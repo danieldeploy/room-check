@@ -1,0 +1,7 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/welcome/public_html/check/
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp -R assets $DEPLOYPATH
+    - /bin/cp api.php config.php index.php lib.php database.sql config.local.example.php .htaccess $DEPLOYPATH
