@@ -94,7 +94,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
     <title>Permissões — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/settings.css">
+    <link rel="stylesheet" href="assets/settings.css?v=<?= (int) filemtime(__DIR__ . '/assets/settings.css') ?>">
     <link rel="stylesheet" href="../assets/session.css">
 </head>
 <body>
