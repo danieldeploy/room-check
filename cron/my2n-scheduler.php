@@ -10,7 +10,7 @@ if ($appRoot === '' && $home !== '') {
 }
 $configPath = rtrim($appRoot, '/') . '/config.php';
 if (!is_file($configPath)) {
-    fwrite(STDERR, "Room Check config not found.\n");
+    fwrite(STDERR, "Portal config not found.\n");
     exit(1);
 }
 

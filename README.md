@@ -1,4 +1,4 @@
-# Portal de Operações — Welcome Hostel
+# Portal de Operações — Active Lines Unip. Lda.
 
 Aplicação PHP/MySQL para `check.welcomehostel.pt`. Depois do login, apresenta apenas os módulos autorizados para o utilizador:
 
@@ -67,7 +67,7 @@ O acesso do Gerente a `users.manage` e `permissions.manage` é obrigatório, par
 
 ## Gestão dos quartos
 
-Cada combinação de alojamento/quarto mantém o problema, estado (`Wrong`, `Ok` ou vazio) e data de atualização de cada item. O City Center Guest House tem quartos 1–6 e o Welcome Guest House 1–15. A API exige `room_check.view` para leitura e `room_check.edit` para gravação.
+Cada combinação de alojamento/quarto mantém o problema, estado (`Problema`, `OK` ou vazio) e data de atualização de cada item. Internamente, a API preserva os valores `wrong` e `ok` para manter compatibilidade com os dados existentes. O City Center Guest House tem quartos 1–6 e o Welcome Guest House 1–15. A API exige `room_check.view` para leitura e `room_check.edit` para gravação.
 
 ## Automação ZKAccess V5.1
 

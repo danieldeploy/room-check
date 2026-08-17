@@ -6,6 +6,7 @@ require $root . '/lib.php';
 $config = require $root . '/config.php';
 require_once $root . '/src/Auth/Auth.php';
 require_once $root . '/src/Security/Csrf.php';
+require_once $root . '/src/UI/SessionBar.php';
 
 try {
     $pdo = database();
@@ -102,13 +103,14 @@ header('Cache-Control: no-store');
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>Utilizadores — Portal Welcome Hostel</title>
+    <title>Utilizadores — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="../assets/auth.css">
     <link rel="stylesheet" href="assets/users.css">
+    <link rel="stylesheet" href="../assets/session.css">
 </head>
 <body>
     <main class="users-shell">
-        <nav><a href="../index.php">← Portal</a><?php if ($canManagePermissions): ?> · <a href="permissions.php">Permissões</a><?php endif; ?></nav>
+        <?php SessionBar::render($currentUser, '..', true, $canManagePermissions); ?>
         <header><p class="eyebrow">Administração</p><h1>Utilizadores</h1><p>Crie contas e atribua um dos quatro perfis.</p></header>
         <?php if ($message): ?><div class="success"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
         <?php if ($error): ?><div class="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>

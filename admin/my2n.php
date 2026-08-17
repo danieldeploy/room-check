@@ -4,6 +4,7 @@ declare(strict_types=1);
 $config = require dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/src/Auth/AdminGuard.php';
 require_once dirname(__DIR__) . '/src/Security/Csrf.php';
+require_once dirname(__DIR__) . '/src/UI/SessionBar.php';
 
 try {
     $user = AdminGuard::requirePermission($config, 'my2n.view');
@@ -27,8 +28,9 @@ $canManagePermissions = Auth::hasPermission($pdo, $user, Auth::PERMISSION_PERMIS
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>My2N Control — Portal Welcome Hostel</title>
+    <title>Controlo My2N — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/my2n.css">
+    <link rel="stylesheet" href="../assets/session.css">
     <script>
         window.MY2N_PANEL = <?= json_encode([
             'statusUrl' => 'api/my2n-status.php',
@@ -39,18 +41,15 @@ $canManagePermissions = Auth::hasPermission($pdo, $user, Auth::PERMISSION_PERMIS
 </head>
 <body>
     <main class="panel-shell">
-        <nav class="topbar" aria-label="Navegação administrativa">
-            <div><a href="../index.php">← Portal</a><?php if ($canManageUsers): ?> · <a href="users.php">Utilizadores</a><?php endif; ?><?php if ($canManagePermissions): ?> · <a href="permissions.php">Permissões</a><?php endif; ?></div>
-            <span><?= htmlspecialchars((string) ($user['display_name'] ?? $user['username'] ?? 'Admin'), ENT_QUOTES, 'UTF-8') ?></span>
-        </nav>
+        <?php SessionBar::render($user, '..', $canManageUsers, $canManagePermissions); ?>
 
         <header class="panel-header">
             <div>
                 <p class="eyebrow">Painel administrativo</p>
-                <h1>My2N Control</h1>
+                <h1>Controlo My2N</h1>
                 <p>Estado dos telemóveis e destinatários atuais da Welcome Bell.</p>
             </div>
-            <span id="modeBadge" class="mode-badge">READ-ONLY</span>
+            <span id="modeBadge" class="mode-badge">APENAS CONSULTA</span>
         </header>
 
         <section class="summary" aria-live="polite">

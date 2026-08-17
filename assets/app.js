@@ -67,8 +67,8 @@
         status.setAttribute('aria-label', `Estado: ${item.name}`);
 
         const buttons = [
-            ['wrong', 'Wrong', 'wrong'],
-            ['ok', 'Ok', 'ok'],
+            ['wrong', 'Problema', 'wrong'],
+            ['ok', 'OK', 'ok'],
         ].map(([value, label, className]) => {
             const button = document.createElement('button');
             button.type = 'button';

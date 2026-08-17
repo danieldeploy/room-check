@@ -19,7 +19,7 @@
         document.querySelector('#siteId').textContent = text(data.siteId);
         document.querySelector('#groupSip').textContent = text(data.ringingGroupSipNumber);
         document.querySelector('#readAt').textContent = new Date(data.readAt).toLocaleString('pt-PT');
-        document.querySelector('#modeBadge').textContent = data.dryRun ? 'DRY-RUN' : 'READ-ONLY';
+        document.querySelector('#modeBadge').textContent = data.dryRun ? 'APENAS CONSULTA' : 'ESCRITA AUTORIZADA';
 
         rows.replaceChildren();
         data.devices.forEach((device) => {

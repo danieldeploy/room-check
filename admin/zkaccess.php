@@ -6,6 +6,7 @@ require $root . '/lib.php';
 $config = require $root . '/config.php';
 require_once $root . '/src/Auth/Auth.php';
 require_once $root . '/src/Security/Csrf.php';
+require_once $root . '/src/UI/SessionBar.php';
 
 function privateFileReady(string $path, string $publicRoot): bool
 {
@@ -63,6 +64,7 @@ try {
 }
 
 $canConfigure = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_ZKACCESS_CONFIGURE);
+$canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
 $zkConfig = $config['zkaccess'] ?? [];
 $runnerVersion = (string) ($zkConfig['runner_version'] ?? 'V5.1 Direct POST');
@@ -171,15 +173,13 @@ header('Cache-Control: no-store');
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>ZKAccess — Portal Welcome Hostel</title>
+    <title>ZKAccess — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/settings.css">
+    <link rel="stylesheet" href="../assets/session.css">
 </head>
 <body>
     <main class="settings-shell">
-        <nav class="topbar" aria-label="Navegação administrativa">
-            <div class="topbar-links"><a href="../index.php">← Portal</a><?php if ($canManagePermissions): ?><a href="permissions.php">Permissões</a><?php endif; ?></div>
-            <span><?= htmlspecialchars((string) $currentUser['display_name'], ENT_QUOTES, 'UTF-8') ?></span>
-        </nav>
+        <?php SessionBar::render($currentUser, '..', $canManageUsers, $canManagePermissions); ?>
         <header class="page-header">
             <p class="eyebrow">Automação de códigos</p>
             <h1>ZKAccess Control</h1>
