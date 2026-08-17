@@ -1,9 +1,12 @@
 Options -Indexes
 DirectoryIndex index.php
 
-<FilesMatch "^(config\.local\.php|database\.sql|README\.md|\.cpanel\.yml)$">
+<FilesMatch "^(config\.local\.php|database\.sql|README\.md|\.cpanel\.yml|my2n-secrets\.json|\.env)$">
     Require all denied
 </FilesMatch>
+
+RewriteEngine On
+RewriteRule ^(?:src|tests|migrations)/ - [F,L,NC]
 
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"

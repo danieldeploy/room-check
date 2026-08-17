@@ -1,7 +1,11 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/welcome/public_html/check/
+    - export DEPLOYPATH=$HOME/public_html/check/
+    - export PRIVATEPATH=$HOME/room-check-private/
     - /bin/mkdir -p $DEPLOYPATH
+    - /bin/mkdir -p $PRIVATEPATH
     - /bin/cp -R assets $DEPLOYPATH
+    - /bin/cp -R admin src $DEPLOYPATH
+    - /bin/cp -R cron $PRIVATEPATH
     - /bin/cp api.php config.php index.php lib.php database.sql config.local.example.php .htaccess $DEPLOYPATH
