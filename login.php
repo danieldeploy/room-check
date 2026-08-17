@@ -40,15 +40,15 @@ header('Cache-Control: no-store');
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>Entrar — Room Check</title>
+    <title>Entrar — Portal Welcome Hostel</title>
     <link rel="stylesheet" href="assets/auth.css">
 </head>
 <body>
     <main class="auth-shell">
         <section class="auth-card">
             <p class="eyebrow">Welcome Hostel</p>
-            <h1>Room Check</h1>
-            <p class="intro">Entre com a sua conta de trabalho.</p>
+            <h1>Portal de Operações</h1>
+            <p class="intro">Entre com a sua conta de trabalho para aceder aos módulos autorizados.</p>
             <?php if ($error !== null): ?>
                 <div class="alert" role="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>

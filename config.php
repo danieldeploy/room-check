@@ -22,6 +22,12 @@ return [
         'setup_key' => $localConfig['auth']['setup_key'] ?? getenv('ROOM_CHECK_SETUP_KEY') ?: '',
         'session_idle_seconds' => 28800,
     ],
+    'zkaccess' => [
+        'runner_version' => 'V5.1 Direct POST',
+        'timezone' => 'Europe/Lisbon',
+        'private_config_file' => (string) ($localConfig['zkaccess']['private_config_file'] ?? getenv('ZKACCESS_PRIVATE_CONFIG_FILE') ?: ''),
+        'runner_status_file' => (string) ($localConfig['zkaccess']['runner_status_file'] ?? getenv('ZKACCESS_RUNNER_STATUS_FILE') ?: ''),
+    ],
     'my2n' => [
         'company_id' => (int) ($localConfig['my2n']['company_id'] ?? getenv('MY2N_COMPANY_ID') ?: 0),
         'site_id' => (int) ($localConfig['my2n']['site_id'] ?? getenv('MY2N_SITE_ID') ?: 0),

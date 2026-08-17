@@ -73,25 +73,30 @@ assertTrue(isset(Auth::ROLES['gerente']), 'Gerente role exists');
 assertTrue(isset(Auth::ROLES['governanta']), 'Governanta role exists');
 assertTrue(isset(Auth::ROLES['tecnico_manutencao']), 'Técnico de Manutenção role exists');
 assertTrue(isset(Auth::ROLES['empregada_andares']), 'Empregada de Andares role exists');
-assertTrue(array_keys(Auth::ROLES) === array_keys(Auth::ROLE_PERMISSIONS), 'every role has one permission set');
+assertTrue(array_keys(Auth::ROLES) === array_keys(Auth::DEFAULT_ROLE_PERMISSIONS), 'every role has one default permission set');
 foreach (array_keys(Auth::ROLES) as $role) {
     assertTrue(
-        Auth::roleHasPermission($role, Auth::PERMISSION_ROOM_CHECK_VIEW),
+        Auth::defaultRoleHasPermission($role, Auth::PERMISSION_ROOM_CHECK_VIEW),
         $role . ' can view room checks'
     );
     assertTrue(
-        Auth::roleHasPermission($role, Auth::PERMISSION_ROOM_CHECK_EDIT),
+        Auth::defaultRoleHasPermission($role, Auth::PERMISSION_ROOM_CHECK_EDIT),
         $role . ' can edit room checks'
     );
 }
-assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_USERS_MANAGE), 'Gerente can manage users');
-assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_MY2N_CONTROL), 'Gerente owns future My2N writes');
-assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_MY2N_SCHEDULE), 'Gerente owns future My2N schedules');
-assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_MY2N_ROLLBACK), 'Gerente owns future My2N rollback');
-assertTrue(Auth::roleHasPermission('governanta', Auth::PERMISSION_MY2N_VIEW), 'Governanta can view My2N status');
-assertTrue(Auth::roleHasPermission('tecnico_manutencao', Auth::PERMISSION_MY2N_VIEW), 'Técnico can view My2N status');
-assertTrue(!Auth::roleHasPermission('empregada_andares', Auth::PERMISSION_MY2N_VIEW), 'Empregada cannot view My2N');
-assertTrue(!Auth::roleHasPermission('governanta', Auth::PERMISSION_USERS_MANAGE), 'Governanta cannot manage users');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_USERS_MANAGE), 'Gerente can manage users');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_PERMISSIONS_MANAGE), 'Gerente can manage permissions');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_ZKACCESS_CONFIGURE), 'Gerente can configure ZKAccess');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_MY2N_CONTROL), 'Gerente owns future My2N writes');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_MY2N_SCHEDULE), 'Gerente owns future My2N schedules');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_MY2N_ROLLBACK), 'Gerente owns future My2N rollback');
+assertTrue(Auth::defaultRoleHasPermission('governanta', Auth::PERMISSION_MY2N_VIEW), 'Governanta can view My2N status');
+assertTrue(Auth::defaultRoleHasPermission('tecnico_manutencao', Auth::PERMISSION_ZKACCESS_VIEW), 'Técnico can view ZKAccess status');
+assertTrue(!Auth::defaultRoleHasPermission('tecnico_manutencao', Auth::PERMISSION_ZKACCESS_CONFIGURE), 'Técnico cannot configure ZKAccess by default');
+assertTrue(Auth::defaultRoleHasPermission('tecnico_manutencao', Auth::PERMISSION_MY2N_VIEW), 'Técnico can view My2N status');
+assertTrue(!Auth::defaultRoleHasPermission('empregada_andares', Auth::PERMISSION_ZKACCESS_VIEW), 'Empregada cannot view ZKAccess');
+assertTrue(!Auth::defaultRoleHasPermission('empregada_andares', Auth::PERMISSION_MY2N_VIEW), 'Empregada cannot view My2N');
+assertTrue(!Auth::defaultRoleHasPermission('governanta', Auth::PERMISSION_USERS_MANAGE), 'Governanta cannot manage users');
 $my2nWritePermissions = [
     Auth::PERMISSION_MY2N_CONTROL,
     Auth::PERMISSION_MY2N_SCHEDULE,
@@ -99,10 +104,16 @@ $my2nWritePermissions = [
 ];
 foreach (['governanta', 'tecnico_manutencao', 'empregada_andares'] as $role) {
     foreach ($my2nWritePermissions as $permission) {
-        assertTrue(!Auth::roleHasPermission($role, $permission), $role . ' cannot use ' . $permission);
+        assertTrue(!Auth::defaultRoleHasPermission($role, $permission), $role . ' cannot use ' . $permission);
     }
 }
-assertTrue(!Auth::roleHasPermission('unknown', Auth::PERMISSION_ROOM_CHECK_VIEW), 'unknown roles have no permissions');
+assertTrue(in_array(Auth::PERMISSION_USERS_MANAGE, Auth::LOCKED_ROLE_PERMISSIONS['gerente'], true), 'Gerente user management cannot be removed');
+assertTrue(in_array(Auth::PERMISSION_PERMISSIONS_MANAGE, Auth::LOCKED_ROLE_PERMISSIONS['gerente'], true), 'Gerente permission management cannot be removed');
+$normalized = Auth::normalizePermissions([Auth::PERMISSION_ZKACCESS_CONFIGURE, 'unknown.permission']);
+assertTrue(in_array(Auth::PERMISSION_ZKACCESS_CONFIGURE, $normalized, true), 'known permission remains normalized');
+assertTrue(in_array(Auth::PERMISSION_ZKACCESS_VIEW, $normalized, true), 'configure permission implies module view');
+assertTrue(!in_array('unknown.permission', $normalized, true), 'unknown permissions are removed');
+assertTrue(!Auth::defaultRoleHasPermission('unknown', Auth::PERMISSION_ROOM_CHECK_VIEW), 'unknown roles have no permissions');
 $shortPasswordRejected = false;
 try {
     Auth::validatePassword('short');

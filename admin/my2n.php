@@ -17,6 +17,9 @@ try {
     echo $exception->getMessage();
     exit;
 }
+$pdo = database();
+$canManageUsers = Auth::hasPermission($pdo, $user, Auth::PERMISSION_USERS_MANAGE);
+$canManagePermissions = Auth::hasPermission($pdo, $user, Auth::PERMISSION_PERMISSIONS_MANAGE);
 ?>
 <!doctype html>
 <html lang="pt">
@@ -24,7 +27,7 @@ try {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>My2N Control — Room Check</title>
+    <title>My2N Control — Portal Welcome Hostel</title>
     <link rel="stylesheet" href="assets/my2n.css">
     <script>
         window.MY2N_PANEL = <?= json_encode([
@@ -37,7 +40,7 @@ try {
 <body>
     <main class="panel-shell">
         <nav class="topbar" aria-label="Navegação administrativa">
-            <div><a href="../index.php">← Gestão de quartos</a><?php if (Auth::hasPermission($user, Auth::PERMISSION_USERS_MANAGE)): ?> · <a href="users.php">Utilizadores</a><?php endif; ?></div>
+            <div><a href="../index.php">← Portal</a><?php if ($canManageUsers): ?> · <a href="users.php">Utilizadores</a><?php endif; ?><?php if ($canManagePermissions): ?> · <a href="permissions.php">Permissões</a><?php endif; ?></div>
             <span><?= htmlspecialchars((string) ($user['display_name'] ?? $user['username'] ?? 'Admin'), ENT_QUOTES, 'UTF-8') ?></span>
         </nav>
 

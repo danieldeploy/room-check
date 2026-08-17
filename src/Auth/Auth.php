@@ -5,25 +5,45 @@ final class Auth
 {
     public const PERMISSION_ROOM_CHECK_VIEW = 'room_check.view';
     public const PERMISSION_ROOM_CHECK_EDIT = 'room_check.edit';
+    public const PERMISSION_ZKACCESS_VIEW = 'zkaccess.view';
+    public const PERMISSION_ZKACCESS_CONFIGURE = 'zkaccess.configure';
     public const PERMISSION_USERS_MANAGE = 'users.manage';
+    public const PERMISSION_PERMISSIONS_MANAGE = 'permissions.manage';
     public const PERMISSION_MY2N_VIEW = 'my2n.view';
     public const PERMISSION_MY2N_CONTROL = 'my2n.control';
     public const PERMISSION_MY2N_SCHEDULE = 'my2n.schedule';
     public const PERMISSION_MY2N_ROLLBACK = 'my2n.rollback';
     public const PERMISSION_AUDIT_VIEW = 'audit.view';
 
+    public const PERMISSIONS = [
+        self::PERMISSION_ROOM_CHECK_VIEW => ['group' => 'Gestão de Quartos', 'label' => 'Consultar quartos'],
+        self::PERMISSION_ROOM_CHECK_EDIT => ['group' => 'Gestão de Quartos', 'label' => 'Alterar quartos'],
+        self::PERMISSION_ZKACCESS_VIEW => ['group' => 'ZKAccess', 'label' => 'Consultar automação'],
+        self::PERMISSION_ZKACCESS_CONFIGURE => ['group' => 'ZKAccess', 'label' => 'Configurar automação'],
+        self::PERMISSION_MY2N_VIEW => ['group' => 'My2N', 'label' => 'Consultar campainha'],
+        self::PERMISSION_MY2N_CONTROL => ['group' => 'My2N', 'label' => 'Alterar destinatários'],
+        self::PERMISSION_MY2N_SCHEDULE => ['group' => 'My2N', 'label' => 'Configurar horários'],
+        self::PERMISSION_MY2N_ROLLBACK => ['group' => 'My2N', 'label' => 'Executar rollback'],
+        self::PERMISSION_USERS_MANAGE => ['group' => 'Administração', 'label' => 'Gerir utilizadores'],
+        self::PERMISSION_PERMISSIONS_MANAGE => ['group' => 'Administração', 'label' => 'Gerir permissões'],
+        self::PERMISSION_AUDIT_VIEW => ['group' => 'Administração', 'label' => 'Consultar auditoria'],
+    ];
+
     public const ROLES = [
         'gerente' => 'Gerente',
         'governanta' => 'Governanta',
-        'tecnico_manutencao' => 'Técnico Manutenção',
+        'tecnico_manutencao' => 'Técnico de Manutenção',
         'empregada_andares' => 'Empregada de Andares',
     ];
 
-    public const ROLE_PERMISSIONS = [
+    public const DEFAULT_ROLE_PERMISSIONS = [
         'gerente' => [
             self::PERMISSION_ROOM_CHECK_VIEW,
             self::PERMISSION_ROOM_CHECK_EDIT,
+            self::PERMISSION_ZKACCESS_VIEW,
+            self::PERMISSION_ZKACCESS_CONFIGURE,
             self::PERMISSION_USERS_MANAGE,
+            self::PERMISSION_PERMISSIONS_MANAGE,
             self::PERMISSION_MY2N_VIEW,
             self::PERMISSION_MY2N_CONTROL,
             self::PERMISSION_MY2N_SCHEDULE,
@@ -38,6 +58,7 @@ final class Auth
         'tecnico_manutencao' => [
             self::PERMISSION_ROOM_CHECK_VIEW,
             self::PERMISSION_ROOM_CHECK_EDIT,
+            self::PERMISSION_ZKACCESS_VIEW,
             self::PERMISSION_MY2N_VIEW,
         ],
         'empregada_andares' => [
@@ -45,6 +66,24 @@ final class Auth
             self::PERMISSION_ROOM_CHECK_EDIT,
         ],
     ];
+
+    public const LOCKED_ROLE_PERMISSIONS = [
+        'gerente' => [
+            self::PERMISSION_USERS_MANAGE,
+            self::PERMISSION_PERMISSIONS_MANAGE,
+        ],
+    ];
+
+    public const PERMISSION_DEPENDENCIES = [
+        self::PERMISSION_ROOM_CHECK_EDIT => [self::PERMISSION_ROOM_CHECK_VIEW],
+        self::PERMISSION_ZKACCESS_CONFIGURE => [self::PERMISSION_ZKACCESS_VIEW],
+        self::PERMISSION_MY2N_CONTROL => [self::PERMISSION_MY2N_VIEW],
+        self::PERMISSION_MY2N_SCHEDULE => [self::PERMISSION_MY2N_VIEW],
+        self::PERMISSION_MY2N_ROLLBACK => [self::PERMISSION_MY2N_VIEW],
+    ];
+
+    private static array $permissionCache = [];
+    private static ?bool $permissionStorageAvailable = null;
 
     public static function startSession(array $config = []): void
     {
@@ -145,25 +184,91 @@ final class Auth
     public static function requirePermission(PDO $pdo, array $config, string $permission): array
     {
         $user = self::requireLogin($pdo, $config);
-        if (!self::hasPermission($user, $permission)) {
+        if (!self::hasPermission($pdo, $user, $permission)) {
             throw new RuntimeException('Não tem permissão para esta ação.', 403);
         }
         return $user;
     }
 
-    public static function hasPermission(array $user, string $permission): bool
+    public static function hasPermission(PDO $pdo, array $user, string $permission): bool
     {
-        return self::roleHasPermission((string) ($user['role'] ?? ''), $permission);
+        return self::roleHasPermission($pdo, (string) ($user['role'] ?? ''), $permission);
     }
 
-    public static function roleHasPermission(string $role, string $permission): bool
+    public static function roleHasPermission(PDO $pdo, string $role, string $permission): bool
     {
-        return in_array($permission, self::ROLE_PERMISSIONS[$role] ?? [], true);
+        if (!isset(self::PERMISSIONS[$permission])) {
+            return false;
+        }
+        return in_array($permission, self::permissionsForRole($pdo, $role), true);
     }
 
-    public static function permissionsForRole(string $role): array
+    public static function permissionsForRole(PDO $pdo, string $role): array
     {
-        return self::ROLE_PERMISSIONS[$role] ?? [];
+        if (!isset(self::ROLES[$role])) {
+            return [];
+        }
+        if (isset(self::$permissionCache[$role])) {
+            return self::$permissionCache[$role];
+        }
+
+        $permissions = self::DEFAULT_ROLE_PERMISSIONS[$role] ?? [];
+        if (self::permissionStorageAvailable($pdo)) {
+            $statement = $pdo->prepare(
+                'SELECT permission FROM role_permissions WHERE role = :role ORDER BY permission'
+            );
+            $statement->execute(['role' => $role]);
+            $permissions = array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN));
+        }
+
+        $permissions = self::normalizePermissions(array_merge(
+            $permissions,
+            self::LOCKED_ROLE_PERMISSIONS[$role] ?? []
+        ));
+        self::$permissionCache[$role] = $permissions;
+        return $permissions;
+    }
+
+    public static function normalizePermissions(array $permissions): array
+    {
+        $normalized = [];
+        foreach ($permissions as $permission) {
+            $permission = (string) $permission;
+            if (!isset(self::PERMISSIONS[$permission])) {
+                continue;
+            }
+            $normalized[] = $permission;
+            foreach (self::PERMISSION_DEPENDENCIES[$permission] ?? [] as $dependency) {
+                $normalized[] = $dependency;
+            }
+        }
+        return array_values(array_unique($normalized));
+    }
+
+    public static function defaultRoleHasPermission(string $role, string $permission): bool
+    {
+        return isset(self::PERMISSIONS[$permission])
+            && in_array($permission, self::DEFAULT_ROLE_PERMISSIONS[$role] ?? [], true);
+    }
+
+    public static function permissionStorageAvailable(PDO $pdo): bool
+    {
+        if (self::$permissionStorageAvailable !== null) {
+            return self::$permissionStorageAvailable;
+        }
+        try {
+            $pdo->query('SELECT 1 FROM role_permissions LIMIT 1');
+            self::$permissionStorageAvailable = true;
+        } catch (PDOException) {
+            self::$permissionStorageAvailable = false;
+        }
+        return self::$permissionStorageAvailable;
+    }
+
+    public static function resetPermissionCache(): void
+    {
+        self::$permissionCache = [];
+        self::$permissionStorageAvailable = null;
     }
 
     public static function logout(): void

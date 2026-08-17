@@ -8,7 +8,8 @@ require_once $root . '/src/Auth/Auth.php';
 require_once $root . '/src/Security/Csrf.php';
 
 try {
-    $currentUser = Auth::requirePermission(database(), $config, Auth::PERMISSION_USERS_MANAGE);
+    $pdo = database();
+    $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_USERS_MANAGE);
 } catch (RuntimeException $exception) {
     if ($exception->getCode() === 401) {
         header('Location: ../login.php');
@@ -24,8 +25,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
         Csrf::validate($_POST['csrf_token'] ?? null);
         $action = (string) ($_POST['action'] ?? '');
-        $pdo = database();
-
         if ($action === 'create') {
             $username = trim((string) ($_POST['username'] ?? ''));
             $displayName = trim((string) ($_POST['display_name'] ?? ''));
@@ -90,10 +89,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
 }
 
-$users = database()->query(
+$users = $pdo->query(
     'SELECT id, username, display_name, role, is_active, last_login_at, created_at
      FROM users ORDER BY display_name, username'
 )->fetchAll();
+$canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
 header('Cache-Control: no-store');
 ?>
 <!doctype html>
@@ -102,13 +102,13 @@ header('Cache-Control: no-store');
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>Utilizadores — Room Check</title>
+    <title>Utilizadores — Portal Welcome Hostel</title>
     <link rel="stylesheet" href="../assets/auth.css">
     <link rel="stylesheet" href="assets/users.css">
 </head>
 <body>
     <main class="users-shell">
-        <nav><a href="../index.php">← Gestão de quartos</a></nav>
+        <nav><a href="../index.php">← Portal</a><?php if ($canManagePermissions): ?> · <a href="permissions.php">Permissões</a><?php endif; ?></nav>
         <header><p class="eyebrow">Administração</p><h1>Utilizadores</h1><p>Crie contas e atribua um dos quatro perfis.</p></header>
         <?php if ($message): ?><div class="success"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
         <?php if ($error): ?><div class="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>

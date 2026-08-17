@@ -6,6 +6,7 @@
     const roomSelect = document.querySelector('#roomSelect');
     const checklist = document.querySelector('#checklist');
     const saveStatus = document.querySelector('#saveStatus');
+    const canEdit = config.canEdit !== false;
 
     let rows = [];
     let saveTimer = null;
@@ -53,10 +54,11 @@
         textarea.placeholder = 'Descreva o problema…';
         textarea.rows = 1;
         textarea.maxLength = 5000;
+        textarea.readOnly = !canEdit;
         textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
         textarea.addEventListener('input', () => {
             autoGrow(textarea);
-            scheduleSave();
+            if (canEdit) scheduleSave();
         });
 
         const status = document.createElement('div');
@@ -73,8 +75,10 @@
             button.textContent = label;
             button.className = `status-button ${className}`;
             button.dataset.value = value;
+            button.disabled = !canEdit;
             button.setAttribute('aria-pressed', String(item.status === value));
             button.addEventListener('click', () => {
+                if (!canEdit) return;
                 const wasSelected = button.getAttribute('aria-pressed') === 'true';
                 status.querySelectorAll('button').forEach((candidate) => {
                     candidate.setAttribute('aria-pressed', 'false');
@@ -133,7 +137,7 @@
             }
 
             renderChecklist(result.items);
-            setStatus('Dados carregados', 'success');
+            setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');
         } catch (error) {
             if (version === requestVersion) {
                 renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
@@ -147,7 +151,7 @@
     };
 
     const saveChecklist = async () => {
-        if (isLoading) {
+        if (isLoading || !canEdit) {
             return;
         }
 
@@ -180,7 +184,7 @@
     };
 
     const scheduleSave = () => {
-        if (isLoading) {
+        if (isLoading || !canEdit) {
             return;
         }
         clearTimeout(saveTimer);

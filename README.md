@@ -1,137 +1,124 @@
-# Room Check
+# Portal de Operações — Welcome Hostel
 
-Aplicação PHP/MySQL para registar a verificação dos quartos do City Center Guest House e Welcome Guest House.
+Aplicação PHP/MySQL para `check.welcomehostel.pt`. Depois do login, apresenta apenas os módulos autorizados para o utilizador:
+
+1. configuração da automação Cloudbeds → ZKAccess;
+2. gestão dos quartos;
+3. configuração/estado da campainha My2N.
+
+Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de aprovação explícita do deployment.
 
 ## Requisitos
 
-- PHP 8.1 ou superior, com PDO MySQL e mbstring
-- MySQL 5.7+ ou MariaDB 10.3+
-- Apache com `.htaccess`
+- PHP 8.1+ com PDO MySQL e mbstring;
+- MySQL 5.7+ ou MariaDB 10.3+;
+- Apache com `.htaccess`;
+- para o executor ZKAccess: Python, Playwright/Chromium e sessão Cloudbeds com MFA, todos fora de `public_html`.
 
 ## Instalação no cPanel
 
-1. Em **MySQL Databases**, crie uma base de dados e um utilizador.
-2. Associe o utilizador à base de dados com **ALL PRIVILEGES**.
-3. No **phpMyAdmin**, selecione a base de dados e importe `database.sql`.
-4. Em `$HOME/public_html/check`, copie `config.local.example.php` para `config.local.php`.
-5. Edite `config.local.php` e indique o nome da base de dados, utilizador e password.
-6. Confirme que o subdomínio `check.welcomehostel.pt` usa `/public_html/check` como Document Root.
-7. Ative **Force HTTPS Redirect** quando o certificado SSL estiver emitido.
+1. Crie a base de dados e um utilizador com os privilégios necessários.
+2. Numa instalação nova, importe `database.sql` no phpMyAdmin.
+3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql` e `004_portal_permissions.sql`.
+4. Copie `config.local.example.php` para `config.local.php` em `$HOME/public_html/check` e configure a base de dados.
+5. Confirme que `check.welcomehostel.pt` usa `/public_html/check` como Document Root e Force HTTPS Redirect.
+6. Defina temporariamente `auth.setup_key`, abra `/setup.php`, crie o primeiro Gerente e remova imediatamente a chave.
 
-`config.local.php` contém credenciais e está excluído do Git.
+`config.local.php` contém configuração local, está excluído do Git e não deve ser partilhado.
 
-## Deployment pelo cPanel
+O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment.
 
-O ficheiro `.cpanel.yml` publica os ficheiros do repositório em:
+## Login e portal
 
-`$HOME/public_html/check`
+- `/login.php` é a entrada pública da aplicação.
+- `/index.php` é o portal autenticado.
+- `/rooms.php` preserva a gestão de quartos existente.
+- `/admin/zkaccess.php` apresenta os parâmetros e o estado da automação ZKAccess.
+- `/admin/my2n.php` apresenta o estado read-only da Welcome Bell.
+- `/admin/users.php` gere contas e perfis.
+- `/admin/permissions.php` configura a matriz de permissões.
 
-No **Git Version Control**, abra o repositório e clique em **Update from Remote** e depois **Deploy HEAD Commit**.
+Não existe registo público. `setup.php` devolve HTTP 410 depois de existir o primeiro utilizador.
 
-## Dados
+## Quatro perfis e permissões
 
-Cada combinação de alojamento e quarto mantém separadamente:
+Os perfis são fixos; as permissões são configuráveis na base de dados e verificadas no servidor, incluindo nas APIs:
 
-- problema identificado para cada item;
-- estado `Wrong`, `Ok` ou sem seleção;
-- data da última atualização.
+- Gerente;
+- Governanta;
+- Técnico de Manutenção;
+- Empregada de Andares.
 
-O City Center Guest House disponibiliza os quartos 1–6. O Welcome Guest House disponibiliza os quartos 1–15.
+Matriz padrão:
 
-## Painel My2N (branch de desenvolvimento)
+| Função | Gerente | Governanta | Técnico de Manutenção | Empregada de Andares |
+| --- | :---: | :---: | :---: | :---: |
+| Consultar quartos | Sim | Sim | Sim | Sim |
+| Alterar quartos | Sim | Sim | Sim | Sim |
+| Consultar automação ZKAccess | Sim | Não | Sim | Não |
+| Configurar automação ZKAccess | Sim | Não | Não | Não |
+| Consultar My2N | Sim | Sim | Sim | Não |
+| Alterar/agendar/rollback My2N | Sim | Não | Não | Não |
+| Gerir utilizadores | Sim | Não | Não | Não |
+| Gerir permissões | Sim | Não | Não | Não |
+| Consultar auditoria | Sim | Não | Não | Não |
 
-O painel My2N é integrado sem reconstruir nem alterar as regras da gestão de quartos. `index.php` e `api.php` apenas recebem autenticação/autorização; a lista, os quartos, os estados e o modo de gravação permanecem iguais.
+O acesso do Gerente a `users.manage` e `permissions.manage` é obrigatório, para impedir que todos os administradores fiquem bloqueados. Permissões de alteração incluem automaticamente a consulta do respetivo módulo. Se a tabela `role_permissions` ainda não existir, a aplicação usa a matriz padrão em código.
 
-### Estado da implementação
+## Gestão dos quartos
 
-- consulta read-only de configurações `MOBILE_VIDEO`;
-- consulta dos membros atuais do grupo da campainha;
-- apresentação de `REGISTERED` / `NOT_REGISTERED`;
-- remoção defensiva de `sipPassword`, tokens e passwords;
-- modo dry-run por defeito;
-- nenhuma operação `PUT` exposta na interface read-only;
-- estrutura de snapshots, auditoria e agendamentos criada mas ainda inativa.
+Cada combinação de alojamento/quarto mantém o problema, estado (`Wrong`, `Ok` ou vazio) e data de atualização de cada item. O City Center Guest House tem quartos 1–6 e o Welcome Guest House 1–15. A API exige `room_check.view` para leitura e `room_check.edit` para gravação.
 
-### Autorização My2N
+## Automação ZKAccess V5.1
 
-O painel e a API read-only exigem a permissão `my2n.view`. As futuras operações de alteração manual, agendamento e rollback têm permissões próprias e ficam reservadas ao Gerente. A existência dessas permissões não ativa escritas My2N.
+A página de configuração foi preparada a partir da versão existente **V5.1 Direct POST**:
 
-Sem sessão, `/admin/my2n.php` redireciona para o login e `/admin/api/my2n-status.php` devolve 401. Um utilizador autenticado sem `my2n.view` recebe 403.
+- lê as chegadas do dia no Cloudbeds;
+- obtém o PIN nas notas da reserva;
+- autentica no ZKAccess, compara o código e usa Direct POST com fallback visual;
+- começa desligada e em dry-run;
+- usa o fuso `Europe/Lisbon`.
 
-### Segredos My2N
+O portal guarda somente `enabled`, `dry_run`, hora e termo de pesquisa. Utilizadores, passwords, endpoints internos, cookies e sessões nunca são guardados na base de dados do portal nem no Git.
 
-Nunca coloque credenciais My2N em `config.local.php`, no Git ou em `public_html`.
+Em `config.local.php`, indique apenas os caminhos privados:
 
-Crie, por exemplo, `$HOME/room-check-private/my2n-secrets.json` com permissões `0600`:
-
-```json
-{
-  "identifier": "IDENTIFICADOR_MY2N",
-  "password": "PASSWORD_MY2N"
-}
+```php
+'zkaccess' => [
+    'private_config_file' => '/home/CPANEL_USER/room-check-private/zkaccess/config.json',
+    'runner_status_file' => '/home/CPANEL_USER/room-check-private/zkaccess/status.json',
+],
 ```
 
-Configure externamente:
+A automação não pode ser ativada pela interface enquanto o primeiro ficheiro não existir, não estiver legível e não estiver fora da raiz pública. O executor Python/Playwright e o seu agendamento privado ainda precisam de ser instalados e validados no servidor antes do modo live.
 
-```text
-MY2N_SECRETS_FILE=/home/CPANEL_USER/room-check-private/my2n-secrets.json
-```
+## Painel My2N
 
-As escritas permanecem desativadas enquanto `MY2N_ALLOW_WRITES` não for exatamente `1`. Ativar essa variável, por si só, não expõe botões de escrita na fase read-only.
+O estado atual é read-only:
 
-### Base de dados
+- consulta configurações `MOBILE_VIDEO` e membros atuais;
+- apresenta `REGISTERED` / `NOT_REGISTERED`;
+- remove defensivamente `sipPassword`, tokens e passwords;
+- não expõe operações `PUT`;
+- mantém estrutura inativa para snapshots, auditoria e horários.
 
-Para atualizar uma instalação existente, importe `migrations/002_my2n.sql` pelo phpMyAdmin. As novas tabelas não alteram `room_checklist_values`.
+As credenciais ficam, por exemplo, em `$HOME/room-check-private/my2n-secrets.json` com permissões `0600`, referenciado por `MY2N_SECRETS_FILE`. Nunca coloque segredos My2N no Git, JavaScript, `config.local.php` ou `public_html`. As escritas também exigem `MY2N_ALLOW_WRITES=1`, mas essa variável não cria interface de escrita nesta fase.
 
-### Testes
+## Proteções
+
+- `password_hash()` e atualização automática do hash;
+- regeneração de sessão no login, cookie `HttpOnly`, `SameSite=Strict` e `Secure` em HTTPS;
+- expiração por inatividade;
+- CSRF no login, logout, instalação e ações administrativas;
+- bloqueio após cinco falhas em quinze minutos por combinação anonimizada de utilizador/IP;
+- auditoria de login, contas, permissões e configuração ZKAccess;
+- contas desativadas em vez de eliminadas;
+- segredos excluídos das respostas, da auditoria e do repositório.
+
+## Testes
 
 ```bash
 php tests/run.php
 ```
 
-Os testes usam dados sanitizados e não fazem chamadas de rede nem operações PUT.
-
-## Autenticação e perfis
-
-A aplicação possui quatro perfis fixos:
-
-- `gerente` — Gerente;
-- `governanta` — Governanta;
-- `tecnico_manutencao` — Técnico Manutenção;
-- `empregada_andares` — Empregada de Andares.
-
-As permissões são definidas centralmente em `Auth::ROLE_PERMISSIONS` e verificadas no servidor, incluindo nas APIs. A interface usa a mesma matriz apenas para mostrar os links disponíveis.
-
-| Função | Gerente | Governanta | Técnico Manutenção | Empregada de Andares |
-| --- | :---: | :---: | :---: | :---: |
-| Consultar gestão de quartos | Sim | Sim | Sim | Sim |
-| Alterar gestão de quartos | Sim | Sim | Sim | Sim |
-| Consultar estado My2N | Sim | Sim | Sim | Não |
-| Gerir utilizadores | Sim | Não | Não | Não |
-| Alterar destinatários My2N (futuro) | Sim | Não | Não | Não |
-| Agendar modos My2N (futuro) | Sim | Não | Não | Não |
-| Executar rollback My2N (futuro) | Sim | Não | Não | Não |
-| Consultar auditoria (futuro) | Sim | Não | Não | Não |
-
-As funções My2N marcadas como futuras já têm autorização definida, mas continuam sem interface ou endpoint de escrita e com `MY2N_ALLOW_WRITES` desativado por defeito.
-
-### Ativação numa instalação existente
-
-1. Importe `migrations/003_auth.sql` no phpMyAdmin.
-2. Em `config.local.php`, defina uma chave de instalação longa e aleatória em `auth.setup_key`.
-3. Faça o deployment da branch aprovada.
-4. Abra `/setup.php` e crie a primeira conta Gerente.
-5. Remova imediatamente `auth.setup_key` de `config.local.php` depois da criação.
-6. Use `/login.php` para entrar e `/admin/users.php` para criar as restantes contas.
-
-Não existe registo público. A página `setup.php` devolve 410 depois de existir o primeiro utilizador.
-
-### Proteções
-
-- passwords com `password_hash()` e atualização automática de hash;
-- sessão regenerada no login, cookie `HttpOnly`, `SameSite=Strict` e `Secure` em HTTPS;
-- expiração por inatividade;
-- CSRF em login, logout, instalação e gestão de contas;
-- bloqueio após cinco falhas durante quinze minutos por combinação de utilizador/IP anonimizada;
-- auditoria de login e alterações de contas;
-- contas desativadas em vez de eliminadas.
+Os testes usam dados sanitizados, não fazem chamadas de rede e não executam alterações My2N ou ZKAccess.
