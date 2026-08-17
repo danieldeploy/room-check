@@ -40,7 +40,7 @@ O City Center Guest House disponibiliza os quartos 1–6. O Welcome Guest House 
 
 ## Painel My2N (branch de desenvolvimento)
 
-O painel My2N é integrado sem alterar `index.php`, `api.php`, `lib.php` nem os assets da gestão de quartos.
+O painel My2N é integrado sem reconstruir nem alterar as regras da gestão de quartos. `index.php` e `api.php` apenas recebem autenticação/autorização; a lista, os quartos, os estados e o modo de gravação permanecem iguais.
 
 ### Estado da implementação
 
@@ -52,11 +52,11 @@ O painel My2N é integrado sem alterar `index.php`, `api.php`, `lib.php` nem os 
 - nenhuma operação `PUT` exposta na interface read-only;
 - estrutura de snapshots, auditoria e agendamentos criada mas ainda inativa.
 
-### Autenticação administrativa
+### Autorização My2N
 
-O painel exige `$_SESSION['user']['role']` igual a `admin` ou `governanta`. O repositório atual ainda não contém um sistema de login. Para ligá-lo a um sistema existente, configure `ROOM_CHECK_AUTH_BOOTSTRAP` com o caminho absoluto do bootstrap de autenticação.
+O painel e a API read-only exigem a permissão `my2n.view`. As futuras operações de alteração manual, agendamento e rollback têm permissões próprias e ficam reservadas ao Gerente. A existência dessas permissões não ativa escritas My2N.
 
-Sem uma sessão administrativa válida, `/admin/my2n.php` e `/admin/api/my2n-status.php` devolvem 403.
+Sem sessão, `/admin/my2n.php` redireciona para o login e `/admin/api/my2n-status.php` devolve 401. Um utilizador autenticado sem `my2n.view` recebe 403.
 
 ### Segredos My2N
 
@@ -100,7 +100,20 @@ A aplicação possui quatro perfis fixos:
 - `tecnico_manutencao` — Técnico Manutenção;
 - `empregada_andares` — Empregada de Andares.
 
-Todos os perfis autenticados podem aceder à gestão de quartos nesta fase. Apenas o Gerente pode criar, desativar, reativar, alterar o perfil e redefinir a password de outras contas. As permissões funcionais serão acrescentadas separadamente.
+As permissões são definidas centralmente em `Auth::ROLE_PERMISSIONS` e verificadas no servidor, incluindo nas APIs. A interface usa a mesma matriz apenas para mostrar os links disponíveis.
+
+| Função | Gerente | Governanta | Técnico Manutenção | Empregada de Andares |
+| --- | :---: | :---: | :---: | :---: |
+| Consultar gestão de quartos | Sim | Sim | Sim | Sim |
+| Alterar gestão de quartos | Sim | Sim | Sim | Sim |
+| Consultar estado My2N | Sim | Sim | Sim | Não |
+| Gerir utilizadores | Sim | Não | Não | Não |
+| Alterar destinatários My2N (futuro) | Sim | Não | Não | Não |
+| Agendar modos My2N (futuro) | Sim | Não | Não | Não |
+| Executar rollback My2N (futuro) | Sim | Não | Não | Não |
+| Consultar auditoria (futuro) | Sim | Não | Não | Não |
+
+As funções My2N marcadas como futuras já têm autorização definida, mas continuam sem interface ou endpoint de escrita e com `MY2N_ALLOW_WRITES` desativado por defeito.
 
 ### Ativação numa instalação existente
 

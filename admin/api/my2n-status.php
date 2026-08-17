@@ -8,7 +8,7 @@ require_once $root . '/src/My2N/My2NClient.php';
 require_once $root . '/src/My2N/My2NService.php';
 
 try {
-    AdminGuard::requireAdmin($config);
+    AdminGuard::requirePermission($config, 'my2n.view');
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         header('Allow: GET');
         throw new RuntimeException('Método não permitido.', 405);
@@ -19,7 +19,7 @@ try {
     $status = 200;
 } catch (Throwable $exception) {
     $candidate = (int) $exception->getCode();
-    $status = in_array($candidate, [403, 405, 409, 422, 502, 503], true) ? $candidate : 500;
+    $status = in_array($candidate, [401, 403, 405, 409, 422, 502, 503], true) ? $candidate : 500;
     $result = ['ok' => false, 'error' => $exception->getMessage()];
     error_log(sprintf('My2N read failed [%d]: %s', $status, $exception->getMessage()));
 }

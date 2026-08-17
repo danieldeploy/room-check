@@ -6,9 +6,13 @@ require_once dirname(__DIR__) . '/src/Auth/AdminGuard.php';
 require_once dirname(__DIR__) . '/src/Security/Csrf.php';
 
 try {
-    $user = AdminGuard::requireAdmin($config);
+    $user = AdminGuard::requirePermission($config, 'my2n.view');
 } catch (RuntimeException $exception) {
-    http_response_code(in_array($exception->getCode(), [403, 503], true) ? $exception->getCode() : 403);
+    if ($exception->getCode() === 401) {
+        header('Location: ../login.php');
+        exit;
+    }
+    http_response_code(in_array($exception->getCode(), [403, 503], true) ? $exception->getCode() : 500);
     header('Content-Type: text/plain; charset=utf-8');
     echo $exception->getMessage();
     exit;
@@ -33,7 +37,7 @@ try {
 <body>
     <main class="panel-shell">
         <nav class="topbar" aria-label="Navegação administrativa">
-            <div><a href="../index.php">← Gestão de quartos</a><?php if (($user['role'] ?? '') === 'gerente'): ?> · <a href="users.php">Utilizadores</a><?php endif; ?></div>
+            <div><a href="../index.php">← Gestão de quartos</a><?php if (Auth::hasPermission($user, Auth::PERMISSION_USERS_MANAGE)): ?> · <a href="users.php">Utilizadores</a><?php endif; ?></div>
             <span><?= htmlspecialchars((string) ($user['display_name'] ?? $user['username'] ?? 'Admin'), ENT_QUOTES, 'UTF-8') ?></span>
         </nav>
 

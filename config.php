@@ -20,7 +20,6 @@ return [
     'auth' => [
         'bootstrap' => $localConfig['auth']['bootstrap'] ?? getenv('ROOM_CHECK_AUTH_BOOTSTRAP') ?: '',
         'setup_key' => $localConfig['auth']['setup_key'] ?? getenv('ROOM_CHECK_SETUP_KEY') ?: '',
-        'admin_roles' => ['gerente', 'governanta'],
         'session_idle_seconds' => 28800,
     ],
     'my2n' => [

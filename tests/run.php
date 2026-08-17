@@ -73,6 +73,36 @@ assertTrue(isset(Auth::ROLES['gerente']), 'Gerente role exists');
 assertTrue(isset(Auth::ROLES['governanta']), 'Governanta role exists');
 assertTrue(isset(Auth::ROLES['tecnico_manutencao']), 'Técnico de Manutenção role exists');
 assertTrue(isset(Auth::ROLES['empregada_andares']), 'Empregada de Andares role exists');
+assertTrue(array_keys(Auth::ROLES) === array_keys(Auth::ROLE_PERMISSIONS), 'every role has one permission set');
+foreach (array_keys(Auth::ROLES) as $role) {
+    assertTrue(
+        Auth::roleHasPermission($role, Auth::PERMISSION_ROOM_CHECK_VIEW),
+        $role . ' can view room checks'
+    );
+    assertTrue(
+        Auth::roleHasPermission($role, Auth::PERMISSION_ROOM_CHECK_EDIT),
+        $role . ' can edit room checks'
+    );
+}
+assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_USERS_MANAGE), 'Gerente can manage users');
+assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_MY2N_CONTROL), 'Gerente owns future My2N writes');
+assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_MY2N_SCHEDULE), 'Gerente owns future My2N schedules');
+assertTrue(Auth::roleHasPermission('gerente', Auth::PERMISSION_MY2N_ROLLBACK), 'Gerente owns future My2N rollback');
+assertTrue(Auth::roleHasPermission('governanta', Auth::PERMISSION_MY2N_VIEW), 'Governanta can view My2N status');
+assertTrue(Auth::roleHasPermission('tecnico_manutencao', Auth::PERMISSION_MY2N_VIEW), 'Técnico can view My2N status');
+assertTrue(!Auth::roleHasPermission('empregada_andares', Auth::PERMISSION_MY2N_VIEW), 'Empregada cannot view My2N');
+assertTrue(!Auth::roleHasPermission('governanta', Auth::PERMISSION_USERS_MANAGE), 'Governanta cannot manage users');
+$my2nWritePermissions = [
+    Auth::PERMISSION_MY2N_CONTROL,
+    Auth::PERMISSION_MY2N_SCHEDULE,
+    Auth::PERMISSION_MY2N_ROLLBACK,
+];
+foreach (['governanta', 'tecnico_manutencao', 'empregada_andares'] as $role) {
+    foreach ($my2nWritePermissions as $permission) {
+        assertTrue(!Auth::roleHasPermission($role, $permission), $role . ' cannot use ' . $permission);
+    }
+}
+assertTrue(!Auth::roleHasPermission('unknown', Auth::PERMISSION_ROOM_CHECK_VIEW), 'unknown roles have no permissions');
 $shortPasswordRejected = false;
 try {
     Auth::validatePassword('short');

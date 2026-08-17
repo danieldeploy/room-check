@@ -5,10 +5,15 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
 try {
-    $currentUser = Auth::requireLogin(database(), $config);
-} catch (RuntimeException) {
-    header('Location: login.php');
-    exit;
+    $currentUser = Auth::requirePermission(database(), $config, Auth::PERMISSION_ROOM_CHECK_VIEW);
+} catch (RuntimeException $exception) {
+    if ($exception->getCode() === 401) {
+        header('Location: login.php');
+        exit;
+    }
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit($exception->getMessage());
 }
 ?>
 <!doctype html>
@@ -33,8 +38,8 @@ try {
         <nav class="session-bar" aria-label="Sessão">
             <div class="session-user"><strong><?= htmlspecialchars($currentUser['display_name'], ENT_QUOTES, 'UTF-8') ?></strong><span><?= htmlspecialchars(Auth::ROLES[$currentUser['role']], ENT_QUOTES, 'UTF-8') ?></span></div>
             <div class="session-actions">
-                <?php if ($currentUser['role'] === 'gerente'): ?><a href="admin/users.php">Utilizadores</a><?php endif; ?>
-                <?php if (in_array($currentUser['role'], ['gerente', 'governanta'], true)): ?><a href="admin/my2n.php">My2N</a><?php endif; ?>
+                <?php if (Auth::hasPermission($currentUser, Auth::PERMISSION_USERS_MANAGE)): ?><a href="admin/users.php">Utilizadores</a><?php endif; ?>
+                <?php if (Auth::hasPermission($currentUser, Auth::PERMISSION_MY2N_VIEW)): ?><a href="admin/my2n.php">My2N</a><?php endif; ?>
                 <form method="post" action="logout.php"><input type="hidden" name="csrf_token" value="<?= htmlspecialchars(Csrf::token(), ENT_QUOTES, 'UTF-8') ?>"><button type="submit">Sair</button></form>
             </div>
         </nav>

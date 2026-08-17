@@ -6,12 +6,12 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 
 try {
-    Auth::requireLogin(database(), $config);
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $property = trim((string) ($_GET['property'] ?? ''));
     $room = (int) ($_GET['room'] ?? 0);
 
     if ($method === 'GET') {
+        Auth::requirePermission(database(), $config, Auth::PERMISSION_ROOM_CHECK_VIEW);
         validateSelection($property, $room);
 
         $statement = database()->prepare(
@@ -42,10 +42,12 @@ try {
     }
 
     if ($method !== 'POST') {
+        Auth::requireLogin(database(), $config);
         header('Allow: GET, POST');
         jsonResponse(['ok' => false, 'error' => 'Método não permitido.'], 405);
     }
 
+    Auth::requirePermission(database(), $config, Auth::PERMISSION_ROOM_CHECK_EDIT);
     $rawBody = file_get_contents('php://input');
     $payload = json_decode($rawBody ?: '', true, 512, JSON_THROW_ON_ERROR);
     $property = trim((string) ($payload['property'] ?? ''));

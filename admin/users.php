@@ -8,7 +8,7 @@ require_once $root . '/src/Auth/Auth.php';
 require_once $root . '/src/Security/Csrf.php';
 
 try {
-    $currentUser = Auth::requireRole(database(), $config, ['gerente']);
+    $currentUser = Auth::requirePermission(database(), $config, Auth::PERMISSION_USERS_MANAGE);
 } catch (RuntimeException $exception) {
     if ($exception->getCode() === 401) {
         header('Location: ../login.php');

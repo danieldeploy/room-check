@@ -3,11 +3,47 @@ declare(strict_types=1);
 
 final class Auth
 {
+    public const PERMISSION_ROOM_CHECK_VIEW = 'room_check.view';
+    public const PERMISSION_ROOM_CHECK_EDIT = 'room_check.edit';
+    public const PERMISSION_USERS_MANAGE = 'users.manage';
+    public const PERMISSION_MY2N_VIEW = 'my2n.view';
+    public const PERMISSION_MY2N_CONTROL = 'my2n.control';
+    public const PERMISSION_MY2N_SCHEDULE = 'my2n.schedule';
+    public const PERMISSION_MY2N_ROLLBACK = 'my2n.rollback';
+    public const PERMISSION_AUDIT_VIEW = 'audit.view';
+
     public const ROLES = [
         'gerente' => 'Gerente',
         'governanta' => 'Governanta',
         'tecnico_manutencao' => 'Técnico Manutenção',
         'empregada_andares' => 'Empregada de Andares',
+    ];
+
+    public const ROLE_PERMISSIONS = [
+        'gerente' => [
+            self::PERMISSION_ROOM_CHECK_VIEW,
+            self::PERMISSION_ROOM_CHECK_EDIT,
+            self::PERMISSION_USERS_MANAGE,
+            self::PERMISSION_MY2N_VIEW,
+            self::PERMISSION_MY2N_CONTROL,
+            self::PERMISSION_MY2N_SCHEDULE,
+            self::PERMISSION_MY2N_ROLLBACK,
+            self::PERMISSION_AUDIT_VIEW,
+        ],
+        'governanta' => [
+            self::PERMISSION_ROOM_CHECK_VIEW,
+            self::PERMISSION_ROOM_CHECK_EDIT,
+            self::PERMISSION_MY2N_VIEW,
+        ],
+        'tecnico_manutencao' => [
+            self::PERMISSION_ROOM_CHECK_VIEW,
+            self::PERMISSION_ROOM_CHECK_EDIT,
+            self::PERMISSION_MY2N_VIEW,
+        ],
+        'empregada_andares' => [
+            self::PERMISSION_ROOM_CHECK_VIEW,
+            self::PERMISSION_ROOM_CHECK_EDIT,
+        ],
     ];
 
     public static function startSession(array $config = []): void
@@ -106,13 +142,28 @@ final class Auth
         return $user;
     }
 
-    public static function requireRole(PDO $pdo, array $config, array $roles): array
+    public static function requirePermission(PDO $pdo, array $config, string $permission): array
     {
         $user = self::requireLogin($pdo, $config);
-        if (!in_array($user['role'], $roles, true)) {
-            throw new RuntimeException('Não tem permissão para esta área.', 403);
+        if (!self::hasPermission($user, $permission)) {
+            throw new RuntimeException('Não tem permissão para esta ação.', 403);
         }
         return $user;
+    }
+
+    public static function hasPermission(array $user, string $permission): bool
+    {
+        return self::roleHasPermission((string) ($user['role'] ?? ''), $permission);
+    }
+
+    public static function roleHasPermission(string $role, string $permission): bool
+    {
+        return in_array($permission, self::ROLE_PERMISSIONS[$role] ?? [], true);
+    }
+
+    public static function permissionsForRole(string $role): array
+    {
+        return self::ROLE_PERMISSIONS[$role] ?? [];
     }
 
     public static function logout(): void
