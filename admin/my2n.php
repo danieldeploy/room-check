@@ -33,7 +33,7 @@ try {
 <body>
     <main class="panel-shell">
         <nav class="topbar" aria-label="Navegação administrativa">
-            <a href="../index.php">← Gestão de quartos</a>
+            <div><a href="../index.php">← Gestão de quartos</a><?php if (($user['role'] ?? '') === 'gerente'): ?> · <a href="users.php">Utilizadores</a><?php endif; ?></div>
             <span><?= htmlspecialchars((string) ($user['name'] ?? $user['username'] ?? 'Admin'), ENT_QUOTES, 'UTF-8') ?></span>
         </nav>
 

@@ -2,8 +2,11 @@
 declare(strict_types=1);
 
 require __DIR__ . '/lib.php';
+$config = require __DIR__ . '/config.php';
+require_once __DIR__ . '/src/Auth/Auth.php';
 
 try {
+    Auth::requireLogin(database(), $config);
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $property = trim((string) ($_GET['property'] ?? ''));
     $room = (int) ($_GET['room'] ?? 0);
@@ -113,6 +116,9 @@ try {
 } catch (JsonException | InvalidArgumentException $exception) {
     jsonResponse(['ok' => false, 'error' => $exception->getMessage()], 422);
 } catch (Throwable $exception) {
+    if ($exception instanceof RuntimeException && in_array($exception->getCode(), [401, 403, 429], true)) {
+        jsonResponse(['ok' => false, 'error' => $exception->getMessage()], $exception->getCode());
+    }
     error_log((string) $exception);
     jsonResponse(['ok' => false, 'error' => 'Não foi possível aceder à base de dados.'], 500);
 }

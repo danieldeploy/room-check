@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/src/My2N/My2NRedactor.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NGateway.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NService.php';
+require_once dirname(__DIR__) . '/src/Auth/Auth.php';
 
 final class FakeMy2NGateway implements My2NGateway
 {
@@ -66,5 +67,18 @@ $redacted = My2NRedactor::sanitize([
 assertTrue(($redacted['safe'] ?? null) === 'ok', 'non-sensitive fields remain');
 assertTrue(!isset($redacted['nested']['session_token']), 'session token is removed');
 assertTrue(!isset($redacted['nested']['sipPassword']), 'nested sipPassword is removed');
+
+assertTrue(count(Auth::ROLES) === 4, 'exactly four authentication roles exist');
+assertTrue(isset(Auth::ROLES['gerente']), 'Gerente role exists');
+assertTrue(isset(Auth::ROLES['governanta']), 'Governanta role exists');
+assertTrue(isset(Auth::ROLES['tecnico_manutencao']), 'Técnico de Manutenção role exists');
+assertTrue(isset(Auth::ROLES['empregada_andares']), 'Empregada de Andares role exists');
+$shortPasswordRejected = false;
+try {
+    Auth::validatePassword('short');
+} catch (InvalidArgumentException) {
+    $shortPasswordRejected = true;
+}
+assertTrue($shortPasswordRejected, 'short passwords are rejected');
 
 echo 'All tests passed.' . PHP_EOL;

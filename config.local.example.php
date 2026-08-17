@@ -12,6 +12,8 @@ return [
     'auth' => [
         // Optional absolute path to the existing authentication bootstrap.
         'bootstrap' => '',
+        // Remove this value after creating the first Gerente account.
+        'setup_key' => 'CRIE_UMA_CHAVE_LONGA_E_ALEATORIA',
     ],
     'my2n' => [
         // This file contains only the path. Credentials stay outside public_html.

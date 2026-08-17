@@ -1,0 +1,7 @@
+.session-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 24px; padding: 10px 14px; border: 1px solid #dce6e5; border-radius: 13px; background: rgba(255,255,255,.82); }
+.session-user { display: flex; align-items: center; gap: 8px; color: #65777d; font-size: .88rem; }
+.session-user strong { color: #17313a; }
+.session-actions { display: flex; align-items: center; gap: 8px; }
+.session-actions a, .session-actions button { min-height: 36px; padding: 8px 11px; border: 0; border-radius: 9px; color: #0f766e; background: #e8f4f2; font: inherit; font-size: .82rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+.session-actions form { margin: 0; }
+@media (max-width: 650px) { .session-bar { align-items: flex-start; flex-direction: column; } .session-actions { flex-wrap: wrap; } }
