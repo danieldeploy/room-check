@@ -44,15 +44,8 @@ return [
         'runner_status_file' => (string) ($localConfig['zkaccess']['runner_status_file'] ?? getenv('ZKACCESS_RUNNER_STATUS_FILE') ?: ''),
     ],
     'my2n' => [
-        'company_id' => (int) ($localConfig['my2n']['company_id'] ?? getenv('MY2N_COMPANY_ID') ?: 0),
-        'site_id' => (int) ($localConfig['my2n']['site_id'] ?? getenv('MY2N_SITE_ID') ?: 0),
-        'intercom_device_id' => (int) ($localConfig['my2n']['intercom_device_id'] ?? getenv('MY2N_INTERCOM_DEVICE_ID') ?: 0),
-        'contact_list_feature_id' => (int) ($localConfig['my2n']['contact_list_feature_id'] ?? getenv('MY2N_CONTACT_LIST_FEATURE_ID') ?: 0),
-        'button_configuration_feature_id' => (int) ($localConfig['my2n']['button_configuration_feature_id'] ?? getenv('MY2N_BUTTON_CONFIGURATION_FEATURE_ID') ?: 0),
-        'button_id' => (int) ($localConfig['my2n']['button_id'] ?? getenv('MY2N_BUTTON_ID') ?: 0),
-        'contact_id' => (int) ($localConfig['my2n']['contact_id'] ?? getenv('MY2N_CONTACT_ID') ?: 0),
-        'ringing_group_item_id' => (int) ($localConfig['my2n']['ringing_group_item_id'] ?? getenv('MY2N_RINGING_GROUP_ITEM_ID') ?: 0),
-        'ringing_group_sip_number' => (string) ($localConfig['my2n']['ringing_group_sip_number'] ?? getenv('MY2N_RINGING_GROUP_SIP_NUMBER') ?: ''),
+        'company_id' => (int) ($localConfig['my2n']['company_id'] ?? getenv('MY2N_COMPANY_ID') ?: 70728),
+        'site_id' => (int) ($localConfig['my2n']['site_id'] ?? getenv('MY2N_SITE_ID') ?: 408904),
         'timezone' => 'Europe/Lisbon',
         'secrets_file' => $localConfig['my2n']['secrets_file']
             ?? getenv('MY2N_SECRETS_FILE')
