@@ -3,21 +3,30 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/My2NGateway.php';
 require_once __DIR__ . '/My2NRedactor.php';
+require_once __DIR__ . '/My2NCredentialStore.php';
 
 final class My2NClient implements My2NGateway
 {
     private ?string $sessionToken = null;
 
-    public function __construct(private readonly array $config)
+    public function __construct(
+        private readonly array $config,
+        private readonly ?array $credentialOverride = null
+    )
     {
+    }
+
+    public function authenticate(): void
+    {
+        $this->sessionToken();
     }
 
     public function listMobileConfigurations(): array
     {
         $path = sprintf(
             '/companies/%d/sites/%d/services/MOBILE_VIDEO/configurations?limit=1000',
-            $this->config['company_id'],
-            $this->config['site_id']
+            $this->configuredId('company_id'),
+            $this->configuredId('site_id')
         );
         return $this->partnerRequest('GET', $path);
     }
@@ -82,22 +91,29 @@ final class My2NClient implements My2NGateway
 
     private function credentials(): array
     {
+        if ($this->credentialOverride !== null) {
+            $identifier = trim((string) ($this->credentialOverride['identifier'] ?? ''));
+            $password = (string) ($this->credentialOverride['password'] ?? '');
+            if ($identifier === '' || $password === '') {
+                throw new RuntimeException('Credenciais My2N incompletas.', 503);
+            }
+            return ['identifier' => $identifier, 'password' => $password];
+        }
+
         $identifier = getenv('MY2N_IDENTIFIER') ?: '';
         $password = getenv('MY2N_PASSWORD') ?: '';
         $file = (string) ($this->config['secrets_file'] ?? '');
 
         if ($file !== '') {
-            $resolved = realpath($file);
-            if ($resolved === false || !is_file($resolved)) {
-                throw new RuntimeException('Ficheiro externo de segredos My2N não encontrado.', 503);
+            try {
+                $stored = (new My2NCredentialStore($file))->read();
+                $identifier = $stored['identifier'];
+                $password = $stored['password'];
+            } catch (RuntimeException $exception) {
+                if ($identifier === '' || $password === '') {
+                    throw $exception;
+                }
             }
-            $documentRoot = realpath((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
-            if ($documentRoot !== false && str_starts_with($resolved, $documentRoot . DIRECTORY_SEPARATOR)) {
-                throw new RuntimeException('O ficheiro de segredos My2N não pode estar em public_html.', 503);
-            }
-            $decoded = json_decode((string) file_get_contents($resolved), true, 8, JSON_THROW_ON_ERROR);
-            $identifier = (string) ($decoded['identifier'] ?? $identifier);
-            $password = (string) ($decoded['password'] ?? $password);
         }
 
         if ($identifier === '' || $password === '') {
@@ -152,13 +168,25 @@ final class My2NClient implements My2NGateway
     {
         return sprintf(
             '/companies/%d/sites/%d/devices/%d/features/CONTACT_LIST/%d/contacts/%d/items/RINGING_GROUP/%d/members',
-            $this->config['company_id'],
-            $this->config['site_id'],
-            $this->config['intercom_device_id'],
-            $this->config['contact_list_feature_id'],
-            $this->config['contact_id'],
-            $this->config['ringing_group_item_id']
+            $this->configuredId('company_id'),
+            $this->configuredId('site_id'),
+            $this->configuredId('intercom_device_id'),
+            $this->configuredId('contact_list_feature_id'),
+            $this->configuredId('contact_id'),
+            $this->configuredId('ringing_group_item_id')
         );
+    }
+
+    private function configuredId(string $key): int
+    {
+        $value = (int) ($this->config[$key] ?? 0);
+        if ($value < 1) {
+            throw new RuntimeException(
+                'A ligação My2N foi configurada, mas ainda falta identificar a empresa, o site e o destination group.',
+                503
+            );
+        }
+        return $value;
     }
 
     private function findScalar(array $payload, array $keys): string|int|null

@@ -40,6 +40,49 @@ final class My2NService
         ];
     }
 
+    public function replaceMembers(array $memberIds, array $expectedCurrentMemberIds): array
+    {
+        $requested = $this->normalizeRequestedMemberIds($memberIds, false);
+        $expected = $this->normalizeRequestedMemberIds($expectedCurrentMemberIds, true);
+        $before = $this->status();
+        $current = $this->normalizeRequestedMemberIds($before['currentMemberIds'], true);
+        if ($current !== $expected) {
+            throw new RuntimeException(
+                'Os destinatários foram alterados entretanto. Atualize a lista antes de tentar novamente.',
+                409
+            );
+        }
+
+        $knownIds = array_map('intval', array_column($before['devices'], 'memberId'));
+        foreach ($requested as $memberId) {
+            if (!in_array($memberId, $knownIds, true)) {
+                throw new InvalidArgumentException('Foi selecionado um telemóvel que não pertence a este site.');
+            }
+        }
+        if ($requested === $current) {
+            return [
+                'changed' => false,
+                'beforeMemberIds' => $current,
+                'requestedMemberIds' => $requested,
+                'status' => $before,
+            ];
+        }
+
+        $this->gateway->updateMembers($requested);
+        $after = $this->status();
+        $confirmed = $this->normalizeRequestedMemberIds($after['currentMemberIds'], true);
+        if ($confirmed !== $requested) {
+            throw new RuntimeException('A My2N não confirmou todos os destinatários pedidos.', 502);
+        }
+
+        return [
+            'changed' => true,
+            'beforeMemberIds' => $current,
+            'requestedMemberIds' => $requested,
+            'status' => $after,
+        ];
+    }
+
     private function normalizeConfigurations(array $payload): array
     {
         $rows = $this->candidateRows($payload, ['configurations', 'items', 'data']);
@@ -67,6 +110,27 @@ final class My2NService
 
         usort($devices, static fn(array $a, array $b): int => strcasecmp($a['name'], $b['name']));
         return $devices;
+    }
+
+    private function normalizeRequestedMemberIds(array $memberIds, bool $allowEmpty): array
+    {
+        $normalized = [];
+        foreach ($memberIds as $memberId) {
+            if (!is_int($memberId) && !(is_string($memberId) && ctype_digit($memberId))) {
+                throw new InvalidArgumentException('Member ID inválido.');
+            }
+            $value = (int) $memberId;
+            if ($value < 1) {
+                throw new InvalidArgumentException('Member ID inválido.');
+            }
+            $normalized[] = $value;
+        }
+        $normalized = array_values(array_unique($normalized));
+        sort($normalized, SORT_NUMERIC);
+        if (!$allowEmpty && $normalized === []) {
+            throw new InvalidArgumentException('Selecione pelo menos um destinatário para a campainha.');
+        }
+        return $normalized;
     }
 
     private function normalizeMemberIds(array $payload): array

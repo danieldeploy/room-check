@@ -59,6 +59,7 @@ INSERT IGNORE INTO role_permissions (role, permission) VALUES
     ('gerente', 'zkaccess.view'),
     ('gerente', 'zkaccess.configure'),
     ('gerente', 'my2n.view'),
+    ('gerente', 'my2n.credentials'),
     ('gerente', 'my2n.control'),
     ('gerente', 'my2n.schedule'),
     ('gerente', 'my2n.rollback'),

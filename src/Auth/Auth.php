@@ -10,6 +10,7 @@ final class Auth
     public const PERMISSION_USERS_MANAGE = 'users.manage';
     public const PERMISSION_PERMISSIONS_MANAGE = 'permissions.manage';
     public const PERMISSION_MY2N_VIEW = 'my2n.view';
+    public const PERMISSION_MY2N_CREDENTIALS = 'my2n.credentials';
     public const PERMISSION_MY2N_CONTROL = 'my2n.control';
     public const PERMISSION_MY2N_SCHEDULE = 'my2n.schedule';
     public const PERMISSION_MY2N_ROLLBACK = 'my2n.rollback';
@@ -21,6 +22,7 @@ final class Auth
         self::PERMISSION_ZKACCESS_VIEW => ['group' => 'ZKAccess', 'label' => 'Consultar automação'],
         self::PERMISSION_ZKACCESS_CONFIGURE => ['group' => 'ZKAccess', 'label' => 'Configurar automação'],
         self::PERMISSION_MY2N_VIEW => ['group' => 'My2N', 'label' => 'Consultar campainha'],
+        self::PERMISSION_MY2N_CREDENTIALS => ['group' => 'My2N', 'label' => 'Gerir login My2N'],
         self::PERMISSION_MY2N_CONTROL => ['group' => 'My2N', 'label' => 'Alterar destinatários'],
         self::PERMISSION_MY2N_SCHEDULE => ['group' => 'My2N', 'label' => 'Configurar horários'],
         self::PERMISSION_MY2N_ROLLBACK => ['group' => 'My2N', 'label' => 'Executar rollback'],
@@ -45,6 +47,7 @@ final class Auth
             self::PERMISSION_USERS_MANAGE,
             self::PERMISSION_PERMISSIONS_MANAGE,
             self::PERMISSION_MY2N_VIEW,
+            self::PERMISSION_MY2N_CREDENTIALS,
             self::PERMISSION_MY2N_CONTROL,
             self::PERMISSION_MY2N_SCHEDULE,
             self::PERMISSION_MY2N_ROLLBACK,
@@ -71,12 +74,14 @@ final class Auth
         'gerente' => [
             self::PERMISSION_USERS_MANAGE,
             self::PERMISSION_PERMISSIONS_MANAGE,
+            self::PERMISSION_MY2N_CREDENTIALS,
         ],
     ];
 
     public const PERMISSION_DEPENDENCIES = [
         self::PERMISSION_ROOM_CHECK_EDIT => [self::PERMISSION_ROOM_CHECK_VIEW],
         self::PERMISSION_ZKACCESS_CONFIGURE => [self::PERMISSION_ZKACCESS_VIEW],
+        self::PERMISSION_MY2N_CREDENTIALS => [self::PERMISSION_MY2N_VIEW],
         self::PERMISSION_MY2N_CONTROL => [self::PERMISSION_MY2N_VIEW],
         self::PERMISSION_MY2N_SCHEDULE => [self::PERMISSION_MY2N_VIEW],
         self::PERMISSION_MY2N_ROLLBACK => [self::PERMISSION_MY2N_VIEW],

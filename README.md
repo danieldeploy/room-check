@@ -19,7 +19,7 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 1. Crie a base de dados e um utilizador com os privilégios necessários.
 2. Numa instalação nova, importe `database.sql` no phpMyAdmin.
-3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql` e `004_portal_permissions.sql`.
+3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql`, `004_portal_permissions.sql` e `005_my2n_credentials_permission.sql`.
 4. Copie `config.local.example.php` para `config.local.php` em `$HOME/public_html/check` e configure a base de dados.
 5. Confirme que `check.welcomehostel.pt` usa `/public_html/check` como Document Root e Force HTTPS Redirect.
 6. Defina temporariamente `auth.setup_key`, abra `/setup.php`, crie o primeiro Gerente e remova imediatamente a chave.
@@ -34,7 +34,7 @@ O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser
 - `/index.php` é o portal autenticado.
 - `/rooms.php` preserva a gestão de quartos existente.
 - `/admin/zkaccess.php` apresenta os parâmetros e o estado da automação ZKAccess.
-- `/admin/my2n.php` apresenta o estado read-only da Welcome Bell.
+- `/admin/my2n.php` configura a ligação e os destinatários da Welcome Bell.
 - `/admin/users.php` gere contas e perfis.
 - `/admin/permissions.php` configura a matriz de permissões.
 
@@ -58,12 +58,13 @@ Matriz padrão:
 | Consultar automação ZKAccess | Sim | Não | Sim | Não |
 | Configurar automação ZKAccess | Sim | Não | Não | Não |
 | Consultar My2N | Sim | Sim | Sim | Não |
+| Gerir login My2N | Sim (obrigatória) | Não | Não | Não |
 | Alterar/agendar/rollback My2N | Sim | Não | Não | Não |
 | Gerir utilizadores | Sim | Não | Não | Não |
 | Gerir permissões | Sim | Não | Não | Não |
 | Consultar auditoria | Sim | Não | Não | Não |
 
-O acesso do Gerente a `users.manage` e `permissions.manage` é obrigatório, para impedir que todos os administradores fiquem bloqueados. Permissões de alteração incluem automaticamente a consulta do respetivo módulo. Se a tabela `role_permissions` ainda não existir, a aplicação usa a matriz padrão em código.
+O acesso do Gerente a `users.manage`, `permissions.manage` e `my2n.credentials` é obrigatório, para impedir que todos os administradores fiquem bloqueados. A permissão `my2n.credentials` pode ser atribuída adicionalmente à Governanta ou ao Técnico. Permissões de alteração incluem automaticamente a consulta do respetivo módulo. Se a tabela `role_permissions` ainda não existir, a aplicação usa a matriz padrão em código.
 
 ## Gestão dos quartos
 
@@ -94,15 +95,18 @@ A automação não pode ser ativada pela interface enquanto o primeiro ficheiro 
 
 ## Painel My2N
 
-O estado atual é read-only:
+- o Gerente pode validar e guardar o login da conta técnica My2N no próprio painel;
+- a permissão `my2n.credentials` pode ser atribuída a outros perfis na matriz;
+- consulta configurações `MOBILE_VIDEO`, estados `REGISTERED` / `NOT_REGISTERED` e membros atuais;
+- mostra quais telemóveis pertencem ao destination group;
+- utilizadores com `my2n.control` podem preparar a adição ou remoção de telemóveis;
+- antes de qualquer escrita guarda snapshot, verifica se o grupo não mudou entretanto, executa o `PUT`, relê e confirma o resultado;
+- nunca permite guardar um destination group vazio;
+- remove defensivamente `sipPassword`, tokens e passwords das respostas e auditorias.
 
-- consulta configurações `MOBILE_VIDEO` e membros atuais;
-- apresenta `REGISTERED` / `NOT_REGISTERED`;
-- remove defensivamente `sipPassword`, tokens e passwords;
-- não expõe operações `PUT`;
-- mantém estrutura inativa para snapshots, auditoria e horários.
+As credenciais ficam em `$HOME/room-check-private/my2n-secrets.json` com permissões `0600`. O caminho pode ser indicado por `MY2N_SECRETS_FILE`; quando `HOME` está disponível, esse caminho privado é usado por defeito. Nunca coloque segredos My2N no Git, JavaScript, `config.local.php` ou `public_html`.
 
-As credenciais ficam, por exemplo, em `$HOME/room-check-private/my2n-secrets.json` com permissões `0600`, referenciado por `MY2N_SECRETS_FILE`. Nunca coloque segredos My2N no Git, JavaScript, `config.local.php` ou `public_html`. As escritas também exigem `MY2N_ALLOW_WRITES=1`, mas essa variável não cria interface de escrita nesta fase.
+As alterações remotas permanecem bloqueadas enquanto `MY2N_ALLOW_WRITES` não for exatamente `1`. Esta variável só deve ser ativada durante o primeiro teste acompanhado.
 
 ## Proteções
 

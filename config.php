@@ -8,6 +8,11 @@ if (!is_array($localConfig)) {
     throw new RuntimeException('config.local.php must return an array.');
 }
 
+$serverHome = rtrim((string) (getenv('HOME') ?: ''), DIRECTORY_SEPARATOR);
+$defaultMy2NSecretsFile = $serverHome === ''
+    ? ''
+    : $serverHome . '/room-check-private/my2n-secrets.json';
+
 return [
     'db' => [
         'host' => $localConfig['db']['host'] ?? getenv('ROOM_CHECK_DB_HOST') ?: 'localhost',
@@ -39,7 +44,9 @@ return [
         'ringing_group_item_id' => (int) ($localConfig['my2n']['ringing_group_item_id'] ?? getenv('MY2N_RINGING_GROUP_ITEM_ID') ?: 0),
         'ringing_group_sip_number' => (string) ($localConfig['my2n']['ringing_group_sip_number'] ?? getenv('MY2N_RINGING_GROUP_SIP_NUMBER') ?: ''),
         'timezone' => 'Europe/Lisbon',
-        'secrets_file' => $localConfig['my2n']['secrets_file'] ?? getenv('MY2N_SECRETS_FILE') ?: '',
+        'secrets_file' => $localConfig['my2n']['secrets_file']
+            ?? getenv('MY2N_SECRETS_FILE')
+            ?: $defaultMy2NSecretsFile,
         'allow_writes' => getenv('MY2N_ALLOW_WRITES') === '1',
         'base_url' => 'https://my2n.com/middleware/api/partner/v1',
         'auth_url' => 'https://auth.my2n.com/self-service/login',
