@@ -21,6 +21,7 @@ final class FakeMy2NGateway implements My2NGateway
                 'siteId' => 7001,
                 'deviceId' => 8001,
                 'name' => 'Test Device',
+                'apartment' => ['id' => 42, 'name' => 'Apartment 42'],
                 'status' => 'NOT_REGISTERED',
                 'sipNumber' => '0000000000',
                 'sipPassword' => 'must-never-leak',
@@ -74,6 +75,8 @@ assertTrue($status['dryRun'] === true, 'read-only status reports dry-run');
 assertTrue(count($status['devices']) === 2, 'mobile configurations are normalized');
 assertTrue($status['devices'][0]['memberId'] === 9001, 'member ID is preserved');
 assertTrue($status['devices'][0]['status'] === 'NOT_REGISTERED', 'registration status is preserved');
+assertTrue($status['devices'][0]['apartmentId'] === 42, 'apartment ID is read from the API payload');
+assertTrue($status['devices'][0]['apartmentName'] === 'Apartment 42', 'apartment name is read from the API payload');
 assertTrue($status['devices'][0]['inCurrentGroup'] === true, 'current group membership is marked');
 assertTrue(!str_contains(strtolower($encoded), 'sippassword'), 'sipPassword key is removed');
 assertTrue(!str_contains($encoded, 'must-never-leak'), 'sipPassword value is removed');
@@ -104,6 +107,7 @@ assertTrue(!isset($redacted['nested']['sipPassword']), 'nested sipPassword is re
 $authClient = new My2NClient([
     'auth_url' => 'https://example.invalid',
     'base_url' => 'https://example.invalid',
+    'ringing_group_sip_number' => '3507254897',
 ]);
 $flowIdMethod = new ReflectionMethod(My2NClient::class, 'flowId');
 $flowIdMethod->setAccessible(true);
@@ -131,6 +135,35 @@ assertTrue(
     !isset($sanitizedLoginResponse['session_token']),
     'session token is removed from sanitized provider responses'
 );
+
+$featureIdMethod = new ReflectionMethod(My2NClient::class, 'contactListFeatureId');
+$featureIdMethod->setAccessible(true);
+assertTrue(
+    $featureIdMethod->invoke($authClient, [
+        'features' => [
+            ['id' => 12, 'type' => 'BUTTON_CONFIGURATION'],
+            ['id' => 34, 'type' => 'CONTACT_LIST'],
+        ],
+    ]) === 34,
+    'CONTACT_LIST feature is discovered from the API payload'
+);
+$destinationGroupMethod = new ReflectionMethod(My2NClient::class, 'destinationGroupFromContactList');
+$destinationGroupMethod->setAccessible(true);
+$destinationGroup = $destinationGroupMethod->invoke($authClient, [
+    'contacts' => [[
+        'id' => 56,
+        'items' => [[
+            'id' => 78,
+            'type' => 'RINGING_GROUP',
+            'sipNumber' => '3507254897',
+            'members' => [9001, 9002],
+        ]],
+    ]],
+], 34);
+assertTrue($destinationGroup['featureId'] === 34, 'destination group keeps the discovered feature ID');
+assertTrue($destinationGroup['contactId'] === 56, 'destination group contact is discovered');
+assertTrue($destinationGroup['itemId'] === 78, 'destination group item is discovered');
+assertTrue($destinationGroup['members'] === [9001, 9002], 'destination members are read automatically');
 
 $temporaryDirectory = sys_get_temp_dir() . '/room-check-my2n-' . bin2hex(random_bytes(4));
 $credentialFile = $temporaryDirectory . '/credentials.json';
