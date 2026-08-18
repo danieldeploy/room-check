@@ -42,6 +42,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .form-message.error { color: #b42318; background: #fff0ee; }
 .panel-status { padding: 12px 20px; border-block: 1px solid var(--line); color: var(--muted); }
 .panel-status[data-kind="error"] { color: #b42318; background: #fff5f4; }
+.panel-status[data-kind="warning"] { color: #7a4b00; background: #fff7df; }
 .panel-status[data-kind="success"] { color: #137333; background: #f2fbf4; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
