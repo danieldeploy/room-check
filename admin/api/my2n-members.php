@@ -12,6 +12,7 @@ $pdo = null;
 $lockAcquired = false;
 $beforeIds = null;
 $requestedIds = null;
+$bellKey = null;
 $actor = null;
 
 try {
@@ -34,6 +35,10 @@ try {
     if (!is_array($payload)) {
         throw new InvalidArgumentException('Pedido inválido.');
     }
+    $bellKey = trim((string) ($payload['bellKey'] ?? ''));
+    if (!preg_match('/^\d+:\d+:\d+:\d+$/', $bellKey)) {
+        throw new InvalidArgumentException('Campainha inválida.');
+    }
     $requestedIds = isset($payload['memberIds']) && is_array($payload['memberIds'])
         ? $payload['memberIds']
         : [];
@@ -55,36 +60,46 @@ try {
     }
 
     $service = new My2NService(new My2NClient($config['my2n']), $config['my2n']);
-    $before = $service->status();
-    $beforeIds = array_values(array_map('intval', $before['currentMemberIds']));
-    sort($beforeIds, SORT_NUMERIC);
-
+    $requestedNormalized = array_values(array_unique(array_map('intval', $requestedIds)));
+    sort($requestedNormalized, SORT_NUMERIC);
     $expectedNormalized = array_values(array_unique(array_map('intval', $expectedIds)));
     sort($expectedNormalized, SORT_NUMERIC);
+    $beforeStatus = $service->status();
+    $beforeBell = null;
+    foreach ($beforeStatus['bells'] ?? [] as $candidateBell) {
+        if (is_array($candidateBell) && hash_equals((string) ($candidateBell['bellKey'] ?? ''), $bellKey)) {
+            $beforeBell = $candidateBell;
+            break;
+        }
+    }
+    if ($beforeBell === null) {
+        throw new InvalidArgumentException('Campainha inválida ou já removida do site.');
+    }
+    $beforeIds = array_values(array_map('intval', $beforeBell['currentMemberIds'] ?? []));
+    sort($beforeIds, SORT_NUMERIC);
     if ($beforeIds !== $expectedNormalized) {
         throw new RuntimeException(
-            'Os destinatários foram alterados entretanto. Atualize a lista antes de tentar novamente.',
+            'Os destinatários desta campainha foram alterados entretanto. Atualize a lista antes de tentar novamente.',
             409
         );
     }
-
-    $requestedNormalized = array_values(array_unique(array_map('intval', $requestedIds)));
-    sort($requestedNormalized, SORT_NUMERIC);
     if ($requestedNormalized !== $beforeIds) {
         $snapshot = $pdo->prepare(
             'INSERT INTO my2n_member_snapshots (member_ids_json, source, created_by)
              VALUES (:members, :source, :actor)'
         );
         $snapshot->execute([
-            'members' => json_encode($beforeIds, JSON_THROW_ON_ERROR),
-            'source' => 'manual',
+            'members' => json_encode([
+                'bellKey' => $bellKey,
+                'memberIds' => $expectedNormalized,
+            ], JSON_THROW_ON_ERROR),
+            'source' => 'manual-bell',
             'actor' => $actor,
         ]);
     }
 
-    $result = $service->replaceMembers($requestedIds, $beforeIds);
-    $confirmedIds = array_values(array_map('intval', $result['status']['currentMemberIds']));
-    sort($confirmedIds, SORT_NUMERIC);
+    $result = $service->replaceBellMembers($bellKey, $requestedIds, $expectedNormalized);
+    $confirmedIds = $requestedNormalized;
 
     $audit = $pdo->prepare(
         'INSERT INTO my2n_audit_log
@@ -93,11 +108,11 @@ try {
          VALUES (:action, :actor, :before_ids, :requested_ids, :confirmed_ids, 0, 1)'
     );
     $audit->execute([
-        'action' => $result['changed'] ? 'members_updated' : 'members_unchanged',
+        'action' => $result['changed'] ? 'bell_members_updated' : 'bell_members_unchanged',
         'actor' => $actor,
-        'before_ids' => json_encode($beforeIds, JSON_THROW_ON_ERROR),
-        'requested_ids' => json_encode($result['requestedMemberIds'], JSON_THROW_ON_ERROR),
-        'confirmed_ids' => json_encode($confirmedIds, JSON_THROW_ON_ERROR),
+        'before_ids' => json_encode(['bellKey' => $bellKey, 'memberIds' => $beforeIds], JSON_THROW_ON_ERROR),
+        'requested_ids' => json_encode(['bellKey' => $bellKey, 'memberIds' => $result['requestedMemberIds']], JSON_THROW_ON_ERROR),
+        'confirmed_ids' => json_encode(['bellKey' => $bellKey, 'memberIds' => $confirmedIds], JSON_THROW_ON_ERROR),
     ]);
 
     $response = ['ok' => true, 'data' => $result['status'], 'changed' => $result['changed']];
@@ -112,10 +127,16 @@ try {
                  VALUES (:action, :actor, :before_ids, :requested_ids, :dry_run, 0, :error)'
             );
             $audit->execute([
-                'action' => 'members_update_failed',
+                'action' => 'bell_members_update_failed',
                 'actor' => $actor,
-                'before_ids' => $beforeIds === null ? null : json_encode($beforeIds, JSON_THROW_ON_ERROR),
-                'requested_ids' => json_encode($requestedIds, JSON_THROW_ON_ERROR),
+                'before_ids' => $beforeIds === null ? null : json_encode([
+                    'bellKey' => $bellKey,
+                    'memberIds' => $beforeIds,
+                ], JSON_THROW_ON_ERROR),
+                'requested_ids' => json_encode([
+                    'bellKey' => $bellKey,
+                    'memberIds' => $requestedIds,
+                ], JSON_THROW_ON_ERROR),
                 'dry_run' => ($config['my2n']['allow_writes'] ?? false) === true ? 0 : 1,
                 'error' => mb_substr($exception->getMessage(), 0, 500),
             ]);
