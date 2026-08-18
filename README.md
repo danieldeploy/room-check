@@ -34,7 +34,7 @@ O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser
 - `/index.php` é o portal autenticado.
 - `/rooms.php` preserva a gestão de quartos existente.
 - `/admin/zkaccess.php` apresenta os parâmetros e o estado da automação ZKAccess.
-- `/admin/my2n.php` configura a ligação e os destinatários da Welcome Bell.
+- `/admin/my2n.php` configura a ligação e as associações entre todas as campainhas e telemóveis do Site My2N.
 - `/admin/users.php` gere contas e perfis.
 - `/admin/permissions.php` configura a matriz de permissões.
 
@@ -97,10 +97,11 @@ A automação não pode ser ativada pela interface enquanto o primeiro ficheiro 
 
 - o Gerente pode validar e guardar o login da conta técnica My2N no próprio painel;
 - a permissão `my2n.credentials` pode ser atribuída a outros perfis na matriz;
-- consulta configurações `MOBILE_VIDEO`, estados `REGISTERED` / `NOT_REGISTERED` e membros atuais;
-- mostra quais telemóveis pertencem ao destination group;
-- utilizadores com `my2n.control` podem preparar a adição ou remoção de telemóveis;
-- antes de qualquer escrita guarda snapshot, verifica se o grupo não mudou entretanto, executa o `PUT`, relê e confirma o resultado;
+- mantém apenas um Site My2N configurado e descobre dinamicamente todas as campainhas, apartamentos e configurações `MOBILE_VIDEO` desse Site;
+- apresenta uma matriz campainha × telemóvel, permitindo que o mesmo telemóvel atenda uma, várias ou nenhuma das campainhas;
+- suporta várias campainhas no mesmo apartamento e destination groups independentes;
+- utilizadores com `my2n.control` podem preparar a adição ou remoção de telemóveis em cada campainha;
+- antes de qualquer escrita guarda snapshot por campainha, verifica se o respetivo grupo não mudou entretanto, executa o `PUT`, relê e confirma o resultado;
 - nunca permite guardar um destination group vazio;
 - remove defensivamente `sipPassword`, tokens e passwords das respostas e auditorias.
 
