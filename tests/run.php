@@ -5,6 +5,7 @@ require_once dirname(__DIR__) . '/src/My2N/My2NRedactor.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NGateway.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NService.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NCredentialStore.php';
+require_once dirname(__DIR__) . '/src/My2N/My2NClient.php';
 require_once dirname(__DIR__) . '/src/Auth/Auth.php';
 
 final class FakeMy2NGateway implements My2NGateway
@@ -99,6 +100,37 @@ $redacted = My2NRedactor::sanitize([
 assertTrue(($redacted['safe'] ?? null) === 'ok', 'non-sensitive fields remain');
 assertTrue(!isset($redacted['nested']['session_token']), 'session token is removed');
 assertTrue(!isset($redacted['nested']['sipPassword']), 'nested sipPassword is removed');
+
+$authClient = new My2NClient([
+    'auth_url' => 'https://example.invalid',
+    'base_url' => 'https://example.invalid',
+]);
+$flowIdMethod = new ReflectionMethod(My2NClient::class, 'flowId');
+$flowIdMethod->setAccessible(true);
+assertTrue(
+    $flowIdMethod->invoke($authClient, ['id' => 'flow-123']) === 'flow-123',
+    'Auth v2 top-level id is accepted as the login flow identifier'
+);
+$decodeResponseMethod = new ReflectionMethod(My2NClient::class, 'decodeResponse');
+$decodeResponseMethod->setAccessible(true);
+$rawLoginResponse = $decodeResponseMethod->invoke(
+    $authClient,
+    '{"session_token":"token-for-test"}',
+    false
+);
+assertTrue(
+    ($rawLoginResponse['session_token'] ?? null) === 'token-for-test',
+    'Auth v2 session token remains available for internal extraction'
+);
+$sanitizedLoginResponse = $decodeResponseMethod->invoke(
+    $authClient,
+    '{"session_token":"token-for-test"}',
+    true
+);
+assertTrue(
+    !isset($sanitizedLoginResponse['session_token']),
+    'session token is removed from sanitized provider responses'
+);
 
 $temporaryDirectory = sys_get_temp_dir() . '/room-check-my2n-' . bin2hex(random_bytes(4));
 $credentialFile = $temporaryDirectory . '/credentials.json';
