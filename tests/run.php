@@ -142,10 +142,20 @@ assertTrue(
     $featureIdMethod->invoke($authClient, [
         'features' => [
             ['id' => 12, 'type' => 'BUTTON_CONFIGURATION'],
-            ['id' => 34, 'type' => 'CONTACT_LIST'],
+            ['id' => 34, 'feature' => 'CONTACT_LIST'],
         ],
     ]) === 34,
-    'CONTACT_LIST feature is discovered from the API payload'
+    'CONTACT_LIST feature is discovered from the current API payload'
+);
+assertTrue(
+    $featureIdMethod->invoke($authClient, [
+        'data' => [
+            'features' => [
+                'CONTACT_LIST' => ['id' => 35],
+            ],
+        ],
+    ]) === 35,
+    'CONTACT_LIST feature is discovered from nested and keyed API payloads'
 );
 $destinationGroupMethod = new ReflectionMethod(My2NClient::class, 'destinationGroupFromContactList');
 $destinationGroupMethod->setAccessible(true);
