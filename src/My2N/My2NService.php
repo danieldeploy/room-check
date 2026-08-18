@@ -89,21 +89,42 @@ final class My2NService
     {
         $rows = $this->candidateRows(
             $payload,
-            ['configurations', 'deviceConfigurations', 'device_configurations', 'items', 'data']
+            ['results', 'configurations', 'deviceConfigurations', 'device_configurations', 'items', 'data']
         );
         $devices = [];
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
             }
+
+            $mobileConfiguration = [];
+            if (isset($row['services']) && is_array($row['services'])) {
+                foreach ($row['services'] as $serviceType => $serviceConfiguration) {
+                    if (
+                        is_string($serviceType)
+                        && strtoupper($serviceType) === 'MOBILE_VIDEO'
+                        && is_array($serviceConfiguration)
+                    ) {
+                        $mobileConfiguration = $serviceConfiguration;
+                        break;
+                    }
+                }
+                if ($mobileConfiguration === []) {
+                    continue;
+                }
+            }
+
             $memberId = $this->firstInt(
-                $row,
+                $mobileConfiguration !== [] ? $mobileConfiguration : $row,
                 ['deviceConfigId', 'deviceConfigurationId', 'configurationId', 'memberId', 'id']
             );
             if ($memberId === null) {
                 continue;
             }
             $siteId = $this->firstInt($row, ['siteId', 'site_id']);
+            if ($siteId === null && isset($row['site']) && is_array($row['site'])) {
+                $siteId = $this->firstInt($row['site'], ['id', 'siteId', 'site_id']);
+            }
             if ($siteId !== null && $siteId !== (int) $this->config['site_id']) {
                 continue;
             }
@@ -113,10 +134,16 @@ final class My2NService
             $device = isset($row['device']) && is_array($row['device'])
                 ? $row['device']
                 : [];
+            $deviceId = $mobileConfiguration !== []
+                ? $this->firstInt($row, ['id', 'deviceId', 'device_id'])
+                : $this->firstInt($row, ['deviceId', 'device_id']);
+            $deviceId ??= $this->firstInt($device, ['id', 'deviceId', 'device_id']);
+            if ($deviceId === (int) $this->config['intercom_device_id']) {
+                continue;
+            }
             $devices[] = [
                 'memberId' => $memberId,
-                'deviceId' => $this->firstInt($row, ['deviceId', 'device_id'])
-                    ?? $this->firstInt($device, ['id', 'deviceId', 'device_id']),
+                'deviceId' => $deviceId,
                 'name' => $this->firstString($row, ['name', 'deviceName', 'displayName'])
                     ?? $this->firstString($device, ['name', 'deviceName', 'displayName'])
                     ?? 'Sem nome',
@@ -125,11 +152,13 @@ final class My2NService
                 'apartmentName' => $this->firstString($row, ['apartmentName', 'apartment_name'])
                     ?? $this->firstString($apartment, ['name', 'displayName']),
                 'status' => strtoupper(
-                    $this->firstString($row, ['status', 'registrationStatus'])
+                    $this->firstString($mobileConfiguration, ['status', 'registrationStatus'])
+                    ?? $this->firstString($row, ['status', 'registrationStatus'])
                     ?? $this->firstString($device, ['status', 'registrationStatus'])
                     ?? 'UNKNOWN'
                 ),
-                'sipNumber' => $this->firstString($row, ['sipNumber', 'sip_number'])
+                'sipNumber' => $this->firstString($mobileConfiguration, ['sipNumber', 'sip_number'])
+                    ?? $this->firstString($row, ['sipNumber', 'sip_number'])
                     ?? $this->firstString($device, ['sipNumber', 'sip_number']),
             ];
         }
