@@ -131,7 +131,7 @@ header('Cache-Control: no-store');
             <div class="card-heading">
                 <div>
                     <h2>Aparelhos MOBILE_VIDEO</h2>
-                    <p>Selecione os telemóveis que devem receber as chamadas do destination group.</p>
+                    <p>Os apartamentos e telemóveis são lidos automaticamente da My2N sempre que atualizar.</p>
                 </div>
                 <button id="refreshButton" type="button">Atualizar</button>
             </div>
@@ -143,6 +143,7 @@ header('Cache-Control: no-store');
                         <thead>
                             <tr>
                                 <th>Nome</th>
+                                <th>Apartamento</th>
                                 <th>Estado</th>
                                 <th>Device ID</th>
                                 <th>Member ID</th>
