@@ -238,15 +238,50 @@ final class My2NClient implements My2NGateway
 
     private function contactListFeatureId(array $payload): int
     {
+        $featureId = $this->typedFeatureId($payload, 'CONTACT_LIST');
+        if ($featureId !== null) {
+            return $featureId;
+        }
+
+        throw new RuntimeException('A API My2N não devolveu a lista de contactos da campainha.', 503);
+    }
+
+    private function typedFeatureId(array $payload, string $expectedType): ?int
+    {
+        $directType = strtoupper((string) ($this->firstScalar(
+            $payload,
+            ['type', 'feature', 'featureType', 'feature_type', 'name']
+        ) ?? ''));
+        if ($directType === $expectedType) {
+            $directId = $this->firstInt($payload, ['id', 'featureId', 'feature_id']);
+            if ($directId !== null) {
+                return $directId;
+            }
+        }
+
+        foreach ($payload as $key => $value) {
+            if (is_string($key) && strtoupper($key) === $expectedType) {
+                if (is_int($value) || (is_string($value) && ctype_digit($value))) {
+                    return (int) $value;
+                }
+                if (is_array($value)) {
+                    $id = $this->firstIntRecursive($value, ['id', 'featureId', 'feature_id']);
+                    if ($id !== null) {
+                        return $id;
+                    }
+                }
+            }
+        }
+
         foreach ($this->candidateRows($payload, ['features', 'items', 'data']) as $row) {
             if (!is_array($row)) {
                 continue;
             }
             $type = strtoupper((string) ($this->firstScalar(
                 $row,
-                ['type', 'featureType', 'feature_type', 'name']
+                ['type', 'feature', 'featureType', 'feature_type', 'name']
             ) ?? ''));
-            if ($type !== 'CONTACT_LIST') {
+            if ($type !== $expectedType) {
                 continue;
             }
             $id = $this->firstInt($row, ['id', 'featureId', 'feature_id']);
@@ -255,7 +290,16 @@ final class My2NClient implements My2NGateway
             }
         }
 
-        throw new RuntimeException('A API My2N não devolveu a lista de contactos da campainha.', 503);
+        foreach ($payload as $value) {
+            if (is_array($value)) {
+                $id = $this->typedFeatureId($value, $expectedType);
+                if ($id !== null) {
+                    return $id;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function destinationGroupFromContactList(array $payload, int $featureId): array
@@ -316,7 +360,33 @@ final class My2NClient implements My2NGateway
                 return $this->candidateRows($payload[$key], $containerKeys);
             }
         }
+        foreach ($payload as $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+            $rows = $this->candidateRows($value, $containerKeys);
+            if ($rows !== []) {
+                return $rows;
+            }
+        }
         return [];
+    }
+
+    private function firstIntRecursive(array $payload, array $keys): ?int
+    {
+        $id = $this->firstInt($payload, $keys);
+        if ($id !== null) {
+            return $id;
+        }
+        foreach ($payload as $value) {
+            if (is_array($value)) {
+                $id = $this->firstIntRecursive($value, $keys);
+                if ($id !== null) {
+                    return $id;
+                }
+            }
+        }
+        return null;
     }
 
     private function firstInt(array $row, array $keys): ?int
