@@ -17,12 +17,7 @@ final class My2NService
         $devices = $this->normalizeConfigurations($rawConfigurations);
         $memberIds = $this->normalizeMemberIds($rawMembers);
         $knownIds = array_column($devices, 'memberId');
-
-        foreach ($memberIds as $memberId) {
-            if (!in_array($memberId, $knownIds, true)) {
-                throw new RuntimeException('O grupo atual contém um membro que não pertence às configurações do site.', 409);
-            }
-        }
+        $unresolvedMemberIds = array_values(array_diff($memberIds, $knownIds));
 
         foreach ($devices as &$device) {
             $device['inCurrentGroup'] = in_array($device['memberId'], $memberIds, true);
@@ -36,6 +31,7 @@ final class My2NService
             'dryRun' => ($this->config['allow_writes'] ?? false) !== true,
             'devices' => $devices,
             'currentMemberIds' => $memberIds,
+            'unresolvedMemberIds' => $unresolvedMemberIds,
             'readAt' => (new DateTimeImmutable('now', new DateTimeZone($this->config['timezone'])))->format(DATE_ATOM),
         ];
     }
@@ -45,6 +41,12 @@ final class My2NService
         $requested = $this->normalizeRequestedMemberIds($memberIds, false);
         $expected = $this->normalizeRequestedMemberIds($expectedCurrentMemberIds, true);
         $before = $this->status();
+        if (($before['unresolvedMemberIds'] ?? []) !== []) {
+            throw new RuntimeException(
+                'Existem membros do grupo que ainda não foram associados a um aparelho; a gravação foi bloqueada.',
+                409
+            );
+        }
         $current = $this->normalizeRequestedMemberIds($before['currentMemberIds'], true);
         if ($current !== $expected) {
             throw new RuntimeException(
@@ -85,13 +87,19 @@ final class My2NService
 
     private function normalizeConfigurations(array $payload): array
     {
-        $rows = $this->candidateRows($payload, ['configurations', 'items', 'data']);
+        $rows = $this->candidateRows(
+            $payload,
+            ['configurations', 'deviceConfigurations', 'device_configurations', 'items', 'data']
+        );
         $devices = [];
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
             }
-            $memberId = $this->firstInt($row, ['id', 'configurationId', 'memberId']);
+            $memberId = $this->firstInt(
+                $row,
+                ['deviceConfigId', 'deviceConfigurationId', 'configurationId', 'memberId', 'id']
+            );
             if ($memberId === null) {
                 continue;
             }
@@ -102,16 +110,27 @@ final class My2NService
             $apartment = isset($row['apartment']) && is_array($row['apartment'])
                 ? $row['apartment']
                 : [];
+            $device = isset($row['device']) && is_array($row['device'])
+                ? $row['device']
+                : [];
             $devices[] = [
                 'memberId' => $memberId,
-                'deviceId' => $this->firstInt($row, ['deviceId', 'device_id']),
-                'name' => $this->firstString($row, ['name', 'deviceName', 'displayName']) ?? 'Sem nome',
+                'deviceId' => $this->firstInt($row, ['deviceId', 'device_id'])
+                    ?? $this->firstInt($device, ['id', 'deviceId', 'device_id']),
+                'name' => $this->firstString($row, ['name', 'deviceName', 'displayName'])
+                    ?? $this->firstString($device, ['name', 'deviceName', 'displayName'])
+                    ?? 'Sem nome',
                 'apartmentId' => $this->firstInt($row, ['apartmentId', 'apartment_id'])
                     ?? $this->firstInt($apartment, ['id', 'apartmentId', 'apartment_id']),
                 'apartmentName' => $this->firstString($row, ['apartmentName', 'apartment_name'])
                     ?? $this->firstString($apartment, ['name', 'displayName']),
-                'status' => strtoupper($this->firstString($row, ['status', 'registrationStatus']) ?? 'UNKNOWN'),
-                'sipNumber' => $this->firstString($row, ['sipNumber', 'sip_number']),
+                'status' => strtoupper(
+                    $this->firstString($row, ['status', 'registrationStatus'])
+                    ?? $this->firstString($device, ['status', 'registrationStatus'])
+                    ?? 'UNKNOWN'
+                ),
+                'sipNumber' => $this->firstString($row, ['sipNumber', 'sip_number'])
+                    ?? $this->firstString($device, ['sipNumber', 'sip_number']),
             ];
         }
 
@@ -148,7 +167,10 @@ final class My2NService
             if (is_int($row) || (is_string($row) && ctype_digit($row))) {
                 $ids[] = (int) $row;
             } elseif (is_array($row)) {
-                $id = $this->firstInt($row, ['id', 'configurationId', 'memberId']);
+                $id = $this->firstInt(
+                    $row,
+                    ['deviceConfigId', 'deviceConfigurationId', 'configurationId', 'memberId', 'id']
+                );
                 if ($id !== null) {
                     $ids[] = $id;
                 }
