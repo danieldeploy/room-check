@@ -15,25 +15,46 @@ final class FakeMy2NGateway implements My2NGateway
 
     public function listMobileConfigurations(): array
     {
-        return ['configurations' => [
+        return ['results' => [
             [
-                'id' => 111,
-                'deviceConfigId' => 9001,
-                'siteId' => 7001,
                 'deviceId' => 8001,
-                'name' => 'Test Device',
-                'apartment' => ['id' => 42, 'name' => 'Apartment 42'],
-                'status' => 'NOT_REGISTERED',
-                'sipNumber' => '0000000000',
-                'sipPassword' => 'must-never-leak',
+                'id' => 8001,
+                'name' => 'Welcome Bell',
+                'site' => ['id' => 7001],
+                'services' => [
+                    'MOBILE_VIDEO' => [
+                        'id' => 8999,
+                        'status' => 'REGISTERED',
+                        'sipNumber' => '0000000099',
+                    ],
+                ],
             ],
             [
-                'id' => 9002,
-                'siteId' => 7001,
-                'deviceId' => 8002,
+                'id' => 8101,
+                'name' => 'Test Device',
+                'site' => ['id' => 7001],
+                'apartmentId' => 42,
+                'apartment' => ['id' => 42, 'name' => 'Apartment 42'],
+                'services' => [
+                    'MOBILE_VIDEO' => [
+                        'id' => 9001,
+                        'status' => 'NOT_REGISTERED',
+                        'sipNumber' => '0000000000',
+                        'sipPassword' => 'must-never-leak',
+                    ],
+                ],
+            ],
+            [
+                'id' => 8102,
                 'name' => 'Test Device 2',
-                'status' => 'REGISTERED',
-                'sipNumber' => '0000000002',
+                'site' => ['id' => 7001],
+                'services' => [
+                    'MOBILE_VIDEO' => [
+                        'id' => 9002,
+                        'status' => 'REGISTERED',
+                        'sipNumber' => '0000000002',
+                    ],
+                ],
             ],
         ]];
     }
