@@ -21,6 +21,22 @@
         return pill;
     };
 
+    const availability = (device) => {
+        const value = String(device.availability || 'OFFLINE').toUpperCase();
+        const labels = {
+            ONLINE: 'ONLINE',
+            BACKGROUND_READY: 'PUSH ATIVO',
+            OFFLINE: 'OFFLINE',
+        };
+        const wrap = document.createElement('div');
+        wrap.className = 'device-state';
+        wrap.append(statusPill(labels[value] || labels.OFFLINE));
+        const detail = document.createElement('small');
+        detail.textContent = `SIP: ${text(device.status)}`;
+        wrap.append(detail);
+        return wrap;
+    };
+
     const selectedMemberIds = () => normalizedIds(
         [...rows.querySelectorAll('input[name="memberIds"]:checked')].map((input) => input.value)
     );
@@ -48,7 +64,7 @@
             [device.name, device.apartmentName, null, device.deviceId, device.memberId, device.sipNumber, null].forEach((value, index) => {
                 const cell = document.createElement('td');
                 if (index === 2) {
-                    cell.append(statusPill(device.status));
+                    cell.append(availability(device));
                 } else if (index === 6) {
                     const label = document.createElement('label');
                     label.className = 'member-toggle';
@@ -59,7 +75,9 @@
                     checkbox.checked = device.inCurrentGroup === true;
                     checkbox.disabled = !config.canControl;
                     checkbox.setAttribute('aria-label', `${text(device.name)} recebe chamadas`);
-                    const labelText = document.createTextNode(checkbox.checked ? 'No grupo' : 'Fora do grupo');
+                    const labelText = document.createElement('span');
+                    labelText.className = 'member-toggle-text';
+                    labelText.textContent = checkbox.checked ? 'No grupo' : 'Fora do grupo';
                     checkbox.addEventListener('change', () => {
                         labelText.textContent = checkbox.checked ? 'No grupo' : 'Fora do grupo';
                         updateSelectionSummary();
