@@ -99,10 +99,17 @@ final class My2NService
             if ($siteId !== null && $siteId !== (int) $this->config['site_id']) {
                 continue;
             }
+            $apartment = isset($row['apartment']) && is_array($row['apartment'])
+                ? $row['apartment']
+                : [];
             $devices[] = [
                 'memberId' => $memberId,
                 'deviceId' => $this->firstInt($row, ['deviceId', 'device_id']),
                 'name' => $this->firstString($row, ['name', 'deviceName', 'displayName']) ?? 'Sem nome',
+                'apartmentId' => $this->firstInt($row, ['apartmentId', 'apartment_id'])
+                    ?? $this->firstInt($apartment, ['id', 'apartmentId', 'apartment_id']),
+                'apartmentName' => $this->firstString($row, ['apartmentName', 'apartment_name'])
+                    ?? $this->firstString($apartment, ['name', 'displayName']),
                 'status' => strtoupper($this->firstString($row, ['status', 'registrationStatus']) ?? 'UNKNOWN'),
                 'sipNumber' => $this->firstString($row, ['sipNumber', 'sip_number']),
             ];
