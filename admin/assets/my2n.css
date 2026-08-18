@@ -56,9 +56,13 @@ th:nth-child(7), td:nth-child(7) { width: 16%; }
 th, td { padding: 13px 16px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { color: var(--muted); font-size: .74rem; text-transform: uppercase; }
 .pill { display: inline-block; padding: 5px 8px; border-radius: 999px; color: #4b5e64; background: #edf2f2; font-size: .72rem; font-weight: 850; }
-.pill.online, .pill.registered, .pill.sim { color: #137333; background: #def7e5; }
-.pill.push.ativo { color: #075985; background: #e0f2fe; }
-.pill.offline, .pill.not_registered, .pill.não { color: #a12b22; background: #fde8e6; }
+.pill.availability-online { color: #137333; background: #def7e5; }
+.pill.availability-not_registered,
+.pill.availability-never_registered,
+.pill.availability-offline { color: #a12b22; background: #fde8e6; }
+.pill.availability-disabled,
+.pill.availability-unlicensed,
+.pill.availability-unknown { color: #7a4b00; background: #fff3cd; }
 .device-state { display: grid; justify-items: start; gap: 4px; }
 .device-state small { color: var(--muted); font-size: .67rem; font-weight: 700; }
 .member-toggle { display: grid; grid-template-columns: 20px minmax(104px, 1fr); align-items: center; gap: 8px; min-width: 132px; font-weight: 750; }
