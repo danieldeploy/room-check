@@ -78,7 +78,9 @@ final class My2NClient implements My2NGateway
                 'identifier' => $credentials['identifier'],
                 'password' => $credentials['password'],
                 'method' => 'password',
-            ]
+            ],
+            [],
+            false
         );
         $token = $this->findScalar($loginResponse, ['session_token', 'sessionToken', 'token']);
         if ($token === null || $token === '') {
@@ -123,7 +125,13 @@ final class My2NClient implements My2NGateway
         return ['identifier' => $identifier, 'password' => $password];
     }
 
-    private function request(string $method, string $url, ?array $body = null, array $headers = []): array
+    private function request(
+        string $method,
+        string $url,
+        ?array $body = null,
+        array $headers = [],
+        bool $sanitizeResponse = true
+    ): array
     {
         if (!extension_loaded('curl')) {
             throw new RuntimeException('A extensão PHP cURL é necessária.', 503);
@@ -155,13 +163,22 @@ final class My2NClient implements My2NGateway
         if ($raw === false) {
             throw new RuntimeException('Falha de rede My2N: ' . $error, 502);
         }
-        $decoded = $raw === '' ? [] : json_decode($raw, true, 64, JSON_THROW_ON_ERROR);
-        $decoded = My2NRedactor::sanitize(is_array($decoded) ? $decoded : []);
+        $decoded = $this->decodeResponse($raw, $sanitizeResponse);
         if ($status < 200 || $status >= 300) {
             throw new RuntimeException('My2N respondeu com HTTP ' . $status . '.', 502);
         }
 
         return $decoded;
+    }
+
+    private function decodeResponse(string $raw, bool $sanitizeResponse): array
+    {
+        $decoded = $raw === '' ? [] : json_decode($raw, true, 64, JSON_THROW_ON_ERROR);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return $sanitizeResponse ? My2NRedactor::sanitize($decoded) : $decoded;
     }
 
     private function membersPath(): string
@@ -209,7 +226,7 @@ final class My2NClient implements My2NGateway
 
     private function flowId(array $payload): string|int|null
     {
-        $direct = $this->findScalar($payload, ['flow_id', 'flowId']);
+        $direct = $this->findScalar($payload, ['flow_id', 'flowId', 'id']);
         if ($direct !== null) {
             return $direct;
         }
