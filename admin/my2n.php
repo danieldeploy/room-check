@@ -25,6 +25,8 @@ $canManageUsers = Auth::hasPermission($pdo, $user, Auth::PERMISSION_USERS_MANAGE
 $canManagePermissions = Auth::hasPermission($pdo, $user, Auth::PERMISSION_PERMISSIONS_MANAGE);
 $canManageCredentials = Auth::hasPermission($pdo, $user, Auth::PERMISSION_MY2N_CREDENTIALS);
 $canControl = Auth::hasPermission($pdo, $user, Auth::PERMISSION_MY2N_CONTROL);
+$canSchedule = Auth::hasPermission($pdo, $user, Auth::PERMISSION_MY2N_SCHEDULE);
+$canRollback = Auth::hasPermission($pdo, $user, Auth::PERMISSION_MY2N_ROLLBACK);
 $credentialStore = new My2NCredentialStore((string) ($config['my2n']['secrets_file'] ?? ''));
 $credentialMessage = isset($_GET['credentials']) && $_GET['credentials'] === 'saved'
     ? 'Login My2N guardado e validado.'
@@ -76,8 +78,12 @@ header('Cache-Control: no-store');
         window.MY2N_PANEL = <?= json_encode([
             'statusUrl' => 'api/my2n-status.php',
             'membersUrl' => 'api/my2n-members.php',
+            'modeUrl' => 'api/my2n-mode.php',
+            'rollbackUrl' => 'api/my2n-rollback.php',
             'csrfToken' => Csrf::token(),
             'canControl' => $canControl,
+            'canSchedule' => $canSchedule,
+            'canRollback' => $canRollback,
             'writesEnabled' => ($config['my2n']['allow_writes'] ?? false) === true,
         ], JSON_UNESCAPED_SLASHES) ?>;
     </script>
@@ -126,6 +132,23 @@ header('Cache-Control: no-store');
             <div><span>Campainhas</span><strong id="bellCount">—</strong></div>
             <div><span>Última leitura</span><strong id="readAt">—</strong></div>
         </section>
+
+        <?php if ($canSchedule || $canRollback): ?>
+            <section class="card mode-card">
+                <div class="card-heading"><div><h2>Modos de atendimento</h2><p>Ativação manual e rollback operacional por snapshot. O automático usa 08:00/15:00 em Europe/Lisbon.</p></div></div>
+                <div class="destination-actions">
+                    <?php if ($canSchedule): ?>
+                        <button class="mode-action" data-mode-key="reception" type="button">Ativar Receção</button>
+                        <button class="mode-action" data-mode-key="out_of_hours" type="button">Ativar Fora de horário</button>
+                    <?php endif; ?>
+                    <?php if ($canRollback): ?>
+                        <label>Snapshot <input id="rollbackSnapshotId" type="number" min="1" inputmode="numeric"></label>
+                        <button id="rollbackButton" type="button">Executar rollback</button>
+                    <?php endif; ?>
+                </div>
+                <p id="modeActionStatus" class="panel-status" role="status">Nenhuma operação iniciada.</p>
+            </section>
+        <?php endif; ?>
 
         <section class="card destination-card">
             <div class="card-heading">

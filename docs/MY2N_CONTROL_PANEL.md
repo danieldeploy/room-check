@@ -33,3 +33,13 @@ Confirm the current schema before adding or changing tables. Use migrations and 
 
 ## Continuation checkpoint
 Start by inspecting commit `ec9d4b48ce6f88e7fa594b9d4a05c6cc00b8a612` and the current branch state. Do not repeat completed work or deploy until explicitly authorized.
+
+## Scheduled modes operations
+
+- Apply `migrations/006_my2n_scheduled_modes.sql` only after a database backup. It preserves the old schedule table as `my2n_schedules_legacy` and creates per-bell assignments.
+- Populate one `my2n_schedules` row for every bell in each mode, then explicitly set `my2n_modes.enabled = 1`. Both modes are disabled after migration and `MY2N_ALLOW_WRITES` remains the independent, default-off write guard.
+- Run `cron/my2n-scheduler.php` at least once per minute. It derives the effective occurrence in `Europe/Lisbon`; the unique run ledger makes repeated invocations idempotent, including the 00:00–08:00 continuation of the prior out-of-hours occurrence.
+- Manual activation requires `my2n.schedule`; snapshot rollback requires `my2n.rollback`. Every operation records a UUID, trigger, actor/result and snapshot without provider credentials.
+- On a multi-bell failure, already changed bells are immediately compensated from the new snapshot. A `rollback_failed` result requires operator review: inspect the run/audit entry and provider state before using the recorded snapshot again.
+- Operational rollback: enter the snapshot ID in the panel. This creates another snapshot first, so the rollback itself can be reversed.
+- Schema rollback: stop the cron, disable writes, verify no operation is running, and execute `migrations/006_my2n_scheduled_modes_rollback.sql`. This removes phase-006 operational history and restores the legacy schedule table; retain the pre-migration backup for recovery.
