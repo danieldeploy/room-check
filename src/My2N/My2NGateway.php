@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 interface My2NGateway
 {
-    public function listMobileConfigurations(): array;
+    public function listSiteDevices(): array;
 
-    public function getCurrentMembers(): array;
+    public function listBellGroups(): array;
 
-    public function updateMembers(array $memberIds): array;
+    public function updateBellMembers(string $bellKey, array $memberIds): array;
 }
