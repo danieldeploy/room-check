@@ -42,6 +42,11 @@ final class FakeMy2NGateway implements My2NGateway
                         'sipNumber' => '0000000000',
                         'sipPassword' => 'must-never-leak',
                     ],
+                    'NOTIFICATION' => [
+                        'active' => true,
+                        'status' => 'ENABLED',
+                        'password' => 'push-secret',
+                    ],
                 ],
             ],
             [
@@ -98,6 +103,12 @@ assertTrue(count($status['devices']) === 2, 'mobile configurations are normalize
 assertTrue($status['devices'][0]['memberId'] === 9001, 'member ID is preserved');
 assertTrue($status['unresolvedMemberIds'] === [], 'all current group members are associated with a device');
 assertTrue($status['devices'][0]['status'] === 'NOT_REGISTERED', 'registration status is preserved');
+assertTrue($status['devices'][0]['pushReady'] === true, 'active notification service is detected');
+assertTrue(
+    $status['devices'][0]['availability'] === 'BACKGROUND_READY',
+    'background-ready device is distinguished from an offline device'
+);
+assertTrue($status['devices'][1]['availability'] === 'ONLINE', 'registered device is online');
 assertTrue($status['devices'][0]['apartmentId'] === 42, 'apartment ID is read from the API payload');
 assertTrue($status['devices'][0]['apartmentName'] === 'Apartment 42', 'apartment name is read from the API payload');
 assertTrue($status['devices'][0]['inCurrentGroup'] === true, 'current group membership is marked');
