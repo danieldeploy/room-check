@@ -44,11 +44,11 @@
         rows.replaceChildren();
         data.devices.forEach((device) => {
             const row = document.createElement('tr');
-            [device.name, null, device.deviceId, device.memberId, device.sipNumber, null].forEach((value, index) => {
+            [device.name, device.apartmentName, null, device.deviceId, device.memberId, device.sipNumber, null].forEach((value, index) => {
                 const cell = document.createElement('td');
-                if (index === 1) {
+                if (index === 2) {
                     cell.append(statusPill(device.status));
-                } else if (index === 5) {
+                } else if (index === 6) {
                     const label = document.createElement('label');
                     label.className = 'member-toggle';
                     const checkbox = document.createElement('input');
