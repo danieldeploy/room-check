@@ -9,6 +9,16 @@ if (!is_array($localConfig)) {
 }
 
 $serverHome = rtrim((string) (getenv('HOME') ?: ''), DIRECTORY_SEPARATOR);
+if ($serverHome === '') {
+    $candidateDirectory = realpath(__DIR__) ?: __DIR__;
+    while ($candidateDirectory !== dirname($candidateDirectory)) {
+        if (basename($candidateDirectory) === 'public_html') {
+            $serverHome = dirname($candidateDirectory);
+            break;
+        }
+        $candidateDirectory = dirname($candidateDirectory);
+    }
+}
 $defaultMy2NSecretsFile = $serverHome === ''
     ? ''
     : $serverHome . '/room-check-private/my2n-secrets.json';
