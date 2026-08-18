@@ -12,50 +12,61 @@ final class My2NService
 
     public function status(): array
     {
-        $rawConfigurations = My2NRedactor::sanitize($this->gateway->listMobileConfigurations());
-        $rawMembers = My2NRedactor::sanitize($this->gateway->getCurrentMembers());
-        $devices = $this->normalizeConfigurations($rawConfigurations);
-        $memberIds = $this->normalizeMemberIds($rawMembers);
-        $knownIds = array_column($devices, 'memberId');
-        $unresolvedMemberIds = array_values(array_diff($memberIds, $knownIds));
+        $rawDevices = My2NRedactor::sanitize($this->gateway->listSiteDevices());
+        $rawBellGroups = My2NRedactor::sanitize($this->gateway->listBellGroups());
+        $bells = $this->normalizeBellGroups($rawBellGroups);
+        $intercomDeviceIds = array_values(array_unique(array_map(
+            'intval',
+            array_column($bells, 'intercomDeviceId')
+        )));
+        $mobiles = $this->normalizeConfigurations($rawDevices, $intercomDeviceIds);
+        $knownMemberIds = array_map('intval', array_column($mobiles, 'memberId'));
 
-        foreach ($devices as &$device) {
-            $device['inCurrentGroup'] = in_array($device['memberId'], $memberIds, true);
+        foreach ($bells as &$bell) {
+            $bell['unresolvedMemberIds'] = array_values(array_diff(
+                $bell['currentMemberIds'],
+                $knownMemberIds
+            ));
         }
-        unset($device);
+        unset($bell);
 
         return [
             'siteId' => (int) $this->config['site_id'],
-            'intercomDeviceId' => (int) $this->config['intercom_device_id'],
-            'ringingGroupSipNumber' => (string) $this->config['ringing_group_sip_number'],
             'dryRun' => ($this->config['allow_writes'] ?? false) !== true,
-            'devices' => $devices,
-            'currentMemberIds' => $memberIds,
-            'unresolvedMemberIds' => $unresolvedMemberIds,
+            'bells' => $bells,
+            'mobiles' => $mobiles,
             'readAt' => (new DateTimeImmutable('now', new DateTimeZone($this->config['timezone'])))->format(DATE_ATOM),
         ];
     }
 
-    public function replaceMembers(array $memberIds, array $expectedCurrentMemberIds): array
+    public function replaceBellMembers(
+        string $bellKey,
+        array $memberIds,
+        array $expectedCurrentMemberIds
+    ): array
     {
+        if (!preg_match('/^\d+:\d+:\d+:\d+$/', $bellKey)) {
+            throw new InvalidArgumentException('Campainha inválida.');
+        }
         $requested = $this->normalizeRequestedMemberIds($memberIds, false);
         $expected = $this->normalizeRequestedMemberIds($expectedCurrentMemberIds, true);
         $before = $this->status();
-        if (($before['unresolvedMemberIds'] ?? []) !== []) {
+        $beforeBell = $this->bellByKey($before['bells'], $bellKey);
+        if (($beforeBell['unresolvedMemberIds'] ?? []) !== []) {
             throw new RuntimeException(
-                'Existem membros do grupo que ainda não foram associados a um aparelho; a gravação foi bloqueada.',
+                'Esta campainha tem membros que ainda não foram associados a um telemóvel; a gravação foi bloqueada.',
                 409
             );
         }
-        $current = $this->normalizeRequestedMemberIds($before['currentMemberIds'], true);
+        $current = $this->normalizeRequestedMemberIds($beforeBell['currentMemberIds'], true);
         if ($current !== $expected) {
             throw new RuntimeException(
-                'Os destinatários foram alterados entretanto. Atualize a lista antes de tentar novamente.',
+                'Os destinatários desta campainha foram alterados entretanto. Atualize a lista antes de tentar novamente.',
                 409
             );
         }
 
-        $knownIds = array_map('intval', array_column($before['devices'], 'memberId'));
+        $knownIds = array_map('intval', array_column($before['mobiles'], 'memberId'));
         foreach ($requested as $memberId) {
             if (!in_array($memberId, $knownIds, true)) {
                 throw new InvalidArgumentException('Foi selecionado um telemóvel que não pertence a este site.');
@@ -64,28 +75,75 @@ final class My2NService
         if ($requested === $current) {
             return [
                 'changed' => false,
+                'bellKey' => $bellKey,
                 'beforeMemberIds' => $current,
                 'requestedMemberIds' => $requested,
                 'status' => $before,
             ];
         }
 
-        $this->gateway->updateMembers($requested);
+        $this->gateway->updateBellMembers($bellKey, $requested);
         $after = $this->status();
-        $confirmed = $this->normalizeRequestedMemberIds($after['currentMemberIds'], true);
+        $afterBell = $this->bellByKey($after['bells'], $bellKey);
+        $confirmed = $this->normalizeRequestedMemberIds($afterBell['currentMemberIds'], true);
         if ($confirmed !== $requested) {
             throw new RuntimeException('A My2N não confirmou todos os destinatários pedidos.', 502);
         }
 
         return [
             'changed' => true,
+            'bellKey' => $bellKey,
             'beforeMemberIds' => $current,
             'requestedMemberIds' => $requested,
             'status' => $after,
         ];
     }
 
-    private function normalizeConfigurations(array $payload): array
+    private function normalizeBellGroups(array $groups): array
+    {
+        $bells = [];
+        foreach ($groups as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            $bellKey = trim((string) ($group['bellKey'] ?? ''));
+            $intercomDeviceId = $this->firstInt($group, ['intercomDeviceId']);
+            if (!preg_match('/^\d+:\d+:\d+:\d+$/', $bellKey) || $intercomDeviceId === null) {
+                continue;
+            }
+            $bells[] = [
+                'bellKey' => $bellKey,
+                'bellName' => trim((string) ($group['bellName'] ?? '')) ?: ('Campainha ' . $intercomDeviceId),
+                'groupName' => trim((string) ($group['groupName'] ?? '')) ?: null,
+                'intercomDeviceId' => $intercomDeviceId,
+                'apartmentId' => $this->firstInt($group, ['apartmentId']),
+                'apartmentName' => $this->firstString($group, ['apartmentName']),
+                'ringingGroupSipNumber' => $this->firstString($group, ['ringingGroupSipNumber']),
+                'currentMemberIds' => $this->normalizeMemberIds([
+                    'members' => isset($group['members']) && is_array($group['members'])
+                        ? $group['members']
+                        : [],
+                ]),
+            ];
+        }
+        usort($bells, static function (array $left, array $right): int {
+            $apartment = strcasecmp((string) $left['apartmentName'], (string) $right['apartmentName']);
+            return $apartment !== 0 ? $apartment : strcasecmp($left['bellName'], $right['bellName']);
+        });
+        return $bells;
+    }
+
+    private function bellByKey(array $bells, string $bellKey): array
+    {
+        foreach ($bells as $bell) {
+            if (is_array($bell) && hash_equals((string) ($bell['bellKey'] ?? ''), $bellKey)) {
+                return $bell;
+            }
+        }
+        throw new InvalidArgumentException('Campainha inválida ou já removida do site.');
+    }
+
+    private function normalizeConfigurations(array $payload, array $intercomDeviceIds): array
     {
         $rows = $this->candidateRows(
             $payload,
@@ -146,7 +204,13 @@ final class My2NService
                 ? $this->firstInt($row, ['id', 'deviceId', 'device_id'])
                 : $this->firstInt($row, ['deviceId', 'device_id']);
             $deviceId ??= $this->firstInt($device, ['id', 'deviceId', 'device_id']);
-            if ($deviceId === (int) $this->config['intercom_device_id']) {
+            $deviceType = strtoupper(
+                $this->firstString($row, ['type', 'deviceType', 'device_type', 'category', 'productType', 'product_type'])
+                ?? $this->firstString($device, ['type', 'deviceType', 'device_type', 'category', 'productType', 'product_type'])
+                ?? ''
+            );
+            if (($deviceId !== null && in_array($deviceId, $intercomDeviceIds, true))
+                || str_contains($deviceType, 'INTERCOM')) {
                 continue;
             }
             $registrationStatus = strtoupper(
