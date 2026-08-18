@@ -98,15 +98,23 @@ final class My2NService
             }
 
             $mobileConfiguration = [];
+            $notificationConfiguration = [];
+            $credentialsConfiguration = [];
             if (isset($row['services']) && is_array($row['services'])) {
                 foreach ($row['services'] as $serviceType => $serviceConfiguration) {
-                    if (
-                        is_string($serviceType)
-                        && strtoupper($serviceType) === 'MOBILE_VIDEO'
-                        && is_array($serviceConfiguration)
-                    ) {
-                        $mobileConfiguration = $serviceConfiguration;
-                        break;
+                    if (!is_string($serviceType) || !is_array($serviceConfiguration)) {
+                        continue;
+                    }
+                    switch (strtoupper($serviceType)) {
+                        case 'MOBILE_VIDEO':
+                            $mobileConfiguration = $serviceConfiguration;
+                            break;
+                        case 'NOTIFICATION':
+                            $notificationConfiguration = $serviceConfiguration;
+                            break;
+                        case 'CREDENTIALS':
+                            $credentialsConfiguration = $serviceConfiguration;
+                            break;
                     }
                 }
                 if ($mobileConfiguration === []) {
@@ -141,6 +149,17 @@ final class My2NService
             if ($deviceId === (int) $this->config['intercom_device_id']) {
                 continue;
             }
+            $registrationStatus = strtoupper(
+                $this->firstString($mobileConfiguration, ['status', 'registrationStatus'])
+                ?? $this->firstString($row, ['status', 'registrationStatus'])
+                ?? $this->firstString($device, ['status', 'registrationStatus'])
+                ?? 'UNKNOWN'
+            );
+            $pushReady = $this->pushConfigurationReady($notificationConfiguration)
+                || $this->pushConfigurationReady($credentialsConfiguration);
+            $availability = $registrationStatus === 'REGISTERED'
+                ? 'ONLINE'
+                : ($pushReady ? 'BACKGROUND_READY' : 'OFFLINE');
             $devices[] = [
                 'memberId' => $memberId,
                 'deviceId' => $deviceId,
@@ -151,12 +170,9 @@ final class My2NService
                     ?? $this->firstInt($apartment, ['id', 'apartmentId', 'apartment_id']),
                 'apartmentName' => $this->firstString($row, ['apartmentName', 'apartment_name'])
                     ?? $this->firstString($apartment, ['name', 'displayName']),
-                'status' => strtoupper(
-                    $this->firstString($mobileConfiguration, ['status', 'registrationStatus'])
-                    ?? $this->firstString($row, ['status', 'registrationStatus'])
-                    ?? $this->firstString($device, ['status', 'registrationStatus'])
-                    ?? 'UNKNOWN'
-                ),
+                'status' => $registrationStatus,
+                'pushReady' => $pushReady,
+                'availability' => $availability,
                 'sipNumber' => $this->firstString($mobileConfiguration, ['sipNumber', 'sip_number'])
                     ?? $this->firstString($row, ['sipNumber', 'sip_number'])
                     ?? $this->firstString($device, ['sipNumber', 'sip_number']),
@@ -221,6 +237,48 @@ final class My2NService
             }
         }
         return [];
+    }
+
+    private function pushConfigurationReady(array $configuration): bool
+    {
+        if ($configuration === []) {
+            return false;
+        }
+        $active = $this->firstBool($configuration, ['active', 'enabled']);
+        $status = strtoupper($this->firstString($configuration, ['status', 'state']) ?? '');
+        if ($active === false || in_array(
+            $status,
+            ['DISABLED', 'UNLICENSED', 'NOT_REGISTERED', 'NEVER_REGISTERED', 'ERROR'],
+            true
+        )) {
+            return false;
+        }
+        return $active === true || in_array($status, ['ACTIVE', 'ENABLED', 'READY', 'REGISTERED'], true);
+    }
+
+    private function firstBool(array $row, array $keys): ?bool
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $row)) {
+                continue;
+            }
+            if (is_bool($row[$key])) {
+                return $row[$key];
+            }
+            if (is_int($row[$key]) && in_array($row[$key], [0, 1], true)) {
+                return $row[$key] === 1;
+            }
+            if (is_string($row[$key])) {
+                $value = strtolower(trim($row[$key]));
+                if (in_array($value, ['1', 'true', 'yes', 'on', 'enabled'], true)) {
+                    return true;
+                }
+                if (in_array($value, ['0', 'false', 'no', 'off', 'disabled'], true)) {
+                    return false;
+                }
+            }
+        }
+        return null;
     }
 
     private function firstInt(array $row, array $keys): ?int
