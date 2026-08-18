@@ -40,6 +40,7 @@
         document.querySelector('#readAt').textContent = new Date(data.readAt).toLocaleString('pt-PT');
         document.querySelector('#modeBadge').textContent = data.dryRun ? 'ALTERAÇÕES BLOQUEADAS' : 'ALTERAÇÕES AUTORIZADAS';
         currentMemberIds = normalizedIds(data.currentMemberIds || []);
+        const unresolvedMemberIds = normalizedIds(data.unresolvedMemberIds || []);
 
         rows.replaceChildren();
         data.devices.forEach((device) => {
@@ -72,8 +73,10 @@
             });
             rows.append(row);
         });
-        status.textContent = `${data.devices.length} aparelho(s) encontrado(s); ${currentMemberIds.length} no destination group.`;
-        status.dataset.kind = 'success';
+        status.textContent = unresolvedMemberIds.length > 0
+            ? `${data.devices.length} aparelho(s) encontrado(s); ${unresolvedMemberIds.length} membro(s) do grupo ainda sem associação.`
+            : `${data.devices.length} aparelho(s) encontrado(s); ${currentMemberIds.length} no destination group.`;
+        status.dataset.kind = unresolvedMemberIds.length > 0 ? 'warning' : 'success';
         updateSelectionSummary();
     };
 
