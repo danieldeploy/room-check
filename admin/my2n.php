@@ -91,7 +91,7 @@ header('Cache-Control: no-store');
             <div>
                 <p class="eyebrow">Painel administrativo</p>
                 <h1>Controlo My2N</h1>
-                <p>Estado dos telemóveis e destinatários atuais da Welcome Bell.</p>
+                <p>Campainhas, apartamentos e telemóveis do único Site My2N.</p>
             </div>
             <span id="modeBadge" class="mode-badge">APENAS CONSULTA</span>
         </header>
@@ -123,15 +123,15 @@ header('Cache-Control: no-store');
 
         <section class="summary" aria-live="polite">
             <div><span>Site</span><strong id="siteId">—</strong></div>
-            <div><span>Grupo SIP</span><strong id="groupSip">—</strong></div>
+            <div><span>Campainhas</span><strong id="bellCount">—</strong></div>
             <div><span>Última leitura</span><strong id="readAt">—</strong></div>
         </section>
 
         <section class="card destination-card">
             <div class="card-heading">
                 <div>
-                    <h2>Aparelhos MOBILE_VIDEO</h2>
-                    <p>Os apartamentos e telemóveis são lidos automaticamente da My2N sempre que atualizar.</p>
+                    <h2>Campainhas e destinatários</h2>
+                    <p>Campainhas, apartamentos e telemóveis são lidos automaticamente da My2N sempre que atualizar.</p>
                 </div>
                 <button id="refreshButton" type="button">Atualizar</button>
             </div>
@@ -142,11 +142,11 @@ header('Cache-Control: no-store');
                     <table>
                         <thead>
                             <tr>
-                                <th>Nome</th>
-                                <th>Apartamento</th>
+                                <th>Campainha</th>
+                                <th>Ap. campainha</th>
+                                <th>Telemóvel</th>
+                                <th>Ap. telemóvel</th>
                                 <th>Estado</th>
-                                <th>Device ID</th>
-                                <th>Member ID</th>
                                 <th>SIP</th>
                                 <th>Recebe chamadas</th>
                             </tr>
