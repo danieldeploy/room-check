@@ -9,6 +9,7 @@
     const saveMembersButton = document.querySelector('#saveMembersButton');
     const selectionSummary = document.querySelector('#selectionSummary');
     const currentAssignments = new Map();
+    const modeActionStatus = document.querySelector('#modeActionStatus');
 
     const text = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
     const normalizedIds = (values) => [...new Set(values.map(Number))].sort((a, b) => a - b);
@@ -256,5 +257,38 @@
     });
 
     refreshButton.addEventListener('click', load);
+    const runOperationalAction = async (url, payload, confirmation) => {
+        if (!window.confirm(confirmation)) return;
+        modeActionStatus.textContent = 'A executar e confirmar todas as campainhas…';
+        modeActionStatus.dataset.kind = '';
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-Token': config.csrfToken },
+                credentials: 'same-origin', cache: 'no-store', body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Operação My2N falhou.');
+            modeActionStatus.textContent = `Operação confirmada. Snapshot de retorno: ${text(result.data.snapshotId)}.`;
+            modeActionStatus.dataset.kind = 'success';
+            await load();
+        } catch (error) {
+            modeActionStatus.textContent = `${error.message} Consulte a auditoria antes de repetir.`;
+            modeActionStatus.dataset.kind = 'error';
+        }
+    };
+    document.querySelectorAll('.mode-action').forEach((button) => button.addEventListener('click', () => {
+        runOperationalAction(config.modeUrl, { modeKey: button.dataset.modeKey }, `Ativar o modo em todas as campainhas configuradas?`);
+    }));
+    const rollbackButton = document.querySelector('#rollbackButton');
+    if (rollbackButton) rollbackButton.addEventListener('click', () => {
+        const snapshotId = Number(document.querySelector('#rollbackSnapshotId').value);
+        if (!Number.isInteger(snapshotId) || snapshotId < 1) {
+            modeActionStatus.textContent = 'Indique um snapshot válido.';
+            modeActionStatus.dataset.kind = 'error';
+            return;
+        }
+        runOperationalAction(config.rollbackUrl, { snapshotId }, `Repor todas as campainhas do snapshot ${snapshotId}?`);
+    });
     load();
 })();

@@ -6,6 +6,9 @@ require_once dirname(__DIR__) . '/src/My2N/My2NGateway.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NService.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NCredentialStore.php';
 require_once dirname(__DIR__) . '/src/My2N/My2NClient.php';
+require_once dirname(__DIR__) . '/src/My2N/My2NModeRepository.php';
+require_once dirname(__DIR__) . '/src/My2N/My2NModeService.php';
+require_once dirname(__DIR__) . '/src/My2N/My2NScheduleClock.php';
 require_once dirname(__DIR__) . '/src/Auth/Auth.php';
 
 final class FakeMy2NGateway implements My2NGateway
@@ -34,6 +37,7 @@ final class FakeMy2NGateway implements My2NGateway
     ];
     public int $updates = 0;
     public ?string $lastUpdatedBellKey = null;
+    public ?string $failBellKey = null;
 
     public function listSiteDevices(): array
     {
@@ -126,6 +130,7 @@ final class FakeMy2NGateway implements My2NGateway
 
     public function updateBellMembers(string $bellKey, array $memberIds): array
     {
+        if ($this->failBellKey === $bellKey) throw new RuntimeException('Simulated provider failure.');
         foreach ($this->bells as &$bell) {
             if ($bell['bellKey'] === $bellKey) {
                 $bell['members'] = array_values(array_map('intval', $memberIds));
@@ -137,6 +142,35 @@ final class FakeMy2NGateway implements My2NGateway
         unset($bell);
         throw new InvalidArgumentException('Unknown bell key.');
     }
+}
+
+final class FakeModeRepository implements My2NModeRepository
+{
+    public array $mode;
+    public array $snapshots = [];
+    public array $runs = [];
+    public array $audits = [];
+    public bool $automaticClaimed = false;
+
+    public function __construct(array $assignments)
+    {
+        $this->mode = ['id' => 7, 'mode_key' => 'reception', 'enabled' => 1, 'assignments' => $assignments];
+    }
+    public function mode(string $modeKey): array { $mode = $this->mode; $mode['mode_key'] = $modeKey; return $mode; }
+    public function enabledModes(): array { return [$this->mode]; }
+    public function beginRun(string $operationId, array $mode, string $trigger, ?string $localDate, ?string $actor): bool
+    {
+        if ($trigger === 'automatic' && $this->automaticClaimed) return false;
+        if ($trigger === 'automatic') $this->automaticClaimed = true;
+        $this->runs[$operationId] = ['status' => 'running', 'trigger' => $trigger]; return true;
+    }
+    public function saveSnapshot(string $operationId, array $assignments, string $source, ?string $actor): int
+    { $id = count($this->snapshots) + 1; $this->snapshots[$id] = $assignments; return $id; }
+    public function attachSnapshot(string $operationId, int $snapshotId): void { $this->runs[$operationId]['snapshot'] = $snapshotId; }
+    public function snapshot(int $snapshotId): array { return $this->snapshots[$snapshotId]; }
+    public function finishRun(string $operationId, string $status, ?string $error = null): void { $this->runs[$operationId]['status'] = $status; }
+    public function audit(string $operationId, string $action, ?string $modeKey, string $trigger, ?string $actor, ?int $snapshotId, bool $success, ?string $error = null): void
+    { $this->audits[] = compact('action', 'trigger', 'success', 'snapshotId'); }
 }
 
 function assertTrue(bool $condition, string $message): void
@@ -226,6 +260,35 @@ try {
     $unknownMemberWriteRejected = true;
 }
 assertTrue($unknownMemberWriteRejected, 'writes remain blocked while a group member is unresolved');
+
+$clockZone = new DateTimeZone('Europe/Lisbon');
+assertTrue(My2NScheduleClock::dueMode(new DateTimeImmutable('2026-01-12 08:00:00', $clockZone))['modeKey'] === 'reception', 'Reception starts at 08:00 Lisbon time');
+assertTrue(My2NScheduleClock::dueMode(new DateTimeImmutable('2026-01-12 15:00:00', $clockZone))['modeKey'] === 'out_of_hours', 'Out-of-hours starts at 15:00 Lisbon time');
+assertTrue(My2NScheduleClock::dueMode(new DateTimeImmutable('2026-03-29 07:30:00', $clockZone))['localDate'] === '2026-03-28', 'overnight run uses the preceding schedule date across DST');
+
+$modeGateway = new FakeMy2NGateway();
+$modeRepository = new FakeModeRepository([
+    ['bellKey' => '8001:34:56:78', 'memberIds' => [9003]],
+    ['bellKey' => '8002:35:57:79', 'memberIds' => [9001]],
+]);
+$modeService = new My2NModeService(new My2NService($modeGateway, $config), $modeRepository, true);
+$activation = $modeService->activate('reception', 'automatic', 'scheduler', '2026-01-12');
+assertTrue(count($activation['changedBellKeys']) === 2, 'a mode independently updates every configured bell');
+assertTrue(isset($modeRepository->snapshots[$activation['snapshotId']]), 'activation stores a multi-bell rollback snapshot');
+$duplicate = $modeService->activate('reception', 'automatic', 'scheduler', '2026-01-12');
+assertTrue($duplicate['reason'] === 'already-run', 'automatic activation is idempotent for a mode occurrence');
+
+$failureGateway = new FakeMy2NGateway();
+$failureGateway->failBellKey = '8002:35:57:79';
+$failureRepository = new FakeModeRepository($modeRepository->mode['assignments']);
+$failureService = new My2NModeService(new My2NService($failureGateway, $config), $failureRepository, true);
+try { $failureService->activate('reception', 'manual', 'manager'); } catch (RuntimeException) {}
+assertTrue($failureGateway->bells[0]['members'] === [9001, 9002], 'partial multi-bell failure compensates the already changed bell');
+assertTrue(end($failureRepository->audits)['action'] === 'mode_failure', 'partial failure is audited');
+
+$blockedMode = new My2NModeService(new My2NService(new FakeMy2NGateway(), $config), $modeRepository, false);
+try { $blockedMode->activate('reception', 'manual', 'manager'); $writeGuarded = false; } catch (RuntimeException) { $writeGuarded = true; }
+assertTrue($writeGuarded, 'mode writes remain disabled by default');
 
 $redacted = My2NRedactor::sanitize([
     'safe' => 'ok',
