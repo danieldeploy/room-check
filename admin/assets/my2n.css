@@ -45,14 +45,25 @@ button:disabled { opacity: .55; cursor: wait; }
 .panel-status[data-kind="warning"] { color: #7a4b00; background: #fff7df; }
 .panel-status[data-kind="success"] { color: #137333; background: #f2fbf4; }
 .table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
+table { width: 100%; min-width: 1080px; table-layout: fixed; border-collapse: collapse; }
+th:nth-child(1), td:nth-child(1) { width: 18%; }
+th:nth-child(2), td:nth-child(2) { width: 18%; }
+th:nth-child(3), td:nth-child(3) { width: 17%; }
+th:nth-child(4), td:nth-child(4) { width: 9%; }
+th:nth-child(5), td:nth-child(5) { width: 9%; }
+th:nth-child(6), td:nth-child(6) { width: 13%; }
+th:nth-child(7), td:nth-child(7) { width: 16%; }
 th, td { padding: 13px 16px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { color: var(--muted); font-size: .74rem; text-transform: uppercase; }
 .pill { display: inline-block; padding: 5px 8px; border-radius: 999px; color: #4b5e64; background: #edf2f2; font-size: .72rem; font-weight: 850; }
-.pill.registered, .pill.sim { color: #137333; background: #def7e5; }
-.pill.not_registered, .pill.não { color: #a12b22; background: #fde8e6; }
-.member-toggle { display: inline-flex; align-items: center; gap: 8px; font-weight: 750; }
+.pill.online, .pill.registered, .pill.sim { color: #137333; background: #def7e5; }
+.pill.push.ativo { color: #075985; background: #e0f2fe; }
+.pill.offline, .pill.not_registered, .pill.não { color: #a12b22; background: #fde8e6; }
+.device-state { display: grid; justify-items: start; gap: 4px; }
+.device-state small { color: var(--muted); font-size: .67rem; font-weight: 700; }
+.member-toggle { display: grid; grid-template-columns: 20px minmax(104px, 1fr); align-items: center; gap: 8px; min-width: 132px; font-weight: 750; }
 .member-toggle input { width: 20px; height: 20px; accent-color: var(--brand); }
+.member-toggle-text { display: block; min-width: 104px; }
 .destination-actions { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 20px; }
 .destination-actions p { margin: 0; color: var(--muted); }
 .write-guard { padding-top: 0; color: #8a5a07; }
