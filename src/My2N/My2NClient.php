@@ -8,7 +8,8 @@ require_once __DIR__ . '/My2NCredentialStore.php';
 final class My2NClient implements My2NGateway
 {
     private ?string $sessionToken = null;
-    private ?array $destinationGroup = null;
+    private ?array $siteDevices = null;
+    private ?array $bellGroups = null;
 
     public function __construct(
         private readonly array $config,
@@ -22,22 +23,80 @@ final class My2NClient implements My2NGateway
         $this->sessionToken();
     }
 
-    public function listMobileConfigurations(): array
+    public function listSiteDevices(): array
     {
+        if ($this->siteDevices !== null) {
+            return $this->siteDevices;
+        }
         $path = sprintf(
             '/companies/%d/sites/%d/devices?limit=1000',
             $this->configuredId('company_id'),
             $this->configuredId('site_id')
         );
-        return $this->partnerRequest('GET', $path);
+        $this->siteDevices = $this->partnerRequest('GET', $path);
+        return $this->siteDevices;
     }
 
-    public function getCurrentMembers(): array
+    public function listBellGroups(): array
     {
-        return ['members' => $this->destinationGroup()['members']];
+        if ($this->bellGroups !== null) {
+            return $this->bellGroups;
+        }
+
+        $groups = [];
+        foreach ($this->candidateRows($this->listSiteDevices(), ['results', 'devices', 'items', 'data']) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $intercomCandidate = $this->intercomCandidate($row);
+            if ($intercomCandidate === false) {
+                continue;
+            }
+            $deviceId = $this->deviceId($row);
+            if ($deviceId === null) {
+                continue;
+            }
+            try {
+                $features = $this->partnerRequest(
+                    'GET',
+                    sprintf(
+                        '/companies/%d/sites/%d/devices/%d/features?limit=1000',
+                        $this->configuredId('company_id'),
+                        $this->configuredId('site_id'),
+                        $deviceId
+                    )
+                );
+                $featureId = $this->contactListFeatureId($features);
+                $contactList = $this->partnerRequest(
+                    'GET',
+                    sprintf(
+                        '/companies/%d/sites/%d/devices/%d/features/CONTACT_LIST/%d',
+                        $this->configuredId('company_id'),
+                        $this->configuredId('site_id'),
+                        $deviceId,
+                        $featureId
+                    )
+                );
+            } catch (RuntimeException $exception) {
+                if ($intercomCandidate === true) {
+                    throw $exception;
+                }
+                continue;
+            }
+            foreach ($this->destinationGroupsFromContactList($contactList, $featureId, $row, $deviceId) as $group) {
+                $groups[] = $group;
+            }
+        }
+
+        if ($groups === []) {
+            throw new RuntimeException('A API My2N não devolveu nenhuma campainha com destination group neste site.', 503);
+        }
+        usort($groups, static fn(array $a, array $b): int => strcasecmp($a['bellName'], $b['bellName']));
+        $this->bellGroups = $groups;
+        return $this->bellGroups;
     }
 
-    public function updateMembers(array $memberIds): array
+    public function updateBellMembers(string $bellKey, array $memberIds): array
     {
         if (($this->config['allow_writes'] ?? false) !== true) {
             throw new RuntimeException('My2N está em modo dry-run; escritas estão desativadas.', 409);
@@ -50,12 +109,13 @@ final class My2NClient implements My2NGateway
                 throw new InvalidArgumentException('Member ID inválido.');
             }
         }
+        $group = $this->bellGroup($bellKey);
         $response = $this->partnerRequest(
             'PUT',
-            $this->membersPath(),
+            $this->membersPath($group),
             array_values(array_map('intval', $memberIds))
         );
-        $this->destinationGroup = null;
+        $this->bellGroups = null;
         return $response;
     }
 
@@ -188,52 +248,27 @@ final class My2NClient implements My2NGateway
         return $sanitizeResponse ? My2NRedactor::sanitize($decoded) : $decoded;
     }
 
-    private function membersPath(): string
+    private function membersPath(array $group): string
     {
-        $group = $this->destinationGroup();
         return sprintf(
             '/companies/%d/sites/%d/devices/%d/features/CONTACT_LIST/%d/contacts/%d/items/RINGING_GROUP/%d/members',
             $this->configuredId('company_id'),
             $this->configuredId('site_id'),
-            $this->configuredId('intercom_device_id'),
+            (int) $group['intercomDeviceId'],
             $group['featureId'],
             $group['contactId'],
             $group['itemId']
         );
     }
 
-    private function destinationGroup(): array
+    private function bellGroup(string $bellKey): array
     {
-        if ($this->destinationGroup !== null) {
-            return $this->destinationGroup;
+        foreach ($this->listBellGroups() as $group) {
+            if (hash_equals((string) $group['bellKey'], $bellKey)) {
+                return $group;
+            }
         }
-
-        $companyId = $this->configuredId('company_id');
-        $siteId = $this->configuredId('site_id');
-        $deviceId = $this->configuredId('intercom_device_id');
-        $featureId = (int) ($this->config['contact_list_feature_id'] ?? 0);
-
-        if ($featureId < 1) {
-            $features = $this->partnerRequest(
-                'GET',
-                sprintf('/companies/%d/sites/%d/devices/%d/features?limit=1000', $companyId, $siteId, $deviceId)
-            );
-            $featureId = $this->contactListFeatureId($features);
-        }
-
-        $contactList = $this->partnerRequest(
-            'GET',
-            sprintf(
-                '/companies/%d/sites/%d/devices/%d/features/CONTACT_LIST/%d',
-                $companyId,
-                $siteId,
-                $deviceId,
-                $featureId
-            )
-        );
-
-        $this->destinationGroup = $this->destinationGroupFromContactList($contactList, $featureId);
-        return $this->destinationGroup;
+        throw new InvalidArgumentException('Campainha inválida ou já removida do site.');
     }
 
     private function contactListFeatureId(array $payload): int
@@ -302,20 +337,33 @@ final class My2NClient implements My2NGateway
         return null;
     }
 
-    private function destinationGroupFromContactList(array $payload, int $featureId): array
+    private function destinationGroupsFromContactList(
+        array $payload,
+        int $featureId,
+        array $deviceRow,
+        int $deviceId
+    ): array
     {
-        $configuredContactId = (int) ($this->config['contact_id'] ?? 0);
-        $configuredItemId = (int) ($this->config['ringing_group_item_id'] ?? 0);
-        $configuredSipNumber = trim((string) ($this->config['ringing_group_sip_number'] ?? ''));
-
+        $groups = [];
+        $baseName = trim((string) ($this->firstScalar(
+            $deviceRow,
+            ['name', 'deviceName', 'displayName']
+        ) ?? ('Campainha ' . $deviceId)));
+        $apartment = isset($deviceRow['apartment']) && is_array($deviceRow['apartment'])
+            ? $deviceRow['apartment']
+            : [];
         foreach ($this->candidateRows($payload, ['contacts']) as $contact) {
             if (!is_array($contact)) {
                 continue;
             }
             $contactId = $this->firstInt($contact, ['id', 'contactId', 'contact_id']);
-            if ($contactId === null || ($configuredContactId > 0 && $contactId !== $configuredContactId)) {
+            if ($contactId === null) {
                 continue;
             }
+            $contactName = trim((string) ($this->firstScalar(
+                $contact,
+                ['name', 'displayName', 'label']
+            ) ?? ''));
             foreach ($this->candidateRows($contact, ['items']) as $item) {
                 if (!is_array($item)) {
                     continue;
@@ -325,29 +373,85 @@ final class My2NClient implements My2NGateway
                     continue;
                 }
                 $itemId = $this->firstInt($item, ['id', 'itemId', 'item_id']);
-                if ($itemId === null || ($configuredItemId > 0 && $itemId !== $configuredItemId)) {
+                if ($itemId === null) {
                     continue;
                 }
                 $sipNumber = trim((string) ($this->firstScalar(
                     $item,
                     ['sipNumber', 'sip_number', 'number']
                 ) ?? ''));
-                if ($configuredSipNumber !== '' && $sipNumber !== $configuredSipNumber) {
-                    continue;
-                }
-
                 $members = isset($item['members']) && is_array($item['members']) ? $item['members'] : [];
-                return [
+                $itemName = trim((string) ($this->firstScalar(
+                    $item,
+                    ['name', 'displayName', 'label']
+                ) ?? ''));
+                $groups[] = [
+                    'bellKey' => implode(':', [$deviceId, $featureId, $contactId, $itemId]),
+                    'intercomDeviceId' => $deviceId,
+                    'bellName' => $baseName,
+                    'groupName' => $contactName !== '' ? $contactName : $itemName,
+                    'apartmentId' => $this->firstInt($deviceRow, ['apartmentId', 'apartment_id'])
+                        ?? $this->firstInt($apartment, ['id', 'apartmentId', 'apartment_id']),
+                    'apartmentName' => $this->firstScalar($deviceRow, ['apartmentName', 'apartment_name'])
+                        ?? $this->firstScalar($apartment, ['name', 'displayName']),
                     'featureId' => $featureId,
                     'contactId' => $contactId,
                     'itemId' => $itemId,
-                    'sipNumber' => $sipNumber,
+                    'ringingGroupSipNumber' => $sipNumber,
                     'members' => $members,
                 ];
             }
         }
 
-        throw new RuntimeException('A API My2N não devolveu o destination group da Welcome Bell.', 503);
+        if (count($groups) > 1) {
+            foreach ($groups as &$group) {
+                $groupName = trim((string) ($group['groupName'] ?? ''));
+                if ($groupName !== '' && strcasecmp($groupName, $baseName) !== 0) {
+                    $group['bellName'] = $baseName . ' — ' . $groupName;
+                } else {
+                    $group['bellName'] = $baseName . ' — ' . $group['itemId'];
+                }
+            }
+            unset($group);
+        }
+
+        return $groups;
+    }
+
+    private function intercomCandidate(array $row): ?bool
+    {
+        $device = isset($row['device']) && is_array($row['device']) ? $row['device'] : [];
+        foreach ([$row, $device] as $candidate) {
+            $type = strtoupper((string) ($this->firstScalar(
+                $candidate,
+                ['type', 'deviceType', 'device_type', 'category', 'productType', 'product_type']
+            ) ?? ''));
+            if (str_contains($type, 'INTERCOM')) {
+                return true;
+            }
+            if ($type !== '' && (str_contains($type, 'MOBILE') || str_contains($type, 'SMARTPHONE'))) {
+                return false;
+            }
+        }
+
+        $services = isset($row['services']) && is_array($row['services']) ? $row['services'] : [];
+        foreach (array_keys($services) as $serviceType) {
+            $normalizedType = strtoupper((string) $serviceType);
+            if (in_array($normalizedType, ['NOTIFICATION', 'CREDENTIALS'], true)) {
+                return false;
+            }
+        }
+        return null;
+    }
+
+    private function deviceId(array $row): ?int
+    {
+        $id = $this->firstInt($row, ['id', 'deviceId', 'device_id']);
+        if ($id !== null) {
+            return $id;
+        }
+        $device = isset($row['device']) && is_array($row['device']) ? $row['device'] : [];
+        return $this->firstInt($device, ['id', 'deviceId', 'device_id']);
     }
 
     private function candidateRows(array $payload, array $containerKeys): array
@@ -410,7 +514,7 @@ final class My2NClient implements My2NGateway
         $value = (int) ($this->config[$key] ?? 0);
         if ($value < 1) {
             throw new RuntimeException(
-                'A ligação My2N foi configurada, mas ainda falta identificar a empresa, o site e o destination group.',
+                'A ligação My2N foi configurada, mas ainda falta identificar a empresa e o site.',
                 503
             );
         }
