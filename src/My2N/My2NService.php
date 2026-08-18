@@ -155,11 +155,16 @@ final class My2NService
                 ?? $this->firstString($device, ['status', 'registrationStatus'])
                 ?? 'UNKNOWN'
             );
-            $pushReady = $this->pushConfigurationReady($notificationConfiguration)
-                || $this->pushConfigurationReady($credentialsConfiguration);
-            $availability = $registrationStatus === 'REGISTERED'
-                ? 'ONLINE'
-                : ($pushReady ? 'BACKGROUND_READY' : 'OFFLINE');
+            $pushConfigured = $this->pushConfigurationConfigured($notificationConfiguration)
+                || $this->pushConfigurationConfigured($credentialsConfiguration);
+            $availability = match ($registrationStatus) {
+                'REGISTERED' => 'ONLINE',
+                'NEVER_REGISTERED' => 'NEVER_REGISTERED',
+                'NOT_REGISTERED' => 'NOT_REGISTERED',
+                'DISABLED' => 'DISABLED',
+                'UNLICENSED' => 'UNLICENSED',
+                default => 'UNKNOWN',
+            };
             $devices[] = [
                 'memberId' => $memberId,
                 'deviceId' => $deviceId,
@@ -171,7 +176,7 @@ final class My2NService
                 'apartmentName' => $this->firstString($row, ['apartmentName', 'apartment_name'])
                     ?? $this->firstString($apartment, ['name', 'displayName']),
                 'status' => $registrationStatus,
-                'pushReady' => $pushReady,
+                'pushConfigured' => $pushConfigured,
                 'availability' => $availability,
                 'sipNumber' => $this->firstString($mobileConfiguration, ['sipNumber', 'sip_number'])
                     ?? $this->firstString($row, ['sipNumber', 'sip_number'])
@@ -239,7 +244,7 @@ final class My2NService
         return [];
     }
 
-    private function pushConfigurationReady(array $configuration): bool
+    private function pushConfigurationConfigured(array $configuration): bool
     {
         if ($configuration === []) {
             return false;
