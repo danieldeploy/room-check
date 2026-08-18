@@ -61,6 +61,22 @@ final class FakeMy2NGateway implements My2NGateway
                     ],
                 ],
             ],
+            [
+                'id' => 8103,
+                'name' => 'Test Device 3',
+                'site' => ['id' => 7001],
+                'services' => [
+                    'MOBILE_VIDEO' => [
+                        'id' => 9003,
+                        'status' => 'NEVER_REGISTERED',
+                        'sipNumber' => '0000000003',
+                    ],
+                    'CREDENTIALS' => [
+                        'active' => true,
+                        'status' => 'ENABLED',
+                    ],
+                ],
+            ],
         ]];
     }
 
@@ -99,16 +115,20 @@ $status = $service->status();
 $encoded = json_encode($status, JSON_THROW_ON_ERROR);
 
 assertTrue($status['dryRun'] === true, 'read-only status reports dry-run');
-assertTrue(count($status['devices']) === 2, 'mobile configurations are normalized');
+assertTrue(count($status['devices']) === 3, 'mobile configurations are normalized');
 assertTrue($status['devices'][0]['memberId'] === 9001, 'member ID is preserved');
 assertTrue($status['unresolvedMemberIds'] === [], 'all current group members are associated with a device');
 assertTrue($status['devices'][0]['status'] === 'NOT_REGISTERED', 'registration status is preserved');
-assertTrue($status['devices'][0]['pushReady'] === true, 'active notification service is detected');
+assertTrue($status['devices'][0]['pushConfigured'] === true, 'configured notification service is detected');
 assertTrue(
-    $status['devices'][0]['availability'] === 'BACKGROUND_READY',
-    'background-ready device is distinguished from an offline device'
+    $status['devices'][0]['availability'] === 'NOT_REGISTERED',
+    'push configuration does not hide an unregistered SIP state'
 );
 assertTrue($status['devices'][1]['availability'] === 'ONLINE', 'registered device is online');
+assertTrue(
+    $status['devices'][2]['availability'] === 'NEVER_REGISTERED',
+    'push configuration does not hide a device that never registered'
+);
 assertTrue($status['devices'][0]['apartmentId'] === 42, 'apartment ID is read from the API payload');
 assertTrue($status['devices'][0]['apartmentName'] === 'Apartment 42', 'apartment name is read from the API payload');
 assertTrue($status['devices'][0]['inCurrentGroup'] === true, 'current group membership is marked');
