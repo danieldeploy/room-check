@@ -25,7 +25,7 @@ final class My2NClient implements My2NGateway
     public function listMobileConfigurations(): array
     {
         $path = sprintf(
-            '/companies/%d/sites/%d/services/MOBILE_VIDEO/configurations?limit=1000',
+            '/companies/%d/sites/%d/devices?limit=1000',
             $this->configuredId('company_id'),
             $this->configuredId('site_id')
         );
