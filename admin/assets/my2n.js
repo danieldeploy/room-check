@@ -25,15 +25,25 @@
         const value = String(device.availability || 'OFFLINE').toUpperCase();
         const labels = {
             ONLINE: 'ONLINE',
-            BACKGROUND_READY: 'PUSH ATIVO',
+            NEVER_REGISTERED: 'NUNCA REGISTADO',
+            NOT_REGISTERED: 'NÃO REGISTADO',
+            DISABLED: 'DESATIVADO',
+            UNLICENSED: 'SEM LICENÇA',
             OFFLINE: 'OFFLINE',
+            UNKNOWN: 'DESCONHECIDO',
         };
         const wrap = document.createElement('div');
         wrap.className = 'device-state';
-        wrap.append(statusPill(labels[value] || labels.OFFLINE));
-        const detail = document.createElement('small');
-        detail.textContent = `SIP: ${text(device.status)}`;
-        wrap.append(detail);
+        const pill = statusPill(labels[value] || labels.UNKNOWN);
+        pill.classList.add(`availability-${value.toLowerCase()}`);
+        wrap.append(pill);
+        const sipDetail = document.createElement('small');
+        sipDetail.textContent = `SIP: ${text(device.status)}`;
+        const pushDetail = document.createElement('small');
+        pushDetail.textContent = device.pushConfigured === true
+            ? 'Push: configurado'
+            : 'Push: não configurado';
+        wrap.append(sipDetail, pushDetail);
         return wrap;
     };
 
