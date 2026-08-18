@@ -17,7 +17,8 @@ final class FakeMy2NGateway implements My2NGateway
     {
         return ['configurations' => [
             [
-                'id' => 9001,
+                'id' => 111,
+                'deviceConfigId' => 9001,
                 'siteId' => 7001,
                 'deviceId' => 8001,
                 'name' => 'Test Device',
@@ -74,6 +75,7 @@ $encoded = json_encode($status, JSON_THROW_ON_ERROR);
 assertTrue($status['dryRun'] === true, 'read-only status reports dry-run');
 assertTrue(count($status['devices']) === 2, 'mobile configurations are normalized');
 assertTrue($status['devices'][0]['memberId'] === 9001, 'member ID is preserved');
+assertTrue($status['unresolvedMemberIds'] === [], 'all current group members are associated with a device');
 assertTrue($status['devices'][0]['status'] === 'NOT_REGISTERED', 'registration status is preserved');
 assertTrue($status['devices'][0]['apartmentId'] === 42, 'apartment ID is read from the API payload');
 assertTrue($status['devices'][0]['apartmentName'] === 'Apartment 42', 'apartment name is read from the API payload');
@@ -95,6 +97,20 @@ try {
     $emptySelectionRejected = true;
 }
 assertTrue($emptySelectionRejected, 'an empty destination group is rejected');
+
+$gateway->members = [9001, 9999];
+$statusWithUnknownMember = $service->status();
+assertTrue(
+    $statusWithUnknownMember['unresolvedMemberIds'] === [9999],
+    'unknown group members do not prevent read-only status'
+);
+$unknownMemberWriteRejected = false;
+try {
+    $service->replaceMembers([9001], [9001, 9999]);
+} catch (RuntimeException) {
+    $unknownMemberWriteRejected = true;
+}
+assertTrue($unknownMemberWriteRejected, 'writes remain blocked while a group member is unresolved');
 
 $redacted = My2NRedactor::sanitize([
     'safe' => 'ok',
