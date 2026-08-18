@@ -10,22 +10,61 @@ require_once dirname(__DIR__) . '/src/Auth/Auth.php';
 
 final class FakeMy2NGateway implements My2NGateway
 {
-    public array $members = [9001];
+    public array $bells = [
+        [
+            'bellKey' => '8001:34:56:78',
+            'intercomDeviceId' => 8001,
+            'bellName' => 'Welcome Bell',
+            'groupName' => 'Receção',
+            'apartmentId' => 41,
+            'apartmentName' => 'Apartment 41',
+            'ringingGroupSipNumber' => '0000000001',
+            'members' => [9001, 9002],
+        ],
+        [
+            'bellKey' => '8002:35:57:79',
+            'intercomDeviceId' => 8002,
+            'bellName' => 'Garden Bell',
+            'groupName' => 'Portão',
+            'apartmentId' => 41,
+            'apartmentName' => 'Apartment 41',
+            'ringingGroupSipNumber' => '0000000004',
+            'members' => [9002],
+        ],
+    ];
     public int $updates = 0;
+    public ?string $lastUpdatedBellKey = null;
 
-    public function listMobileConfigurations(): array
+    public function listSiteDevices(): array
     {
         return ['results' => [
             [
                 'deviceId' => 8001,
                 'id' => 8001,
                 'name' => 'Welcome Bell',
+                'type' => 'IP_INTERCOM',
                 'site' => ['id' => 7001],
+                'apartment' => ['id' => 41, 'name' => 'Apartment 41'],
                 'services' => [
                     'MOBILE_VIDEO' => [
                         'id' => 8999,
                         'status' => 'REGISTERED',
                         'sipNumber' => '0000000099',
+                    ],
+                ],
+            ],
+            [
+                'deviceId' => 8002,
+                'id' => 8002,
+                'name' => 'Garden Bell',
+                'type' => 'IP_INTERCOM',
+                'site' => ['id' => 7001],
+                'apartment' => ['id' => 41, 'name' => 'Apartment 41'],
+                'services' => [
+                    'MOBILE_VIDEO' => [
+                        'id' => 8998,
+                        'status' => 'REGISTERED',
+                        'sipNumber' => '0000000098',
                     ],
                 ],
             ],
@@ -80,16 +119,23 @@ final class FakeMy2NGateway implements My2NGateway
         ]];
     }
 
-    public function getCurrentMembers(): array
+    public function listBellGroups(): array
     {
-        return $this->members;
+        return $this->bells;
     }
 
-    public function updateMembers(array $memberIds): array
+    public function updateBellMembers(string $bellKey, array $memberIds): array
     {
-        $this->members = array_values(array_map('intval', $memberIds));
-        $this->updates++;
-        return ['members' => $this->members];
+        foreach ($this->bells as &$bell) {
+            if ($bell['bellKey'] === $bellKey) {
+                $bell['members'] = array_values(array_map('intval', $memberIds));
+                $this->lastUpdatedBellKey = $bellKey;
+                $this->updates++;
+                return ['members' => $bell['members']];
+            }
+        }
+        unset($bell);
+        throw new InvalidArgumentException('Unknown bell key.');
     }
 }
 
@@ -103,8 +149,6 @@ function assertTrue(bool $condition, string $message): void
 
 $config = [
     'site_id' => 7001,
-    'intercom_device_id' => 8001,
-    'ringing_group_sip_number' => '0000000001',
     'timezone' => 'Europe/Lisbon',
     'allow_writes' => false,
 ];
@@ -115,50 +159,69 @@ $status = $service->status();
 $encoded = json_encode($status, JSON_THROW_ON_ERROR);
 
 assertTrue($status['dryRun'] === true, 'read-only status reports dry-run');
-assertTrue(count($status['devices']) === 3, 'mobile configurations are normalized');
-assertTrue($status['devices'][0]['memberId'] === 9001, 'member ID is preserved');
-assertTrue($status['unresolvedMemberIds'] === [], 'all current group members are associated with a device');
-assertTrue($status['devices'][0]['status'] === 'NOT_REGISTERED', 'registration status is preserved');
-assertTrue($status['devices'][0]['pushConfigured'] === true, 'configured notification service is detected');
+assertTrue(count($status['bells']) === 2, 'all bell destination groups are normalized');
+assertTrue(count($status['mobiles']) === 3, 'mobile configurations are normalized');
+assertTrue($status['mobiles'][0]['memberId'] === 9001, 'member ID is preserved');
+assertTrue($status['bells'][0]['unresolvedMemberIds'] === [], 'all bell members are associated with a mobile');
+assertTrue($status['mobiles'][0]['status'] === 'NOT_REGISTERED', 'registration status is preserved');
+assertTrue($status['mobiles'][0]['pushConfigured'] === true, 'configured notification service is detected');
 assertTrue(
-    $status['devices'][0]['availability'] === 'NOT_REGISTERED',
+    $status['mobiles'][0]['availability'] === 'NOT_REGISTERED',
     'push configuration does not hide an unregistered SIP state'
 );
-assertTrue($status['devices'][1]['availability'] === 'ONLINE', 'registered device is online');
+assertTrue($status['mobiles'][1]['availability'] === 'ONLINE', 'registered device is online');
 assertTrue(
-    $status['devices'][2]['availability'] === 'NEVER_REGISTERED',
+    $status['mobiles'][2]['availability'] === 'NEVER_REGISTERED',
     'push configuration does not hide a device that never registered'
 );
-assertTrue($status['devices'][0]['apartmentId'] === 42, 'apartment ID is read from the API payload');
-assertTrue($status['devices'][0]['apartmentName'] === 'Apartment 42', 'apartment name is read from the API payload');
-assertTrue($status['devices'][0]['inCurrentGroup'] === true, 'current group membership is marked');
+assertTrue($status['mobiles'][0]['apartmentId'] === 42, 'mobile apartment ID is read from the API payload');
+assertTrue($status['mobiles'][0]['apartmentName'] === 'Apartment 42', 'mobile apartment name is read from the API payload');
+assertTrue($status['bells'][0]['apartmentId'] === 41, 'bell apartment ID is dynamic');
+assertTrue($status['bells'][1]['apartmentId'] === 41, 'several bells can belong to the same apartment');
+assertTrue($status['bells'][0]['currentMemberIds'] === [9002], 'bell assignments remain independent');
+assertTrue($status['bells'][1]['currentMemberIds'] === [9001, 9002], 'each bell keeps its own mobile list');
 assertTrue(!str_contains(strtolower($encoded), 'sippassword'), 'sipPassword key is removed');
 assertTrue(!str_contains($encoded, 'must-never-leak'), 'sipPassword value is removed');
 
-$update = $service->replaceMembers([9002], [9001]);
+$welcomeBellKey = '8001:34:56:78';
+$update = $service->replaceBellMembers($welcomeBellKey, [9003], [9001, 9002]);
 assertTrue($update['changed'] === true, 'destination group change is reported');
 assertTrue($gateway->updates === 1, 'destination group is written once');
-assertTrue($update['status']['currentMemberIds'] === [9002], 'destination group change is confirmed');
-$noChange = $service->replaceMembers([9002], [9002]);
+assertTrue($gateway->lastUpdatedBellKey === $welcomeBellKey, 'only the selected bell is written');
+$updatedWelcomeBell = array_values(array_filter(
+    $update['status']['bells'],
+    static fn(array $bell): bool => $bell['bellKey'] === $welcomeBellKey
+))[0];
+assertTrue($updatedWelcomeBell['currentMemberIds'] === [9003], 'bell destination change is confirmed');
+$gardenBell = array_values(array_filter(
+    $update['status']['bells'],
+    static fn(array $bell): bool => $bell['bellKey'] === '8002:35:57:79'
+))[0];
+assertTrue($gardenBell['currentMemberIds'] === [9002], 'changing one bell does not change another bell');
+$noChange = $service->replaceBellMembers($welcomeBellKey, [9003], [9003]);
 assertTrue($noChange['changed'] === false, 'unchanged destination group skips the write');
 assertTrue($gateway->updates === 1, 'no-op does not write to My2N');
 $emptySelectionRejected = false;
 try {
-    $service->replaceMembers([], [9002]);
+    $service->replaceBellMembers($welcomeBellKey, [], [9003]);
 } catch (InvalidArgumentException) {
     $emptySelectionRejected = true;
 }
 assertTrue($emptySelectionRejected, 'an empty destination group is rejected');
 
-$gateway->members = [9001, 9999];
+$gateway->bells[0]['members'] = [9001, 9999];
 $statusWithUnknownMember = $service->status();
+$welcomeWithUnknownMember = array_values(array_filter(
+    $statusWithUnknownMember['bells'],
+    static fn(array $bell): bool => $bell['bellKey'] === $welcomeBellKey
+))[0];
 assertTrue(
-    $statusWithUnknownMember['unresolvedMemberIds'] === [9999],
-    'unknown group members do not prevent read-only status'
+    $welcomeWithUnknownMember['unresolvedMemberIds'] === [9999],
+    'unknown bell members do not prevent read-only status'
 );
 $unknownMemberWriteRejected = false;
 try {
-    $service->replaceMembers([9001], [9001, 9999]);
+    $service->replaceBellMembers($welcomeBellKey, [9001], [9001, 9999]);
 } catch (RuntimeException) {
     $unknownMemberWriteRejected = true;
 }
@@ -175,7 +238,6 @@ assertTrue(!isset($redacted['nested']['sipPassword']), 'nested sipPassword is re
 $authClient = new My2NClient([
     'auth_url' => 'https://example.invalid',
     'base_url' => 'https://example.invalid',
-    'ringing_group_sip_number' => '3507254897',
 ]);
 $flowIdMethod = new ReflectionMethod(My2NClient::class, 'flowId');
 $flowIdMethod->setAccessible(true);
@@ -225,11 +287,12 @@ assertTrue(
     ]) === 35,
     'CONTACT_LIST feature is discovered from nested and keyed API payloads'
 );
-$destinationGroupMethod = new ReflectionMethod(My2NClient::class, 'destinationGroupFromContactList');
-$destinationGroupMethod->setAccessible(true);
-$destinationGroup = $destinationGroupMethod->invoke($authClient, [
+$destinationGroupsMethod = new ReflectionMethod(My2NClient::class, 'destinationGroupsFromContactList');
+$destinationGroupsMethod->setAccessible(true);
+$destinationGroups = $destinationGroupsMethod->invoke($authClient, [
     'contacts' => [[
         'id' => 56,
+        'name' => 'Receção',
         'items' => [[
             'id' => 78,
             'type' => 'RINGING_GROUP',
@@ -237,11 +300,20 @@ $destinationGroup = $destinationGroupMethod->invoke($authClient, [
             'members' => [9001, 9002],
         ]],
     ]],
-], 34);
+], 34, [
+    'id' => 8001,
+    'name' => 'Welcome Bell',
+    'type' => 'IP_INTERCOM',
+    'apartment' => ['id' => 41, 'name' => 'Apartment 41'],
+], 8001);
+$destinationGroup = $destinationGroups[0];
+assertTrue(count($destinationGroups) === 1, 'all bell destination groups are discovered');
+assertTrue($destinationGroup['bellKey'] === '8001:34:56:78', 'bell key is stable and based on My2N IDs');
 assertTrue($destinationGroup['featureId'] === 34, 'destination group keeps the discovered feature ID');
 assertTrue($destinationGroup['contactId'] === 56, 'destination group contact is discovered');
 assertTrue($destinationGroup['itemId'] === 78, 'destination group item is discovered');
 assertTrue($destinationGroup['members'] === [9001, 9002], 'destination members are read automatically');
+assertTrue($destinationGroup['apartmentId'] === 41, 'bell apartment is read automatically');
 
 $temporaryDirectory = sys_get_temp_dir() . '/room-check-my2n-' . bin2hex(random_bytes(4));
 $credentialFile = $temporaryDirectory . '/credentials.json';
