@@ -46,6 +46,9 @@ select { width: 100%; min-height: 48px; padding: 0 42px 0 14px; border: 1px soli
 #roomSelect option.room-full, #roomSelect.room-full { color: #fff; background: #16a34a; }
 #roomSelect option.room-partial, #roomSelect.room-partial { color: #fff; background: #2563eb; }
 #roomSelect option.room-empty, #roomSelect.room-empty { color: var(--ink); background: #fff; }
+#roomSelect option.room-full:hover, #roomSelect option.room-full:focus, #roomSelect option.room-full:checked { color: #fff !important; background: #16a34a !important; box-shadow: 0 0 0 100vmax #16a34a inset; }
+#roomSelect option.room-partial:hover, #roomSelect option.room-partial:focus, #roomSelect option.room-partial:checked { color: #fff !important; background: #2563eb !important; box-shadow: 0 0 0 100vmax #2563eb inset; }
+#roomSelect option.room-empty:hover, #roomSelect option.room-empty:focus, #roomSelect option.room-empty:checked { color: var(--ink) !important; background: #fff !important; box-shadow: 0 0 0 100vmax #fff inset; }
 input[type="date"], input[type="text"] { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); }
 select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px solid rgba(15, 118, 110, 0.2); outline-offset: 2px; border-color: var(--brand); }
 .checklist-card { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
