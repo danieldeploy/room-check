@@ -25,11 +25,16 @@ h1 { margin: 0; font-size: clamp(2.15rem, 6vw, 4rem); line-height: 0.96; letter-
 .save-status[data-kind="success"] { color: var(--ok); border-color: #bbdec6; background: #f0fdf4; }
 .save-status[data-kind="error"] { color: var(--wrong); border-color: #f0c7c2; background: #fff5f4; }
 .selectors { display: grid; grid-template-columns: minmax(280px, 3fr) minmax(90px, 0.7fr); gap: 16px; padding: 18px; margin-bottom: 18px; border: 1px solid rgba(220, 230, 229, 0.9); border-radius: 20px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
-.selectors.has-assignment { grid-template-columns: minmax(250px, 2.4fr) minmax(90px, 0.65fr) minmax(210px, 1.35fr) minmax(170px, 1fr); }
+.selectors.has-assignment { grid-template-columns: minmax(210px, 1.5fr) minmax(80px, 0.45fr) minmax(240px, 1.55fr) minmax(190px, 1.2fr) minmax(160px, 0.9fr); }
+.interval-creator { margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); }
+.interval-creator summary { color: var(--brand-dark); font-weight: 800; cursor: pointer; }
+.interval-fields { display: grid; grid-template-columns: minmax(220px, 1.5fr) 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 16px; }
+.interval-fields button { min-height: 48px; padding: 0 20px; border: 0; border-radius: 12px; color: #fff; background: var(--brand); font-weight: 800; cursor: pointer; }
+.interval-fields button:disabled { opacity: 0.6; cursor: wait; }
 label { display: grid; gap: 7px; }
 label span { color: var(--muted); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 select { width: 100%; min-height: 48px; padding: 0 42px 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); cursor: pointer; }
-input[type="date"] { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); }
+input[type="date"], input[type="text"] { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); }
 select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px solid rgba(15, 118, 110, 0.2); outline-offset: 2px; border-color: var(--brand); }
 .checklist-card { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
 .table-heading, .check-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(280px, 2.2fr) minmax(180px, 0.85fr); gap: 16px; align-items: center; }
@@ -66,6 +71,8 @@ noscript { display: block; margin-top: 18px; color: var(--wrong); }
     .hero { align-items: flex-start; flex-direction: column; gap: 16px; }
     .save-status { max-width: 100%; }
     .selectors, .selectors.has-assignment { grid-template-columns: 1fr 100px; padding: 14px; }
+    .interval-fields { grid-template-columns: 1fr; }
+    .selectors.has-assignment .interval-field,
     .selectors.has-assignment .assignment-field { grid-column: 1 / -1; }
     .selectors.has-assignment .assignment-date-field { grid-column: 1 / -1; }
     .table-heading { display: none; }
