@@ -48,7 +48,7 @@ try {
     <meta name="theme-color" content="#0f766e">
     <title>Gestão dos Quartos — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>">
-    <link rel="stylesheet" href="assets/session.css">
+    <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
     <script>
         window.ROOM_CHECK = <?= json_encode([
             'properties' => PROPERTIES,

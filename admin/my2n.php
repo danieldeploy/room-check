@@ -71,7 +71,7 @@ header('Cache-Control: no-store');
     <meta name="robots" content="noindex,nofollow">
     <title>Controlo My2N — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/my2n.css?v=<?= (int) filemtime(__DIR__ . '/assets/my2n.css') ?>">
-    <link rel="stylesheet" href="../assets/session.css">
+    <link rel="stylesheet" href="../assets/session.css?v=<?= (int) filemtime(dirname(__DIR__) . '/assets/session.css') ?>">
     <script>
         window.MY2N_PANEL = <?= json_encode([
             'statusUrl' => 'api/my2n-status.php',

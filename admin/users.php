@@ -154,7 +154,7 @@ header('Cache-Control: no-store');
     <title>Utilizadores — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="../assets/auth.css">
     <link rel="stylesheet" href="assets/users.css">
-    <link rel="stylesheet" href="../assets/session.css">
+    <link rel="stylesheet" href="../assets/session.css?v=<?= (int) filemtime(dirname(__DIR__) . '/assets/session.css') ?>">
 </head>
 <body>
     <main class="users-shell">

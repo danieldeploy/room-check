@@ -175,7 +175,7 @@ header('Cache-Control: no-store');
     <meta name="robots" content="noindex,nofollow">
     <title>ZKAccess — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/settings.css">
-    <link rel="stylesheet" href="../assets/session.css">
+    <link rel="stylesheet" href="../assets/session.css?v=<?= (int) filemtime(dirname(__DIR__) . '/assets/session.css') ?>">
 </head>
 <body>
     <main class="settings-shell">
