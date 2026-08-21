@@ -66,7 +66,7 @@ try {
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
             'initialRoom' => $initialRoom,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     </script>
     <script src="assets/app.js" defer></script>
 </head>
@@ -122,6 +122,18 @@ try {
                 <label class="assignment-date-field"><span>Data da verificação</span><input id="assignmentDate" type="date" value="<?= (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d') ?>" aria-label="Data da verificação"></label>
             <?php endif; ?>
         </section>
+        <?php if ($canAssign): ?>
+            <section id="intervalManager" class="interval-manager" hidden aria-label="Editar intervalo selecionado">
+                <h2>Editar intervalo</h2>
+                <div class="interval-fields">
+                    <label><span>Nome</span><input id="editIntervalName" type="text" maxlength="120"></label>
+                    <label><span>Data inicial</span><input id="editIntervalStart" type="date"></label>
+                    <label><span>Data final</span><input id="editIntervalEnd" type="date"></label>
+                    <div class="interval-manager-actions"><button id="saveInterval" type="button">Guardar intervalo</button><button id="deleteInterval" class="danger" type="button">Apagar intervalo</button></div>
+                </div>
+                <p>As datas só podem ser reduzidas até continuarem a incluir todos os itens já atribuídos.</p>
+            </section>
+        <?php endif; ?>
         <section class="checklist-card">
             <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><span>Estado</span><?php if ($canAssign): ?><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label><?php endif; ?></div>
             <div id="checklist" class="checklist"></div>

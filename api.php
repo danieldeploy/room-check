@@ -110,6 +110,85 @@ try {
         ]]);
     }
 
+    if (($payload['action'] ?? '') === 'update_interval') {
+        $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
+        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
+        $intervalId = (int) ($payload['intervalId'] ?? 0);
+        $name = trim((string) ($payload['name'] ?? ''));
+        $startDate = trim((string) ($payload['startDate'] ?? ''));
+        $endDate = trim((string) ($payload['endDate'] ?? ''));
+        if ($name === '' || mb_strlen($name) > 120) {
+            throw new InvalidArgumentException('Indique um nome para o intervalo (máximo 120 caracteres).');
+        }
+        foreach (['inicial' => $startDate, 'final' => $endDate] as $label => $date) {
+            $parts = array_map('intval', explode('-', $date));
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)
+                || count($parts) !== 3 || !checkdate($parts[1], $parts[2], $parts[0])) {
+                throw new InvalidArgumentException("A data {$label} do intervalo é inválida.");
+            }
+        }
+        if ($endDate < $startDate) {
+            throw new InvalidArgumentException('A data final não pode ser anterior à data inicial.');
+        }
+        $boundsStatement = $pdo->prepare(
+            'SELECT MIN(due_date) AS first_due_date, MAX(due_date) AS last_due_date, COUNT(*) AS assignment_count
+             FROM room_item_assignments WHERE interval_id = :id'
+        );
+        $boundsStatement->execute(['id' => $intervalId]);
+        $bounds = $boundsStatement->fetch();
+        if ((int) ($bounds['assignment_count'] ?? 0) > 0) {
+            $firstDueDate = (string) $bounds['first_due_date'];
+            $lastDueDate = (string) $bounds['last_due_date'];
+            if ($startDate > $firstDueDate || $endDate < $lastDueDate) {
+                throw new InvalidArgumentException(
+                    "O intervalo tem itens atribuídos entre {$firstDueDate} e {$lastDueDate}. As novas datas têm de incluir todo esse período."
+                );
+            }
+        }
+        $statement = $pdo->prepare(
+            'UPDATE room_verification_intervals SET name = :name, start_date = :start_date, end_date = :end_date
+             WHERE id = :id'
+        );
+        $statement->execute(['id' => $intervalId, 'name' => $name, 'start_date' => $startDate, 'end_date' => $endDate]);
+        if ($statement->rowCount() === 0) {
+            $exists = $pdo->prepare('SELECT id FROM room_verification_intervals WHERE id = :id');
+            $exists->execute(['id' => $intervalId]);
+            if (!$exists->fetchColumn()) {
+                throw new InvalidArgumentException('Intervalo de verificação não encontrado.');
+            }
+        }
+        Auth::audit($pdo, (int) $currentUser['id'], 'room_verification_interval_updated', [
+            'interval_id' => $intervalId, 'name' => $name, 'start_date' => $startDate, 'end_date' => $endDate,
+        ]);
+        jsonResponse(['ok' => true, 'interval' => [
+            'id' => $intervalId, 'name' => $name, 'startDate' => $startDate, 'endDate' => $endDate,
+        ]]);
+    }
+
+    if (($payload['action'] ?? '') === 'delete_interval') {
+        $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
+        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
+        $intervalId = (int) ($payload['intervalId'] ?? 0);
+        $pdo->beginTransaction();
+        $intervalStatement = $pdo->prepare('SELECT name FROM room_verification_intervals WHERE id = :id FOR UPDATE');
+        $intervalStatement->execute(['id' => $intervalId]);
+        $intervalName = $intervalStatement->fetchColumn();
+        if ($intervalName === false) {
+            throw new InvalidArgumentException('Intervalo de verificação não encontrado.');
+        }
+        $deleteAssignments = $pdo->prepare('DELETE FROM room_item_assignments WHERE interval_id = :id');
+        $deleteAssignments->execute(['id' => $intervalId]);
+        $deletedAssignments = $deleteAssignments->rowCount();
+        $deleteInterval = $pdo->prepare('DELETE FROM room_verification_intervals WHERE id = :id');
+        $deleteInterval->execute(['id' => $intervalId]);
+        Auth::audit($pdo, (int) $currentUser['id'], 'room_verification_interval_deleted', [
+            'interval_id' => $intervalId, 'name' => (string) $intervalName,
+            'deleted_assignments' => $deletedAssignments,
+        ]);
+        $pdo->commit();
+        jsonResponse(['ok' => true, 'deletedAssignments' => $deletedAssignments]);
+    }
+
     if (($payload['action'] ?? '') === 'assign_items') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);

@@ -11,6 +11,12 @@
     const intervalStart = document.querySelector('#intervalStart');
     const intervalEnd = document.querySelector('#intervalEnd');
     const createInterval = document.querySelector('#createInterval');
+    const intervalManager = document.querySelector('#intervalManager');
+    const editIntervalName = document.querySelector('#editIntervalName');
+    const editIntervalStart = document.querySelector('#editIntervalStart');
+    const editIntervalEnd = document.querySelector('#editIntervalEnd');
+    const saveInterval = document.querySelector('#saveInterval');
+    const deleteInterval = document.querySelector('#deleteInterval');
     const employeeSelect = document.querySelector('#employeeSelect');
     const assignmentDate = document.querySelector('#assignmentDate');
     const selectAllItems = document.querySelector('#selectAllItems');
@@ -54,6 +60,29 @@
         roomSelect.value = String(Math.min(preferredRoom, count));
     };
 
+    const formatDate = (value) => {
+        const [year, month, day] = value.split('-');
+        return `${day}/${month}/${year}`;
+    };
+
+    const formatIntervalOption = (interval) =>
+        `${interval.name} — ${formatDate(interval.startDate)} a ${formatDate(interval.endDate)}`;
+
+    const selectedInterval = () => {
+        const intervalId = Number(intervalSelect?.value || 0);
+        return config.intervals.find((candidate) => candidate.id === intervalId) || null;
+    };
+
+    const syncIntervalManager = () => {
+        if (!intervalManager) return;
+        const interval = selectedInterval();
+        intervalManager.hidden = !interval;
+        if (!interval) return;
+        editIntervalName.value = interval.name;
+        editIntervalStart.value = interval.startDate;
+        editIntervalEnd.value = interval.endDate;
+    };
+
     const makeRow = (item) => {
         const row = document.createElement('article');
         row.className = 'check-row';
@@ -73,6 +102,13 @@
             if (canEdit) scheduleSave();
         });
         textarea.dataset.problem = item.problem || '';
+        const problemField = document.createElement('div');
+        problemField.className = 'problem-field';
+        const assignmentHint = document.createElement('span');
+        assignmentHint.className = 'assignment-hint';
+        assignmentHint.textContent = 'A verificar';
+        assignmentHint.hidden = true;
+        problemField.append(textarea, assignmentHint);
 
         const status = document.createElement('div');
         status.className = 'status-options';
@@ -114,12 +150,12 @@
             assignmentCheckbox.addEventListener('change', updateSelectAllState);
             const marker = document.createElement('span');
             assignmentLabel.append(assignmentCheckbox, marker);
-            row.append(name, textarea, status, assignmentLabel);
+            row.append(name, problemField, status, assignmentLabel);
         } else {
-            row.append(name, textarea, status);
+            row.append(name, problemField, status);
         }
 
-        return { element: row, name: item.name, textarea, status, assignmentCheckbox };
+        return { element: row, name: item.name, textarea, assignmentHint, status, assignmentCheckbox };
     };
 
     function updateSelectAllState() {
@@ -132,8 +168,7 @@
 
     const updateAssignmentMode = () => {
         if (!canAssign) return;
-        const intervalId = Number(intervalSelect.value);
-        const interval = config.intervals.find((candidate) => candidate.id === intervalId);
+        const interval = selectedInterval();
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate ? assignmentDate.value : '';
         if (interval && assignmentDate) {
@@ -150,8 +185,7 @@
             row.assignmentCheckbox.checked = active
                 && Number(assignment.employeeId || 0) === employeeId
                 && assignment.dueDate === selectedDate;
-            row.textarea.value = active ? '' : row.textarea.dataset.problem;
-            row.textarea.placeholder = active ? 'A verificar' : 'Descreva o problema…';
+            row.assignmentHint.hidden = !active;
             row.textarea.readOnly = active || !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = active || !canEdit; });
             autoGrow(row.textarea);
@@ -324,19 +358,93 @@
             config.intervals.unshift(result.interval);
             const option = document.createElement('option');
             option.value = String(result.interval.id);
-            option.textContent = `${result.interval.name} — ${result.interval.startDate} a ${result.interval.endDate}`;
+            option.textContent = formatIntervalOption(result.interval);
             intervalSelect.append(option);
             intervalSelect.value = String(result.interval.id);
             assignmentDate.value = result.interval.startDate;
             intervalName.value = '';
             intervalStart.value = '';
             intervalEnd.value = '';
+            syncIntervalManager();
             await loadChecklist();
             setStatus('Intervalo criado', 'success');
         } catch (error) {
             setStatus(error.message, 'error');
         } finally {
             createInterval.disabled = false;
+        }
+    };
+
+    const updateVerificationInterval = async () => {
+        const interval = selectedInterval();
+        if (!interval) return;
+        const name = editIntervalName.value.trim();
+        const startDate = editIntervalStart.value;
+        const endDate = editIntervalEnd.value;
+        if (!name || !startDate || !endDate) {
+            setStatus('Preencha o nome e as duas datas do intervalo', 'error');
+            return;
+        }
+        saveInterval.disabled = true;
+        deleteInterval.disabled = true;
+        setStatus('A guardar intervalo…');
+        try {
+            const response = await fetch('api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                    action: 'update_interval', csrfToken: config.csrfToken,
+                    intervalId: interval.id, name, startDate, endDate,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar o intervalo.');
+            Object.assign(interval, result.interval);
+            const option = intervalSelect.querySelector(`option[value="${interval.id}"]`);
+            if (option) option.textContent = formatIntervalOption(interval);
+            updateAssignmentMode();
+            syncIntervalManager();
+            setStatus('Intervalo atualizado', 'success');
+        } catch (error) {
+            setStatus(error.message, 'error');
+        } finally {
+            saveInterval.disabled = false;
+            deleteInterval.disabled = false;
+        }
+    };
+
+    const deleteVerificationInterval = async () => {
+        const interval = selectedInterval();
+        if (!interval) return;
+        const confirmed = window.confirm(
+            `Apagar o intervalo “${interval.name}”? Todas as atribuições deste intervalo também serão apagadas. Esta ação não pode ser anulada.`
+        );
+        if (!confirmed) return;
+        saveInterval.disabled = true;
+        deleteInterval.disabled = true;
+        setStatus('A apagar intervalo…');
+        try {
+            const response = await fetch('api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                    action: 'delete_interval', csrfToken: config.csrfToken, intervalId: interval.id,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao apagar o intervalo.');
+            config.intervals = config.intervals.filter((candidate) => candidate.id !== interval.id);
+            intervalSelect.querySelector(`option[value="${interval.id}"]`)?.remove();
+            intervalSelect.value = '';
+            employeeSelect.value = '';
+            syncIntervalManager();
+            await loadChecklist();
+            setStatus(`Intervalo apagado (${result.deletedAssignments} atribuições removidas)`, 'success');
+        } catch (error) {
+            setStatus(error.message, 'error');
+        } finally {
+            saveInterval.disabled = false;
+            deleteInterval.disabled = false;
         }
     };
 
@@ -347,9 +455,12 @@
     roomSelect.addEventListener('change', loadChecklist);
     if (intervalSelect) intervalSelect.addEventListener('change', async () => {
         employeeSelect.value = '';
+        syncIntervalManager();
         await loadChecklist();
     });
     if (createInterval) createInterval.addEventListener('click', createVerificationInterval);
+    if (saveInterval) saveInterval.addEventListener('click', updateVerificationInterval);
+    if (deleteInterval) deleteInterval.addEventListener('click', deleteVerificationInterval);
     if (employeeSelect) employeeSelect.addEventListener('change', updateAssignmentMode);
     if (assignmentDate) assignmentDate.addEventListener('change', updateAssignmentMode);
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
