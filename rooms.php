@@ -24,6 +24,11 @@ $employees = $canAssign ? $pdo->query(
      WHERE role = 'empregada_andares' AND is_active = 1
      ORDER BY display_name, username"
 )->fetchAll() : [];
+$intervals = $canAssign ? $pdo->query(
+    'SELECT id, name, start_date, end_date
+     FROM room_verification_intervals
+     ORDER BY start_date DESC, id DESC'
+)->fetchAll() : [];
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
 $initialProperty = trim((string) ($_GET['property'] ?? array_key_first(PROPERTIES)));
@@ -51,6 +56,12 @@ try {
             'canEdit' => $canEdit,
             'canAssign' => $canAssign,
             'employees' => $employees,
+            'intervals' => array_map(static fn(array $interval): array => [
+                'id' => (int) $interval['id'],
+                'name' => (string) $interval['name'],
+                'startDate' => (string) $interval['start_date'],
+                'endDate' => (string) $interval['end_date'],
+            ], $intervals),
             'csrfToken' => Csrf::token(),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
@@ -70,6 +81,17 @@ try {
             </div>
             <div id="saveStatus" class="save-status" role="status" aria-live="polite">A carregar…</div>
         </header>
+        <?php if ($canAssign): ?>
+            <details class="interval-creator">
+                <summary>Criar intervalo de verificação</summary>
+                <div class="interval-fields">
+                    <label><span>Nome</span><input id="intervalName" type="text" maxlength="120" placeholder="Ex.: Verificação semanal"></label>
+                    <label><span>Data inicial</span><input id="intervalStart" type="date"></label>
+                    <label><span>Data final</span><input id="intervalEnd" type="date"></label>
+                    <button id="createInterval" type="button">Criar intervalo</button>
+                </div>
+            </details>
+        <?php endif; ?>
         <section class="selectors<?= $canAssign ? ' has-assignment' : '' ?>" aria-label="Selecionar alojamento, quarto e atribuição">
             <label class="property-field">
                 <span>Alojamento</span>
@@ -81,6 +103,14 @@ try {
             </label>
             <label><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
             <?php if ($canAssign): ?>
+                <label class="interval-field"><span>Intervalo</span>
+                    <select id="intervalSelect" aria-label="Intervalo de verificação">
+                        <option value="">Escolher intervalo</option>
+                        <?php foreach ($intervals as $interval): ?>
+                            <option value="<?= (int) $interval['id'] ?>"><?= htmlspecialchars((string) $interval['name'], ENT_QUOTES, 'UTF-8') ?> — <?= (new DateTimeImmutable((string) $interval['start_date']))->format('d/m/Y') ?> a <?= (new DateTimeImmutable((string) $interval['end_date']))->format('d/m/Y') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
                 <label class="assignment-field"><span>Atribuir</span>
                     <select id="employeeSelect" aria-label="Empregada de Andares">
                         <option value="">Escolher empregada</option>
