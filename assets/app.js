@@ -266,8 +266,9 @@
             row.assignmentCheckbox.disabled = !active || locked;
             row.assignmentCheckbox.checked = active
                 && (hasAssignment || lockedByDraft || selectedInCurrentDraft);
-            row.assignmentCheckbox.parentElement.classList.toggle('saved-assignment', active && hasAssignment);
-            row.assignmentCheckbox.parentElement.classList.toggle(
+            const checkboxMarker = row.assignmentCheckbox.nextElementSibling;
+            checkboxMarker.classList.toggle('saved-assignment', active && hasAssignment);
+            checkboxMarker.classList.toggle(
                 'draft-assignment', active && !hasAssignment && (lockedByDraft || selectedInCurrentDraft)
             );
             row.element.classList.toggle('assignment-locked', active && locked);
@@ -556,6 +557,12 @@
     roomSelect.addEventListener('change', loadChecklist);
     if (intervalSelect) intervalSelect.addEventListener('change', async () => {
         employeeSelect.value = '';
+        assignments = {};
+        rows.forEach((row) => {
+            row.assignmentCheckbox.checked = false;
+            row.assignmentCheckbox.disabled = true;
+            row.assignmentCheckbox.nextElementSibling.classList.remove('saved-assignment', 'draft-assignment');
+        });
         syncIntervalManager();
         await loadChecklist();
     });
