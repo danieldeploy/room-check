@@ -27,6 +27,7 @@ button { border: 0; border-radius: 10px; background: #0f766e; padding: 12px 18px
 .task-location { display: flex; justify-content: space-between; gap: 12px; color: #486581; font-size: .83rem; }
 .task-location strong { color: #0f766e; }
 .task-card h2 { margin: 22px 0 10px; font-size: 1.4rem; }
+.task-date { margin: -2px 0 12px; color: #526d82; }
 .problem { padding: 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; line-height: 1.45; }
 .task-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 22px; }
 .task-actions a { color: #0f766e; font-weight: 800; }

@@ -18,6 +18,12 @@ try {
     exit($exception->getMessage());
 }
 $canEdit = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_ROOM_CHECK_EDIT);
+$canAssign = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN);
+$employees = $canAssign ? $pdo->query(
+    "SELECT id, display_name FROM users
+     WHERE role = 'empregada_andares' AND is_active = 1
+     ORDER BY display_name, username"
+)->fetchAll() : [];
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
 $initialProperty = trim((string) ($_GET['property'] ?? array_key_first(PROPERTIES)));
@@ -43,6 +49,10 @@ try {
             'properties' => PROPERTIES,
             'items' => CHECKLIST_ITEMS,
             'canEdit' => $canEdit,
+            'canAssign' => $canAssign,
+            'employees' => $employees,
+            'csrfToken' => Csrf::token(),
+            'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
             'initialRoom' => $initialRoom,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -60,8 +70,7 @@ try {
             </div>
             <div id="saveStatus" class="save-status" role="status" aria-live="polite">A carregar…</div>
         </header>
-        <section class="selectors" aria-label="Selecionar alojamento e quarto">
-            <label><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
+        <section class="selectors<?= $canAssign ? ' has-assignment' : '' ?>" aria-label="Selecionar alojamento, quarto e atribuição">
             <label class="property-field">
                 <span>Alojamento</span>
                 <select id="propertySelect" aria-label="Alojamento">
@@ -70,10 +79,23 @@ try {
                     <?php endforeach; ?>
                 </select>
             </label>
+            <label><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
+            <?php if ($canAssign): ?>
+                <label class="assignment-field"><span>Atribuir</span>
+                    <select id="employeeSelect" aria-label="Empregada de Andares">
+                        <option value="">Escolher empregada</option>
+                        <?php foreach ($employees as $employee): ?>
+                            <option value="<?= (int) $employee['id'] ?>"><?= htmlspecialchars((string) $employee['display_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label class="assignment-date-field"><span>Data da verificação</span><input id="assignmentDate" type="date" value="<?= (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d') ?>" aria-label="Data da verificação"></label>
+            <?php endif; ?>
         </section>
         <section class="checklist-card">
-            <div class="table-heading" aria-hidden="true"><span>Item a verificar</span><span>Problema identificado</span><span>Estado</span></div>
+            <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><span>Estado</span><?php if ($canAssign): ?><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label><?php endif; ?></div>
             <div id="checklist" class="checklist"></div>
+            <?php if ($canAssign): ?><div id="assignmentActions" class="assignment-actions" hidden><button id="saveAssignments" type="button">Guardar atribuição</button></div><?php endif; ?>
         </section>
         <noscript>Esta aplicação necessita de JavaScript para carregar os dados.</noscript>
     </main>

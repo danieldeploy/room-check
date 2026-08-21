@@ -47,14 +47,10 @@ $modules = [
         'tone' => 'green',
     ],
     [
-        'permissions_any' => [Auth::PERMISSION_TASK_ASSIGN, Auth::PERMISSION_TASK_VIEW_OWN],
+        'permission' => Auth::PERMISSION_TASK_VIEW_OWN,
         'eyebrow' => 'Equipa de limpeza',
-        'title' => Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)
-            ? 'Atribuir verificações'
-            : 'Os meus itens a verificar',
-        'description' => Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)
-            ? 'Distribua os itens de cada quarto pelas Empregadas de Andares.'
-            : 'Consulte os itens que a Governanta lhe atribuiu.',
+        'title' => 'Os meus itens a verificar',
+        'description' => 'Consulte os itens que a Governanta lhe atribuiu.',
         'href' => 'tasks.php',
         'status' => 'Disponível',
         'tone' => 'green',

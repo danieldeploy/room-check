@@ -17,6 +17,13 @@ try {
 
 $canAssign = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN);
 $canViewOwn = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_VIEW_OWN);
+if ($canAssign && !$canViewOwn) {
+    header('Location: rooms.php');
+    exit;
+}
+if ($canViewOwn) {
+    $canAssign = false;
+}
 if (!$canAssign && !$canViewOwn) {
     http_response_code(403);
     exit('Não tem permissão para consultar tarefas.');
@@ -143,7 +150,7 @@ if ($canAssign) {
     }
 } else {
     $statement = $pdo->prepare(
-        'SELECT a.id, a.property_name, a.room_number, a.item_name, a.assigned_at,
+        'SELECT a.id, a.property_name, a.room_number, a.item_name, a.assigned_at, a.due_date,
                 v.problem, v.status
          FROM room_item_assignments a
          LEFT JOIN room_checklist_values v
@@ -151,7 +158,7 @@ if ($canAssign) {
           AND v.room_number = a.room_number
           AND v.item_name = a.item_name
          WHERE a.assigned_to_user_id = :user_id AND a.completed_at IS NULL
-         ORDER BY a.property_name, a.room_number, a.assigned_at, a.item_name'
+         ORDER BY a.due_date, a.property_name, a.room_number, a.item_name'
     );
     $statement->execute(['user_id' => (int) $currentUser['id']]);
     $tasks = $statement->fetchAll();
@@ -223,6 +230,7 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
                     <article class="task-card">
                         <div class="task-location"><span><?= taskEscape((string) $task['property_name']) ?></span><strong>Quarto <?= (int) $task['room_number'] ?></strong></div>
                         <h2><?= taskEscape((string) $task['item_name']) ?></h2>
+                        <p class="task-date"><strong>Data:</strong> <?= taskEscape((new DateTimeImmutable((string) $task['due_date']))->format('d/m/Y')) ?></p>
                         <?php if (trim((string) ($task['problem'] ?? '')) !== ''): ?><p class="problem"><?= nl2br(taskEscape((string) $task['problem'])) ?></p><?php endif; ?>
                         <div class="task-actions">
                             <a href="rooms.php?property=<?= rawurlencode((string) $task['property_name']) ?>&amp;room=<?= (int) $task['room_number'] ?>">Abrir quarto</a>
