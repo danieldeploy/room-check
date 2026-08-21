@@ -25,7 +25,7 @@ h1 { margin: 0; font-size: clamp(2.15rem, 6vw, 4rem); line-height: 0.96; letter-
 .save-status[data-kind="success"] { color: var(--ok); border-color: #bbdec6; background: #f0fdf4; }
 .save-status[data-kind="error"] { color: var(--wrong); border-color: #f0c7c2; background: #fff5f4; }
 .selectors { display: grid; grid-template-columns: minmax(280px, 3fr) minmax(90px, 0.7fr); gap: 16px; padding: 18px; margin-bottom: 18px; border: 1px solid rgba(220, 230, 229, 0.9); border-radius: 20px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
-.selectors.has-assignment { grid-template-columns: minmax(210px, 1.5fr) minmax(115px, 0.55fr) minmax(240px, 1.55fr) minmax(190px, 1.2fr) minmax(160px, 0.9fr); }
+.selectors.has-assignment { grid-template-columns: minmax(210px, 1.5fr) minmax(240px, 1.55fr) minmax(115px, 0.55fr) minmax(190px, 1.2fr) minmax(160px, 0.9fr); }
 .interval-creator { margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); }
 .interval-creator summary { color: var(--brand-dark); font-weight: 800; cursor: pointer; }
 .interval-creator p { margin: 10px 0 0; color: var(--muted); font-size: .85rem; }

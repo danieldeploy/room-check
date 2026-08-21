@@ -117,7 +117,6 @@ try {
                     <?php endforeach; ?>
                 </select>
             </label>
-            <label><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
             <?php if ($canAssign): ?>
                 <label class="interval-field"><span>Intervalo</span>
                     <select id="intervalSelect" aria-label="Intervalo de verificação">
@@ -127,6 +126,7 @@ try {
                         <?php endforeach; ?>
                     </select>
                 </label>
+                <label class="room-field"><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
                 <label class="assignment-field"><span>Atribuir</span>
                     <select id="employeeSelect" aria-label="Empregada de Andares">
                         <option value="">Escolher empregada</option>
@@ -136,6 +136,8 @@ try {
                     </select>
                 </label>
                 <label class="assignment-date-field"><span>Data da verificação</span><input id="assignmentDate" type="date" value="<?= (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d') ?>" aria-label="Data da verificação"></label>
+            <?php else: ?>
+                <label class="room-field"><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
             <?php endif; ?>
         </section>
         <?php if ($canAssign): ?>
