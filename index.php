@@ -47,6 +47,15 @@ $modules = [
         'tone' => 'green',
     ],
     [
+        'permission' => Auth::PERMISSION_TASK_VIEW_OWN,
+        'eyebrow' => 'Equipa de limpeza',
+        'title' => 'Os meus itens a verificar',
+        'description' => 'Consulte os itens que a Governanta lhe atribuiu.',
+        'href' => 'tasks.php',
+        'status' => 'Disponível',
+        'tone' => 'green',
+    ],
+    [
         'permission' => Auth::PERMISSION_MY2N_VIEW,
         'eyebrow' => 'Campainha',
         'title' => 'My2N',
@@ -59,7 +68,17 @@ $modules = [
 
 $visibleModules = array_values(array_filter(
     $modules,
-    static fn(array $module): bool => Auth::hasPermission($pdo, $currentUser, $module['permission'])
+    static function (array $module) use ($pdo, $currentUser): bool {
+        if (isset($module['permission'])) {
+            return Auth::hasPermission($pdo, $currentUser, $module['permission']);
+        }
+        foreach ($module['permissions_any'] ?? [] as $permission) {
+            if (Auth::hasPermission($pdo, $currentUser, $permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
 ));
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);

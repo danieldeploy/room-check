@@ -357,6 +357,10 @@ assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_MY2N_CONTR
 assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_MY2N_SCHEDULE), 'Gerente owns future My2N schedules');
 assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_MY2N_ROLLBACK), 'Gerente owns future My2N rollback');
 assertTrue(Auth::defaultRoleHasPermission('governanta', Auth::PERMISSION_MY2N_VIEW), 'Governanta can view My2N status');
+assertTrue(Auth::defaultRoleHasPermission('governanta', Auth::PERMISSION_TASK_ASSIGN), 'Governanta can assign room tasks');
+assertTrue(Auth::defaultRoleHasPermission('gerente', Auth::PERMISSION_TASK_ASSIGN), 'Gerente can assign room tasks');
+assertTrue(Auth::defaultRoleHasPermission('empregada_andares', Auth::PERMISSION_TASK_VIEW_OWN), 'Empregada can view own room tasks');
+assertTrue(!Auth::defaultRoleHasPermission('empregada_andares', Auth::PERMISSION_TASK_ASSIGN), 'Empregada cannot assign room tasks');
 assertTrue(Auth::defaultRoleHasPermission('tecnico_manutencao', Auth::PERMISSION_ZKACCESS_VIEW), 'Técnico can view ZKAccess status');
 assertTrue(!Auth::defaultRoleHasPermission('tecnico_manutencao', Auth::PERMISSION_ZKACCESS_CONFIGURE), 'Técnico cannot configure ZKAccess by default');
 assertTrue(Auth::defaultRoleHasPermission('tecnico_manutencao', Auth::PERMISSION_MY2N_VIEW), 'Técnico can view My2N status');
