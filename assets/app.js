@@ -6,6 +6,11 @@
     const roomSelect = document.querySelector('#roomSelect');
     const checklist = document.querySelector('#checklist');
     const saveStatus = document.querySelector('#saveStatus');
+    const intervalSelect = document.querySelector('#intervalSelect');
+    const intervalName = document.querySelector('#intervalName');
+    const intervalStart = document.querySelector('#intervalStart');
+    const intervalEnd = document.querySelector('#intervalEnd');
+    const createInterval = document.querySelector('#createInterval');
     const employeeSelect = document.querySelector('#employeeSelect');
     const assignmentDate = document.querySelector('#assignmentDate');
     const selectAllItems = document.querySelector('#selectAllItems');
@@ -127,16 +132,24 @@
 
     const updateAssignmentMode = () => {
         if (!canAssign) return;
+        const intervalId = Number(intervalSelect.value);
+        const interval = config.intervals.find((candidate) => candidate.id === intervalId);
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate ? assignmentDate.value : '';
-        const active = employeeId > 0 && dueDate !== '';
+        if (interval && assignmentDate) {
+            assignmentDate.min = interval.startDate;
+            assignmentDate.max = interval.endDate;
+            if (dueDate < interval.startDate || dueDate > interval.endDate) assignmentDate.value = interval.startDate;
+        }
+        const selectedDate = assignmentDate ? assignmentDate.value : '';
+        const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
         rows.forEach((row) => {
             row.element.classList.toggle('assignment-mode', active);
             row.assignmentCheckbox.disabled = !active;
             const assignment = assignments[row.name] || {};
             row.assignmentCheckbox.checked = active
                 && Number(assignment.employeeId || 0) === employeeId
-                && assignment.dueDate === dueDate;
+                && assignment.dueDate === selectedDate;
             row.textarea.value = active ? '' : row.textarea.dataset.problem;
             row.textarea.placeholder = active ? 'A verificar' : 'Descreva o problema…';
             row.textarea.readOnly = active || !canEdit;
@@ -146,7 +159,8 @@
         selectAllItems.disabled = !active;
         assignmentActions.hidden = !active;
         updateSelectAllState();
-        setStatus(active ? 'Selecione os itens a atribuir' : (canEdit ? 'Dados carregados' : 'Apenas consulta'), active ? '' : 'success');
+        const prompt = interval ? 'Escolha a empregada e a data dentro do intervalo' : 'Escolha ou crie um intervalo';
+        setStatus(active ? 'Selecione os itens a atribuir' : (canAssign ? prompt : (canEdit ? 'Dados carregados' : 'Apenas consulta')), active ? '' : 'success');
     };
 
     const renderChecklist = (items) => {
@@ -176,6 +190,7 @@
             const params = new URLSearchParams({
                 property: current.property,
                 room: String(current.room),
+                interval_id: intervalSelect ? intervalSelect.value : '0',
             });
             const response = await fetch(`api.php?${params}`, {
                 headers: { Accept: 'application/json' },
@@ -208,9 +223,10 @@
     };
 
     const saveSelectedAssignments = async () => {
+        const intervalId = Number(intervalSelect.value);
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate.value;
-        if (!employeeId || !dueDate) return;
+        if (!intervalId || !employeeId || !dueDate) return;
         const current = selection();
         const selectedItems = rows
             .filter((row) => row.assignmentCheckbox && row.assignmentCheckbox.checked)
@@ -222,7 +238,8 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
                 body: JSON.stringify({
-                    action: 'assign_items', csrfToken: config.csrfToken, ...current, employeeId, dueDate, selectedItems,
+                    action: 'assign_items', csrfToken: config.csrfToken, ...current,
+                    intervalId, employeeId, dueDate, selectedItems,
                 }),
             });
             const result = await response.json();
@@ -284,11 +301,55 @@
         saveTimer = window.setTimeout(saveChecklist, 600);
     };
 
+    const createVerificationInterval = async () => {
+        const name = intervalName.value.trim();
+        const startDate = intervalStart.value;
+        const endDate = intervalEnd.value;
+        if (!name || !startDate || !endDate) {
+            setStatus('Preencha o nome e as duas datas do intervalo', 'error');
+            return;
+        }
+        createInterval.disabled = true;
+        setStatus('A criar intervalo…');
+        try {
+            const response = await fetch('api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                    action: 'create_interval', csrfToken: config.csrfToken, name, startDate, endDate,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao criar o intervalo.');
+            config.intervals.unshift(result.interval);
+            const option = document.createElement('option');
+            option.value = String(result.interval.id);
+            option.textContent = `${result.interval.name} — ${result.interval.startDate} a ${result.interval.endDate}`;
+            intervalSelect.append(option);
+            intervalSelect.value = String(result.interval.id);
+            assignmentDate.value = result.interval.startDate;
+            intervalName.value = '';
+            intervalStart.value = '';
+            intervalEnd.value = '';
+            await loadChecklist();
+            setStatus('Intervalo criado', 'success');
+        } catch (error) {
+            setStatus(error.message, 'error');
+        } finally {
+            createInterval.disabled = false;
+        }
+    };
+
     propertySelect.addEventListener('change', () => {
         renderRooms(1);
         loadChecklist();
     });
     roomSelect.addEventListener('change', loadChecklist);
+    if (intervalSelect) intervalSelect.addEventListener('change', async () => {
+        employeeSelect.value = '';
+        await loadChecklist();
+    });
+    if (createInterval) createInterval.addEventListener('click', createVerificationInterval);
     if (employeeSelect) employeeSelect.addEventListener('change', updateAssignmentMode);
     if (assignmentDate) assignmentDate.addEventListener('change', updateAssignmentMode);
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
