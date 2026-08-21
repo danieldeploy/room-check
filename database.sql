@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(64) NOT NULL,
     display_name VARCHAR(120) NOT NULL,
+    email VARCHAR(190) NULL,
+    mobile VARCHAR(32) NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(40) NOT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -20,7 +22,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_users_username (username)
+    UNIQUE KEY uq_users_username (username),
+    UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -53,22 +56,8 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     INDEX idx_role_permissions_updated_by (updated_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS room_verification_intervals (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    name VARCHAR(120) NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    created_by_user_id BIGINT UNSIGNED NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    INDEX idx_verification_intervals_dates (start_date, end_date),
-    CONSTRAINT fk_verification_interval_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id),
-    CONSTRAINT chk_verification_interval_dates CHECK (end_date >= start_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS room_item_assignments (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    interval_id BIGINT UNSIGNED NOT NULL,
     property_name VARCHAR(80) NOT NULL,
     room_number TINYINT UNSIGNED NOT NULL,
     item_name VARCHAR(80) NOT NULL,
@@ -79,12 +68,10 @@ CREATE TABLE IF NOT EXISTS room_item_assignments (
     completed_at DATETIME NULL,
     completed_by_user_id BIGINT UNSIGNED NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_interval_room_item (interval_id, property_name, room_number, item_name),
-    INDEX idx_assignment_interval (interval_id, due_date),
+    UNIQUE KEY uq_room_item_assignment (property_name, room_number, item_name),
     INDEX idx_assignment_assignee (assigned_to_user_id, completed_at),
     INDEX idx_assignment_due_date (due_date, assigned_to_user_id, completed_at),
     INDEX idx_assignment_room (property_name, room_number),
-    CONSTRAINT fk_assignment_interval FOREIGN KEY (interval_id) REFERENCES room_verification_intervals(id),
     CONSTRAINT fk_assignment_assignee FOREIGN KEY (assigned_to_user_id) REFERENCES users(id),
     CONSTRAINT fk_assignment_assigner FOREIGN KEY (assigned_by_user_id) REFERENCES users(id),
     CONSTRAINT fk_assignment_completer FOREIGN KEY (completed_by_user_id) REFERENCES users(id)

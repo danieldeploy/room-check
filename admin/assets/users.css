@@ -8,12 +8,18 @@ header p:not(.eyebrow) { color: #65777d; }
 .create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .create-grid button { align-self: end; }
 .user-list { display: grid; gap: 12px; }
-.user-row { display: grid; grid-template-columns: minmax(170px, 1fr) auto minmax(260px, 1.4fr) minmax(260px, 1.4fr) auto; align-items: center; gap: 12px; padding: 14px; border: 1px solid #e0e9e8; border-radius: 13px; }
+.user-row { display: grid; gap: 16px; padding: 18px; border: 1px solid #e0e9e8; border-radius: 13px; }
 .user-row > div span { display: block; color: #65777d; font-size: .86rem; }
+.user-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.edit-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+.edit-grid label { min-width: 0; }
+.edit-grid input, .edit-grid select { width: 100%; }
+.user-card-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .account-state { padding: 5px 8px; border-radius: 999px; font-size: .75rem; font-weight: 850; }
 .account-state.active { color: #137333; background: #e4f7e9; }
 .account-state.inactive { color: #9f231b; background: #fff0ee; }
 .inline-form { display: flex; align-items: center; gap: 7px; }
 .inline-form input, .inline-form select { min-height: 42px; }
 button.secondary { color: #17313a; background: #e8efee; }
-@media (max-width: 900px) { .users-shell { width: min(100% - 20px, 1180px); padding-top: 10px; } .user-row { grid-template-columns: 1fr; align-items: stretch; } .create-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1050px) { .edit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .users-shell { width: min(100% - 20px, 1180px); padding-top: 10px; } .create-grid, .edit-grid { grid-template-columns: 1fr; } .user-card-actions, .inline-form { align-items: stretch; flex-direction: column; } }
