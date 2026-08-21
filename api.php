@@ -44,9 +44,9 @@ try {
         if (Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)) {
             $intervalId = (int) ($_GET['interval_id'] ?? 0);
             $assignmentStatement = $pdo->prepare(
-                'SELECT item_name, assigned_to_user_id, due_date FROM room_item_assignments
+                'SELECT item_name, assigned_to_user_id, due_date, completed_at FROM room_item_assignments
                  WHERE interval_id = :interval_id AND property_name = :property
-                   AND room_number = :room AND completed_at IS NULL'
+                   AND room_number = :room'
             );
             $assignmentStatement->execute([
                 'interval_id' => $intervalId,
@@ -57,6 +57,7 @@ try {
                 $assignments[(string) $assignment['item_name']] = [
                     'employeeId' => (int) $assignment['assigned_to_user_id'],
                     'dueDate' => (string) $assignment['due_date'],
+                    'completed' => $assignment['completed_at'] !== null,
                 ];
             }
         }
@@ -226,6 +227,11 @@ try {
         }
         $selected = array_fill_keys(array_values(array_intersect(CHECKLIST_ITEMS, array_map('strval', $selectedItems))), true);
         $pdo->beginTransaction();
+        $assignmentLock = $pdo->prepare(
+            'SELECT assigned_to_user_id, due_date, completed_at FROM room_item_assignments
+             WHERE interval_id = :interval_id AND property_name = :property
+               AND room_number = :room AND item_name = :item FOR UPDATE'
+        );
         $upsert = $pdo->prepare(
             'INSERT INTO room_item_assignments
                 (interval_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, completed_at, completed_by_user_id)
@@ -238,7 +244,8 @@ try {
         $remove = $pdo->prepare(
             'DELETE FROM room_item_assignments WHERE interval_id = :interval_id
              AND property_name = :property AND room_number = :room
-             AND item_name = :item AND assigned_to_user_id = :assignee AND due_date = :due_date'
+             AND item_name = :item AND assigned_to_user_id = :assignee AND due_date = :due_date
+             AND completed_at IS NULL'
         );
         foreach (CHECKLIST_ITEMS as $name) {
             $parameters = [
@@ -246,6 +253,19 @@ try {
                 'item' => $name, 'assignee' => $employeeId,
             ];
             if (isset($selected[$name])) {
+                $assignmentLock->execute([
+                    'interval_id' => $intervalId, 'property' => $property,
+                    'room' => $room, 'item' => $name,
+                ]);
+                $existingAssignment = $assignmentLock->fetch();
+                if ($existingAssignment
+                    && ((int) $existingAssignment['assigned_to_user_id'] !== $employeeId
+                        || (string) $existingAssignment['due_date'] !== $dueDate
+                        || $existingAssignment['completed_at'] !== null)) {
+                    throw new InvalidArgumentException(
+                        "O item {$name} já está atribuído ou concluído noutra data deste intervalo."
+                    );
+                }
                 $upsert->execute($parameters + ['assigner' => (int) $currentUser['id'], 'due_date' => $dueDate]);
             } else {
                 $remove->execute($parameters + ['due_date' => $dueDate]);

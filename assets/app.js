@@ -30,11 +30,53 @@
     let requestVersion = 0;
     let isLoading = false;
     let assignments = {};
+    const draftPrefix = 'room-check-assignment-draft:v1';
 
     const selection = () => ({
         property: propertySelect.value,
         room: Number(roomSelect.value),
     });
+
+    const draftKey = () => {
+        if (!canAssign) return null;
+        const intervalId = Number(intervalSelect?.value || 0);
+        const employeeId = Number(employeeSelect?.value || 0);
+        const dueDate = assignmentDate?.value || '';
+        if (!intervalId || !employeeId || !dueDate) return null;
+        const current = selection();
+        return [draftPrefix, intervalId, current.property, current.room, employeeId, dueDate].join('|');
+    };
+
+    const readDraft = () => {
+        const key = draftKey();
+        if (!key) return new Set();
+        try {
+            const value = JSON.parse(window.localStorage.getItem(key) || '[]');
+            return new Set(Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []);
+        } catch {
+            return new Set();
+        }
+    };
+
+    const saveDraft = () => {
+        const key = draftKey();
+        if (!key) return;
+        const selectedItems = rows
+            .filter((row) => row.assignmentCheckbox && !row.assignmentCheckbox.disabled && row.assignmentCheckbox.checked)
+            .map((row) => row.name);
+        try {
+            window.localStorage.setItem(key, JSON.stringify(selectedItems));
+            setStatus('Seleção guardada neste browser', 'success');
+        } catch {
+            setStatus('Não foi possível guardar o rascunho neste browser', 'error');
+        }
+    };
+
+    const clearDraft = () => {
+        const key = draftKey();
+        if (!key) return;
+        try { window.localStorage.removeItem(key); } catch { /* armazenamento indisponível */ }
+    };
 
     const setStatus = (text, kind = '') => {
         saveStatus.textContent = text;
@@ -147,7 +189,10 @@
             assignmentCheckbox.type = 'checkbox';
             assignmentCheckbox.disabled = true;
             assignmentCheckbox.setAttribute('aria-label', `Atribuir ${item.name}`);
-            assignmentCheckbox.addEventListener('change', updateSelectAllState);
+            assignmentCheckbox.addEventListener('change', () => {
+                updateSelectAllState();
+                saveDraft();
+            });
             const marker = document.createElement('span');
             assignmentLabel.append(assignmentCheckbox, marker);
             row.append(name, problemField, status, assignmentLabel);
@@ -160,7 +205,9 @@
 
     function updateSelectAllState() {
         if (!selectAllItems) return;
-        const checkboxes = rows.map((row) => row.assignmentCheckbox).filter(Boolean);
+        const checkboxes = rows
+            .map((row) => row.assignmentCheckbox)
+            .filter((checkbox) => checkbox && !checkbox.disabled);
         const checked = checkboxes.filter((checkbox) => checkbox.checked).length;
         selectAllItems.checked = checkboxes.length > 0 && checked === checkboxes.length;
         selectAllItems.indeterminate = checked > 0 && checked < checkboxes.length;
@@ -178,13 +225,29 @@
         }
         const selectedDate = assignmentDate ? assignmentDate.value : '';
         const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
+        const draft = active ? readDraft() : new Set();
         rows.forEach((row) => {
             row.element.classList.toggle('assignment-mode', active);
-            row.assignmentCheckbox.disabled = !active;
             const assignment = assignments[row.name] || {};
-            row.assignmentCheckbox.checked = active
-                && Number(assignment.employeeId || 0) === employeeId
+            const hasAssignment = Number(assignment.employeeId || 0) > 0;
+            const sameAssignment = hasAssignment
+                && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate === selectedDate;
+            const locked = hasAssignment && (!sameAssignment || assignment.completed === true);
+            row.assignmentCheckbox.disabled = !active || locked;
+            row.assignmentCheckbox.checked = active
+                && (sameAssignment || (!hasAssignment && draft.has(row.name)));
+            row.element.classList.toggle('assignment-locked', active && locked);
+            if (active && locked) {
+                const state = assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`;
+                row.assignmentCheckbox.parentElement.title = `Este item ${state}.`;
+                row.assignmentHint.textContent = assignment.completed
+                    ? `Verificado em ${formatDate(assignment.dueDate)}`
+                    : `Atribuído para ${formatDate(assignment.dueDate)}`;
+            } else {
+                row.assignmentCheckbox.parentElement.removeAttribute('title');
+                row.assignmentHint.textContent = 'A verificar';
+            }
             row.assignmentHint.hidden = !active;
             row.textarea.readOnly = active || !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = active || !canEdit; });
@@ -263,7 +326,7 @@
         if (!intervalId || !employeeId || !dueDate) return;
         const current = selection();
         const selectedItems = rows
-            .filter((row) => row.assignmentCheckbox && row.assignmentCheckbox.checked)
+            .filter((row) => row.assignmentCheckbox && !row.assignmentCheckbox.disabled && row.assignmentCheckbox.checked)
             .map((row) => row.name);
         saveAssignments.disabled = true;
         setStatus('A guardar atribuição…');
@@ -285,6 +348,7 @@
                     && !selectedItems.includes(name)) delete assignments[name];
             });
             selectedItems.forEach((name) => { assignments[name] = { employeeId, dueDate }; });
+            clearDraft();
             setStatus('Atribuição guardada', 'success');
         } catch (error) {
             setStatus(error.message, 'error');
@@ -466,6 +530,7 @@
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
         rows.forEach((row) => { if (!row.assignmentCheckbox.disabled) row.assignmentCheckbox.checked = selectAllItems.checked; });
         updateSelectAllState();
+        saveDraft();
     });
     if (saveAssignments) saveAssignments.addEventListener('click', saveSelectedAssignments);
 
