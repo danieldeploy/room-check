@@ -133,6 +133,7 @@ try {
                 </div>
                 <p>As datas só podem ser reduzidas até continuarem a incluir todos os itens já atribuídos.</p>
             </section>
+            <div class="assignment-legend" aria-label="Legenda das atribuições"><span><i class="saved"></i>Guardado na base de dados</span><span><i class="draft"></i>Rascunho guardado no browser</span></div>
         <?php endif; ?>
         <section class="checklist-card">
             <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><span>Estado</span><?php if ($canAssign): ?><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label><?php endif; ?></div>

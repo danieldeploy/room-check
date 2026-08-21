@@ -261,10 +261,15 @@
                 && assignment.dueDate === selectedDate;
             const draftDate = otherDrafts.get(row.name) || '';
             const lockedByDraft = !hasAssignment && draftDate !== '';
+            const selectedInCurrentDraft = !hasAssignment && draft.has(row.name);
             const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
             row.assignmentCheckbox.disabled = !active || locked;
             row.assignmentCheckbox.checked = active
-                && (sameAssignment || (!hasAssignment && draft.has(row.name)));
+                && (hasAssignment || lockedByDraft || selectedInCurrentDraft);
+            row.assignmentCheckbox.parentElement.classList.toggle('saved-assignment', active && hasAssignment);
+            row.assignmentCheckbox.parentElement.classList.toggle(
+                'draft-assignment', active && !hasAssignment && (lockedByDraft || selectedInCurrentDraft)
+            );
             row.element.classList.toggle('assignment-locked', active && locked);
             if (active && locked) {
                 const state = lockedByDraft
