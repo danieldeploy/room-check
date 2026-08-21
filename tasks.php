@@ -151,6 +151,7 @@ if ($canAssign) {
 } else {
     $statement = $pdo->prepare(
         'SELECT a.id, a.property_name, a.room_number, a.item_name, a.assigned_at, a.due_date,
+                a.verification_instructions,
                 v.problem, v.status
          FROM room_item_assignments a
          LEFT JOIN room_checklist_values v
@@ -177,7 +178,7 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
     <meta name="robots" content="noindex,nofollow">
     <meta name="theme-color" content="#0f766e">
     <title>Tarefas dos Quartos — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/tasks.css">
+    <link rel="stylesheet" href="assets/tasks.css?v=<?= (int) filemtime(__DIR__ . '/assets/tasks.css') ?>">
     <link rel="stylesheet" href="assets/session.css">
 </head>
 <body>
@@ -231,6 +232,7 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
                         <div class="task-location"><span><?= taskEscape((string) $task['property_name']) ?></span><strong>Quarto <?= (int) $task['room_number'] ?></strong></div>
                         <h2><?= taskEscape((string) $task['item_name']) ?></h2>
                         <p class="task-date"><strong>Data:</strong> <?= taskEscape((new DateTimeImmutable((string) $task['due_date']))->format('d/m/Y')) ?></p>
+                        <?php if (trim((string) ($task['verification_instructions'] ?? '')) !== ''): ?><div class="instructions"><strong>Instruções da verificação</strong><p><?= nl2br(taskEscape((string) $task['verification_instructions'])) ?></p></div><?php endif; ?>
                         <?php if (trim((string) ($task['problem'] ?? '')) !== ''): ?><p class="problem"><?= nl2br(taskEscape((string) $task['problem'])) ?></p><?php endif; ?>
                         <div class="task-actions">
                             <a href="rooms.php?property=<?= rawurlencode((string) $task['property_name']) ?>&amp;room=<?= (int) $task['room_number'] ?>">Abrir quarto</a>

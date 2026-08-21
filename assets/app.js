@@ -47,14 +47,20 @@
         return [draftPrefix, intervalId, current.property, current.room, employeeId, dueDate].join('|');
     };
 
-    const readDraft = () => {
+    const readDraftData = () => {
         const key = draftKey();
-        if (!key) return new Set();
+        if (!key) return { items: new Set(), instructions: {} };
         try {
             const value = JSON.parse(window.localStorage.getItem(key) || '[]');
-            return new Set(Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []);
+            const items = Array.isArray(value) ? value : value.items;
+            const instructions = !Array.isArray(value) && value && typeof value.instructions === 'object'
+                ? value.instructions : {};
+            return {
+                items: new Set(Array.isArray(items) ? items.filter((item) => typeof item === 'string') : []),
+                instructions,
+            };
         } catch {
-            return new Set();
+            return { items: new Set(), instructions: {} };
         }
     };
 
@@ -72,9 +78,14 @@
                 const parts = key.split('|');
                 const dueDate = parts[parts.length - 1] || '';
                 const value = JSON.parse(window.localStorage.getItem(key) || '[]');
-                if (!Array.isArray(value)) continue;
-                value.forEach((item) => {
-                    if (typeof item === 'string' && !reserved.has(item)) reserved.set(item, dueDate);
+                const items = Array.isArray(value) ? value : value.items;
+                const instructions = !Array.isArray(value) && value && typeof value.instructions === 'object'
+                    ? value.instructions : {};
+                if (!Array.isArray(items)) continue;
+                items.forEach((item) => {
+                    if (typeof item === 'string' && !reserved.has(item)) {
+                        reserved.set(item, { dueDate, instructions: String(instructions[item] || '') });
+                    }
                 });
             }
         } catch {
@@ -89,8 +100,11 @@
         const selectedItems = rows
             .filter((row) => row.assignmentCheckbox && !row.assignmentCheckbox.disabled && row.assignmentCheckbox.checked)
             .map((row) => row.name);
+        const instructions = Object.fromEntries(rows
+            .filter((row) => selectedItems.includes(row.name))
+            .map((row) => [row.name, row.textarea.value]));
         try {
-            window.localStorage.setItem(key, JSON.stringify(selectedItems));
+            window.localStorage.setItem(key, JSON.stringify({ items: selectedItems, instructions }));
             setStatus('Seleção guardada neste browser', 'success');
         } catch {
             setStatus('Não foi possível guardar o rascunho neste browser', 'error');
@@ -166,7 +180,12 @@
         textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
         textarea.addEventListener('input', () => {
             autoGrow(textarea);
-            if (canEdit) scheduleSave();
+            if (row.classList.contains('assignment-mode')) {
+                saveDraft();
+            } else if (canEdit) {
+                textarea.dataset.problem = textarea.value;
+                scheduleSave();
+            }
         });
         textarea.dataset.problem = item.problem || '';
         const problemField = document.createElement('div');
@@ -217,6 +236,7 @@
             assignmentCheckbox.addEventListener('change', () => {
                 updateSelectAllState();
                 saveDraft();
+                updateAssignmentMode();
             });
             const marker = document.createElement('span');
             assignmentLabel.append(assignmentCheckbox, marker);
@@ -250,7 +270,9 @@
         }
         const selectedDate = assignmentDate ? assignmentDate.value : '';
         const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
-        const draft = active ? readDraft() : new Set();
+        if (active) clearTimeout(saveTimer);
+        const draftData = active ? readDraftData() : { items: new Set(), instructions: {} };
+        const draft = draftData.items;
         const otherDrafts = active ? readOtherDraftAssignments() : new Map();
         rows.forEach((row) => {
             row.element.classList.toggle('assignment-mode', active);
@@ -259,8 +281,9 @@
             const sameAssignment = hasAssignment
                 && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate === selectedDate;
-            const draftDate = otherDrafts.get(row.name) || '';
-            const lockedByDraft = !hasAssignment && draftDate !== '';
+            const otherDraft = otherDrafts.get(row.name) || null;
+            const draftDate = otherDraft?.dueDate || '';
+            const lockedByDraft = !hasAssignment && otherDraft !== null;
             const selectedInCurrentDraft = !hasAssignment && draft.has(row.name);
             const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
             row.assignmentCheckbox.disabled = !active || locked;
@@ -272,6 +295,17 @@
                 'draft-assignment', active && !hasAssignment && (lockedByDraft || selectedInCurrentDraft)
             );
             row.element.classList.toggle('assignment-locked', active && locked);
+            if (active && hasAssignment) {
+                row.textarea.value = String(assignment.instructions || '');
+            } else if (active && lockedByDraft) {
+                row.textarea.value = String(otherDraft.instructions || '');
+            } else if (active) {
+                row.textarea.value = String(draftData.instructions[row.name] || '');
+            } else {
+                row.textarea.value = row.textarea.dataset.problem || '';
+            }
+            row.textarea.placeholder = active ? 'Descreva a verificação…' : 'Descreva o problema…';
+            row.textarea.setAttribute('aria-label', `${active ? 'Instruções da verificação' : 'Problema identificado'}: ${row.name}`);
             if (active && locked) {
                 const state = lockedByDraft
                     ? `já está selecionado num rascunho para ${formatDate(draftDate)}`
@@ -282,12 +316,18 @@
                     : (assignment.completed
                         ? `Verificado em ${formatDate(assignment.dueDate)}`
                         : `Atribuído para ${formatDate(assignment.dueDate)}`);
+            } else if (active && selectedInCurrentDraft) {
+                row.assignmentCheckbox.parentElement.removeAttribute('title');
+                row.assignmentHint.textContent = `Selecionado para ${formatDate(selectedDate)} (rascunho)`;
+            } else if (active && sameAssignment) {
+                row.assignmentCheckbox.parentElement.removeAttribute('title');
+                row.assignmentHint.textContent = `Atribuído para ${formatDate(selectedDate)}`;
             } else {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
-                row.assignmentHint.textContent = 'A verificar';
+                row.assignmentHint.textContent = '';
             }
-            row.assignmentHint.hidden = !active;
-            row.textarea.readOnly = active || !canEdit;
+            row.assignmentHint.hidden = !active || (!locked && !selectedInCurrentDraft && !sameAssignment);
+            row.textarea.readOnly = active ? locked : !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = active || !canEdit; });
             autoGrow(row.textarea);
         });
@@ -366,6 +406,9 @@
         const selectedItems = rows
             .filter((row) => row.assignmentCheckbox && !row.assignmentCheckbox.disabled && row.assignmentCheckbox.checked)
             .map((row) => row.name);
+        const instructions = Object.fromEntries(rows
+            .filter((row) => selectedItems.includes(row.name))
+            .map((row) => [row.name, row.textarea.value.trim()]));
         saveAssignments.disabled = true;
         setStatus('A guardar atribuição…');
         try {
@@ -374,7 +417,7 @@
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
                 body: JSON.stringify({
                     action: 'assign_items', csrfToken: config.csrfToken, ...current,
-                    intervalId, employeeId, dueDate, selectedItems,
+                    intervalId, employeeId, dueDate, selectedItems, instructions,
                 }),
             });
             const result = await response.json();
@@ -385,8 +428,9 @@
                     && assignment.dueDate === dueDate
                     && !selectedItems.includes(name)) delete assignments[name];
             });
-            selectedItems.forEach((name) => { assignments[name] = { employeeId, dueDate }; });
+            selectedItems.forEach((name) => { assignments[name] = { employeeId, dueDate, instructions: instructions[name] || '' }; });
             clearDraft();
+            updateAssignmentMode();
             setStatus('Atribuição guardada', 'success');
         } catch (error) {
             setStatus(error.message, 'error');

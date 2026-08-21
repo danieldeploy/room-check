@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS room_item_assignments (
     assigned_to_user_id BIGINT UNSIGNED NOT NULL,
     assigned_by_user_id BIGINT UNSIGNED NOT NULL,
     due_date DATE NOT NULL,
+    verification_instructions TEXT NOT NULL,
     assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME NULL,
     completed_by_user_id BIGINT UNSIGNED NULL,

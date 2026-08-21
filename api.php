@@ -44,7 +44,7 @@ try {
         if (Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)) {
             $intervalId = (int) ($_GET['interval_id'] ?? 0);
             $assignmentStatement = $pdo->prepare(
-                'SELECT item_name, assigned_to_user_id, due_date, completed_at FROM room_item_assignments
+                'SELECT item_name, assigned_to_user_id, due_date, verification_instructions, completed_at FROM room_item_assignments
                  WHERE interval_id = :interval_id AND property_name = :property
                    AND room_number = :room'
             );
@@ -57,6 +57,7 @@ try {
                 $assignments[(string) $assignment['item_name']] = [
                     'employeeId' => (int) $assignment['assigned_to_user_id'],
                     'dueDate' => (string) $assignment['due_date'],
+                    'instructions' => (string) $assignment['verification_instructions'],
                     'completed' => $assignment['completed_at'] !== null,
                 ];
             }
@@ -199,9 +200,13 @@ try {
         $employeeId = (int) ($payload['employeeId'] ?? 0);
         $dueDate = trim((string) ($payload['dueDate'] ?? ''));
         $selectedItems = $payload['selectedItems'] ?? null;
+        $instructions = $payload['instructions'] ?? [];
         validateSelection($property, $room);
         if (!is_array($selectedItems)) {
             throw new InvalidArgumentException('Seleção de itens inválida.');
+        }
+        if (!is_array($instructions)) {
+            throw new InvalidArgumentException('Instruções de verificação inválidas.');
         }
         $dateParts = array_map('intval', explode('-', $dueDate));
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)
@@ -226,6 +231,14 @@ try {
             throw new InvalidArgumentException('Escolha uma Empregada de Andares ativa.');
         }
         $selected = array_fill_keys(array_values(array_intersect(CHECKLIST_ITEMS, array_map('strval', $selectedItems))), true);
+        $normalizedInstructions = [];
+        foreach (array_keys($selected) as $name) {
+            $instruction = trim((string) ($instructions[$name] ?? ''));
+            if (mb_strlen($instruction) > 5000) {
+                throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
+            }
+            $normalizedInstructions[$name] = $instruction;
+        }
         $pdo->beginTransaction();
         $assignmentLock = $pdo->prepare(
             'SELECT assigned_to_user_id, due_date, completed_at FROM room_item_assignments
@@ -234,11 +247,11 @@ try {
         );
         $upsert = $pdo->prepare(
             'INSERT INTO room_item_assignments
-                (interval_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, completed_at, completed_by_user_id)
-             VALUES (:interval_id, :property, :room, :item, :assignee, :assigner, :due_date, NULL, NULL)
+                (interval_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
+             VALUES (:interval_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
              ON DUPLICATE KEY UPDATE assigned_to_user_id = VALUES(assigned_to_user_id),
                 assigned_by_user_id = VALUES(assigned_by_user_id), assigned_at = CURRENT_TIMESTAMP,
-                due_date = VALUES(due_date),
+                due_date = VALUES(due_date), verification_instructions = VALUES(verification_instructions),
                 completed_at = NULL, completed_by_user_id = NULL'
         );
         $remove = $pdo->prepare(
@@ -266,7 +279,10 @@ try {
                         "O item {$name} já está atribuído ou concluído noutra data deste intervalo."
                     );
                 }
-                $upsert->execute($parameters + ['assigner' => (int) $currentUser['id'], 'due_date' => $dueDate]);
+                $upsert->execute($parameters + [
+                    'assigner' => (int) $currentUser['id'], 'due_date' => $dueDate,
+                    'instructions' => $normalizedInstructions[$name],
+                ]);
             } else {
                 $remove->execute($parameters + ['due_date' => $dueDate]);
             }

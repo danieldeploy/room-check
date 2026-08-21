@@ -17,6 +17,8 @@ Numa instalação existente, abra o phpMyAdmin, escolha a base de dados da aplic
 1. `migrations/006_room_item_assignments.sql`
 2. `migrations/007_room_item_assignment_dates.sql`
 3. `migrations/008_room_verification_intervals.sql`
+4. `migrations/009_user_contacts.sql`
+5. `migrations/010_assignment_instructions.sql`
 
 Não volte a executar uma migração que já tenha sido aplicada. A migração 008 conserva as atribuições anteriores num intervalo chamado **Atribuições anteriores**.
 
@@ -34,9 +36,9 @@ Não volte a executar uma migração que já tenha sido aplicada. A migração 0
 3. Crie um intervalo com data inicial e final.
 4. Escolha alojamento e quarto.
 5. Escolha o intervalo, uma empregada e uma data dentro do intervalo.
-6. Selecione alguns itens e guarde.
+6. Selecione alguns itens, escreva as instruções de verificação e guarde.
 7. Tente mudar a data ou a empregada do mesmo item: a atribuição deve ser substituída, nunca duplicada.
-8. Entre como Empregada de Andares e confirme que apenas as tarefas próprias aparecem.
+8. Entre como Empregada de Andares e confirme que apenas as tarefas próprias aparecem com as respetivas instruções.
 9. Marque um item como concluído.
 
 ## Rollback

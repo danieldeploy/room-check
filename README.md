@@ -20,7 +20,7 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 1. Crie a base de dados e um utilizador com os privilégios necessários.
 2. Numa instalação nova, importe `database.sql` no phpMyAdmin.
-3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql`, `004_portal_permissions.sql`, `005_my2n_credentials_permission.sql`, `006_room_item_assignments.sql`, `007_room_item_assignment_dates.sql` e `008_room_verification_intervals.sql`.
+3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql`, `004_portal_permissions.sql`, `005_my2n_credentials_permission.sql`, `006_room_item_assignments.sql`, `007_room_item_assignment_dates.sql`, `008_room_verification_intervals.sql`, `009_user_contacts.sql` e `010_assignment_instructions.sql`.
 4. Copie `config.local.example.php` para `config.local.php` em `$HOME/public_html/check` e configure a base de dados.
 5. Confirme que `check.welcomehostel.pt` usa `/public_html/check` como Document Root e Force HTTPS Redirect.
 6. Defina temporariamente `auth.setup_key`, abra `/setup.php`, crie o primeiro Gerente e remova imediatamente a chave.
