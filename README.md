@@ -4,7 +4,8 @@ Aplicação PHP/MySQL para `check.welcomehostel.pt`. Depois do login, apresenta 
 
 1. configuração da automação Cloudbeds → ZKAccess;
 2. gestão dos quartos;
-3. configuração/estado da campainha My2N.
+3. distribuição de itens a verificar pelas Empregadas de Andares;
+4. configuração/estado da campainha My2N.
 
 Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de aprovação explícita do deployment.
 
@@ -19,7 +20,7 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 1. Crie a base de dados e um utilizador com os privilégios necessários.
 2. Numa instalação nova, importe `database.sql` no phpMyAdmin.
-3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql`, `004_portal_permissions.sql` e `005_my2n_credentials_permission.sql`.
+3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql`, `004_portal_permissions.sql`, `005_my2n_credentials_permission.sql` e `006_room_item_assignments.sql`.
 4. Copie `config.local.example.php` para `config.local.php` em `$HOME/public_html/check` e configure a base de dados.
 5. Confirme que `check.welcomehostel.pt` usa `/public_html/check` como Document Root e Force HTTPS Redirect.
 6. Defina temporariamente `auth.setup_key`, abra `/setup.php`, crie o primeiro Gerente e remova imediatamente a chave.
@@ -33,6 +34,7 @@ O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser
 - `/login.php` é a entrada pública da aplicação.
 - `/index.php` é o portal autenticado.
 - `/rooms.php` preserva a gestão de quartos existente.
+- `/tasks.php` permite à Governanta distribuir verificações e apresenta a cada Empregada de Andares apenas os seus itens pendentes.
 - `/admin/zkaccess.php` apresenta os parâmetros e o estado da automação ZKAccess.
 - `/admin/my2n.php` configura a ligação e as associações entre todas as campainhas e telemóveis do Site My2N.
 - `/admin/users.php` gere contas e perfis.
@@ -55,6 +57,8 @@ Matriz padrão:
 | --- | :---: | :---: | :---: | :---: |
 | Consultar quartos | Sim | Sim | Sim | Sim |
 | Alterar quartos | Sim | Sim | Sim | Sim |
+| Atribuir itens a verificar | Sim | Sim | Não | Não |
+| Consultar tarefas próprias | Não | Não | Não | Sim |
 | Consultar automação ZKAccess | Sim | Não | Sim | Não |
 | Configurar automação ZKAccess | Sim | Não | Não | Não |
 | Consultar My2N | Sim | Sim | Sim | Não |
@@ -69,6 +73,10 @@ O acesso do Gerente a `users.manage`, `permissions.manage` e `my2n.credentials` 
 ## Gestão dos quartos
 
 Cada combinação de alojamento/quarto mantém o problema, estado (`Problema`, `OK` ou vazio) e data de atualização de cada item. Internamente, a API preserva os valores `wrong` e `ok` para manter compatibilidade com os dados existentes. O City Center Guest House tem quartos 1–6 e o Welcome Guest House 1–15. A API exige `room_check.view` para leitura e `room_check.edit` para gravação.
+
+## Atribuição de verificações
+
+O Gerente e a Governanta podem escolher uma Empregada de Andares ativa para cada combinação de alojamento, quarto e item. Uma reatribuição para outra empregada volta a colocar o item como pendente. A empregada vê no seu portal apenas as próprias tarefas pendentes, pode abrir diretamente o quarto correspondente e marcar o item como concluído. Todas as atribuições e conclusões são validadas no servidor, protegidas por CSRF e registadas na auditoria.
 
 ## Automação ZKAccess V5.1
 

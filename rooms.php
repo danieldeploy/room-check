@@ -20,6 +20,14 @@ try {
 $canEdit = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_ROOM_CHECK_EDIT);
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
+$initialProperty = trim((string) ($_GET['property'] ?? array_key_first(PROPERTIES)));
+$initialRoom = (int) ($_GET['room'] ?? 1);
+try {
+    validateSelection($initialProperty, $initialRoom);
+} catch (InvalidArgumentException) {
+    $initialProperty = (string) array_key_first(PROPERTIES);
+    $initialRoom = 1;
+}
 ?>
 <!doctype html>
 <html lang="pt">
@@ -35,6 +43,8 @@ $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION
             'properties' => PROPERTIES,
             'items' => CHECKLIST_ITEMS,
             'canEdit' => $canEdit,
+            'initialProperty' => $initialProperty,
+            'initialRoom' => $initialRoom,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     </script>
     <script src="assets/app.js" defer></script>
@@ -56,7 +66,7 @@ $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION
                 <span>Alojamento</span>
                 <select id="propertySelect" aria-label="Alojamento">
                     <?php foreach (PROPERTIES as $property => $roomCount): ?>
-                        <option value="<?= htmlspecialchars($property, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($property, ENT_QUOTES, 'UTF-8') ?></option>
+                        <option value="<?= htmlspecialchars($property, ENT_QUOTES, 'UTF-8') ?>" <?= $property === $initialProperty ? 'selected' : '' ?>><?= htmlspecialchars($property, ENT_QUOTES, 'UTF-8') ?></option>
                     <?php endforeach; ?>
                 </select>
             </label>

@@ -200,7 +200,10 @@
 
     window.addEventListener('beforeunload', () => clearTimeout(saveTimer));
 
-    renderRooms(1);
+    if (config.initialProperty && Object.hasOwn(config.properties, config.initialProperty)) {
+        propertySelect.value = config.initialProperty;
+    }
+    renderRooms(Number(config.initialRoom) || 1);
     renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
     loadChecklist();
 })();
