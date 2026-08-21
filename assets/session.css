@@ -28,7 +28,7 @@
     gap: 10px;
     color: var(--session-ink);
     font-weight: 900;
-    font-size: .75rem;
+    font-size: .9rem;
     letter-spacing: -.025em;
     text-decoration: none;
     white-space: nowrap;
@@ -44,7 +44,7 @@
     color: #fff;
     background: linear-gradient(135deg, #0f766e, #14b8a6);
     box-shadow: 0 8px 18px rgba(15, 118, 110, .24);
-    font-size: .7rem;
+    font-size: .76rem;
     letter-spacing: .04em;
 }
 .session-links a, .session-logout {
@@ -58,7 +58,7 @@
     color: var(--session-brand-dark);
     background: transparent;
     font: inherit;
-    font-size: .75rem;
+    font-size: .9rem;
     font-weight: 800;
     text-decoration: none;
     cursor: pointer;
@@ -79,8 +79,8 @@
     border-radius: 15px;
     background: rgba(255, 255, 255, .76);
 }
-.session-user { display: grid; min-width: 120px; color: var(--session-muted); font-size: .72rem; line-height: 1.15; text-align: right; }
-.session-user strong { color: var(--session-ink); font-size: .75rem; }
+.session-user { display: grid; min-width: 120px; color: var(--session-muted); font-size: .78rem; line-height: 1.15; text-align: right; }
+.session-user strong { color: var(--session-ink); font-size: .9rem; }
 .session-user span { margin-top: 4px; color: var(--session-brand); font-weight: 750; }
 .session-logout-form { margin: 0; }
 .session-logout { min-width: 58px; color: #52646b; border-color: #dce7e5; background: #f5f9f8; }
