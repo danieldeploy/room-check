@@ -27,14 +27,15 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 `config.local.php` contém configuração local, está excluído do Git e não deve ser partilhado.
 
-O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment.
+O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment. Para esta funcionalidade, siga `docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md`, incluindo o backup prévio e a ordem das migrações.
 
 ## Login e portal
 
 - `/login.php` é a entrada pública da aplicação.
 - `/index.php` é o portal autenticado.
 - `/rooms.php` preserva a gestão de quartos existente.
-- `/tasks.php` permite à Governanta distribuir verificações e apresenta a cada Empregada de Andares apenas os seus itens pendentes.
+- `/rooms.php` permite ao Gerente e à Governanta criar intervalos e distribuir verificações dentro da gestão dos quartos.
+- `/tasks.php` apresenta a cada Empregada de Andares apenas os seus itens pendentes.
 - `/admin/zkaccess.php` apresenta os parâmetros e o estado da automação ZKAccess.
 - `/admin/my2n.php` configura a ligação e as associações entre todas as campainhas e telemóveis do Site My2N.
 - `/admin/users.php` gere contas e perfis.
