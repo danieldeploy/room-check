@@ -1,4 +1,4 @@
-# Portal de Operações — Active Lines Unip. Lda.
+# Portal de Gestão — Active Lines Unip. Lda.
 
 Aplicação PHP/MySQL para `check.welcomehostel.pt`. Depois do login, apresenta apenas os módulos autorizados para o utilizador:
 

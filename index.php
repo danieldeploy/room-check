@@ -91,7 +91,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
     <meta name="theme-color" content="#102a43">
-    <title>Portal de Operações — Active Lines Unip. Lda.</title>
+    <title>Portal de Gestão — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/portal.css">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
@@ -99,7 +99,7 @@ header('Cache-Control: no-store');
     <main class="portal-shell">
         <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
         <header class="portal-header">
-            <p class="eyebrow">Portal de Operações</p>
+            <p class="eyebrow">Portal de Gestão</p>
             <h1>O que pretende gerir?</h1>
             <p>As opções apresentadas dependem das permissões do seu perfil.</p>
         </header>

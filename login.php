@@ -47,7 +47,7 @@ header('Cache-Control: no-store');
     <main class="auth-shell">
         <section class="auth-card">
             <p class="eyebrow">Active Lines Unip. Lda.</p>
-            <h1>Portal de Operações</h1>
+            <h1>Portal de Gestão</h1>
             <p class="intro">Entre com a sua conta de trabalho para aceder aos módulos autorizados.</p>
             <?php if ($error !== null): ?>
                 <div class="alert" role="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
