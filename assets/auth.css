@@ -5,6 +5,7 @@ body { margin: 0; }
 .auth-card { width: min(440px, 100%); padding: clamp(26px, 6vw, 42px); border: 1px solid #d6e4e2; border-radius: 22px; background: #fff; box-shadow: 0 24px 60px rgba(28,68,66,.13); }
 .eyebrow { margin: 0 0 7px; color: #0f766e; font-size: .74rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
 h1 { margin: 0; font-size: clamp(2rem, 8vw, 3.2rem); letter-spacing: -.05em; }
+.auth-title { font-size: clamp(1.75rem, 8vw, 2.45rem); white-space: nowrap; }
 .intro { margin: 10px 0 24px; color: #65777d; }
 form { display: grid; gap: 16px; }
 label { display: grid; gap: 7px; }
