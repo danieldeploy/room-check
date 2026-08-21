@@ -58,6 +58,31 @@
         }
     };
 
+    const readOtherDraftAssignments = () => {
+        const currentKey = draftKey();
+        const intervalId = Number(intervalSelect?.value || 0);
+        if (!currentKey || !intervalId) return new Map();
+        const current = selection();
+        const keyPrefix = [draftPrefix, intervalId, current.property, current.room].join('|') + '|';
+        const reserved = new Map();
+        try {
+            for (let index = 0; index < window.localStorage.length; index += 1) {
+                const key = window.localStorage.key(index);
+                if (!key || key === currentKey || !key.startsWith(keyPrefix)) continue;
+                const parts = key.split('|');
+                const dueDate = parts[parts.length - 1] || '';
+                const value = JSON.parse(window.localStorage.getItem(key) || '[]');
+                if (!Array.isArray(value)) continue;
+                value.forEach((item) => {
+                    if (typeof item === 'string' && !reserved.has(item)) reserved.set(item, dueDate);
+                });
+            }
+        } catch {
+            return new Map();
+        }
+        return reserved;
+    };
+
     const saveDraft = () => {
         const key = draftKey();
         if (!key) return;
@@ -226,6 +251,7 @@
         const selectedDate = assignmentDate ? assignmentDate.value : '';
         const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
         const draft = active ? readDraft() : new Set();
+        const otherDrafts = active ? readOtherDraftAssignments() : new Map();
         rows.forEach((row) => {
             row.element.classList.toggle('assignment-mode', active);
             const assignment = assignments[row.name] || {};
@@ -233,17 +259,23 @@
             const sameAssignment = hasAssignment
                 && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate === selectedDate;
-            const locked = hasAssignment && (!sameAssignment || assignment.completed === true);
+            const draftDate = otherDrafts.get(row.name) || '';
+            const lockedByDraft = !hasAssignment && draftDate !== '';
+            const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
             row.assignmentCheckbox.disabled = !active || locked;
             row.assignmentCheckbox.checked = active
                 && (sameAssignment || (!hasAssignment && draft.has(row.name)));
             row.element.classList.toggle('assignment-locked', active && locked);
             if (active && locked) {
-                const state = assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`;
+                const state = lockedByDraft
+                    ? `já está selecionado num rascunho para ${formatDate(draftDate)}`
+                    : (assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`);
                 row.assignmentCheckbox.parentElement.title = `Este item ${state}.`;
-                row.assignmentHint.textContent = assignment.completed
-                    ? `Verificado em ${formatDate(assignment.dueDate)}`
-                    : `Atribuído para ${formatDate(assignment.dueDate)}`;
+                row.assignmentHint.textContent = lockedByDraft
+                    ? `Selecionado para ${formatDate(draftDate)} (rascunho)`
+                    : (assignment.completed
+                        ? `Verificado em ${formatDate(assignment.dueDate)}`
+                        : `Atribuído para ${formatDate(assignment.dueDate)}`);
             } else {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
                 row.assignmentHint.textContent = 'A verificar';
