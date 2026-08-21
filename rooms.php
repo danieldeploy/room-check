@@ -91,6 +91,22 @@ try {
                     <button id="createInterval" type="button">Criar intervalo</button>
                 </div>
             </details>
+            <details class="interval-creator interval-editor">
+                <summary>Editar intervalo de verificação</summary>
+                <div id="intervalManager" class="interval-fields" aria-label="Editar intervalo de verificação">
+                    <label><span>Intervalo a editar</span><select id="editIntervalSelect" aria-label="Intervalo a editar">
+                        <option value="">Escolher intervalo</option>
+                        <?php foreach ($intervals as $interval): ?>
+                            <option value="<?= (int) $interval['id'] ?>"><?= htmlspecialchars((string) $interval['name'], ENT_QUOTES, 'UTF-8') ?> — <?= (new DateTimeImmutable((string) $interval['start_date']))->format('d/m/Y') ?> a <?= (new DateTimeImmutable((string) $interval['end_date']))->format('d/m/Y') ?></option>
+                        <?php endforeach; ?>
+                    </select></label>
+                    <label><span>Nome</span><input id="editIntervalName" type="text" maxlength="120" disabled></label>
+                    <label><span>Data inicial</span><input id="editIntervalStart" type="date" disabled></label>
+                    <label><span>Data final</span><input id="editIntervalEnd" type="date" disabled></label>
+                    <div class="interval-manager-actions"><button id="saveInterval" type="button" disabled>Guardar intervalo</button><button id="deleteInterval" class="danger" type="button" disabled>Apagar intervalo</button></div>
+                </div>
+                <p>As datas só podem ser reduzidas até continuarem a incluir todos os itens já atribuídos.</p>
+            </details>
         <?php endif; ?>
         <section class="selectors<?= $canAssign ? ' has-assignment' : '' ?>" aria-label="Selecionar alojamento, quarto e atribuição">
             <label class="property-field">
@@ -123,16 +139,6 @@ try {
             <?php endif; ?>
         </section>
         <?php if ($canAssign): ?>
-            <section id="intervalManager" class="interval-manager" hidden aria-label="Editar intervalo selecionado">
-                <h2>Editar intervalo</h2>
-                <div class="interval-fields">
-                    <label><span>Nome</span><input id="editIntervalName" type="text" maxlength="120"></label>
-                    <label><span>Data inicial</span><input id="editIntervalStart" type="date"></label>
-                    <label><span>Data final</span><input id="editIntervalEnd" type="date"></label>
-                    <div class="interval-manager-actions"><button id="saveInterval" type="button">Guardar intervalo</button><button id="deleteInterval" class="danger" type="button">Apagar intervalo</button></div>
-                </div>
-                <p>As datas só podem ser reduzidas até continuarem a incluir todos os itens já atribuídos.</p>
-            </section>
             <div class="assignment-legend" aria-label="Legenda das atribuições"><span><i class="saved"></i>Guardado na base de dados</span><span><i class="draft"></i>Rascunho guardado no browser</span></div>
         <?php endif; ?>
         <section class="checklist-card">

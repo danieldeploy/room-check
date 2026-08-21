@@ -12,6 +12,7 @@
     const intervalEnd = document.querySelector('#intervalEnd');
     const createInterval = document.querySelector('#createInterval');
     const intervalManager = document.querySelector('#intervalManager');
+    const editIntervalSelect = document.querySelector('#editIntervalSelect');
     const editIntervalName = document.querySelector('#editIntervalName');
     const editIntervalStart = document.querySelector('#editIntervalStart');
     const editIntervalEnd = document.querySelector('#editIntervalEnd');
@@ -193,14 +194,19 @@
         return config.intervals.find((candidate) => candidate.id === intervalId) || null;
     };
 
+    const selectedEditInterval = () => {
+        const intervalId = Number(editIntervalSelect?.value || 0);
+        return config.intervals.find((candidate) => candidate.id === intervalId) || null;
+    };
+
     const syncIntervalManager = () => {
         if (!intervalManager) return;
-        const interval = selectedInterval();
-        intervalManager.hidden = !interval;
-        if (!interval) return;
-        editIntervalName.value = interval.name;
-        editIntervalStart.value = interval.startDate;
-        editIntervalEnd.value = interval.endDate;
+        const interval = selectedEditInterval();
+        editIntervalName.value = interval?.name || '';
+        editIntervalStart.value = interval?.startDate || '';
+        editIntervalEnd.value = interval?.endDate || '';
+        [editIntervalName, editIntervalStart, editIntervalEnd, saveInterval, deleteInterval]
+            .forEach((control) => { control.disabled = !interval; });
     };
 
     const makeRow = (item) => {
@@ -552,6 +558,8 @@
             option.value = String(result.interval.id);
             option.textContent = formatIntervalOption(result.interval);
             intervalSelect.append(option);
+            const editOption = option.cloneNode(true);
+            editIntervalSelect.append(editOption);
             intervalSelect.value = String(result.interval.id);
             assignmentDate.value = result.interval.startDate;
             intervalName.value = '';
@@ -568,7 +576,7 @@
     };
 
     const updateVerificationInterval = async () => {
-        const interval = selectedInterval();
+        const interval = selectedEditInterval();
         if (!interval) return;
         const name = editIntervalName.value.trim();
         const startDate = editIntervalStart.value;
@@ -594,6 +602,8 @@
             Object.assign(interval, result.interval);
             const option = intervalSelect.querySelector(`option[value="${interval.id}"]`);
             if (option) option.textContent = formatIntervalOption(interval);
+            const editOption = editIntervalSelect.querySelector(`option[value="${interval.id}"]`);
+            if (editOption) editOption.textContent = formatIntervalOption(interval);
             updateAssignmentMode();
             syncIntervalManager();
             setStatus('Intervalo atualizado', 'success');
@@ -606,7 +616,7 @@
     };
 
     const deleteVerificationInterval = async () => {
-        const interval = selectedInterval();
+        const interval = selectedEditInterval();
         if (!interval) return;
         const confirmed = window.confirm(
             `Apagar o intervalo “${interval.name}”? Todas as atribuições deste intervalo também serão apagadas. Esta ação não pode ser anulada.`
@@ -627,10 +637,15 @@
             if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao apagar o intervalo.');
             config.intervals = config.intervals.filter((candidate) => candidate.id !== interval.id);
             intervalSelect.querySelector(`option[value="${interval.id}"]`)?.remove();
-            intervalSelect.value = '';
-            employeeSelect.value = '';
+            editIntervalSelect.querySelector(`option[value="${interval.id}"]`)?.remove();
+            editIntervalSelect.value = '';
+            const deletedActiveInterval = Number(intervalSelect.value || 0) === interval.id;
+            if (deletedActiveInterval) {
+                intervalSelect.value = '';
+                employeeSelect.value = '';
+            }
             syncIntervalManager();
-            await loadChecklist();
+            if (deletedActiveInterval) await loadChecklist();
             setStatus(`Intervalo apagado (${result.deletedAssignments} atribuições removidas)`, 'success');
         } catch (error) {
             setStatus(error.message, 'error');
@@ -659,12 +674,12 @@
             row.assignmentCheckbox.disabled = true;
             row.assignmentCheckbox.nextElementSibling.classList.remove('saved-assignment', 'draft-assignment');
         });
-        syncIntervalManager();
         await loadChecklist();
     });
     if (createInterval) createInterval.addEventListener('click', createVerificationInterval);
     if (saveInterval) saveInterval.addEventListener('click', updateVerificationInterval);
     if (deleteInterval) deleteInterval.addEventListener('click', deleteVerificationInterval);
+    if (editIntervalSelect) editIntervalSelect.addEventListener('change', syncIntervalManager);
     if (employeeSelect) employeeSelect.addEventListener('change', updateAssignmentMode);
     if (assignmentDate) assignmentDate.addEventListener('change', updateAssignmentMode);
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
