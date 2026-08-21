@@ -41,6 +41,7 @@ try {
         );
 
         $assignments = [];
+        $roomAssignmentCounts = [];
         if (Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)) {
             $intervalId = (int) ($_GET['interval_id'] ?? 0);
             $assignmentStatement = $pdo->prepare(
@@ -61,9 +62,21 @@ try {
                     'completed' => $assignment['completed_at'] !== null,
                 ];
             }
+            $roomCountStatement = $pdo->prepare(
+                'SELECT room_number, COUNT(*) AS assigned_items FROM room_item_assignments
+                 WHERE interval_id = :interval_id AND property_name = :property
+                 GROUP BY room_number'
+            );
+            $roomCountStatement->execute(['interval_id' => $intervalId, 'property' => $property]);
+            foreach ($roomCountStatement->fetchAll() as $roomCount) {
+                $roomAssignmentCounts[(string) $roomCount['room_number']] = (int) $roomCount['assigned_items'];
+            }
         }
 
-        jsonResponse(['ok' => true, 'items' => $items, 'assignments' => $assignments]);
+        jsonResponse([
+            'ok' => true, 'items' => $items, 'assignments' => $assignments,
+            'roomAssignmentCounts' => $roomAssignmentCounts,
+        ]);
     }
 
     if ($method !== 'POST') {

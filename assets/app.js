@@ -30,6 +30,7 @@
     let requestVersion = 0;
     let isLoading = false;
     let assignments = {};
+    let roomAssignmentCounts = {};
     const draftPrefix = 'room-check-assignment-draft:v1';
 
     const selection = () => ({
@@ -105,6 +106,7 @@
             .map((row) => [row.name, row.textarea.value]));
         try {
             window.localStorage.setItem(key, JSON.stringify({ items: selectedItems, instructions }));
+            applyRoomAssignmentStates();
             setStatus('Seleção guardada neste browser', 'success');
         } catch {
             setStatus('Não foi possível guardar o rascunho neste browser', 'error');
@@ -139,7 +141,44 @@
         }
 
         roomSelect.value = String(Math.min(preferredRoom, count));
+        applyRoomAssignmentStates();
     };
+
+    function applyRoomAssignmentStates() {
+        const totalItems = config.items.length;
+        const draftCounts = new Map();
+        const intervalId = Number(intervalSelect?.value || 0);
+        const current = selection();
+        const keyPrefix = [draftPrefix, intervalId, current.property].join('|') + '|';
+        if (intervalId) {
+            try {
+                for (let index = 0; index < window.localStorage.length; index += 1) {
+                    const key = window.localStorage.key(index);
+                    if (!key || !key.startsWith(keyPrefix)) continue;
+                    const parts = key.split('|');
+                    const room = parts[3] || '';
+                    const value = JSON.parse(window.localStorage.getItem(key) || '[]');
+                    const items = Array.isArray(value) ? value : value.items;
+                    if (!Array.isArray(items)) continue;
+                    if (!draftCounts.has(room)) draftCounts.set(room, new Set());
+                    items.forEach((item) => { if (typeof item === 'string') draftCounts.get(room).add(item); });
+                }
+            } catch { /* as cores continuam a usar apenas os dados da base de dados */ }
+        }
+        Array.from(roomSelect.options).forEach((option) => {
+            const assignedItems = Math.min(totalItems,
+                Number(roomAssignmentCounts[option.value] || 0) + (draftCounts.get(option.value)?.size || 0));
+            const state = assignedItems === 0 ? 'empty' : (assignedItems >= totalItems ? 'full' : 'partial');
+            option.classList.remove('room-full', 'room-partial', 'room-empty');
+            option.classList.add(`room-${state}`);
+            option.title = state === 'full'
+                ? 'Todos os itens atribuídos neste intervalo'
+                : (state === 'partial' ? `${assignedItems} de ${totalItems} itens atribuídos neste intervalo` : 'Nenhum item atribuído neste intervalo');
+        });
+        const selected = roomSelect.selectedOptions[0];
+        roomSelect.classList.remove('room-full', 'room-partial', 'room-empty');
+        if (selected) roomSelect.classList.add(...Array.from(selected.classList));
+    }
 
     const formatDate = (value) => {
         const [year, month, day] = value.split('-');
@@ -381,12 +420,16 @@
             }
 
             assignments = result.assignments || {};
+            roomAssignmentCounts = result.roomAssignmentCounts || {};
+            applyRoomAssignmentStates();
             renderChecklist(result.items);
             if (employeeSelect) employeeSelect.value = '';
             updateAssignmentMode();
             setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');
         } catch (error) {
             if (version === requestVersion) {
+                roomAssignmentCounts = {};
+                applyRoomAssignmentStates();
                 renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
                 setStatus(error.message, 'error');
             }
@@ -430,6 +473,9 @@
             });
             selectedItems.forEach((name) => { assignments[name] = { employeeId, dueDate, instructions: instructions[name] || '' }; });
             clearDraft();
+            roomAssignmentCounts[String(current.room)] = Object.values(assignments)
+                .filter((assignment) => Number(assignment.employeeId || 0) > 0).length;
+            applyRoomAssignmentStates();
             updateAssignmentMode();
             setStatus('Atribuição guardada', 'success');
         } catch (error) {
@@ -595,13 +641,19 @@
     };
 
     propertySelect.addEventListener('change', () => {
+        roomAssignmentCounts = {};
         renderRooms(1);
         loadChecklist();
     });
-    roomSelect.addEventListener('change', loadChecklist);
+    roomSelect.addEventListener('change', () => {
+        applyRoomAssignmentStates();
+        loadChecklist();
+    });
     if (intervalSelect) intervalSelect.addEventListener('change', async () => {
         employeeSelect.value = '';
         assignments = {};
+        roomAssignmentCounts = {};
+        applyRoomAssignmentStates();
         rows.forEach((row) => {
             row.assignmentCheckbox.checked = false;
             row.assignmentCheckbox.disabled = true;
