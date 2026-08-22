@@ -28,7 +28,8 @@ h1 { margin: 0; color: #102a43; font-family: inherit; font-size: clamp(2rem, 5vw
 .save-status { max-width: 300px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255, 255, 255, 0.72); font-size: 0.85rem; text-align: center; }
 .save-status[data-kind="success"] { color: var(--ok); border-color: #bbdec6; background: #f0fdf4; }
 .save-status[data-kind="error"] { color: var(--wrong); border-color: #f0c7c2; background: #fff5f4; }
-.selectors { display: grid; grid-template-columns: minmax(280px, 3fr) minmax(90px, 0.7fr); gap: 16px; padding: 18px; margin-bottom: 18px; border: 1px solid rgba(220, 230, 229, 0.9); border-radius: 20px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
+.selectors { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(280px, 3fr) minmax(90px, 0.7fr); gap: 16px; padding: 18px; margin-bottom: 18px; overflow: visible; border: 1px solid rgba(220, 230, 229, 0.9); border-radius: 20px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
+.selectors.room-picker-open { z-index: 40; }
 .selectors.has-assignment { grid-template-columns: minmax(210px, 1.5fr) minmax(240px, 1.55fr) minmax(115px, 0.55fr) minmax(190px, 1.2fr) minmax(160px, 0.9fr); }
 .interval-creator { margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.82); box-shadow: var(--shadow); }
 .interval-creator summary { color: var(--brand-dark); font-weight: 800; cursor: pointer; }
@@ -55,7 +56,7 @@ select { width: 100%; min-height: 48px; padding: 0 42px 0 14px; border: 1px soli
 .room-picker-button::after { content: ""; position: absolute; top: 50%; right: 15px; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-70%) rotate(45deg); }
 .room-picker-button.room-partial { color: #831843; background: #fbcfe8; }
 .room-picker-button.room-full { color: #fff; background: #be123c; }
-.room-picker-menu { position: absolute; z-index: 20; top: calc(100% + 5px); left: 0; width: 100%; max-height: 260px; padding: 5px; overflow-y: auto; border: 1px solid #cbd9d7; border-radius: 11px; background: #fff; box-shadow: 0 14px 30px rgba(23, 49, 58, 0.18); }
+.room-picker-menu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; width: 100%; max-height: 260px; padding: 5px; overflow-y: auto; border: 1px solid #cbd9d7; border-radius: 11px; background: #fff; box-shadow: 0 14px 30px rgba(23, 49, 58, 0.18); }
 .room-picker-menu[hidden] { display: none; }
 .room-picker-option { display: block; width: 100%; min-height: 38px; padding: 7px 10px; border: 0; border-radius: 7px; color: var(--ink); background: #fff; text-align: left; cursor: pointer; }
 .room-picker-option.room-partial { color: #831843; background: #fbcfe8; }
