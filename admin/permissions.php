@@ -100,10 +100,11 @@ header('Cache-Control: no-store');
 <body>
     <main class="settings-shell">
         <?php SessionBar::render($currentUser, '..', $canManageUsers, true); ?>
-        <header class="page-header">
-            <p class="eyebrow">Administração</p>
-            <h1 class="page-title">Permissões dos perfis</h1>
-            <p>Defina os módulos e ações disponíveis para cada um dos quatro perfis. As verificações são feitas no servidor, incluindo nas APIs.</p>
+        <header class="page-header compact-page-header">
+            <div class="compact-page-heading">
+                <p class="eyebrow">Administração</p>
+                <h1 class="page-title">Permissões dos perfis</h1>
+            </div>
         </header>
 
         <?php if (!$storageAvailable): ?><div class="alert">Importe <code>migrations/004_portal_permissions.sql</code> para ativar a configuração persistente. Até lá, a aplicação usa a matriz padrão abaixo.</div><?php endif; ?>
