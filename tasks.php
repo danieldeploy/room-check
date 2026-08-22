@@ -184,10 +184,11 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
 <body>
 <main class="tasks-shell">
     <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
-    <header class="tasks-header">
-        <p class="eyebrow">Operação diária</p>
-        <h1 class="page-title"><?= $canAssign ? 'Atribuir itens a verificar' : 'Os meus itens a verificar' ?></h1>
-        <p><?= $canAssign ? 'Escolha a empregada responsável por cada item do quarto.' : 'Esta lista mostra apenas os itens que lhe foram atribuídos e ainda estão pendentes.' ?></p>
+    <header class="tasks-header compact-page-header">
+        <div class="compact-page-heading">
+            <p class="eyebrow">Operação diária</p>
+            <h1 class="page-title"><?= $canAssign ? 'Atribuir itens a verificar' : 'Os meus itens a verificar' ?></h1>
+        </div>
     </header>
     <?php if ($message): ?><div class="notice success" role="status"><?= taskEscape($message) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="notice error" role="alert"><?= taskEscape($error) ?></div><?php endif; ?>
