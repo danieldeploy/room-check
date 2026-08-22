@@ -409,6 +409,13 @@
             const otherDraft = otherDrafts.get(row.name) || null;
             const draftDate = otherDraft?.dueDate || '';
             const lockedByDraft = !hasAssignment && otherDraft !== null;
+            const sameEmployeeOtherDate = hasAssignment
+                && Number(assignment.employeeId) === employeeId
+                && assignment.dueDate !== selectedDate
+                && assignment.completed !== true;
+            const sameEmployeeOtherDraftDate = lockedByDraft
+                && Number(otherDraft.employeeId) === employeeId
+                && draftDate !== selectedDate;
             const selectedInCurrentDraft = !hasAssignment && draft.has(row.name);
             const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
             row.assignmentCheckbox.disabled = !active || locked;
@@ -420,6 +427,10 @@
                 'draft-assignment', active && !hasAssignment && (lockedByDraft || selectedInCurrentDraft)
             );
             checkboxMarker.classList.toggle('locked-assignment', active && locked);
+            checkboxMarker.classList.toggle(
+                'same-employee-other-date', active && locked
+                    && (sameEmployeeOtherDate || sameEmployeeOtherDraftDate)
+            );
             row.element.classList.toggle('assignment-locked', active && locked);
             if (active && hasAssignment) {
                 row.textarea.value = String(assignment.instructions || '');
@@ -454,6 +465,10 @@
             }
             row.assignmentHint.classList.toggle(
                 'editable-assignment', active && !locked && (selectedInCurrentDraft || sameAssignment)
+            );
+            row.assignmentHint.classList.toggle(
+                'same-employee-other-date', active && locked
+                    && (sameEmployeeOtherDate || sameEmployeeOtherDraftDate)
             );
             row.assignmentHint.hidden = !active || (!locked && !selectedInCurrentDraft && !sameAssignment);
             row.textarea.readOnly = active ? locked : !canEdit;
