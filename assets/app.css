@@ -80,6 +80,7 @@ textarea { display: block; width: 100%; min-height: 46px; padding: 11px 13px; ov
 textarea::placeholder { color: #9aabaa; }
 .problem-field { min-width: 0; }
 .assignment-hint { display: block; margin: 6px 3px 0; color: #526d82; font-size: .78rem; font-weight: 700; }
+.assignment-hint.editable-assignment { color: var(--ok); }
 .assignment-hint[hidden] { display: none; }
 .check-row.assignment-mode .status-options { visibility: hidden; }
 .assignment-check { display: grid; place-items: center; cursor: pointer; }
@@ -88,11 +89,15 @@ textarea::placeholder { color: #9aabaa; }
 .assignment-check input:checked + span { border-color: var(--ok); background: var(--ok); box-shadow: inset 0 0 0 5px #fff; }
 .assignment-check input:checked + span.saved-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
 .assignment-check input:checked + span.draft-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
+.assignment-check input:checked + span.locked-assignment { border-color: #64748b !important; background: #94a3b8 !important; opacity: 1 !important; }
 .assignment-check input:indeterminate + span { border-color: var(--ok); background: linear-gradient(#fff 42%, var(--ok) 42% 58%, #fff 58%); }
 .assignment-check input:focus-visible + span { outline: 3px solid rgba(15, 118, 110, 0.25); outline-offset: 3px; }
 .assignment-check input:disabled + span { cursor: not-allowed; opacity: 0.38; }
 .assignment-check input:disabled + span.saved-assignment,
 .assignment-check input:disabled + span.draft-assignment { opacity: 1 !important; }
+.select-all input:disabled + span,
+.select-all input:disabled:checked + span,
+.select-all input:disabled:indeterminate + span { border-color: #64748b !important; background: #94a3b8 !important; box-shadow: inset 0 0 0 5px #fff; opacity: 1 !important; cursor: not-allowed; }
 .check-row.assignment-locked { background: #f2f5f4; }
 .check-row.assignment-locked .assignment-check { cursor: not-allowed; }
 .assignment-actions { position: relative; padding: 14px 20px; border-top: 1px solid var(--line); text-align: right; }
