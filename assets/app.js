@@ -333,7 +333,9 @@
             if (viewingAssignments && hasAssignment) {
                 row.textarea.value = String(assignment.instructions || '');
             } else if (viewingAssignments) {
-                row.textarea.value = row.textarea.dataset.defaultInstructions || '';
+                row.textarea.value = row.textarea.dataset.problem
+                    || row.textarea.dataset.defaultInstructions
+                    || '';
             } else {
                 row.textarea.value = row.textarea.dataset.problem || '';
             }

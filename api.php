@@ -35,12 +35,17 @@ try {
         }
 
         $items = array_map(
-            static fn(string $name): array => [
-                'name' => $name,
-                'problem' => $saved[$name]['problem'] ?? '',
-                'status' => $saved[$name]['status'] ?? null,
-                'defaultInstructions' => (string) ($selectedList['defaults'][$name] ?? ''),
-            ],
+            static function (string $name) use ($saved, $selectedList): array {
+                $listInstructions = (string) ($selectedList['defaults'][$name] ?? '');
+                $roomInstructions = (string) ($saved[$name]['problem'] ?? '');
+
+                return [
+                    'name' => $name,
+                    'problem' => $roomInstructions !== '' ? $roomInstructions : $listInstructions,
+                    'status' => $saved[$name]['status'] ?? null,
+                    'defaultInstructions' => $listInstructions,
+                ];
+            },
             $listItems
         );
 
