@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS item_list_items (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     list_id BIGINT UNSIGNED NOT NULL,
     name VARCHAR(80) NOT NULL,
+    default_instructions TEXT NOT NULL,
     sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -40,13 +41,13 @@ CREATE TABLE IF NOT EXISTS item_list_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO item_lists (id, name, is_system) VALUES (1, 'Check Geral', 1);
-INSERT IGNORE INTO item_list_items (list_id, name, sort_order) VALUES
-    (1, 'Espelho', 10), (1, 'Lampadas', 20), (1, 'Armarios', 30),
-    (1, 'Cabeceiras', 40), (1, 'Ventoinhas', 50), (1, 'Cortinas', 60),
-    (1, 'Fichas', 70), (1, 'Camas', 80), (1, 'Luzes', 90),
-    (1, 'Portas', 100), (1, 'Fechaduras', 110), (1, 'Janelas', 120),
-    (1, 'Chaves', 130), (1, 'Placa de Saida', 140),
-    (1, 'Caixote de Lixo', 150), (1, 'Paredes', 160), (1, 'Hangers', 170);
+INSERT IGNORE INTO item_list_items (list_id, name, default_instructions, sort_order) VALUES
+    (1, 'Espelho', '', 10), (1, 'Lampadas', '', 20), (1, 'Armarios', '', 30),
+    (1, 'Cabeceiras', '', 40), (1, 'Ventoinhas', '', 50), (1, 'Cortinas', '', 60),
+    (1, 'Fichas', '', 70), (1, 'Camas', '', 80), (1, 'Luzes', '', 90),
+    (1, 'Portas', '', 100), (1, 'Fechaduras', '', 110), (1, 'Janelas', '', 120),
+    (1, 'Chaves', '', 130), (1, 'Placa de Saida', '', 140),
+    (1, 'Caixote de Lixo', '', 150), (1, 'Paredes', '', 160), (1, 'Hangers', '', 170);
 
 CREATE TABLE IF NOT EXISTS room_checklist_values (
     property_name VARCHAR(80) NOT NULL,

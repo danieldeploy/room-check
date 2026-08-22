@@ -39,6 +39,7 @@ try {
                 'name' => $name,
                 'problem' => $saved[$name]['problem'] ?? '',
                 'status' => $saved[$name]['status'] ?? null,
+                'defaultInstructions' => (string) ($selectedList['defaults'][$name] ?? ''),
             ],
             $listItems
         );

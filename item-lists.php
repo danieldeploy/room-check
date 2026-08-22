@@ -28,6 +28,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $listId = (int) ($_POST['list_id'] ?? 0);
         $itemId = (int) ($_POST['item_id'] ?? 0);
         $name = trim((string) ($_POST['name'] ?? ''));
+        $instructions = trim((string) ($_POST['default_instructions'] ?? ''));
         if (in_array($action, ['create_list', 'rename_list'], true)) {
             if ($name === '' || mb_strlen($name) > 120) {
                 throw new InvalidArgumentException('O nome da lista deve ter entre 1 e 120 caracteres.');
@@ -35,6 +36,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         } elseif (in_array($action, ['add_item', 'rename_item'], true)) {
             if ($name === '' || mb_strlen($name) > 80) {
                 throw new InvalidArgumentException('O nome do item deve ter entre 1 e 80 caracteres.');
+            }
+            if (mb_strlen($instructions) > 5000) {
+                throw new InvalidArgumentException('A descrição da verificação não pode ultrapassar 5000 caracteres.');
             }
         }
 
@@ -74,10 +78,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             );
             $position->execute(['list_id' => $listId]);
             $statement = $pdo->prepare(
-                'INSERT INTO item_list_items (list_id, name, sort_order) VALUES (:list_id, :name, :sort_order)'
+                'INSERT INTO item_list_items (list_id, name, default_instructions, sort_order)
+                 VALUES (:list_id, :name, :instructions, :sort_order)'
             );
             $statement->execute([
-                'list_id' => $listId, 'name' => $name, 'sort_order' => (int) $position->fetchColumn(),
+                'list_id' => $listId, 'name' => $name, 'instructions' => $instructions,
+                'sort_order' => (int) $position->fetchColumn(),
             ]);
             $message = 'Item adicionado.';
         } elseif ($action === 'rename_item') {
@@ -100,8 +106,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                  WHERE list_id = :list_id AND item_name = :old_name'
             );
             $renameAssignments->execute(['new_name' => $name, 'list_id' => $listId, 'old_name' => $oldName]);
-            $renameItem = $pdo->prepare('UPDATE item_list_items SET name = :name WHERE id = :id');
-            $renameItem->execute(['name' => $name, 'id' => $itemId]);
+            $renameItem = $pdo->prepare(
+                'UPDATE item_list_items SET name = :name, default_instructions = :instructions WHERE id = :id'
+            );
+            $renameItem->execute(['name' => $name, 'instructions' => $instructions, 'id' => $itemId]);
             $pdo->commit();
             $message = 'Item atualizado em todos os registos.';
         } elseif ($action === 'delete_item') {
@@ -152,7 +160,8 @@ $selectedList = array_values(array_filter($lists, static fn(array $list): bool =
 $itemRows = [];
 if ($selectedList) {
     $statement = $pdo->prepare(
-        'SELECT id, name FROM item_list_items WHERE list_id = :list_id ORDER BY sort_order, id'
+        'SELECT id, name, default_instructions FROM item_list_items
+         WHERE list_id = :list_id ORDER BY sort_order, id'
     );
     $statement->execute(['list_id' => $listId]);
     $itemRows = $statement->fetchAll();
@@ -215,7 +224,7 @@ header('Cache-Control: no-store');
                 <button class="danger" type="submit">Apagar lista</button>
             </form><?php endif; ?>
         </div>
-        <div class="items-heading"><span>Itens da lista</span><span>Ações</span></div>
+        <div class="items-heading"><span>Item</span><span>Descreva a verificação</span><span>Ações</span></div>
         <?php if ($itemRows === []): ?><p class="empty">Esta lista ainda não tem itens.</p><?php endif; ?>
         <?php foreach ($itemRows as $item): ?>
             <div class="item-row">
@@ -223,6 +232,7 @@ header('Cache-Control: no-store');
                     <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                     <input type="hidden" name="action" value="rename_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>">
                     <input name="name" maxlength="80" required value="<?= listEscape((string) $item['name']) ?>" aria-label="Nome do item">
+                    <textarea name="default_instructions" maxlength="5000" rows="2" placeholder="Descreva a verificação…" aria-label="Descrição da verificação: <?= listEscape((string) $item['name']) ?>"><?= listEscape((string) $item['default_instructions']) ?></textarea>
                     <button type="submit">Guardar</button>
                 </form>
                 <form method="post" onsubmit="return confirm('Apagar este item?')">
@@ -236,6 +246,7 @@ header('Cache-Control: no-store');
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
             <input type="hidden" name="action" value="add_item"><input type="hidden" name="list_id" value="<?= $listId ?>">
             <label><span>Novo item</span><input name="name" maxlength="80" required placeholder="Nome do item"></label>
+            <label class="new-instructions"><span>Descrição da verificação</span><textarea name="default_instructions" maxlength="5000" rows="2" placeholder="Descreva a verificação…"></textarea></label>
             <button type="submit">Adicionar item</button>
         </form>
     </section>

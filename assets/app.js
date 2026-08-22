@@ -218,6 +218,7 @@
             }
         });
         textarea.dataset.problem = item.problem || '';
+        textarea.dataset.defaultInstructions = item.defaultInstructions || '';
         const problemField = document.createElement('div');
         problemField.className = 'problem-field';
         const assignmentHint = document.createElement('span');
@@ -332,7 +333,7 @@
             if (viewingAssignments && hasAssignment) {
                 row.textarea.value = String(assignment.instructions || '');
             } else if (viewingAssignments) {
-                row.textarea.value = '';
+                row.textarea.value = row.textarea.dataset.defaultInstructions || '';
             } else {
                 row.textarea.value = row.textarea.dataset.problem || '';
             }
@@ -425,7 +426,10 @@
             if (version === requestVersion) {
                 roomAssignmentCounts = {};
                 applyRoomAssignmentStates();
-                renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
+                renderChecklist(config.items.map((name) => ({
+                    name, problem: '', status: null,
+                    defaultInstructions: config.itemDefaults?.[name] || '',
+                })));
                 setStatus(error.message, 'error');
             }
         } finally {
@@ -666,10 +670,14 @@
         clearInstructionSaveTimers();
         const list = config.lists.find((candidate) => Number(candidate.id) === Number(listSelect.value));
         config.items = Array.isArray(list?.items) ? list.items : [];
+        config.itemDefaults = list?.defaults || {};
         assignments = {};
         roomAssignmentCounts = {};
         applyRoomAssignmentStates();
-        renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
+        renderChecklist(config.items.map((name) => ({
+            name, problem: '', status: null,
+            defaultInstructions: config.itemDefaults?.[name] || '',
+        })));
         loadChecklist();
     });
     roomSelect.addEventListener('change', () => {
@@ -761,6 +769,9 @@
     }
     renderRooms(Number(config.initialRoom) || 1);
     if (assignmentDate && !assignmentDate.value) assignmentDate.value = config.today;
-    renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
+    renderChecklist(config.items.map((name) => ({
+        name, problem: '', status: null,
+        defaultInstructions: config.itemDefaults?.[name] || '',
+    })));
     loadChecklist();
 })();

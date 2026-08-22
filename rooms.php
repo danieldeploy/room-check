@@ -65,6 +65,7 @@ try {
         window.ROOM_CHECK = <?= json_encode([
             'properties' => PROPERTIES,
             'items' => $initialList['items'],
+            'itemDefaults' => $initialList['defaults'],
             'lists' => $lists,
             'initialListId' => $initialListId,
             'canEdit' => $canEdit,
