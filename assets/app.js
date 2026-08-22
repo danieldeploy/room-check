@@ -303,6 +303,7 @@
         }
         const selectedDate = assignmentDate ? assignmentDate.value : '';
         const viewingAssignments = Boolean(interval);
+        checklist.classList.toggle('assignment-view-mode', viewingAssignments);
         const active = viewingAssignments && employeeId > 0 && selectedDate !== '';
         if (active) clearTimeout(saveTimer);
         rows.forEach((row) => {
@@ -387,6 +388,8 @@
         const version = ++requestVersion;
         const current = selection();
         isLoading = true;
+        checklist.classList.toggle('assignment-view-mode', Boolean(selectedInterval()));
+        checklist.setAttribute('aria-busy', 'true');
         clearTimeout(saveTimer);
         setStatus('A carregar…');
 
@@ -425,6 +428,7 @@
         } finally {
             if (version === requestVersion) {
                 isLoading = false;
+                checklist.setAttribute('aria-busy', 'false');
             }
         }
     };
