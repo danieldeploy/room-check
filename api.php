@@ -204,6 +204,137 @@ try {
         jsonResponse(['ok' => true, 'deletedAssignments' => $deletedAssignments]);
     }
 
+    if (($payload['action'] ?? '') === 'set_assignments_atomic') {
+        $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
+        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
+        $property = trim((string) ($payload['property'] ?? ''));
+        $room = (int) ($payload['room'] ?? 0);
+        $intervalId = (int) ($payload['intervalId'] ?? 0);
+        $employeeId = (int) ($payload['employeeId'] ?? 0);
+        $dueDate = trim((string) ($payload['dueDate'] ?? ''));
+        $changes = $payload['changes'] ?? null;
+        validateSelection($property, $room);
+        if (!is_array($changes) || $changes === [] || count($changes) > count(CHECKLIST_ITEMS)) {
+            throw new InvalidArgumentException('Alterações de atribuição inválidas.');
+        }
+        $dateParts = array_map('intval', explode('-', $dueDate));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)
+            || count($dateParts) !== 3
+            || !checkdate($dateParts[1], $dateParts[2], $dateParts[0])) {
+            throw new InvalidArgumentException('Escolha uma data válida para a verificação.');
+        }
+        $allowedItems = array_flip(CHECKLIST_ITEMS);
+        $normalizedChanges = [];
+        foreach ($changes as $change) {
+            if (!is_array($change)) {
+                throw new InvalidArgumentException('Alteração de atribuição inválida.');
+            }
+            $name = trim((string) ($change['itemName'] ?? ''));
+            if (!isset($allowedItems[$name]) || isset($normalizedChanges[$name])) {
+                throw new InvalidArgumentException('Item de atribuição inválido ou repetido.');
+            }
+            $instructions = trim((string) ($change['instructions'] ?? ''));
+            if (mb_strlen($instructions) > 5000) {
+                throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
+            }
+            $normalizedChanges[$name] = [
+                'selected' => filter_var($change['selected'] ?? false, FILTER_VALIDATE_BOOL),
+                'instructions' => $instructions,
+            ];
+        }
+
+        $pdo->beginTransaction();
+        $intervalCheck = $pdo->prepare(
+            'SELECT start_date, end_date FROM room_verification_intervals WHERE id = :id FOR UPDATE'
+        );
+        $intervalCheck->execute(['id' => $intervalId]);
+        $interval = $intervalCheck->fetch();
+        if (!$interval) {
+            throw new InvalidArgumentException('Escolha um intervalo de verificação válido.');
+        }
+        if ($dueDate < (string) $interval['start_date'] || $dueDate > (string) $interval['end_date']) {
+            throw new InvalidArgumentException('A data da verificação tem de ficar dentro do intervalo escolhido.');
+        }
+        $employeeCheck = $pdo->prepare(
+            "SELECT id FROM users WHERE id = :id AND role = 'empregada_andares' AND is_active = 1 FOR UPDATE"
+        );
+        $employeeCheck->execute(['id' => $employeeId]);
+        if (!$employeeCheck->fetchColumn()) {
+            throw new InvalidArgumentException('Escolha uma Empregada de Andares ativa.');
+        }
+        $assignmentLock = $pdo->prepare(
+            'SELECT assigned_to_user_id, due_date, completed_at FROM room_item_assignments
+             WHERE interval_id = :interval_id AND property_name = :property
+               AND room_number = :room AND item_name = :item FOR UPDATE'
+        );
+        $upsert = $pdo->prepare(
+            'INSERT INTO room_item_assignments
+                (interval_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
+             VALUES (:interval_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
+             ON DUPLICATE KEY UPDATE assigned_to_user_id = VALUES(assigned_to_user_id),
+                assigned_by_user_id = VALUES(assigned_by_user_id), assigned_at = CURRENT_TIMESTAMP,
+                due_date = VALUES(due_date), verification_instructions = VALUES(verification_instructions),
+                completed_at = NULL, completed_by_user_id = NULL'
+        );
+        $remove = $pdo->prepare(
+            'DELETE FROM room_item_assignments WHERE interval_id = :interval_id
+             AND property_name = :property AND room_number = :room AND item_name = :item
+             AND assigned_to_user_id = :assignee AND due_date = :due_date AND completed_at IS NULL'
+        );
+        foreach ($normalizedChanges as $name => $change) {
+            $identity = [
+                'interval_id' => $intervalId, 'property' => $property,
+                'room' => $room, 'item' => $name,
+            ];
+            $assignmentLock->execute($identity);
+            $existing = $assignmentLock->fetch();
+            if ($existing
+                && ((int) $existing['assigned_to_user_id'] !== $employeeId
+                    || (string) $existing['due_date'] !== $dueDate
+                    || $existing['completed_at'] !== null)) {
+                throw new InvalidArgumentException(
+                    "O item {$name} já está atribuído ou concluído noutra data deste intervalo."
+                );
+            }
+            if ($change['selected']) {
+                $upsert->execute($identity + [
+                    'assignee' => $employeeId, 'assigner' => (int) $currentUser['id'],
+                    'due_date' => $dueDate, 'instructions' => $change['instructions'],
+                ]);
+            } else {
+                $remove->execute($identity + ['assignee' => $employeeId, 'due_date' => $dueDate]);
+            }
+        }
+        Auth::audit($pdo, (int) $currentUser['id'], 'room_task_assignments_atomic_update', [
+            'interval_id' => $intervalId, 'property' => $property, 'room' => $room,
+            'assignee' => $employeeId, 'due_date' => $dueDate,
+            'changed_items' => array_keys($normalizedChanges),
+        ]);
+        $boundsStatement = $pdo->prepare(
+            'SELECT MIN(due_date) AS first_due_date, MAX(due_date) AS last_due_date
+             FROM room_item_assignments WHERE interval_id = :interval_id'
+        );
+        $boundsStatement->execute(['interval_id' => $intervalId]);
+        $intervalBounds = $boundsStatement->fetch();
+        $roomCount = $pdo->prepare(
+            'SELECT COUNT(*) FROM room_item_assignments WHERE interval_id = :interval_id
+             AND property_name = :property AND room_number = :room'
+        );
+        $roomCount->execute(['interval_id' => $intervalId, 'property' => $property, 'room' => $room]);
+        $roomAssignedItems = (int) $roomCount->fetchColumn();
+        $pdo->commit();
+        jsonResponse([
+            'ok' => true,
+            'roomAssignedItems' => $roomAssignedItems,
+            'intervalBounds' => [
+                'firstDueDate' => $intervalBounds['first_due_date'] !== null
+                    ? (string) $intervalBounds['first_due_date'] : null,
+                'lastDueDate' => $intervalBounds['last_due_date'] !== null
+                    ? (string) $intervalBounds['last_due_date'] : null,
+            ],
+        ]);
+    }
+
     if (($payload['action'] ?? '') === 'assign_items') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
