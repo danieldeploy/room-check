@@ -7,6 +7,10 @@
     --page: #f2f7f6;
     --brand: #0f766e;
     --brand-dark: #115e59;
+    --assignment-strong: #0f766e;
+    --assignment-soft: #8fc1bc;
+    --assignment-soft-border: #5a9f98;
+    --assignment-soft-text: #4f8580;
     --ok: #15803d;
     --wrong: #b42318;
     --shadow: 0 20px 50px rgba(29, 68, 66, 0.1);
@@ -38,7 +42,7 @@ h1 { margin: 0; color: #102a43; font-family: inherit; font-size: clamp(2rem, 5vw
 .assignment-legend { display: flex; justify-content: flex-end; gap: 18px; margin: -4px 2px 10px; color: var(--muted); font-size: .78rem; }
 .assignment-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .assignment-legend i { width: 13px; height: 13px; border-radius: 3px; }
-.assignment-legend i.selected { background: var(--ok); }
+.assignment-legend i.selected { background: var(--assignment-strong); }
 label { display: grid; gap: 7px; }
 label span { color: var(--muted); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 select { width: 100%; min-height: 48px; padding: 0 42px 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); cursor: pointer; }
@@ -80,19 +84,19 @@ textarea { display: block; width: 100%; min-height: 46px; padding: 11px 13px; ov
 textarea::placeholder { color: #9aabaa; }
 .problem-field { min-width: 0; }
 .assignment-hint { display: block; margin: 6px 3px 0; color: #526d82; font-size: .78rem; font-weight: 700; }
-.assignment-hint.editable-assignment { color: var(--ok); }
-.assignment-hint.same-employee-other-date { color: #5f8f6d; }
+.assignment-hint.editable-assignment { color: var(--assignment-strong); }
+.assignment-hint.same-employee-other-date { color: var(--assignment-soft-text); }
 .assignment-hint[hidden] { display: none; }
 .check-row.assignment-mode .status-options { visibility: hidden; }
 .assignment-check { display: grid; place-items: center; cursor: pointer; }
 .assignment-check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .assignment-check span { width: 28px; height: 28px; border: 2px solid #78908e; border-radius: 5px; background: #fff; }
-.assignment-check input:checked + span { border-color: var(--ok); background: var(--ok); box-shadow: inset 0 0 0 5px #fff; }
-.assignment-check input:checked + span.saved-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
-.assignment-check input:checked + span.draft-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
+.assignment-check input:checked + span { border-color: var(--assignment-strong); background: var(--assignment-strong); box-shadow: inset 0 0 0 5px #fff; }
+.assignment-check input:checked + span.saved-assignment { border-color: var(--assignment-strong) !important; background: var(--assignment-strong) !important; opacity: 1 !important; }
+.assignment-check input:checked + span.draft-assignment { border-color: var(--assignment-strong) !important; background: var(--assignment-strong) !important; opacity: 1 !important; }
 .assignment-check input:checked + span.locked-assignment { border-color: #64748b !important; background: #94a3b8 !important; opacity: 1 !important; }
-.assignment-check input:checked + span.locked-assignment.same-employee-other-date { border-color: #5f9f72 !important; background: #8fc79f !important; opacity: 1 !important; }
-.assignment-check input:indeterminate + span { border-color: var(--ok); background: linear-gradient(#fff 42%, var(--ok) 42% 58%, #fff 58%); }
+.assignment-check input:checked + span.locked-assignment.same-employee-other-date { border-color: var(--assignment-soft-border) !important; background: var(--assignment-soft) !important; opacity: 1 !important; }
+.assignment-check input:indeterminate + span { border-color: var(--assignment-strong); background: linear-gradient(#fff 42%, var(--assignment-strong) 42% 58%, #fff 58%); }
 .assignment-check input:focus-visible + span { outline: 3px solid rgba(15, 118, 110, 0.25); outline-offset: 3px; }
 .assignment-check input:disabled + span { cursor: not-allowed; opacity: 0.38; }
 .assignment-check input:disabled + span.saved-assignment,
