@@ -38,8 +38,7 @@ h1 { margin: 0; color: #102a43; font-family: inherit; font-size: clamp(2rem, 5vw
 .assignment-legend { display: flex; justify-content: flex-end; gap: 18px; margin: -4px 2px 10px; color: var(--muted); font-size: .78rem; }
 .assignment-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .assignment-legend i { width: 13px; height: 13px; border-radius: 3px; }
-.assignment-legend i.saved { background: var(--ok); }
-.assignment-legend i.draft { background: #2563eb; }
+.assignment-legend i.selected { background: var(--ok); }
 label { display: grid; gap: 7px; }
 label span { color: var(--muted); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 select { width: 100%; min-height: 48px; padding: 0 42px 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); cursor: pointer; }
@@ -86,10 +85,10 @@ textarea::placeholder { color: #9aabaa; }
 .assignment-check { display: grid; place-items: center; cursor: pointer; }
 .assignment-check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .assignment-check span { width: 28px; height: 28px; border: 2px solid #78908e; border-radius: 5px; background: #fff; }
-.assignment-check input:checked + span { border-color: #2563eb; background: #2563eb; box-shadow: inset 0 0 0 5px #fff; }
+.assignment-check input:checked + span { border-color: var(--ok); background: var(--ok); box-shadow: inset 0 0 0 5px #fff; }
 .assignment-check input:checked + span.saved-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
-.assignment-check input:checked + span.draft-assignment { border-color: #2563eb !important; background: #2563eb !important; opacity: 1 !important; }
-.assignment-check input:indeterminate + span { border-color: var(--brand); background: linear-gradient(#fff 42%, var(--brand) 42% 58%, #fff 58%); }
+.assignment-check input:checked + span.draft-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
+.assignment-check input:indeterminate + span { border-color: var(--ok); background: linear-gradient(#fff 42%, var(--ok) 42% 58%, #fff 58%); }
 .assignment-check input:focus-visible + span { outline: 3px solid rgba(15, 118, 110, 0.25); outline-offset: 3px; }
 .assignment-check input:disabled + span { cursor: not-allowed; opacity: 0.38; }
 .assignment-check input:disabled + span.saved-assignment,
