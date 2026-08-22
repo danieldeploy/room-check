@@ -71,8 +71,7 @@ select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px s
 .table-heading { padding: 14px 20px; border-radius: 19px 19px 0 0; color: #e8fffb; background: linear-gradient(135deg, var(--brand-dark), var(--brand)); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 .table-heading strong { color: inherit; }
 .assignment-heading-control { position: relative; z-index: 3; grid-column: 3 / 5; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-.assignment-heading-control > strong { font-size: inherit; letter-spacing: inherit; }
-.top-save-assignment { min-height: 34px; padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 9px; color: var(--brand-dark); background: #fff; box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12); font-size: 0.72rem; font-weight: 850; cursor: pointer; }
+.top-save-assignment { min-height: 34px; padding: 6px 12px; border: 1px solid #e8fffb; border-radius: 9px; color: var(--brand-dark); background: #e8fffb; box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12); font-size: 0.72rem; font-weight: 850; cursor: pointer; }
 .top-save-assignment:hover, .top-save-assignment:focus-visible { background: #ecfdf5; transform: translateY(-1px); }
 .top-save-assignment:disabled { cursor: wait; opacity: 0.65; transform: none; }
 .check-row { padding: 14px 20px; border-top: 1px solid var(--line); }
