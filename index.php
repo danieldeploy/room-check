@@ -100,7 +100,7 @@ header('Cache-Control: no-store');
         <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
         <header class="portal-header">
             <p class="eyebrow">Portal de Gestão</p>
-            <h1>O que pretende gerir?</h1>
+            <h1 class="page-title">O que pretende gerir?</h1>
             <p>As opções apresentadas dependem das permissões do seu perfil.</p>
         </header>
         <?php if ($visibleModules === []): ?>
