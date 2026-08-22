@@ -4,6 +4,7 @@
     const config = window.ROOM_CHECK;
     const propertySelect = document.querySelector('#propertySelect');
     const roomSelect = document.querySelector('#roomSelect');
+    const selectorsPanel = roomSelect.closest('.selectors');
     const checklist = document.querySelector('#checklist');
     const saveStatus = document.querySelector('#saveStatus');
     const intervalSelect = document.querySelector('#intervalSelect');
@@ -177,6 +178,7 @@
     const closeRoomPicker = () => {
         roomPickerMenu.hidden = true;
         roomPickerButton.setAttribute('aria-expanded', 'false');
+        selectorsPanel.classList.remove('room-picker-open');
     };
 
     function syncRoomPicker() {
@@ -795,6 +797,7 @@
         const willOpen = roomPickerMenu.hidden;
         roomPickerMenu.hidden = !willOpen;
         roomPickerButton.setAttribute('aria-expanded', String(willOpen));
+        selectorsPanel.classList.toggle('room-picker-open', willOpen);
         if (willOpen) roomPickerMenu.querySelector('[aria-selected="true"]')?.focus();
     });
     roomPickerMenu.addEventListener('click', (event) => {
