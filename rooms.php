@@ -73,11 +73,10 @@ try {
 <body>
     <main class="app-shell">
         <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
-        <header class="hero">
-            <div>
+        <header class="hero compact-page-header">
+            <div class="compact-page-heading">
                 <p class="eyebrow">Operações do Alojamento</p>
                 <h1 class="page-title">Gestão dos Quartos</h1>
-                <p class="subtitle">Lista de verificação dos quartos<?= $canEdit ? '' : ' — apenas consulta' ?></p>
             </div>
             <div id="saveStatus" class="save-status" role="status" aria-live="polite">A carregar…</div>
         </header>
