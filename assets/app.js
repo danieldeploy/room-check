@@ -22,24 +22,22 @@
     const employeeSelect = document.querySelector('#employeeSelect');
     const assignmentDate = document.querySelector('#assignmentDate');
     const selectAllItems = document.querySelector('#selectAllItems');
-    const assignmentActions = document.querySelector('#assignmentActions');
-    const saveAssignments = document.querySelector('#saveAssignments');
-    const saveAssignmentsTop = document.querySelector('#saveAssignmentsTop');
-    const assignmentSaveToasts = document.querySelectorAll('.assignment-save-toast');
     const canEdit = config.canEdit !== false;
     const canAssign = config.canAssign === true;
 
     let rows = [];
     let saveTimer = null;
-    let assignmentToastTimer = null;
+    const instructionSaveTimers = new Map();
+    let assignmentSaveQueue = Promise.resolve();
     let requestVersion = 0;
     let isLoading = false;
     let assignments = {};
     let roomAssignmentCounts = {};
-    let assignmentSelectionDirty = false;
-    let allowDraftExit = false;
-    const draftPrefix = 'room-check-assignment-draft:v2';
-    const currentUserId = Number(config.currentUserId || 0);
+
+    const clearInstructionSaveTimers = () => {
+        instructionSaveTimers.forEach((timer) => window.clearTimeout(timer));
+        instructionSaveTimers.clear();
+    };
 
     roomSelect.classList.add('room-select-native');
     const roomPicker = document.createElement('div');
@@ -65,111 +63,6 @@
 
     const employeeName = (employeeId) => config.employees
         .find((employee) => Number(employee.id) === Number(employeeId))?.display_name || 'Funcionária não identificada';
-
-    const draftKey = () => {
-        if (!canAssign) return null;
-        const intervalId = Number(intervalSelect?.value || 0);
-        const employeeId = Number(employeeSelect?.value || 0);
-        const dueDate = assignmentDate?.value || '';
-        if (!intervalId || !employeeId || !dueDate) return null;
-        const current = selection();
-        return [draftPrefix, currentUserId, intervalId, current.property, current.room, employeeId, dueDate].join('|');
-    };
-
-    const hasCurrentDraft = () => {
-        const key = draftKey();
-        if (!key) return false;
-        try { return window.localStorage.getItem(key) !== null; } catch { return false; }
-    };
-
-    const hasPendingUserDrafts = () => {
-        const prefix = `${draftPrefix}|${currentUserId}|`;
-        try {
-            for (let index = 0; index < window.localStorage.length; index += 1) {
-                if (window.localStorage.key(index)?.startsWith(prefix)) return true;
-            }
-        } catch { return false; }
-        return false;
-    };
-
-    const readDraftData = () => {
-        const key = draftKey();
-        if (!key) return { items: new Set(), instructions: {} };
-        try {
-            const value = JSON.parse(window.localStorage.getItem(key) || '[]');
-            const items = Array.isArray(value) ? value : value.items;
-            const instructions = !Array.isArray(value) && value && typeof value.instructions === 'object'
-                ? value.instructions : {};
-            return {
-                items: new Set(Array.isArray(items) ? items.filter((item) => typeof item === 'string') : []),
-                instructions,
-            };
-        } catch {
-            return { items: new Set(), instructions: {} };
-        }
-    };
-
-    const readOtherDraftAssignments = () => {
-        const currentKey = draftKey();
-        const intervalId = Number(intervalSelect?.value || 0);
-        if (!currentKey || !intervalId) return new Map();
-        const current = selection();
-        const keyPrefix = [draftPrefix, currentUserId, intervalId, current.property, current.room].join('|') + '|';
-        const reserved = new Map();
-        try {
-            for (let index = 0; index < window.localStorage.length; index += 1) {
-                const key = window.localStorage.key(index);
-                if (!key || key === currentKey || !key.startsWith(keyPrefix)) continue;
-                const parts = key.split('|');
-                const draftEmployeeId = Number(parts[parts.length - 2] || 0);
-                const dueDate = parts[parts.length - 1] || '';
-                const value = JSON.parse(window.localStorage.getItem(key) || '[]');
-                const items = Array.isArray(value) ? value : value.items;
-                const instructions = !Array.isArray(value) && value && typeof value.instructions === 'object'
-                    ? value.instructions : {};
-                if (!Array.isArray(items)) continue;
-                items.forEach((item) => {
-                    if (typeof item === 'string' && !reserved.has(item)) {
-                        reserved.set(item, {
-                            dueDate,
-                            employeeId: draftEmployeeId,
-                            instructions: String(instructions[item] || ''),
-                        });
-                    }
-                });
-            }
-        } catch {
-            return new Map();
-        }
-        return reserved;
-    };
-
-    const saveDraft = () => {
-        const key = draftKey();
-        if (!key) return;
-        const selectedItems = rows
-            .filter((row) => row.assignmentCheckbox && !row.assignmentCheckbox.disabled && row.assignmentCheckbox.checked)
-            .map((row) => row.name);
-        const instructions = Object.fromEntries(rows
-            .filter((row) => selectedItems.includes(row.name))
-            .map((row) => [row.name, row.textarea.value]));
-        try {
-            window.localStorage.setItem(key, JSON.stringify({ items: selectedItems, instructions }));
-            assignmentSelectionDirty = true;
-            assignmentActions.hidden = false;
-            saveAssignmentsTop.hidden = false;
-            applyRoomAssignmentStates();
-            setStatus('Seleção guardada neste browser', 'success');
-        } catch {
-            setStatus('Não foi possível guardar o rascunho neste browser', 'error');
-        }
-    };
-
-    const clearDraft = () => {
-        const key = draftKey();
-        if (!key) return;
-        try { window.localStorage.removeItem(key); } catch { /* armazenamento indisponível */ }
-    };
 
     const setStatus = (text, kind = '') => {
         saveStatus.textContent = text;
@@ -224,28 +117,8 @@
 
     function applyRoomAssignmentStates() {
         const totalItems = config.items.length;
-        const draftCounts = new Map();
-        const intervalId = Number(intervalSelect?.value || 0);
-        const current = selection();
-        const keyPrefix = [draftPrefix, currentUserId, intervalId, current.property].join('|') + '|';
-        if (intervalId) {
-            try {
-                for (let index = 0; index < window.localStorage.length; index += 1) {
-                    const key = window.localStorage.key(index);
-                    if (!key || !key.startsWith(keyPrefix)) continue;
-                    const parts = key.split('|');
-                    const room = parts[4] || '';
-                    const value = JSON.parse(window.localStorage.getItem(key) || '[]');
-                    const items = Array.isArray(value) ? value : value.items;
-                    if (!Array.isArray(items)) continue;
-                    if (!draftCounts.has(room)) draftCounts.set(room, new Set());
-                    items.forEach((item) => { if (typeof item === 'string') draftCounts.get(room).add(item); });
-                }
-            } catch { /* as cores continuam a usar apenas os dados da base de dados */ }
-        }
         Array.from(roomSelect.options).forEach((option) => {
-            const assignedItems = Math.min(totalItems,
-                Number(roomAssignmentCounts[option.value] || 0) + (draftCounts.get(option.value)?.size || 0));
+            const assignedItems = Math.min(totalItems, Number(roomAssignmentCounts[option.value] || 0));
             const state = assignedItems === 0 ? 'empty' : (assignedItems >= totalItems ? 'full' : 'partial');
             option.classList.remove('room-full', 'room-partial', 'room-empty');
             option.classList.add(`room-${state}`);
@@ -328,7 +201,15 @@
         textarea.addEventListener('input', () => {
             autoGrow(textarea);
             if (row.classList.contains('assignment-mode')) {
-                saveDraft();
+                if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;
+                window.clearTimeout(instructionSaveTimers.get(item.name));
+                instructionSaveTimers.set(item.name, window.setTimeout(() => {
+                    queueAssignmentSave([{
+                        itemName: item.name,
+                        selected: true,
+                        instructions: textarea.value.trim(),
+                    }]);
+                }, 700));
             } else if (canEdit) {
                 textarea.dataset.problem = textarea.value;
                 scheduleSave();
@@ -381,10 +262,14 @@
             assignmentCheckbox.disabled = true;
             assignmentCheckbox.setAttribute('aria-label', `Atribuir ${item.name}`);
             assignmentCheckbox.addEventListener('change', () => {
-                assignmentSelectionDirty = true;
+                window.clearTimeout(instructionSaveTimers.get(item.name));
+                instructionSaveTimers.delete(item.name);
                 updateSelectAllState();
-                saveDraft();
-                updateAssignmentMode();
+                queueAssignmentSave([{
+                    itemName: item.name,
+                    selected: assignmentCheckbox.checked,
+                    instructions: textarea.value.trim(),
+                }], [assignmentCheckbox]);
             });
             const marker = document.createElement('span');
             assignmentLabel.append(assignmentCheckbox, marker);
@@ -419,10 +304,6 @@
         const selectedDate = assignmentDate ? assignmentDate.value : '';
         const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
         if (active) clearTimeout(saveTimer);
-        assignmentSelectionDirty = active && hasCurrentDraft();
-        const draftData = active ? readDraftData() : { items: new Set(), instructions: {} };
-        const draft = draftData.items;
-        const otherDrafts = active ? readOtherDraftAssignments() : new Map();
         rows.forEach((row) => {
             row.element.classList.toggle('assignment-mode', active);
             const assignment = assignments[row.name] || {};
@@ -430,60 +311,35 @@
             const sameAssignment = hasAssignment
                 && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate === selectedDate;
-            const otherDraft = otherDrafts.get(row.name) || null;
-            const draftDate = otherDraft?.dueDate || '';
-            const lockedByDraft = !hasAssignment && otherDraft !== null;
             const sameEmployeeOtherDate = hasAssignment
                 && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate !== selectedDate
                 && assignment.completed !== true;
-            const sameEmployeeOtherDraftDate = lockedByDraft
-                && Number(otherDraft.employeeId) === employeeId
-                && draftDate !== selectedDate;
-            const selectedInCurrentDraft = !hasAssignment && draft.has(row.name);
-            const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
+            const locked = hasAssignment && (!sameAssignment || assignment.completed === true);
             row.assignmentCheckbox.disabled = !active || locked;
-            if (active && assignmentSelectionDirty && sameAssignment) {
-                row.assignmentCheckbox.checked = draft.has(row.name);
-            } else {
-                row.assignmentCheckbox.checked = active
-                    && (hasAssignment || lockedByDraft || selectedInCurrentDraft);
-            }
+            row.assignmentCheckbox.checked = active && hasAssignment;
             const checkboxMarker = row.assignmentCheckbox.nextElementSibling;
             checkboxMarker.classList.toggle('saved-assignment', active && hasAssignment);
-            checkboxMarker.classList.toggle(
-                'draft-assignment', active && !hasAssignment && (lockedByDraft || selectedInCurrentDraft)
-            );
             checkboxMarker.classList.toggle('locked-assignment', active && locked);
             checkboxMarker.classList.toggle(
-                'same-employee-other-date', active && locked
-                    && (sameEmployeeOtherDate || sameEmployeeOtherDraftDate)
+                'same-employee-other-date', active && locked && sameEmployeeOtherDate
             );
             row.element.classList.toggle('assignment-locked', active && locked);
             if (active && hasAssignment) {
                 row.textarea.value = String(assignment.instructions || '');
-            } else if (active && lockedByDraft) {
-                row.textarea.value = String(otherDraft.instructions || '');
             } else if (active) {
-                row.textarea.value = String(draftData.instructions[row.name] || '');
+                row.textarea.value = '';
             } else {
                 row.textarea.value = row.textarea.dataset.problem || '';
             }
             row.textarea.placeholder = active ? 'Descreva a verificação…' : 'Descreva o problema…';
             row.textarea.setAttribute('aria-label', `${active ? 'Instruções da verificação' : 'Problema identificado'}: ${row.name}`);
             if (active && locked) {
-                const state = lockedByDraft
-                    ? `já está selecionado num rascunho para ${formatDate(draftDate)}`
-                    : (assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`);
+                const state = assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`;
                 row.assignmentCheckbox.parentElement.title = `Este item ${state}.`;
-                row.assignmentHint.textContent = lockedByDraft
-                    ? `Selecionado para ${formatDate(draftDate)} — ${employeeName(otherDraft.employeeId)} (rascunho)`
-                    : (assignment.completed
-                        ? `Verificado em ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`
-                        : `Atribuído para ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`);
-            } else if (active && selectedInCurrentDraft) {
-                row.assignmentCheckbox.parentElement.removeAttribute('title');
-                row.assignmentHint.textContent = `Selecionado para ${formatDate(selectedDate)} — ${employeeName(employeeId)} (rascunho)`;
+                row.assignmentHint.textContent = assignment.completed
+                    ? `Verificado em ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`
+                    : `Atribuído para ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`;
             } else if (active && sameAssignment) {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
                 row.assignmentHint.textContent = `Atribuído para ${formatDate(selectedDate)} — ${employeeName(employeeId)}`;
@@ -492,13 +348,12 @@
                 row.assignmentHint.textContent = '';
             }
             row.assignmentHint.classList.toggle(
-                'editable-assignment', active && !locked && (selectedInCurrentDraft || sameAssignment)
+                'editable-assignment', active && !locked && sameAssignment
             );
             row.assignmentHint.classList.toggle(
-                'same-employee-other-date', active && locked
-                    && (sameEmployeeOtherDate || sameEmployeeOtherDraftDate)
+                'same-employee-other-date', active && locked && sameEmployeeOtherDate
             );
-            row.assignmentHint.hidden = !active || (!locked && !selectedInCurrentDraft && !sameAssignment);
+            row.assignmentHint.hidden = !active || (!locked && !sameAssignment);
             row.textarea.readOnly = active ? locked : !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = active || !canEdit; });
             autoGrow(row.textarea);
@@ -508,12 +363,9 @@
         selectAllItems.parentElement.title = hasLockedItems
             ? 'Existem itens atribuídos a outra empregada ou data. Altere apenas as checkboxes disponíveis.'
             : '';
-        const showSaveActions = active && assignmentSelectionDirty;
-        assignmentActions.hidden = !showSaveActions;
-        saveAssignmentsTop.hidden = !showSaveActions;
         updateSelectAllState();
         const prompt = interval ? 'Escolha a empregada e a data dentro do intervalo' : 'Escolha ou crie um intervalo';
-        setStatus(active ? 'Selecione os itens a atribuir' : (canAssign ? prompt : (canEdit ? 'Dados carregados' : 'Apenas consulta')), active ? '' : 'success');
+        setStatus(active ? 'As alterações são guardadas automaticamente' : (canAssign ? prompt : (canEdit ? 'Dados carregados' : 'Apenas consulta')), active ? 'success' : 'success');
     };
 
     const renderChecklist = (items) => {
@@ -579,66 +431,58 @@
         }
     };
 
-    const saveSelectedAssignments = async () => {
+    const queueAssignmentSave = (changes, affectedCheckboxes = []) => {
         const intervalId = Number(intervalSelect.value);
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate.value;
-        if (!intervalId || !employeeId || !dueDate) return;
+        if (!intervalId || !employeeId || !dueDate || changes.length === 0) return Promise.resolve(false);
         const current = selection();
-        const selectedItems = rows
-            .filter((row) => row.assignmentCheckbox && !row.assignmentCheckbox.disabled && row.assignmentCheckbox.checked)
-            .map((row) => row.name);
-        const instructions = Object.fromEntries(rows
-            .filter((row) => selectedItems.includes(row.name))
-            .map((row) => [row.name, row.textarea.value.trim()]));
-        assignmentSaveToasts.forEach((toast) => { toast.hidden = true; });
-        saveAssignments.disabled = true;
-        saveAssignmentsTop.disabled = true;
-        setStatus('A guardar atribuição…');
-        try {
+        const contextMatches = () => Number(intervalSelect.value) === intervalId
+            && Number(employeeSelect.value) === employeeId
+            && assignmentDate.value === dueDate
+            && propertySelect.value === current.property
+            && Number(roomSelect.value) === current.room;
+        affectedCheckboxes.forEach((checkbox) => { checkbox.disabled = true; });
+        setStatus('A guardar automaticamente…');
+        assignmentSaveQueue = assignmentSaveQueue.catch(() => false).then(async () => {
             const response = await fetch('api.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
                 body: JSON.stringify({
-                    action: 'assign_items', csrfToken: config.csrfToken, ...current,
-                    intervalId, employeeId, dueDate, selectedItems, instructions,
+                    action: 'set_assignments_atomic', csrfToken: config.csrfToken, ...current,
+                    intervalId, employeeId, dueDate, changes,
                 }),
             });
             const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar a atribuição.');
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar automaticamente.');
             const interval = config.intervals.find((candidate) => candidate.id === intervalId);
             if (interval && result.intervalBounds) {
                 interval.firstDueDate = result.intervalBounds.firstDueDate;
                 interval.lastDueDate = result.intervalBounds.lastDueDate;
                 if (selectedEditInterval()?.id === intervalId) applyIntervalDateLimits();
             }
-            Object.keys(assignments).forEach((name) => {
-                const assignment = assignments[name] || {};
-                if (Number(assignment.employeeId) === employeeId
-                    && assignment.dueDate === dueDate
-                    && !selectedItems.includes(name)) delete assignments[name];
-            });
-            selectedItems.forEach((name) => { assignments[name] = { employeeId, dueDate, instructions: instructions[name] || '' }; });
-            clearDraft();
-            roomAssignmentCounts[String(current.room)] = Object.values(assignments)
-                .filter((assignment) => Number(assignment.employeeId || 0) > 0).length;
-            applyRoomAssignmentStates();
-            assignmentSelectionDirty = false;
-            updateAssignmentMode();
-            setStatus('Atribuição guardada', 'success');
-            if (assignmentSaveToasts.length > 0) {
-                window.clearTimeout(assignmentToastTimer);
-                assignmentSaveToasts.forEach((toast) => { toast.hidden = false; });
-                assignmentToastTimer = window.setTimeout(() => {
-                    assignmentSaveToasts.forEach((toast) => { toast.hidden = true; });
-                }, 2400);
+            if (contextMatches()) {
+                changes.forEach((change) => {
+                    if (change.selected) {
+                        assignments[change.itemName] = {
+                            employeeId, dueDate, instructions: change.instructions || '', completed: false,
+                        };
+                    } else {
+                        delete assignments[change.itemName];
+                    }
+                });
+                roomAssignmentCounts[String(current.room)] = Number(result.roomAssignedItems || 0);
+                applyRoomAssignmentStates();
+                updateAssignmentMode();
             }
-        } catch (error) {
+            setStatus('Guardado automaticamente', 'success');
+            return true;
+        }).catch((error) => {
+            if (contextMatches()) updateAssignmentMode();
             setStatus(error.message, 'error');
-        } finally {
-            saveAssignments.disabled = false;
-            saveAssignmentsTop.disabled = false;
-        }
+            return false;
+        });
+        return assignmentSaveQueue;
     };
 
     const saveChecklist = async () => {
@@ -806,13 +650,13 @@
     };
 
     propertySelect.addEventListener('change', () => {
-        assignmentSelectionDirty = false;
+        clearInstructionSaveTimers();
         roomAssignmentCounts = {};
         renderRooms(1);
         loadChecklist();
     });
     roomSelect.addEventListener('change', () => {
-        assignmentSelectionDirty = false;
+        clearInstructionSaveTimers();
         applyRoomAssignmentStates();
         loadChecklist();
     });
@@ -847,7 +691,7 @@
         if (!roomPicker.contains(event.target)) closeRoomPicker();
     });
     if (intervalSelect) intervalSelect.addEventListener('change', async () => {
-        assignmentSelectionDirty = false;
+        clearInstructionSaveTimers();
         employeeSelect.value = '';
         assignments = {};
         roomAssignmentCounts = {};
@@ -855,7 +699,7 @@
         rows.forEach((row) => {
             row.assignmentCheckbox.checked = false;
             row.assignmentCheckbox.disabled = true;
-            row.assignmentCheckbox.nextElementSibling.classList.remove('saved-assignment', 'draft-assignment');
+            row.assignmentCheckbox.nextElementSibling.classList.remove('saved-assignment');
         });
         await loadChecklist();
     });
@@ -866,56 +710,33 @@
     if (editIntervalStart) editIntervalStart.addEventListener('change', applyIntervalDateLimits);
     if (editIntervalEnd) editIntervalEnd.addEventListener('change', applyIntervalDateLimits);
     if (employeeSelect) employeeSelect.addEventListener('change', () => {
-        assignmentSelectionDirty = false;
+        clearInstructionSaveTimers();
         updateAssignmentMode();
     });
     if (assignmentDate) assignmentDate.addEventListener('change', () => {
-        assignmentSelectionDirty = false;
+        clearInstructionSaveTimers();
         updateAssignmentMode();
     });
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
-        assignmentSelectionDirty = true;
-        rows.forEach((row) => { if (!row.assignmentCheckbox.disabled) row.assignmentCheckbox.checked = selectAllItems.checked; });
+        const changes = [];
+        const affected = [];
+        rows.forEach((row) => {
+            if (row.assignmentCheckbox.disabled) return;
+            row.assignmentCheckbox.checked = selectAllItems.checked;
+            changes.push({
+                itemName: row.name,
+                selected: selectAllItems.checked,
+                instructions: row.textarea.value.trim(),
+            });
+            affected.push(row.assignmentCheckbox);
+        });
         updateSelectAllState();
-        saveDraft();
-        updateAssignmentMode();
-    });
-    if (saveAssignments) saveAssignments.addEventListener('click', saveSelectedAssignments);
-    if (saveAssignmentsTop) saveAssignmentsTop.addEventListener('click', saveSelectedAssignments);
-
-    const confirmDraftExit = () => window.confirm(
-        'Existem alterações não guardadas. Estes rascunhos ficam apenas neste browser e neste utilizador; não estarão visíveis noutro computador ou para outro utilizador.\n\nPretende continuar sem guardar?'
-    );
-
-    document.addEventListener('click', (event) => {
-        const link = event.target.closest('a[href]');
-        if (!link || link.target === '_blank' || link.hasAttribute('download') || !hasPendingUserDrafts()) return;
-        const destination = new URL(link.href, window.location.href);
-        if (destination.href === window.location.href || destination.protocol === 'javascript:') return;
-        if (!confirmDraftExit()) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            return;
-        }
-        allowDraftExit = true;
-    }, true);
-
-    document.querySelector('.session-logout-form')?.addEventListener('submit', (event) => {
-        if (!hasPendingUserDrafts() || allowDraftExit) return;
-        if (!confirmDraftExit()) {
-            event.preventDefault();
-            return;
-        }
-        allowDraftExit = true;
+        queueAssignmentSave(changes, affected);
     });
 
-    window.addEventListener('beforeunload', (event) => {
+    window.addEventListener('beforeunload', () => {
         clearTimeout(saveTimer);
-        clearTimeout(assignmentToastTimer);
-        if (!allowDraftExit && hasPendingUserDrafts()) {
-            event.preventDefault();
-            event.returnValue = '';
-        }
+        clearInstructionSaveTimers();
     });
 
     if (config.initialProperty && Object.hasOwn(config.properties, config.initialProperty)) {
