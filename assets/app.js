@@ -36,6 +36,23 @@
     let roomAssignmentCounts = {};
     const draftPrefix = 'room-check-assignment-draft:v1';
 
+    roomSelect.classList.add('room-select-native');
+    const roomPicker = document.createElement('div');
+    roomPicker.className = 'room-picker';
+    const roomPickerButton = document.createElement('button');
+    roomPickerButton.type = 'button';
+    roomPickerButton.className = 'room-picker-button';
+    roomPickerButton.setAttribute('aria-haspopup', 'listbox');
+    roomPickerButton.setAttribute('aria-expanded', 'false');
+    roomPickerButton.setAttribute('aria-label', 'Quarto');
+    const roomPickerMenu = document.createElement('div');
+    roomPickerMenu.className = 'room-picker-menu';
+    roomPickerMenu.setAttribute('role', 'listbox');
+    roomPickerMenu.setAttribute('aria-label', 'Quarto');
+    roomPickerMenu.hidden = true;
+    roomPicker.append(roomPickerButton, roomPickerMenu);
+    roomSelect.insertAdjacentElement('afterend', roomPicker);
+
     const selection = () => ({
         property: propertySelect.value,
         room: Number(roomSelect.value),
@@ -147,6 +164,31 @@
         applyRoomAssignmentStates();
     };
 
+    const closeRoomPicker = () => {
+        roomPickerMenu.hidden = true;
+        roomPickerButton.setAttribute('aria-expanded', 'false');
+    };
+
+    function syncRoomPicker() {
+        const selectedValue = roomSelect.value;
+        roomPickerMenu.replaceChildren();
+        Array.from(roomSelect.options).forEach((option) => {
+            const menuOption = document.createElement('button');
+            menuOption.type = 'button';
+            menuOption.className = `room-picker-option ${Array.from(option.classList).join(' ')}`;
+            menuOption.dataset.value = option.value;
+            menuOption.textContent = option.textContent;
+            menuOption.title = option.title;
+            menuOption.setAttribute('role', 'option');
+            menuOption.setAttribute('aria-selected', String(option.value === selectedValue));
+            roomPickerMenu.append(menuOption);
+        });
+        const selected = roomSelect.selectedOptions[0];
+        roomPickerButton.textContent = selected?.textContent || '';
+        roomPickerButton.classList.remove('room-full', 'room-partial', 'room-empty');
+        if (selected) roomPickerButton.classList.add(...Array.from(selected.classList));
+    }
+
     function applyRoomAssignmentStates() {
         const totalItems = config.items.length;
         const draftCounts = new Map();
@@ -181,6 +223,7 @@
         const selected = roomSelect.selectedOptions[0];
         roomSelect.classList.remove('room-full', 'room-partial', 'room-empty');
         if (selected) roomSelect.classList.add(...Array.from(selected.classList));
+        syncRoomPicker();
     }
 
     const formatDate = (value) => {
@@ -703,6 +746,35 @@
     roomSelect.addEventListener('change', () => {
         applyRoomAssignmentStates();
         loadChecklist();
+    });
+    roomPickerButton.addEventListener('click', () => {
+        const willOpen = roomPickerMenu.hidden;
+        roomPickerMenu.hidden = !willOpen;
+        roomPickerButton.setAttribute('aria-expanded', String(willOpen));
+        if (willOpen) roomPickerMenu.querySelector('[aria-selected="true"]')?.focus();
+    });
+    roomPickerMenu.addEventListener('click', (event) => {
+        const option = event.target.closest('.room-picker-option');
+        if (!option) return;
+        roomSelect.value = option.dataset.value;
+        closeRoomPicker();
+        roomSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        roomPickerButton.focus();
+    });
+    roomPickerMenu.addEventListener('keydown', (event) => {
+        const options = Array.from(roomPickerMenu.querySelectorAll('.room-picker-option'));
+        const index = options.indexOf(document.activeElement);
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            options[(index + step + options.length) % options.length]?.focus();
+        } else if (event.key === 'Escape') {
+            closeRoomPicker();
+            roomPickerButton.focus();
+        }
+    });
+    document.addEventListener('click', (event) => {
+        if (!roomPicker.contains(event.target)) closeRoomPicker();
     });
     if (intervalSelect) intervalSelect.addEventListener('change', async () => {
         employeeSelect.value = '';
