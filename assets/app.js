@@ -419,8 +419,11 @@
             const selectedInCurrentDraft = !hasAssignment && draft.has(row.name);
             const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
             row.assignmentCheckbox.disabled = !active || locked;
-            row.assignmentCheckbox.checked = active
-                && (hasAssignment || lockedByDraft || selectedInCurrentDraft);
+            const preserveManualSelection = active && assignmentSelectionDirty && sameAssignment;
+            if (!preserveManualSelection) {
+                row.assignmentCheckbox.checked = active
+                    && (hasAssignment || lockedByDraft || selectedInCurrentDraft);
+            }
             const checkboxMarker = row.assignmentCheckbox.nextElementSibling;
             checkboxMarker.classList.toggle('saved-assignment', active && hasAssignment);
             checkboxMarker.classList.toggle(
