@@ -76,7 +76,7 @@ try {
         <header class="hero">
             <div>
                 <p class="eyebrow">Operações do Alojamento</p>
-                <h1>Gestão dos Quartos</h1>
+                <h1>GESTÃO DOS QUARTOS</h1>
                 <p class="subtitle">Lista de verificação dos quartos<?= $canEdit ? '' : ' — apenas consulta' ?></p>
             </div>
             <div id="saveStatus" class="save-status" role="status" aria-live="polite">A carregar…</div>
