@@ -25,9 +25,13 @@ $employees = $canAssign ? $pdo->query(
      ORDER BY display_name, username"
 )->fetchAll() : [];
 $intervals = $canAssign ? $pdo->query(
-    'SELECT id, name, start_date, end_date
-     FROM room_verification_intervals
-     ORDER BY start_date DESC, id DESC'
+    'SELECT interval_row.id, interval_row.name, interval_row.start_date, interval_row.end_date,
+            MIN(assignment.due_date) AS first_due_date,
+            MAX(assignment.due_date) AS last_due_date
+     FROM room_verification_intervals interval_row
+     LEFT JOIN room_item_assignments assignment ON assignment.interval_id = interval_row.id
+     GROUP BY interval_row.id, interval_row.name, interval_row.start_date, interval_row.end_date
+     ORDER BY interval_row.start_date DESC, interval_row.id DESC'
 )->fetchAll() : [];
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
@@ -61,6 +65,8 @@ try {
                 'name' => (string) $interval['name'],
                 'startDate' => (string) $interval['start_date'],
                 'endDate' => (string) $interval['end_date'],
+                'firstDueDate' => $interval['first_due_date'] !== null ? (string) $interval['first_due_date'] : null,
+                'lastDueDate' => $interval['last_due_date'] !== null ? (string) $interval['last_due_date'] : null,
             ], $intervals),
             'csrfToken' => Csrf::token(),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
