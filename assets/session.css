@@ -58,6 +58,7 @@
     padding-left: 12px;
     margin-left: 12px;
     border-left: 1px solid #a9b8bc;
+    color: #65777d;
 }
 .session-bar::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: linear-gradient(180deg, #14b8a6, var(--session-brand-dark)); }
 .session-navigation, .session-account, .session-links { display: flex; align-items: center; }
