@@ -87,11 +87,10 @@ header('Cache-Control: no-store');
     <main class="panel-shell">
         <?php SessionBar::render($user, '..', $canManageUsers, $canManagePermissions); ?>
 
-        <header class="panel-header">
-            <div>
+        <header class="panel-header compact-page-header">
+            <div class="compact-page-heading">
                 <p class="eyebrow">Painel administrativo</p>
                 <h1 class="page-title">Controlo My2N</h1>
-                <p>Campainhas, apartamentos e telemóveis do único Site My2N.</p>
             </div>
             <span id="modeBadge" class="mode-badge">APENAS CONSULTA</span>
         </header>
