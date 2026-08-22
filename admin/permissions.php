@@ -102,7 +102,7 @@ header('Cache-Control: no-store');
         <?php SessionBar::render($currentUser, '..', $canManageUsers, true); ?>
         <header class="page-header">
             <p class="eyebrow">Administração</p>
-            <h1>Permissões dos perfis</h1>
+            <h1 class="page-title">Permissões dos perfis</h1>
             <p>Defina os módulos e ações disponíveis para cada um dos quatro perfis. As verificações são feitas no servidor, incluindo nas APIs.</p>
         </header>
 
