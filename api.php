@@ -16,6 +16,7 @@ try {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_VIEW);
         validateSelection($property, $room);
         $listId = (int) ($_GET['list_id'] ?? 0);
+        $intervalId = (int) ($_GET['interval_id'] ?? 0);
         $selectedList = itemList($pdo, $listId);
         $listItems = $selectedList['items'];
 
@@ -35,13 +36,15 @@ try {
         }
 
         $items = array_map(
-            static function (string $name) use ($saved, $selectedList): array {
+            static function (string $name) use ($saved, $selectedList, $intervalId): array {
                 $listInstructions = (string) ($selectedList['defaults'][$name] ?? '');
                 $roomInstructions = (string) ($saved[$name]['problem'] ?? '');
 
                 return [
                     'name' => $name,
-                    'problem' => $roomInstructions !== '' ? $roomInstructions : $listInstructions,
+                    'problem' => $intervalId > 0
+                        ? $listInstructions
+                        : ($roomInstructions !== '' ? $roomInstructions : $listInstructions),
                     'status' => $saved[$name]['status'] ?? null,
                     'defaultInstructions' => $listInstructions,
                 ];
@@ -52,7 +55,6 @@ try {
         $assignments = [];
         $roomAssignmentCounts = [];
         if (Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)) {
-            $intervalId = (int) ($_GET['interval_id'] ?? 0);
             $assignmentStatement = $pdo->prepare(
                 'SELECT item_name, assigned_to_user_id, due_date, verification_instructions, completed_at FROM room_item_assignments
                  WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
