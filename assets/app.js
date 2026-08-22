@@ -37,7 +37,9 @@
     let assignments = {};
     let roomAssignmentCounts = {};
     let assignmentSelectionDirty = false;
-    const draftPrefix = 'room-check-assignment-draft:v1';
+    let allowDraftExit = false;
+    const draftPrefix = 'room-check-assignment-draft:v2';
+    const currentUserId = Number(config.currentUserId || 0);
 
     roomSelect.classList.add('room-select-native');
     const roomPicker = document.createElement('div');
@@ -71,7 +73,23 @@
         const dueDate = assignmentDate?.value || '';
         if (!intervalId || !employeeId || !dueDate) return null;
         const current = selection();
-        return [draftPrefix, intervalId, current.property, current.room, employeeId, dueDate].join('|');
+        return [draftPrefix, currentUserId, intervalId, current.property, current.room, employeeId, dueDate].join('|');
+    };
+
+    const hasCurrentDraft = () => {
+        const key = draftKey();
+        if (!key) return false;
+        try { return window.localStorage.getItem(key) !== null; } catch { return false; }
+    };
+
+    const hasPendingUserDrafts = () => {
+        const prefix = `${draftPrefix}|${currentUserId}|`;
+        try {
+            for (let index = 0; index < window.localStorage.length; index += 1) {
+                if (window.localStorage.key(index)?.startsWith(prefix)) return true;
+            }
+        } catch { return false; }
+        return false;
     };
 
     const readDraftData = () => {
@@ -96,7 +114,7 @@
         const intervalId = Number(intervalSelect?.value || 0);
         if (!currentKey || !intervalId) return new Map();
         const current = selection();
-        const keyPrefix = [draftPrefix, intervalId, current.property, current.room].join('|') + '|';
+        const keyPrefix = [draftPrefix, currentUserId, intervalId, current.property, current.room].join('|') + '|';
         const reserved = new Map();
         try {
             for (let index = 0; index < window.localStorage.length; index += 1) {
@@ -137,6 +155,9 @@
             .map((row) => [row.name, row.textarea.value]));
         try {
             window.localStorage.setItem(key, JSON.stringify({ items: selectedItems, instructions }));
+            assignmentSelectionDirty = true;
+            assignmentActions.hidden = false;
+            saveAssignmentsTop.hidden = false;
             applyRoomAssignmentStates();
             setStatus('Seleção guardada neste browser', 'success');
         } catch {
@@ -206,14 +227,14 @@
         const draftCounts = new Map();
         const intervalId = Number(intervalSelect?.value || 0);
         const current = selection();
-        const keyPrefix = [draftPrefix, intervalId, current.property].join('|') + '|';
+        const keyPrefix = [draftPrefix, currentUserId, intervalId, current.property].join('|') + '|';
         if (intervalId) {
             try {
                 for (let index = 0; index < window.localStorage.length; index += 1) {
                     const key = window.localStorage.key(index);
                     if (!key || !key.startsWith(keyPrefix)) continue;
                     const parts = key.split('|');
-                    const room = parts[3] || '';
+                    const room = parts[4] || '';
                     const value = JSON.parse(window.localStorage.getItem(key) || '[]');
                     const items = Array.isArray(value) ? value : value.items;
                     if (!Array.isArray(items)) continue;
@@ -398,6 +419,7 @@
         const selectedDate = assignmentDate ? assignmentDate.value : '';
         const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
         if (active) clearTimeout(saveTimer);
+        assignmentSelectionDirty = active && hasCurrentDraft();
         const draftData = active ? readDraftData() : { items: new Set(), instructions: {} };
         const draft = draftData.items;
         const otherDrafts = active ? readOtherDraftAssignments() : new Map();
@@ -421,8 +443,9 @@
             const selectedInCurrentDraft = !hasAssignment && draft.has(row.name);
             const locked = (hasAssignment && (!sameAssignment || assignment.completed === true)) || lockedByDraft;
             row.assignmentCheckbox.disabled = !active || locked;
-            const preserveManualSelection = active && assignmentSelectionDirty && sameAssignment;
-            if (!preserveManualSelection) {
+            if (active && assignmentSelectionDirty && sameAssignment) {
+                row.assignmentCheckbox.checked = draft.has(row.name);
+            } else {
                 row.assignmentCheckbox.checked = active
                     && (hasAssignment || lockedByDraft || selectedInCurrentDraft);
             }
@@ -860,9 +883,39 @@
     if (saveAssignments) saveAssignments.addEventListener('click', saveSelectedAssignments);
     if (saveAssignmentsTop) saveAssignmentsTop.addEventListener('click', saveSelectedAssignments);
 
-    window.addEventListener('beforeunload', () => {
+    const confirmDraftExit = () => window.confirm(
+        'Existem alterações não guardadas. Estes rascunhos ficam apenas neste browser e neste utilizador; não estarão visíveis noutro computador ou para outro utilizador.\n\nPretende continuar sem guardar?'
+    );
+
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest('a[href]');
+        if (!link || link.target === '_blank' || link.hasAttribute('download') || !hasPendingUserDrafts()) return;
+        const destination = new URL(link.href, window.location.href);
+        if (destination.href === window.location.href || destination.protocol === 'javascript:') return;
+        if (!confirmDraftExit()) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+        }
+        allowDraftExit = true;
+    }, true);
+
+    document.querySelector('.session-logout-form')?.addEventListener('submit', (event) => {
+        if (!hasPendingUserDrafts() || allowDraftExit) return;
+        if (!confirmDraftExit()) {
+            event.preventDefault();
+            return;
+        }
+        allowDraftExit = true;
+    });
+
+    window.addEventListener('beforeunload', (event) => {
         clearTimeout(saveTimer);
         clearTimeout(assignmentToastTimer);
+        if (!allowDraftExit && hasPendingUserDrafts()) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
     });
 
     if (config.initialProperty && Object.hasOwn(config.properties, config.initialProperty)) {
