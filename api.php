@@ -305,8 +305,23 @@ try {
             'assignee' => $employeeId, 'due_date' => $dueDate,
             'assigned_items' => count($selected),
         ]);
+        $boundsStatement = $pdo->prepare(
+            'SELECT MIN(due_date) AS first_due_date, MAX(due_date) AS last_due_date
+             FROM room_item_assignments WHERE interval_id = :interval_id'
+        );
+        $boundsStatement->execute(['interval_id' => $intervalId]);
+        $intervalBounds = $boundsStatement->fetch();
         $pdo->commit();
-        jsonResponse(['ok' => true, 'assignedItems' => count($selected)]);
+        jsonResponse([
+            'ok' => true,
+            'assignedItems' => count($selected),
+            'intervalBounds' => [
+                'firstDueDate' => $intervalBounds['first_due_date'] !== null
+                    ? (string) $intervalBounds['first_due_date'] : null,
+                'lastDueDate' => $intervalBounds['last_due_date'] !== null
+                    ? (string) $intervalBounds['last_due_date'] : null,
+            ],
+        ]);
     }
 
     Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_EDIT);
