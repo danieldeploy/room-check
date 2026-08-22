@@ -192,6 +192,8 @@
 
         const name = document.createElement('h2');
         name.textContent = item.name;
+        const itemHeading = document.createElement('div');
+        itemHeading.className = 'item-heading';
 
         const textarea = document.createElement('textarea');
         textarea.value = item.problem || '';
@@ -225,7 +227,7 @@
         assignmentHint.className = 'assignment-hint';
         assignmentHint.textContent = 'A verificar';
         assignmentHint.hidden = true;
-        problemField.append(textarea, assignmentHint);
+        problemField.append(textarea);
 
         const status = document.createElement('div');
         status.className = 'status-options';
@@ -276,9 +278,14 @@
             });
             const marker = document.createElement('span');
             assignmentLabel.append(assignmentCheckbox, marker);
-            row.append(name, problemField, status, assignmentLabel);
+            const itemTitle = document.createElement('div');
+            itemTitle.className = 'item-title';
+            itemTitle.append(name, assignmentHint);
+            itemHeading.append(assignmentLabel, itemTitle);
+            row.append(itemHeading, problemField, status);
         } else {
-            row.append(name, problemField, status);
+            itemHeading.append(name);
+            row.append(itemHeading, problemField, status);
         }
 
         return { element: row, name: item.name, textarea, assignmentHint, status, assignmentCheckbox };
