@@ -98,10 +98,11 @@ header('Cache-Control: no-store');
 <body>
     <main class="portal-shell">
         <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
-        <header class="portal-header">
-            <p class="eyebrow">Portal de Gestão</p>
-            <h1 class="page-title">O que pretende gerir?</h1>
-            <p>As opções apresentadas dependem das permissões do seu perfil.</p>
+        <header class="portal-header compact-page-header">
+            <div class="compact-page-heading">
+                <p class="eyebrow">Portal de Gestão</p>
+                <h1 class="page-title">O que pretende gerir?</h1>
+            </div>
         </header>
         <?php if ($visibleModules === []): ?>
             <section class="empty-state"><h2>Sem módulos atribuídos</h2><p>O seu perfil está ativo, mas ainda não tem acesso a nenhum módulo.</p></section>
