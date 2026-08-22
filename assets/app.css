@@ -81,6 +81,7 @@ textarea::placeholder { color: #9aabaa; }
 .problem-field { min-width: 0; }
 .assignment-hint { display: block; margin: 6px 3px 0; color: #526d82; font-size: .78rem; font-weight: 700; }
 .assignment-hint.editable-assignment { color: var(--ok); }
+.assignment-hint.same-employee-other-date { color: #4d7c0f; }
 .assignment-hint[hidden] { display: none; }
 .check-row.assignment-mode .status-options { visibility: hidden; }
 .assignment-check { display: grid; place-items: center; cursor: pointer; }
@@ -90,6 +91,7 @@ textarea::placeholder { color: #9aabaa; }
 .assignment-check input:checked + span.saved-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
 .assignment-check input:checked + span.draft-assignment { border-color: #15803d !important; background: #15803d !important; opacity: 1 !important; }
 .assignment-check input:checked + span.locked-assignment { border-color: #64748b !important; background: #94a3b8 !important; opacity: 1 !important; }
+.assignment-check input:checked + span.locked-assignment.same-employee-other-date { border-color: #4ade80 !important; background: #86efac !important; opacity: 1 !important; }
 .assignment-check input:indeterminate + span { border-color: var(--ok); background: linear-gradient(#fff 42%, var(--ok) 42% 58%, #fff 58%); }
 .assignment-check input:focus-visible + span { outline: 3px solid rgba(15, 118, 110, 0.25); outline-offset: 3px; }
 .assignment-check input:disabled + span { cursor: not-allowed; opacity: 0.38; }
