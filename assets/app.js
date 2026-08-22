@@ -260,6 +260,7 @@
         status.append(...buttons);
         let assignmentCheckbox = null;
         if (canAssign) {
+            itemHeading.classList.add('has-assignment-check');
             const assignmentLabel = document.createElement('label');
             assignmentLabel.className = 'assignment-check';
             assignmentCheckbox = document.createElement('input');
