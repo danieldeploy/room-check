@@ -86,7 +86,8 @@ textarea::placeholder { color: #9aabaa; }
 .assignment-hint.editable-assignment { color: var(--assignment-strong); }
 .assignment-hint.same-employee-other-date { color: var(--assignment-soft-text); }
 .assignment-hint[hidden] { display: none; }
-.check-row.assignment-mode .status-options { visibility: hidden; }
+.check-row.assignment-mode .status-options,
+.checklist.assignment-view-mode .status-options { visibility: hidden; }
 .assignment-check { display: grid; place-items: center; cursor: pointer; }
 .assignment-check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .assignment-check span { width: 28px; height: 28px; border: 2px solid #78908e; border-radius: 5px; background: #fff; }
