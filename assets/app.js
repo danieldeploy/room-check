@@ -23,11 +23,13 @@
     const selectAllItems = document.querySelector('#selectAllItems');
     const assignmentActions = document.querySelector('#assignmentActions');
     const saveAssignments = document.querySelector('#saveAssignments');
+    const assignmentSaveToast = document.querySelector('#assignmentSaveToast');
     const canEdit = config.canEdit !== false;
     const canAssign = config.canAssign === true;
 
     let rows = [];
     let saveTimer = null;
+    let assignmentToastTimer = null;
     let requestVersion = 0;
     let isLoading = false;
     let assignments = {};
@@ -482,6 +484,7 @@
         const instructions = Object.fromEntries(rows
             .filter((row) => selectedItems.includes(row.name))
             .map((row) => [row.name, row.textarea.value.trim()]));
+        if (assignmentSaveToast) assignmentSaveToast.hidden = true;
         saveAssignments.disabled = true;
         setStatus('A guardar atribuição…');
         try {
@@ -514,6 +517,13 @@
             applyRoomAssignmentStates();
             updateAssignmentMode();
             setStatus('Atribuição guardada', 'success');
+            if (assignmentSaveToast) {
+                window.clearTimeout(assignmentToastTimer);
+                assignmentSaveToast.hidden = false;
+                assignmentToastTimer = window.setTimeout(() => {
+                    assignmentSaveToast.hidden = true;
+                }, 2400);
+            }
         } catch (error) {
             setStatus(error.message, 'error');
         } finally {
@@ -721,7 +731,10 @@
     });
     if (saveAssignments) saveAssignments.addEventListener('click', saveSelectedAssignments);
 
-    window.addEventListener('beforeunload', () => clearTimeout(saveTimer));
+    window.addEventListener('beforeunload', () => {
+        clearTimeout(saveTimer);
+        clearTimeout(assignmentToastTimer);
+    });
 
     if (config.initialProperty && Object.hasOwn(config.properties, config.initialProperty)) {
         propertySelect.value = config.initialProperty;
