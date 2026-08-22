@@ -146,7 +146,7 @@ try {
             <?php endif; ?>
         </section>
         <?php if ($canAssign): ?>
-            <div class="assignment-legend" aria-label="Legenda das atribuições"><span><i class="saved"></i>Guardado na base de dados</span><span><i class="draft"></i>Rascunho guardado no browser</span></div>
+            <div class="assignment-legend" aria-label="Legenda das atribuições"><span><i class="selected"></i>Item selecionado</span></div>
         <?php endif; ?>
         <section class="checklist-card">
             <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control"><span class="assignment-save-toast top" role="status" aria-live="polite" hidden>Guardado com sucesso</span><button id="saveAssignmentsTop" class="top-save-assignment" type="button" hidden>Guardar atribuição</button><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
