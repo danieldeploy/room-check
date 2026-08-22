@@ -62,6 +62,10 @@ select { width: 100%; min-height: 48px; padding: 0 42px 0 14px; border: 1px soli
 .room-picker-option.room-partial { color: #831843; background: #fbcfe8; }
 .room-picker-option.room-full { color: #fff; background: #be123c; }
 .room-picker-option:hover, .room-picker-option:focus-visible { outline: none; color: var(--ink); background: #f1f5f4; }
+.room-picker-option.room-partial:hover,
+.room-picker-option.room-partial:focus-visible { color: #831843; background: #fce7f3; }
+.room-picker-option.room-full:hover,
+.room-picker-option.room-full:focus-visible { color: #fff; background: #e11d48; }
 input[type="date"], input[type="text"] { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); }
 select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px solid rgba(15, 118, 110, 0.2); outline-offset: 2px; border-color: var(--brand); }
 .checklist-card { position: relative; z-index: 2; overflow: visible; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
