@@ -23,7 +23,8 @@
     const selectAllItems = document.querySelector('#selectAllItems');
     const assignmentActions = document.querySelector('#assignmentActions');
     const saveAssignments = document.querySelector('#saveAssignments');
-    const assignmentSaveToast = document.querySelector('#assignmentSaveToast');
+    const saveAssignmentsTop = document.querySelector('#saveAssignmentsTop');
+    const assignmentSaveToasts = document.querySelectorAll('.assignment-save-toast');
     const canEdit = config.canEdit !== false;
     const canAssign = config.canAssign === true;
 
@@ -447,6 +448,7 @@
         });
         selectAllItems.disabled = !active;
         assignmentActions.hidden = !active;
+        saveAssignmentsTop.hidden = !active;
         updateSelectAllState();
         const prompt = interval ? 'Escolha a empregada e a data dentro do intervalo' : 'Escolha ou crie um intervalo';
         setStatus(active ? 'Selecione os itens a atribuir' : (canAssign ? prompt : (canEdit ? 'Dados carregados' : 'Apenas consulta')), active ? '' : 'success');
@@ -527,8 +529,9 @@
         const instructions = Object.fromEntries(rows
             .filter((row) => selectedItems.includes(row.name))
             .map((row) => [row.name, row.textarea.value.trim()]));
-        if (assignmentSaveToast) assignmentSaveToast.hidden = true;
+        assignmentSaveToasts.forEach((toast) => { toast.hidden = true; });
         saveAssignments.disabled = true;
+        saveAssignmentsTop.disabled = true;
         setStatus('A guardar atribuição…');
         try {
             const response = await fetch('api.php', {
@@ -560,17 +563,18 @@
             applyRoomAssignmentStates();
             updateAssignmentMode();
             setStatus('Atribuição guardada', 'success');
-            if (assignmentSaveToast) {
+            if (assignmentSaveToasts.length > 0) {
                 window.clearTimeout(assignmentToastTimer);
-                assignmentSaveToast.hidden = false;
+                assignmentSaveToasts.forEach((toast) => { toast.hidden = false; });
                 assignmentToastTimer = window.setTimeout(() => {
-                    assignmentSaveToast.hidden = true;
+                    assignmentSaveToasts.forEach((toast) => { toast.hidden = true; });
                 }, 2400);
             }
         } catch (error) {
             setStatus(error.message, 'error');
         } finally {
             saveAssignments.disabled = false;
+            saveAssignmentsTop.disabled = false;
         }
     };
 
@@ -802,6 +806,7 @@
         saveDraft();
     });
     if (saveAssignments) saveAssignments.addEventListener('click', saveSelectedAssignments);
+    if (saveAssignmentsTop) saveAssignmentsTop.addEventListener('click', saveSelectedAssignments);
 
     window.addEventListener('beforeunload', () => {
         clearTimeout(saveTimer);
