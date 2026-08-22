@@ -35,6 +35,7 @@
     let isLoading = false;
     let assignments = {};
     let roomAssignmentCounts = {};
+    let assignmentSelectionDirty = false;
     const draftPrefix = 'room-check-assignment-draft:v1';
 
     roomSelect.classList.add('room-select-native');
@@ -349,6 +350,7 @@
             assignmentCheckbox.disabled = true;
             assignmentCheckbox.setAttribute('aria-label', `Atribuir ${item.name}`);
             assignmentCheckbox.addEventListener('change', () => {
+                assignmentSelectionDirty = true;
                 updateSelectAllState();
                 saveDraft();
                 updateAssignmentMode();
@@ -447,8 +449,9 @@
             autoGrow(row.textarea);
         });
         selectAllItems.disabled = !active;
-        assignmentActions.hidden = !active;
-        saveAssignmentsTop.hidden = !active;
+        const showSaveActions = active && assignmentSelectionDirty;
+        assignmentActions.hidden = !showSaveActions;
+        saveAssignmentsTop.hidden = !showSaveActions;
         updateSelectAllState();
         const prompt = interval ? 'Escolha a empregada e a data dentro do intervalo' : 'Escolha ou crie um intervalo';
         setStatus(active ? 'Selecione os itens a atribuir' : (canAssign ? prompt : (canEdit ? 'Dados carregados' : 'Apenas consulta')), active ? '' : 'success');
@@ -561,6 +564,7 @@
             roomAssignmentCounts[String(current.room)] = Object.values(assignments)
                 .filter((assignment) => Number(assignment.employeeId || 0) > 0).length;
             applyRoomAssignmentStates();
+            assignmentSelectionDirty = false;
             updateAssignmentMode();
             setStatus('Atribuição guardada', 'success');
             if (assignmentSaveToasts.length > 0) {
@@ -743,11 +747,13 @@
     };
 
     propertySelect.addEventListener('change', () => {
+        assignmentSelectionDirty = false;
         roomAssignmentCounts = {};
         renderRooms(1);
         loadChecklist();
     });
     roomSelect.addEventListener('change', () => {
+        assignmentSelectionDirty = false;
         applyRoomAssignmentStates();
         loadChecklist();
     });
@@ -781,6 +787,7 @@
         if (!roomPicker.contains(event.target)) closeRoomPicker();
     });
     if (intervalSelect) intervalSelect.addEventListener('change', async () => {
+        assignmentSelectionDirty = false;
         employeeSelect.value = '';
         assignments = {};
         roomAssignmentCounts = {};
@@ -798,12 +805,20 @@
     if (editIntervalSelect) editIntervalSelect.addEventListener('change', syncIntervalManager);
     if (editIntervalStart) editIntervalStart.addEventListener('change', applyIntervalDateLimits);
     if (editIntervalEnd) editIntervalEnd.addEventListener('change', applyIntervalDateLimits);
-    if (employeeSelect) employeeSelect.addEventListener('change', updateAssignmentMode);
-    if (assignmentDate) assignmentDate.addEventListener('change', updateAssignmentMode);
+    if (employeeSelect) employeeSelect.addEventListener('change', () => {
+        assignmentSelectionDirty = false;
+        updateAssignmentMode();
+    });
+    if (assignmentDate) assignmentDate.addEventListener('change', () => {
+        assignmentSelectionDirty = false;
+        updateAssignmentMode();
+    });
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
+        assignmentSelectionDirty = true;
         rows.forEach((row) => { if (!row.assignmentCheckbox.disabled) row.assignmentCheckbox.checked = selectAllItems.checked; });
         updateSelectAllState();
         saveDraft();
+        updateAssignmentMode();
     });
     if (saveAssignments) saveAssignments.addEventListener('click', saveSelectedAssignments);
     if (saveAssignmentsTop) saveAssignmentsTop.addEventListener('click', saveSelectedAssignments);
