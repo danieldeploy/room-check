@@ -1,14 +1,3 @@
-CREATE TABLE IF NOT EXISTS room_checklist_values (
-    property_name VARCHAR(80) NOT NULL,
-    room_number TINYINT UNSIGNED NOT NULL,
-    item_name VARCHAR(80) NOT NULL,
-    problem TEXT NOT NULL,
-    status ENUM('wrong', 'ok') NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (property_name, room_number, item_name),
-    INDEX idx_property_room (property_name, room_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(64) NOT NULL,
@@ -24,6 +13,52 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_username (username),
     UNIQUE KEY uq_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS item_lists (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(120) NOT NULL,
+    is_system TINYINT(1) NOT NULL DEFAULT 0,
+    created_by_user_id BIGINT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_item_lists_name (name),
+    CONSTRAINT fk_item_list_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS item_list_items (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    list_id BIGINT UNSIGNED NOT NULL,
+    name VARCHAR(80) NOT NULL,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_item_list_item_name (list_id, name),
+    INDEX idx_item_list_order (list_id, sort_order, id),
+    CONSTRAINT fk_item_list_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO item_lists (id, name, is_system) VALUES (1, 'Verificação dos quartos', 1);
+INSERT IGNORE INTO item_list_items (list_id, name, sort_order) VALUES
+    (1, 'Espelho', 10), (1, 'Lampadas', 20), (1, 'Armarios', 30),
+    (1, 'Cabeceiras', 40), (1, 'Ventoinhas', 50), (1, 'Cortinas', 60),
+    (1, 'Fichas', 70), (1, 'Camas', 80), (1, 'Luzes', 90),
+    (1, 'Portas', 100), (1, 'Fechaduras', 110), (1, 'Janelas', 120),
+    (1, 'Chaves', 130), (1, 'Placa de Saida', 140),
+    (1, 'Caixote de Lixo', 150), (1, 'Paredes', 160), (1, 'Hangers', 170);
+
+CREATE TABLE IF NOT EXISTS room_checklist_values (
+    property_name VARCHAR(80) NOT NULL,
+    room_number TINYINT UNSIGNED NOT NULL,
+    list_id BIGINT UNSIGNED NOT NULL,
+    item_name VARCHAR(80) NOT NULL,
+    problem TEXT NOT NULL,
+    status ENUM('wrong', 'ok') NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (list_id, property_name, room_number, item_name),
+    INDEX idx_property_room (property_name, room_number),
+    CONSTRAINT fk_checklist_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -72,6 +107,7 @@ CREATE TABLE IF NOT EXISTS room_verification_intervals (
 CREATE TABLE IF NOT EXISTS room_item_assignments (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     interval_id BIGINT UNSIGNED NOT NULL,
+    list_id BIGINT UNSIGNED NOT NULL,
     property_name VARCHAR(80) NOT NULL,
     room_number TINYINT UNSIGNED NOT NULL,
     item_name VARCHAR(80) NOT NULL,
@@ -83,12 +119,14 @@ CREATE TABLE IF NOT EXISTS room_item_assignments (
     completed_at DATETIME NULL,
     completed_by_user_id BIGINT UNSIGNED NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_interval_room_item (interval_id, property_name, room_number, item_name),
+    UNIQUE KEY uq_interval_list_room_item (interval_id, list_id, property_name, room_number, item_name),
     INDEX idx_assignment_interval (interval_id, due_date),
     INDEX idx_assignment_assignee (assigned_to_user_id, completed_at),
     INDEX idx_assignment_due_date (due_date, assigned_to_user_id, completed_at),
     INDEX idx_assignment_room (property_name, room_number),
+    INDEX idx_assignment_list (list_id),
     CONSTRAINT fk_assignment_interval FOREIGN KEY (interval_id) REFERENCES room_verification_intervals(id),
+    CONSTRAINT fk_assignment_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id),
     CONSTRAINT fk_assignment_assignee FOREIGN KEY (assigned_to_user_id) REFERENCES users(id),
     CONSTRAINT fk_assignment_assigner FOREIGN KEY (assigned_by_user_id) REFERENCES users(id),
     CONSTRAINT fk_assignment_completer FOREIGN KEY (completed_by_user_id) REFERENCES users(id)

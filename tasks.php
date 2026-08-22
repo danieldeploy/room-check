@@ -150,12 +150,14 @@ if ($canAssign) {
     }
 } else {
     $statement = $pdo->prepare(
-        'SELECT a.id, a.property_name, a.room_number, a.item_name, a.assigned_at, a.due_date,
+        'SELECT a.id, a.list_id, a.property_name, a.room_number, a.item_name, a.assigned_at, a.due_date,
                 a.verification_instructions,
-                v.problem, v.status
+                list_row.name AS list_name, v.problem, v.status
          FROM room_item_assignments a
+         INNER JOIN item_lists list_row ON list_row.id = a.list_id
          LEFT JOIN room_checklist_values v
-           ON v.property_name = a.property_name
+           ON v.list_id = a.list_id
+          AND v.property_name = a.property_name
           AND v.room_number = a.room_number
           AND v.item_name = a.item_name
          WHERE a.assigned_to_user_id = :user_id AND a.completed_at IS NULL
@@ -231,12 +233,13 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
                 <?php foreach ($tasks as $task): ?>
                     <article class="task-card">
                         <div class="task-location"><span><?= taskEscape((string) $task['property_name']) ?></span><strong>Quarto <?= (int) $task['room_number'] ?></strong></div>
+                        <p class="task-list-name"><?= taskEscape((string) $task['list_name']) ?></p>
                         <h2><?= taskEscape((string) $task['item_name']) ?></h2>
                         <p class="task-date"><strong>Data:</strong> <?= taskEscape((new DateTimeImmutable((string) $task['due_date']))->format('d/m/Y')) ?></p>
                         <?php if (trim((string) ($task['verification_instructions'] ?? '')) !== ''): ?><div class="instructions"><strong>Instruções da verificação</strong><p><?= nl2br(taskEscape((string) $task['verification_instructions'])) ?></p></div><?php endif; ?>
                         <?php if (trim((string) ($task['problem'] ?? '')) !== ''): ?><p class="problem"><?= nl2br(taskEscape((string) $task['problem'])) ?></p><?php endif; ?>
                         <div class="task-actions">
-                            <a href="rooms.php?property=<?= rawurlencode((string) $task['property_name']) ?>&amp;room=<?= (int) $task['room_number'] ?>">Abrir quarto</a>
+                            <a href="rooms.php?property=<?= rawurlencode((string) $task['property_name']) ?>&amp;room=<?= (int) $task['room_number'] ?>&amp;list_id=<?= (int) $task['list_id'] ?>">Abrir quarto</a>
                             <form method="post">
                                 <input type="hidden" name="csrf_token" value="<?= taskEscape(Csrf::token()) ?>">
                                 <input type="hidden" name="action" value="complete">

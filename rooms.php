@@ -19,6 +19,14 @@ try {
 }
 $canEdit = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_ROOM_CHECK_EDIT);
 $canAssign = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN);
+$lists = itemLists($pdo);
+$initialListId = (int) ($_GET['list_id'] ?? ($lists[0]['id'] ?? 0));
+if (!array_filter($lists, static fn(array $list): bool => $list['id'] === $initialListId)) {
+    $initialListId = (int) ($lists[0]['id'] ?? 0);
+}
+$initialList = array_values(array_filter(
+    $lists, static fn(array $list): bool => $list['id'] === $initialListId
+))[0] ?? ['items' => []];
 $employees = $canAssign ? $pdo->query(
     "SELECT id, display_name FROM users
      WHERE role = 'empregada_andares' AND is_active = 1
@@ -50,13 +58,15 @@ try {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
-    <title>Gestão dos Quartos — Active Lines Unip. Lda.</title>
+    <title>Gestão Quartos — Active Lines Unip. Lda.</title>
     <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
     <script>
         window.ROOM_CHECK = <?= json_encode([
             'properties' => PROPERTIES,
-            'items' => CHECKLIST_ITEMS,
+            'items' => $initialList['items'],
+            'lists' => $lists,
+            'initialListId' => $initialListId,
             'canEdit' => $canEdit,
             'canAssign' => $canAssign,
             'employees' => $employees,
@@ -82,7 +92,10 @@ try {
         <header class="hero compact-page-header">
             <div class="compact-page-heading">
                 <p class="eyebrow">Operações do Alojamento</p>
-                <h1 class="page-title">Gestão dos Quartos</h1>
+                <nav class="module-tabs" aria-label="Gestão de quartos e listas">
+                    <a class="active" href="rooms.php" aria-current="page">GESTÃO QUARTOS</a>
+                    <?php if ($canAssign): ?><a href="item-lists.php">LISTAS DE ITENS</a><?php endif; ?>
+                </nav>
             </div>
             <div id="saveStatus" class="save-status" role="status" aria-live="polite">A carregar…</div>
         </header>
@@ -146,7 +159,7 @@ try {
             <?php endif; ?>
         </section>
         <section class="checklist-card">
-            <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control"><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
+            <div class="table-heading"><label class="list-heading-select"><select id="listSelect" aria-label="Lista de itens"><?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $initialListId ? 'selected' : '' ?>><?= htmlspecialchars($list['name'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control"><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
             <div id="checklist" class="checklist"></div>
         </section>
         <noscript>Esta aplicação necessita de JavaScript para carregar os dados.</noscript>

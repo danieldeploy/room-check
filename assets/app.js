@@ -6,6 +6,7 @@
     const roomSelect = document.querySelector('#roomSelect');
     const selectorsPanel = roomSelect.closest('.selectors');
     const checklist = document.querySelector('#checklist');
+    const listSelect = document.querySelector('#listSelect');
     const saveStatus = document.querySelector('#saveStatus');
     const intervalSelect = document.querySelector('#intervalSelect');
     const intervalName = document.querySelector('#intervalName');
@@ -59,6 +60,7 @@
     const selection = () => ({
         property: propertySelect.value,
         room: Number(roomSelect.value),
+        listId: Number(listSelect.value),
     });
 
     const employeeName = (employeeId) => config.employees
@@ -398,6 +400,7 @@
                 property: current.property,
                 room: String(current.room),
                 interval_id: intervalSelect ? intervalSelect.value : '0',
+                list_id: String(current.listId),
             });
             const response = await fetch(`api.php?${params}`, {
                 headers: { Accept: 'application/json' },
@@ -435,11 +438,13 @@
 
     const queueAssignmentSave = (changes, affectedCheckboxes = []) => {
         const intervalId = Number(intervalSelect.value);
+        const listId = Number(listSelect.value);
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate.value;
-        if (!intervalId || !employeeId || !dueDate || changes.length === 0) return Promise.resolve(false);
+        if (!intervalId || !listId || !employeeId || !dueDate || changes.length === 0) return Promise.resolve(false);
         const current = selection();
         const contextMatches = () => Number(intervalSelect.value) === intervalId
+            && Number(listSelect.value) === listId
             && Number(employeeSelect.value) === employeeId
             && assignmentDate.value === dueDate
             && propertySelect.value === current.property
@@ -452,7 +457,7 @@
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
                 body: JSON.stringify({
                     action: 'set_assignments_atomic', csrfToken: config.csrfToken, ...current,
-                    intervalId, employeeId, dueDate, changes,
+                    intervalId, listId, employeeId, dueDate, changes,
                 }),
             });
             const result = await response.json();
@@ -655,6 +660,16 @@
         clearInstructionSaveTimers();
         roomAssignmentCounts = {};
         renderRooms(1);
+        loadChecklist();
+    });
+    listSelect.addEventListener('change', () => {
+        clearInstructionSaveTimers();
+        const list = config.lists.find((candidate) => Number(candidate.id) === Number(listSelect.value));
+        config.items = Array.isArray(list?.items) ? list.items : [];
+        assignments = {};
+        roomAssignmentCounts = {};
+        applyRoomAssignmentStates();
+        renderChecklist(config.items.map((name) => ({ name, problem: '', status: null })));
         loadChecklist();
     });
     roomSelect.addEventListener('change', () => {

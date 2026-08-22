@@ -70,6 +70,42 @@ function validateSelection(string $property, int $room): void
     }
 }
 
+function itemLists(PDO $pdo): array
+{
+    $rows = $pdo->query(
+        'SELECT list_row.id, list_row.name, list_row.is_system, item.name AS item_name
+         FROM item_lists list_row
+         LEFT JOIN item_list_items item ON item.list_id = list_row.id
+         ORDER BY list_row.is_system DESC, list_row.name, item.sort_order, item.id'
+    )->fetchAll();
+    $lists = [];
+    foreach ($rows as $row) {
+        $id = (int) $row['id'];
+        if (!isset($lists[$id])) {
+            $lists[$id] = [
+                'id' => $id,
+                'name' => (string) $row['name'],
+                'isSystem' => (bool) $row['is_system'],
+                'items' => [],
+            ];
+        }
+        if ($row['item_name'] !== null) {
+            $lists[$id]['items'][] = (string) $row['item_name'];
+        }
+    }
+    return array_values($lists);
+}
+
+function itemList(PDO $pdo, int $listId): array
+{
+    foreach (itemLists($pdo) as $list) {
+        if ((int) $list['id'] === $listId) {
+            return $list;
+        }
+    }
+    throw new InvalidArgumentException('Escolha uma lista de itens válida.');
+}
+
 function jsonResponse(array $payload, int $status = 200): never
 {
     http_response_code($status);

@@ -15,13 +15,16 @@ try {
         $pdo = database();
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_VIEW);
         validateSelection($property, $room);
+        $listId = (int) ($_GET['list_id'] ?? 0);
+        $selectedList = itemList($pdo, $listId);
+        $listItems = $selectedList['items'];
 
         $statement = $pdo->prepare(
             'SELECT item_name, problem, status
              FROM room_checklist_values
-             WHERE property_name = :property AND room_number = :room'
+             WHERE list_id = :list_id AND property_name = :property AND room_number = :room'
         );
-        $statement->execute(['property' => $property, 'room' => $room]);
+        $statement->execute(['list_id' => $listId, 'property' => $property, 'room' => $room]);
 
         $saved = [];
         foreach ($statement->fetchAll() as $row) {
@@ -37,7 +40,7 @@ try {
                 'problem' => $saved[$name]['problem'] ?? '',
                 'status' => $saved[$name]['status'] ?? null,
             ],
-            CHECKLIST_ITEMS
+            $listItems
         );
 
         $assignments = [];
@@ -46,11 +49,12 @@ try {
             $intervalId = (int) ($_GET['interval_id'] ?? 0);
             $assignmentStatement = $pdo->prepare(
                 'SELECT item_name, assigned_to_user_id, due_date, verification_instructions, completed_at FROM room_item_assignments
-                 WHERE interval_id = :interval_id AND property_name = :property
+                 WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
                    AND room_number = :room'
             );
             $assignmentStatement->execute([
                 'interval_id' => $intervalId,
+                'list_id' => $listId,
                 'property' => $property,
                 'room' => $room,
             ]);
@@ -64,10 +68,10 @@ try {
             }
             $roomCountStatement = $pdo->prepare(
                 'SELECT room_number, COUNT(*) AS assigned_items FROM room_item_assignments
-                 WHERE interval_id = :interval_id AND property_name = :property
+                 WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
                  GROUP BY room_number'
             );
-            $roomCountStatement->execute(['interval_id' => $intervalId, 'property' => $property]);
+            $roomCountStatement->execute(['interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property]);
             foreach ($roomCountStatement->fetchAll() as $roomCount) {
                 $roomAssignmentCounts[(string) $roomCount['room_number']] = (int) $roomCount['assigned_items'];
             }
@@ -210,11 +214,14 @@ try {
         $property = trim((string) ($payload['property'] ?? ''));
         $room = (int) ($payload['room'] ?? 0);
         $intervalId = (int) ($payload['intervalId'] ?? 0);
+        $listId = (int) ($payload['listId'] ?? 0);
         $employeeId = (int) ($payload['employeeId'] ?? 0);
         $dueDate = trim((string) ($payload['dueDate'] ?? ''));
         $changes = $payload['changes'] ?? null;
         validateSelection($property, $room);
-        if (!is_array($changes) || $changes === [] || count($changes) > count(CHECKLIST_ITEMS)) {
+        $selectedList = itemList($pdo, $listId);
+        $listItems = $selectedList['items'];
+        if (!is_array($changes) || $changes === [] || count($changes) > count($listItems)) {
             throw new InvalidArgumentException('Alterações de atribuição inválidas.');
         }
         $dateParts = array_map('intval', explode('-', $dueDate));
@@ -223,7 +230,7 @@ try {
             || !checkdate($dateParts[1], $dateParts[2], $dateParts[0])) {
             throw new InvalidArgumentException('Escolha uma data válida para a verificação.');
         }
-        $allowedItems = array_flip(CHECKLIST_ITEMS);
+        $allowedItems = array_flip($listItems);
         $normalizedChanges = [];
         foreach ($changes as $change) {
             if (!is_array($change)) {
@@ -264,27 +271,27 @@ try {
         }
         $assignmentLock = $pdo->prepare(
             'SELECT assigned_to_user_id, due_date, completed_at FROM room_item_assignments
-             WHERE interval_id = :interval_id AND property_name = :property
+             WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
                AND room_number = :room AND item_name = :item FOR UPDATE'
         );
         $upsert = $pdo->prepare(
             'INSERT INTO room_item_assignments
-                (interval_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
-             VALUES (:interval_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
+                (interval_id, list_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
+             VALUES (:interval_id, :list_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
              ON DUPLICATE KEY UPDATE assigned_to_user_id = VALUES(assigned_to_user_id),
                 assigned_by_user_id = VALUES(assigned_by_user_id), assigned_at = CURRENT_TIMESTAMP,
                 due_date = VALUES(due_date), verification_instructions = VALUES(verification_instructions),
                 completed_at = NULL, completed_by_user_id = NULL'
         );
         $remove = $pdo->prepare(
-            'DELETE FROM room_item_assignments WHERE interval_id = :interval_id
+            'DELETE FROM room_item_assignments WHERE interval_id = :interval_id AND list_id = :list_id
              AND property_name = :property AND room_number = :room AND item_name = :item
              AND assigned_to_user_id = :assignee AND due_date = :due_date AND completed_at IS NULL'
         );
         foreach ($normalizedChanges as $name => $change) {
             $identity = [
                 'interval_id' => $intervalId, 'property' => $property,
-                'room' => $room, 'item' => $name,
+                'list_id' => $listId, 'room' => $room, 'item' => $name,
             ];
             $assignmentLock->execute($identity);
             $existing = $assignmentLock->fetch();
@@ -306,7 +313,7 @@ try {
             }
         }
         Auth::audit($pdo, (int) $currentUser['id'], 'room_task_assignments_atomic_update', [
-            'interval_id' => $intervalId, 'property' => $property, 'room' => $room,
+            'interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property, 'room' => $room,
             'assignee' => $employeeId, 'due_date' => $dueDate,
             'changed_items' => array_keys($normalizedChanges),
         ]);
@@ -318,9 +325,9 @@ try {
         $intervalBounds = $boundsStatement->fetch();
         $roomCount = $pdo->prepare(
             'SELECT COUNT(*) FROM room_item_assignments WHERE interval_id = :interval_id
-             AND property_name = :property AND room_number = :room'
+             AND list_id = :list_id AND property_name = :property AND room_number = :room'
         );
-        $roomCount->execute(['interval_id' => $intervalId, 'property' => $property, 'room' => $room]);
+        $roomCount->execute(['interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property, 'room' => $room]);
         $roomAssignedItems = (int) $roomCount->fetchColumn();
         $pdo->commit();
         jsonResponse([
@@ -341,11 +348,14 @@ try {
         $property = trim((string) ($payload['property'] ?? ''));
         $room = (int) ($payload['room'] ?? 0);
         $intervalId = (int) ($payload['intervalId'] ?? 0);
+        $listId = (int) ($payload['listId'] ?? 0);
         $employeeId = (int) ($payload['employeeId'] ?? 0);
         $dueDate = trim((string) ($payload['dueDate'] ?? ''));
         $selectedItems = $payload['selectedItems'] ?? null;
         $instructions = $payload['instructions'] ?? [];
         validateSelection($property, $room);
+        $selectedList = itemList($pdo, $listId);
+        $listItems = $selectedList['items'];
         if (!is_array($selectedItems)) {
             throw new InvalidArgumentException('Seleção de itens inválida.');
         }
@@ -374,7 +384,7 @@ try {
         if (!$employeeCheck->fetchColumn()) {
             throw new InvalidArgumentException('Escolha uma Empregada de Andares ativa.');
         }
-        $selected = array_fill_keys(array_values(array_intersect(CHECKLIST_ITEMS, array_map('strval', $selectedItems))), true);
+        $selected = array_fill_keys(array_values(array_intersect($listItems, array_map('strval', $selectedItems))), true);
         $normalizedInstructions = [];
         foreach (array_keys($selected) as $name) {
             $instruction = trim((string) ($instructions[$name] ?? ''));
@@ -386,32 +396,32 @@ try {
         $pdo->beginTransaction();
         $assignmentLock = $pdo->prepare(
             'SELECT assigned_to_user_id, due_date, completed_at FROM room_item_assignments
-             WHERE interval_id = :interval_id AND property_name = :property
+             WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
                AND room_number = :room AND item_name = :item FOR UPDATE'
         );
         $upsert = $pdo->prepare(
             'INSERT INTO room_item_assignments
-                (interval_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
-             VALUES (:interval_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
+                (interval_id, list_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
+             VALUES (:interval_id, :list_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
              ON DUPLICATE KEY UPDATE assigned_to_user_id = VALUES(assigned_to_user_id),
                 assigned_by_user_id = VALUES(assigned_by_user_id), assigned_at = CURRENT_TIMESTAMP,
                 due_date = VALUES(due_date), verification_instructions = VALUES(verification_instructions),
                 completed_at = NULL, completed_by_user_id = NULL'
         );
         $remove = $pdo->prepare(
-            'DELETE FROM room_item_assignments WHERE interval_id = :interval_id
+            'DELETE FROM room_item_assignments WHERE interval_id = :interval_id AND list_id = :list_id
              AND property_name = :property AND room_number = :room
              AND item_name = :item AND assigned_to_user_id = :assignee AND due_date = :due_date
              AND completed_at IS NULL'
         );
-        foreach (CHECKLIST_ITEMS as $name) {
+        foreach ($listItems as $name) {
             $parameters = [
-                'interval_id' => $intervalId, 'property' => $property, 'room' => $room,
+                'interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property, 'room' => $room,
                 'item' => $name, 'assignee' => $employeeId,
             ];
             if (isset($selected[$name])) {
                 $assignmentLock->execute([
-                    'interval_id' => $intervalId, 'property' => $property,
+                    'interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property,
                     'room' => $room, 'item' => $name,
                 ]);
                 $existingAssignment = $assignmentLock->fetch();
@@ -432,7 +442,7 @@ try {
             }
         }
         Auth::audit($pdo, (int) $currentUser['id'], 'room_tasks_assigned', [
-            'interval_id' => $intervalId, 'property' => $property, 'room' => $room,
+            'interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property, 'room' => $room,
             'assignee' => $employeeId, 'due_date' => $dueDate,
             'assigned_items' => count($selected),
         ]);
@@ -458,14 +468,17 @@ try {
     Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_EDIT);
     $property = trim((string) ($payload['property'] ?? ''));
     $room = (int) ($payload['room'] ?? 0);
+    $listId = (int) ($payload['listId'] ?? 0);
     $items = $payload['items'] ?? null;
 
     validateSelection($property, $room);
+    $selectedList = itemList($pdo, $listId);
+    $listItems = $selectedList['items'];
     if (!is_array($items)) {
         throw new InvalidArgumentException('Dados do checklist inválidos.');
     }
 
-    $allowedItems = array_flip(CHECKLIST_ITEMS);
+    $allowedItems = array_flip($listItems);
     $normalized = [];
 
     foreach ($items as $item) {
@@ -498,20 +511,21 @@ try {
 
     $statement = $pdo->prepare(
         'INSERT INTO room_checklist_values
-            (property_name, room_number, item_name, problem, status)
+            (property_name, room_number, list_id, item_name, problem, status)
          VALUES
-            (:property, :room, :item, :problem, :status)
+            (:property, :room, :list_id, :item, :problem, :status)
          ON DUPLICATE KEY UPDATE
             problem = VALUES(problem),
             status = VALUES(status),
             updated_at = CURRENT_TIMESTAMP'
     );
 
-    foreach (CHECKLIST_ITEMS as $name) {
+    foreach ($listItems as $name) {
         $value = $normalized[$name] ?? ['problem' => '', 'status' => null];
         $statement->execute([
             'property' => $property,
             'room' => $room,
+            'list_id' => $listId,
             'item' => $name,
             'problem' => $value['problem'],
             'status' => $value['status'],

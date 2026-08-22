@@ -23,6 +23,10 @@ button, select, textarea, input { font: inherit; }
 .app-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 64px; }
 .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
 .eyebrow { margin: 0 0 6px; color: var(--brand); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
+.module-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 10px; margin-left: 10px; border-left: 1px solid #a9b8bc; }
+.module-tabs a { padding: 7px 11px; border-radius: 9px; color: #6b7d82; font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-decoration: none; }
+.module-tabs a:hover { background: rgba(255,255,255,.8); }
+.module-tabs a.active { color: var(--brand-dark); background: #dff4f1; }
 h1 { margin: 0; color: #102a43; font-family: inherit; font-size: clamp(2rem, 5vw, 3.5rem); font-weight: bold; line-height: 1.02; letter-spacing: -0.045em; }
 .subtitle { margin: 10px 0 0; color: var(--muted); }
 .save-status { max-width: 300px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255, 255, 255, 0.72); font-size: 0.85rem; text-align: center; }
@@ -74,6 +78,9 @@ select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px s
 .selectors.has-assignment ~ .checklist-card .check-row { grid-template-columns: minmax(160px, 1fr) minmax(280px, 2.2fr) minmax(180px, 0.85fr) 48px; }
 .table-heading { padding: 14px 20px; border-radius: 19px 19px 0 0; color: #e8fffb; background: linear-gradient(135deg, var(--brand-dark), var(--brand)); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 .table-heading strong { color: inherit; }
+.list-heading-select { display: block; }
+.list-heading-select select { min-height: 36px; padding: 0 34px 0 10px; border-color: rgba(232,255,251,.45); border-radius: 9px; color: #fff; background: rgba(255,255,255,.12); font-size: .75rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.list-heading-select select option { color: var(--ink); background: #fff; text-transform: none; }
 .assignment-heading-control { position: relative; z-index: 3; grid-column: 3 / 5; display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 0; }
 .assignment-heading-control .select-all { grid-column: 2; justify-self: center; }
 .check-row { padding: 14px 20px; border-top: 1px solid var(--line); }
@@ -124,6 +131,7 @@ noscript { display: block; margin-top: 18px; color: var(--wrong); }
     .table-heading { display: none; }
     .selectors.has-assignment ~ .checklist-card .table-heading { display: grid; grid-template-columns: 1fr; }
     .selectors.has-assignment ~ .checklist-card .table-heading > span { display: none; }
+    .list-heading-select { display: block !important; }
     .selectors.has-assignment ~ .checklist-card .assignment-heading-control { grid-column: 1; }
     .check-row, .selectors.has-assignment ~ .checklist-card .check-row { grid-template-columns: 1fr; gap: 10px; padding: 17px 15px; }
     .assignment-check { justify-content: start; }

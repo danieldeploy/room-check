@@ -40,7 +40,7 @@ $modules = [
     [
         'permission' => Auth::PERMISSION_ROOM_CHECK_VIEW,
         'eyebrow' => 'Operação diária',
-        'title' => 'Gestão dos Quartos',
+        'title' => 'Gestão Quartos',
         'description' => 'Verificação dos quartos do City Center Guest House e Welcome Guest House.',
         'href' => 'rooms.php',
         'status' => 'Disponível',

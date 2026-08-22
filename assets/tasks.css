@@ -26,6 +26,7 @@ button { border: 0; border-radius: 10px; background: #0f766e; padding: 12px 18px
 .task-card { padding: 20px; border: 1px solid #d9e2ec; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(16,42,67,.07); }
 .task-location { display: flex; justify-content: space-between; gap: 12px; color: #486581; font-size: .83rem; }
 .task-location strong { color: #0f766e; }
+.task-list-name { margin: 10px 0 0; color: #0f766e; font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .task-card h2 { margin: 22px 0 10px; font-size: 1.4rem; }
 .task-date { margin: -2px 0 12px; color: #526d82; }
 .instructions { padding: 13px; border-radius: 10px; background: #ecfdf5; color: #14532d; line-height: 1.45; }
