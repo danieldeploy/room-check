@@ -182,7 +182,7 @@ header('Cache-Control: no-store');
         <?php SessionBar::render($currentUser, '..', $canManageUsers, $canManagePermissions); ?>
         <header class="page-header">
             <p class="eyebrow">Automação de códigos</p>
-            <h1>ZKAccess Control</h1>
+            <h1 class="page-title">ZKAccess Control</h1>
             <p>Configuração operacional da integração Cloudbeds → ZKAccess baseada na versão existente V5.1 Direct POST.</p>
         </header>
 
