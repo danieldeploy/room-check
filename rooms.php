@@ -59,6 +59,7 @@ try {
             'items' => CHECKLIST_ITEMS,
             'canEdit' => $canEdit,
             'canAssign' => $canAssign,
+            'currentUserId' => (int) $currentUser['id'],
             'employees' => $employees,
             'intervals' => array_map(static fn(array $interval): array => [
                 'id' => (int) $interval['id'],
