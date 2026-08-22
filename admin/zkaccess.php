@@ -180,10 +180,11 @@ header('Cache-Control: no-store');
 <body>
     <main class="settings-shell">
         <?php SessionBar::render($currentUser, '..', $canManageUsers, $canManagePermissions); ?>
-        <header class="page-header">
-            <p class="eyebrow">Automação de códigos</p>
-            <h1 class="page-title">ZKAccess Control</h1>
-            <p>Configuração operacional da integração Cloudbeds → ZKAccess baseada na versão existente V5.1 Direct POST.</p>
+        <header class="page-header compact-page-header">
+            <div class="compact-page-heading">
+                <p class="eyebrow">Automação de códigos</p>
+                <h1 class="page-title">ZKAccess Control</h1>
+            </div>
         </header>
 
         <?php if (!$settingsStorageAvailable): ?><div class="alert">Importe <code>migrations/004_portal_permissions.sql</code> para ativar esta configuração.</div><?php endif; ?>
