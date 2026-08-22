@@ -199,12 +199,36 @@
         return config.intervals.find((candidate) => candidate.id === intervalId) || null;
     };
 
+    const applyIntervalDateLimits = () => {
+        if (!editIntervalStart || !editIntervalEnd) return;
+        const interval = selectedEditInterval();
+        editIntervalStart.removeAttribute('min');
+        editIntervalStart.removeAttribute('max');
+        editIntervalEnd.removeAttribute('min');
+        editIntervalEnd.removeAttribute('max');
+        editIntervalStart.title = '';
+        editIntervalEnd.title = '';
+        if (!interval) return;
+
+        const latestStart = [interval.firstDueDate, editIntervalEnd.value].filter(Boolean).sort()[0] || '';
+        const earliestEnd = [interval.lastDueDate, editIntervalStart.value].filter(Boolean).sort().at(-1) || '';
+        if (latestStart) editIntervalStart.max = latestStart;
+        if (earliestEnd) editIntervalEnd.min = earliestEnd;
+        editIntervalStart.title = interval.firstDueDate
+            ? `Não pode ser posterior à primeira atribuição (${formatDate(interval.firstDueDate)})`
+            : '';
+        editIntervalEnd.title = interval.lastDueDate
+            ? `Não pode ser anterior à última atribuição (${formatDate(interval.lastDueDate)})`
+            : '';
+    };
+
     const syncIntervalManager = () => {
         if (!intervalManager) return;
         const interval = selectedEditInterval();
         editIntervalName.value = interval?.name || '';
         editIntervalStart.value = interval?.startDate || '';
         editIntervalEnd.value = interval?.endDate || '';
+        applyIntervalDateLimits();
         [editIntervalName, editIntervalStart, editIntervalEnd, saveInterval, deleteInterval]
             .forEach((control) => { control.disabled = !interval; });
     };
@@ -471,6 +495,12 @@
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar a atribuição.');
+            const interval = config.intervals.find((candidate) => candidate.id === intervalId);
+            if (interval && result.intervalBounds) {
+                interval.firstDueDate = result.intervalBounds.firstDueDate;
+                interval.lastDueDate = result.intervalBounds.lastDueDate;
+                if (selectedEditInterval()?.id === intervalId) applyIntervalDateLimits();
+            }
             Object.keys(assignments).forEach((name) => {
                 const assignment = assignments[name] || {};
                 if (Number(assignment.employeeId) === employeeId
@@ -680,6 +710,8 @@
     if (saveInterval) saveInterval.addEventListener('click', updateVerificationInterval);
     if (deleteInterval) deleteInterval.addEventListener('click', deleteVerificationInterval);
     if (editIntervalSelect) editIntervalSelect.addEventListener('change', syncIntervalManager);
+    if (editIntervalStart) editIntervalStart.addEventListener('change', applyIntervalDateLimits);
+    if (editIntervalEnd) editIntervalEnd.addEventListener('change', applyIntervalDateLimits);
     if (employeeSelect) employeeSelect.addEventListener('change', updateAssignmentMode);
     if (assignmentDate) assignmentDate.addEventListener('change', updateAssignmentMode);
     if (selectAllItems) selectAllItems.addEventListener('change', () => {
