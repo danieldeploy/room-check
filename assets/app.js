@@ -302,47 +302,46 @@
             if (dueDate < interval.startDate || dueDate > interval.endDate) assignmentDate.value = interval.startDate;
         }
         const selectedDate = assignmentDate ? assignmentDate.value : '';
-        const active = Boolean(interval) && employeeId > 0 && selectedDate !== '';
+        const viewingAssignments = Boolean(interval);
+        const active = viewingAssignments && employeeId > 0 && selectedDate !== '';
         if (active) clearTimeout(saveTimer);
         rows.forEach((row) => {
-            row.element.classList.toggle('assignment-mode', active);
+            row.element.classList.toggle('assignment-mode', viewingAssignments);
             const assignment = assignments[row.name] || {};
             const hasAssignment = Number(assignment.employeeId || 0) > 0;
-            const sameAssignment = hasAssignment
+            const sameAssignment = active && hasAssignment
                 && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate === selectedDate;
-            const sameEmployeeOtherDate = hasAssignment
+            const sameEmployeeOtherDate = active && hasAssignment
                 && Number(assignment.employeeId) === employeeId
                 && assignment.dueDate !== selectedDate
                 && assignment.completed !== true;
-            const locked = hasAssignment && (!sameAssignment || assignment.completed === true);
+            const locked = hasAssignment && (!active || !sameAssignment || assignment.completed === true);
             row.assignmentCheckbox.disabled = !active || locked;
-            row.assignmentCheckbox.checked = active && hasAssignment;
+            row.assignmentCheckbox.checked = viewingAssignments && hasAssignment;
             const checkboxMarker = row.assignmentCheckbox.nextElementSibling;
-            checkboxMarker.classList.toggle('saved-assignment', active && hasAssignment);
-            checkboxMarker.classList.toggle('locked-assignment', active && locked);
+            checkboxMarker.classList.toggle('saved-assignment', viewingAssignments && hasAssignment);
+            checkboxMarker.classList.toggle('locked-assignment', viewingAssignments && locked);
             checkboxMarker.classList.toggle(
                 'same-employee-other-date', active && locked && sameEmployeeOtherDate
             );
-            row.element.classList.toggle('assignment-locked', active && locked);
-            if (active && hasAssignment) {
+            row.element.classList.toggle('assignment-locked', viewingAssignments && locked);
+            if (viewingAssignments && hasAssignment) {
                 row.textarea.value = String(assignment.instructions || '');
-            } else if (active) {
+            } else if (viewingAssignments) {
                 row.textarea.value = '';
             } else {
                 row.textarea.value = row.textarea.dataset.problem || '';
             }
-            row.textarea.placeholder = active ? 'Descreva a verificação…' : 'Descreva o problema…';
-            row.textarea.setAttribute('aria-label', `${active ? 'Instruções da verificação' : 'Problema identificado'}: ${row.name}`);
-            if (active && locked) {
+            row.textarea.placeholder = viewingAssignments ? 'Descreva a verificação…' : 'Descreva o problema…';
+            row.textarea.setAttribute('aria-label', `${viewingAssignments ? 'Instruções da verificação' : 'Problema identificado'}: ${row.name}`);
+            if (viewingAssignments && hasAssignment) {
                 const state = assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`;
-                row.assignmentCheckbox.parentElement.title = `Este item ${state}.`;
+                if (locked) row.assignmentCheckbox.parentElement.title = `Este item ${state}.`;
+                else row.assignmentCheckbox.parentElement.removeAttribute('title');
                 row.assignmentHint.textContent = assignment.completed
                     ? `Verificado em ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`
                     : `Atribuído para ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`;
-            } else if (active && sameAssignment) {
-                row.assignmentCheckbox.parentElement.removeAttribute('title');
-                row.assignmentHint.textContent = `Atribuído para ${formatDate(selectedDate)} — ${employeeName(employeeId)}`;
             } else {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
                 row.assignmentHint.textContent = '';
@@ -353,9 +352,9 @@
             row.assignmentHint.classList.toggle(
                 'same-employee-other-date', active && locked && sameEmployeeOtherDate
             );
-            row.assignmentHint.hidden = !active || (!locked && !sameAssignment);
-            row.textarea.readOnly = active ? locked : !canEdit;
-            row.status.querySelectorAll('button').forEach((button) => { button.disabled = active || !canEdit; });
+            row.assignmentHint.hidden = !viewingAssignments || !hasAssignment;
+            row.textarea.readOnly = viewingAssignments ? (!active || locked) : !canEdit;
+            row.status.querySelectorAll('button').forEach((button) => { button.disabled = viewingAssignments || !canEdit; });
             autoGrow(row.textarea);
         });
         const hasLockedItems = active && rows.some((row) => row.assignmentCheckbox.disabled);
@@ -364,7 +363,7 @@
             ? 'Existem itens atribuídos a outra empregada ou data. Altere apenas as checkboxes disponíveis.'
             : '';
         updateSelectAllState();
-        const prompt = interval ? 'Escolha a empregada e a data dentro do intervalo' : 'Escolha ou crie um intervalo';
+        const prompt = interval ? 'Situação das atribuições — escolha a empregada e a data para alterar' : 'Escolha ou crie um intervalo';
         setStatus(active ? 'As alterações são guardadas automaticamente' : (canAssign ? prompt : (canEdit ? 'Dados carregados' : 'Apenas consulta')), active ? 'success' : 'success');
     };
 
@@ -414,7 +413,6 @@
             roomAssignmentCounts = result.roomAssignmentCounts || {};
             applyRoomAssignmentStates();
             renderChecklist(result.items);
-            if (employeeSelect) employeeSelect.value = '';
             updateAssignmentMode();
             setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');
         } catch (error) {
