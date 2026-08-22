@@ -145,11 +145,8 @@ try {
                 <label class="room-field"><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
             <?php endif; ?>
         </section>
-        <?php if ($canAssign): ?>
-            <div class="assignment-legend" aria-label="Legenda das atribuições"><span><i class="selected"></i>Item selecionado</span></div>
-        <?php endif; ?>
         <section class="checklist-card">
-            <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control"><span class="assignment-save-toast top" role="status" aria-live="polite" hidden>Guardado com sucesso</span><button id="saveAssignmentsTop" class="top-save-assignment" type="button" hidden>Guardar atribuição</button><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
+            <div class="table-heading"><span>Item a verificar</span><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control"><div class="top-save-wrap"><span class="assignment-save-toast top" role="status" aria-live="polite" hidden>Guardado com sucesso</span><button id="saveAssignmentsTop" class="top-save-assignment" type="button" hidden>Guardar atribuição</button></div><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
             <div id="checklist" class="checklist"></div>
             <?php if ($canAssign): ?><div id="assignmentActions" class="assignment-actions" hidden><span id="assignmentSaveToast" class="assignment-save-toast" role="status" aria-live="polite" hidden>Guardado com sucesso</span><button id="saveAssignments" type="button">Guardar atribuição</button></div><?php endif; ?>
         </section>
