@@ -22,7 +22,7 @@ CREATE TABLE item_list_items (
     CONSTRAINT fk_item_list_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO item_lists (name, is_system) VALUES ('Verificação dos quartos', 1);
+INSERT INTO item_lists (name, is_system) VALUES ('Check Geral', 1);
 SET @room_check_list_id = LAST_INSERT_ID();
 
 INSERT INTO item_list_items (list_id, name, sort_order) VALUES

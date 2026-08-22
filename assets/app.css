@@ -75,14 +75,15 @@ select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px s
 .checklist-card { position: relative; z-index: 2; overflow: visible; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
 .table-heading, .check-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(280px, 2.2fr) minmax(180px, 0.85fr); gap: 16px; align-items: center; }
 .selectors.has-assignment ~ .checklist-card .table-heading,
-.selectors.has-assignment ~ .checklist-card .check-row { grid-template-columns: minmax(160px, 1fr) minmax(280px, 2.2fr) minmax(180px, 0.85fr) 48px; }
+.selectors.has-assignment ~ .checklist-card .check-row { grid-template-columns: minmax(160px, 1fr) minmax(280px, 3.05fr) 48px; }
 .table-heading { padding: 14px 20px; border-radius: 19px 19px 0 0; color: #e8fffb; background: linear-gradient(135deg, var(--brand-dark), var(--brand)); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 .table-heading strong { color: inherit; }
+.table-heading > span:nth-child(2) { text-align: center; }
 .list-heading-select { display: block; }
 .list-heading-select select { min-height: 36px; padding: 0 34px 0 10px; border-color: rgba(232,255,251,.45); border-radius: 9px; color: #fff; background: rgba(255,255,255,.12); font-size: .75rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .list-heading-select select option { color: var(--ink); background: #fff; text-transform: none; }
-.assignment-heading-control { position: relative; z-index: 3; grid-column: 3 / 5; display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 0; }
-.assignment-heading-control .select-all { grid-column: 2; justify-self: center; }
+.assignment-heading-control { position: relative; z-index: 3; grid-column: 3; display: grid; grid-template-columns: 48px; align-items: center; gap: 0; }
+.assignment-heading-control .select-all { grid-column: 1; justify-self: center; }
 .check-row { padding: 14px 20px; border-top: 1px solid var(--line); }
 .check-row:first-child { border-top: 0; }
 .check-row h2 { margin: 0; font-size: 1rem; font-weight: 750; }
@@ -95,6 +96,7 @@ textarea::placeholder { color: #9aabaa; }
 .assignment-hint[hidden] { display: none; }
 .check-row.assignment-mode .status-options,
 .checklist.assignment-view-mode .status-options { visibility: hidden; }
+.selectors.has-assignment ~ .checklist-card .status-options { display: none; }
 .assignment-check { display: grid; place-items: center; cursor: pointer; }
 .assignment-check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .assignment-check span { width: 28px; height: 28px; border: 2px solid #78908e; border-radius: 5px; background: #fff; }

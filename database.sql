@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS item_list_items (
     CONSTRAINT fk_item_list_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO item_lists (id, name, is_system) VALUES (1, 'Verificação dos quartos', 1);
+INSERT IGNORE INTO item_lists (id, name, is_system) VALUES (1, 'Check Geral', 1);
 INSERT IGNORE INTO item_list_items (list_id, name, sort_order) VALUES
     (1, 'Espelho', 10), (1, 'Lampadas', 20), (1, 'Armarios', 30),
     (1, 'Cabeceiras', 40), (1, 'Ventoinhas', 50), (1, 'Cortinas', 60),
