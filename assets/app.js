@@ -60,6 +60,9 @@
         room: Number(roomSelect.value),
     });
 
+    const employeeName = (employeeId) => config.employees
+        .find((employee) => Number(employee.id) === Number(employeeId))?.display_name || 'Funcionária não identificada';
+
     const draftKey = () => {
         if (!canAssign) return null;
         const intervalId = Number(intervalSelect?.value || 0);
@@ -99,6 +102,7 @@
                 const key = window.localStorage.key(index);
                 if (!key || key === currentKey || !key.startsWith(keyPrefix)) continue;
                 const parts = key.split('|');
+                const draftEmployeeId = Number(parts[parts.length - 2] || 0);
                 const dueDate = parts[parts.length - 1] || '';
                 const value = JSON.parse(window.localStorage.getItem(key) || '[]');
                 const items = Array.isArray(value) ? value : value.items;
@@ -107,7 +111,11 @@
                 if (!Array.isArray(items)) continue;
                 items.forEach((item) => {
                     if (typeof item === 'string' && !reserved.has(item)) {
-                        reserved.set(item, { dueDate, instructions: String(instructions[item] || '') });
+                        reserved.set(item, {
+                            dueDate,
+                            employeeId: draftEmployeeId,
+                            instructions: String(instructions[item] || ''),
+                        });
                     }
                 });
             }
@@ -411,6 +419,7 @@
             checkboxMarker.classList.toggle(
                 'draft-assignment', active && !hasAssignment && (lockedByDraft || selectedInCurrentDraft)
             );
+            checkboxMarker.classList.toggle('locked-assignment', active && locked);
             row.element.classList.toggle('assignment-locked', active && locked);
             if (active && hasAssignment) {
                 row.textarea.value = String(assignment.instructions || '');
@@ -429,26 +438,33 @@
                     : (assignment.completed ? 'já foi concluído' : `já está atribuído para ${formatDate(assignment.dueDate)}`);
                 row.assignmentCheckbox.parentElement.title = `Este item ${state}.`;
                 row.assignmentHint.textContent = lockedByDraft
-                    ? `Selecionado para ${formatDate(draftDate)} (rascunho)`
+                    ? `Selecionado para ${formatDate(draftDate)} — ${employeeName(otherDraft.employeeId)} (rascunho)`
                     : (assignment.completed
-                        ? `Verificado em ${formatDate(assignment.dueDate)}`
-                        : `Atribuído para ${formatDate(assignment.dueDate)}`);
+                        ? `Verificado em ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`
+                        : `Atribuído para ${formatDate(assignment.dueDate)} — ${employeeName(assignment.employeeId)}`);
             } else if (active && selectedInCurrentDraft) {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
-                row.assignmentHint.textContent = `Selecionado para ${formatDate(selectedDate)} (rascunho)`;
+                row.assignmentHint.textContent = `Selecionado para ${formatDate(selectedDate)} — ${employeeName(employeeId)} (rascunho)`;
             } else if (active && sameAssignment) {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
-                row.assignmentHint.textContent = `Atribuído para ${formatDate(selectedDate)}`;
+                row.assignmentHint.textContent = `Atribuído para ${formatDate(selectedDate)} — ${employeeName(employeeId)}`;
             } else {
                 row.assignmentCheckbox.parentElement.removeAttribute('title');
                 row.assignmentHint.textContent = '';
             }
+            row.assignmentHint.classList.toggle(
+                'editable-assignment', active && !locked && (selectedInCurrentDraft || sameAssignment)
+            );
             row.assignmentHint.hidden = !active || (!locked && !selectedInCurrentDraft && !sameAssignment);
             row.textarea.readOnly = active ? locked : !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = active || !canEdit; });
             autoGrow(row.textarea);
         });
-        selectAllItems.disabled = !active;
+        const hasLockedItems = active && rows.some((row) => row.assignmentCheckbox.disabled);
+        selectAllItems.disabled = !active || hasLockedItems;
+        selectAllItems.parentElement.title = hasLockedItems
+            ? 'Existem itens atribuídos a outra empregada ou data. Altere apenas as checkboxes disponíveis.'
+            : '';
         const showSaveActions = active && assignmentSelectionDirty;
         assignmentActions.hidden = !showSaveActions;
         saveAssignmentsTop.hidden = !showSaveActions;
