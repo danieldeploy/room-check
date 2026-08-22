@@ -90,7 +90,7 @@ header('Cache-Control: no-store');
         <header class="panel-header">
             <div>
                 <p class="eyebrow">Painel administrativo</p>
-                <h1>Controlo My2N</h1>
+                <h1 class="page-title">Controlo My2N</h1>
                 <p>Campainhas, apartamentos e telemóveis do único Site My2N.</p>
             </div>
             <span id="modeBadge" class="mode-badge">APENAS CONSULTA</span>
