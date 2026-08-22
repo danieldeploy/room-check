@@ -331,7 +331,10 @@
             );
             row.element.classList.toggle('assignment-locked', viewingAssignments && locked);
             if (viewingAssignments && hasAssignment) {
-                row.textarea.value = String(assignment.instructions || '');
+                row.textarea.value = String(assignment.instructions || '').trim()
+                    || row.textarea.dataset.problem
+                    || row.textarea.dataset.defaultInstructions
+                    || '';
             } else if (viewingAssignments) {
                 row.textarea.value = row.textarea.dataset.problem
                     || row.textarea.dataset.defaultInstructions
