@@ -59,7 +59,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Gestão Quartos — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-assignment-controls-1">
+    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-assignment-controls-2">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
     <script>
         window.ROOM_CHECK = <?= json_encode([
