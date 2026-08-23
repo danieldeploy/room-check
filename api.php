@@ -303,6 +303,20 @@ try {
             throw new InvalidArgumentException('Escolha uma data válida para a verificação.');
         }
         $allowedItems = array_flip($listItems);
+        $existingInstructionsStatement = $pdo->prepare(
+            'SELECT item_name, verification_instructions, verification_instructions_en
+             FROM room_item_assignments
+             WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
+               AND room_number = :room'
+        );
+        $existingInstructionsStatement->execute([
+            'interval_id' => $intervalId, 'list_id' => $listId,
+            'property' => $property, 'room' => $room,
+        ]);
+        $existingInstructions = [];
+        foreach ($existingInstructionsStatement->fetchAll() as $existingInstruction) {
+            $existingInstructions[(string) $existingInstruction['item_name']] = $existingInstruction;
+        }
         $normalizedChanges = [];
         foreach ($changes as $change) {
             if (!is_array($change)) {
@@ -316,7 +330,13 @@ try {
             if (mb_strlen($instructions) > 5000) {
                 throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
             }
-            $instructionVersions = $contentTranslator->versions($instructions, Translator::locale());
+            $existingInstruction = $existingInstructions[$name] ?? [];
+            $instructionVersions = $contentTranslator->versions(
+                $instructions,
+                Translator::locale(),
+                (string) ($existingInstruction['verification_instructions'] ?? ''),
+                (string) ($existingInstruction['verification_instructions_en'] ?? '')
+            );
             $normalizedChanges[$name] = [
                 'selected' => filter_var($change['selected'] ?? false, FILTER_VALIDATE_BOOL),
                 'instructions' => $instructionVersions['pt'],
@@ -461,13 +481,33 @@ try {
             throw new InvalidArgumentException('Escolha uma Empregada de Andares ativa.');
         }
         $selected = array_fill_keys(array_values(array_intersect($listItems, array_map('strval', $selectedItems))), true);
+        $existingInstructionsStatement = $pdo->prepare(
+            'SELECT item_name, verification_instructions, verification_instructions_en
+             FROM room_item_assignments
+             WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
+               AND room_number = :room'
+        );
+        $existingInstructionsStatement->execute([
+            'interval_id' => $intervalId, 'list_id' => $listId,
+            'property' => $property, 'room' => $room,
+        ]);
+        $existingInstructions = [];
+        foreach ($existingInstructionsStatement->fetchAll() as $existingInstruction) {
+            $existingInstructions[(string) $existingInstruction['item_name']] = $existingInstruction;
+        }
         $normalizedInstructions = [];
         foreach (array_keys($selected) as $name) {
             $instruction = trim((string) ($instructions[$name] ?? ''));
             if (mb_strlen($instruction) > 5000) {
                 throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
             }
-            $normalizedInstructions[$name] = $contentTranslator->versions($instruction, Translator::locale());
+            $existingInstruction = $existingInstructions[$name] ?? [];
+            $normalizedInstructions[$name] = $contentTranslator->versions(
+                $instruction,
+                Translator::locale(),
+                (string) ($existingInstruction['verification_instructions'] ?? ''),
+                (string) ($existingInstruction['verification_instructions_en'] ?? '')
+            );
         }
         $pdo->beginTransaction();
         $assignmentLock = $pdo->prepare(
@@ -557,6 +597,15 @@ try {
     }
 
     $allowedItems = array_flip($listItems);
+    $existingProblemsStatement = $pdo->prepare(
+        'SELECT item_name, problem, problem_en FROM room_checklist_values
+         WHERE property_name = :property AND room_number = :room AND list_id = :list_id'
+    );
+    $existingProblemsStatement->execute(['property' => $property, 'room' => $room, 'list_id' => $listId]);
+    $existingProblems = [];
+    foreach ($existingProblemsStatement->fetchAll() as $existingProblem) {
+        $existingProblems[(string) $existingProblem['item_name']] = $existingProblem;
+    }
     $normalized = [];
 
     foreach ($items as $item) {
@@ -582,7 +631,13 @@ try {
             throw new InvalidArgumentException("Estado inválido em {$name}.");
         }
 
-        $problemVersions = $contentTranslator->versions($problem, Translator::locale());
+        $existingProblem = $existingProblems[$name] ?? [];
+        $problemVersions = $contentTranslator->versions(
+            $problem,
+            Translator::locale(),
+            (string) ($existingProblem['problem'] ?? ''),
+            (string) ($existingProblem['problem_en'] ?? '')
+        );
         $normalized[$name] = [
             'problem' => $problemVersions['pt'],
             'problem_en' => $problemVersions['en'],
