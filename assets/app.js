@@ -6,6 +6,8 @@
     const roomSelect = document.querySelector('#roomSelect');
     const selectorsPanel = roomSelect.closest('.selectors');
     const checklist = document.querySelector('#checklist');
+    const checklistCard = checklist.closest('.checklist-card');
+    const assignmentHeadingControl = document.querySelector('.assignment-heading-control');
     const listSelect = document.querySelector('#listSelect');
     const saveStatus = document.querySelector('#saveStatus');
     const intervalSelect = document.querySelector('#intervalSelect');
@@ -259,10 +261,11 @@
 
         status.append(...buttons);
         let assignmentCheckbox = null;
+        let assignmentLabel = null;
         if (canAssign) {
-            itemHeading.classList.add('has-assignment-check');
-            const assignmentLabel = document.createElement('label');
+            assignmentLabel = document.createElement('label');
             assignmentLabel.className = 'assignment-check';
+            assignmentLabel.hidden = true;
             assignmentCheckbox = document.createElement('input');
             assignmentCheckbox.type = 'checkbox';
             assignmentCheckbox.disabled = true;
@@ -289,7 +292,7 @@
             row.append(itemHeading, problemField, status);
         }
 
-        return { element: row, name: item.name, textarea, assignmentHint, status, assignmentCheckbox };
+        return { element: row, name: item.name, textarea, assignmentHint, status, assignmentCheckbox, assignmentLabel, itemHeading };
     };
 
     function updateSelectAllState() {
@@ -316,6 +319,8 @@
         const viewingAssignments = Boolean(interval);
         checklist.classList.toggle('assignment-view-mode', viewingAssignments);
         const active = viewingAssignments && employeeId > 0 && selectedDate !== '';
+        checklistCard.classList.toggle('assignment-controls-visible', active);
+        if (assignmentHeadingControl) assignmentHeadingControl.hidden = !active;
         if (active) clearTimeout(saveTimer);
         rows.forEach((row) => {
             row.element.classList.toggle('assignment-mode', viewingAssignments);
@@ -329,6 +334,8 @@
                 && assignment.dueDate !== selectedDate
                 && assignment.completed !== true;
             const locked = hasAssignment && (!active || !sameAssignment || assignment.completed === true);
+            row.assignmentLabel.hidden = !active;
+            row.itemHeading.classList.toggle('has-assignment-check', active);
             row.assignmentCheckbox.disabled = !active || locked;
             row.assignmentCheckbox.checked = viewingAssignments && hasAssignment;
             const checkboxMarker = row.assignmentCheckbox.nextElementSibling;
