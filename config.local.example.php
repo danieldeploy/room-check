@@ -27,4 +27,11 @@ return [
         'company_id' => 0,
         'site_id' => 0,
     ],
+    'whatsapp' => [
+        'secrets_file' => '/home/CPANEL_USER/room-check-private/whatsapp-secrets.json',
+        'graph_version' => 'v23.0',
+        'template_name' => 'room_assignment_reminder',
+        'template_language' => 'pt_PT',
+        'default_country_code' => '351',
+    ],
 ];
