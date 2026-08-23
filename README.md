@@ -27,6 +27,22 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 `config.local.php` contém configuração local, está excluído do Git e não deve ser partilhado.
 
+### Tradução automática gratuita
+
+As instruções dinâmicas são traduzidas entre português e inglês quando são criadas ou alteradas. A aplicação usa por defeito a API pública MyMemory, sem chave e sem chamadas durante a simples navegação. As duas versões ficam guardadas nas colunas bilingues criadas pela migração `017_bilingual_content.sql`.
+
+Não é necessária configuração adicional. Opcionalmente, pode identificar os pedidos no `config.local.php`:
+
+```php
+'translation' => [
+    'enabled' => true,
+    'contact_email' => 'email@dominio.pt',
+    'timeout_seconds' => 12,
+],
+```
+
+Se o serviço estiver temporariamente indisponível, a gravação não é bloqueada: a versão original é guardada também como fallback na segunda língua. Uma alteração posterior volta a tentar a tradução.
+
 O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment. Para esta funcionalidade, siga `docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md`, incluindo o backup prévio e a ordem das migrações.
 
 ## Login e portal
