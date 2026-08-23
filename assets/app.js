@@ -11,6 +11,7 @@
     const listSelect = document.querySelector('#listSelect');
     const saveStatus = document.querySelector('#saveStatus');
     const intervalSelect = document.querySelector('#intervalSelect');
+    const intervalDates = document.querySelector('#intervalDates');
     const intervalName = document.querySelector('#intervalName');
     const intervalStart = document.querySelector('#intervalStart');
     const intervalEnd = document.querySelector('#intervalEnd');
@@ -143,6 +144,14 @@
 
     const formatIntervalOption = (interval) =>
         `${interval.name} — ${formatDate(interval.startDate)} a ${formatDate(interval.endDate)}`;
+
+    const syncIntervalDates = () => {
+        if (!intervalDates) return;
+        const interval = selectedInterval();
+        intervalDates.textContent = interval
+            ? `${formatDate(interval.startDate)} a ${formatDate(interval.endDate)}`
+            : '';
+    };
 
     const selectedInterval = () => {
         const intervalId = Number(intervalSelect?.value || 0);
@@ -308,6 +317,7 @@
     const updateAssignmentMode = () => {
         if (!canAssign) return;
         const interval = selectedInterval();
+        syncIntervalDates();
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate ? assignmentDate.value : '';
         if (interval && assignmentDate) {
@@ -594,9 +604,11 @@
             config.intervals.unshift(result.interval);
             const option = document.createElement('option');
             option.value = String(result.interval.id);
-            option.textContent = formatIntervalOption(result.interval);
+            option.textContent = result.interval.name;
             intervalSelect.append(option);
-            const editOption = option.cloneNode(true);
+            const editOption = document.createElement('option');
+            editOption.value = String(result.interval.id);
+            editOption.textContent = formatIntervalOption(result.interval);
             editIntervalSelect.append(editOption);
             intervalSelect.value = String(result.interval.id);
             assignmentDate.value = result.interval.startDate;
@@ -639,7 +651,7 @@
             if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar o intervalo.');
             Object.assign(interval, result.interval);
             const option = intervalSelect.querySelector(`option[value="${interval.id}"]`);
-            if (option) option.textContent = formatIntervalOption(interval);
+            if (option) option.textContent = interval.name;
             const editOption = editIntervalSelect.querySelector(`option[value="${interval.id}"]`);
             if (editOption) editOption.textContent = formatIntervalOption(interval);
             updateAssignmentMode();
