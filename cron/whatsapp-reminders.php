@@ -6,6 +6,10 @@ if (!is_file($appRoot . '/config.php')) { fwrite(STDERR, "Portal config not foun
 require $appRoot . '/lib.php';
 require $appRoot . '/src/Notifications/WhatsAppCloudClient.php';
 $config = require $appRoot . '/config.php';
+$configuredTemplate = (string) ($config['whatsapp']['template_name'] ?? '');
+if ($configuredTemplate === '' || $configuredTemplate === 'room_assignment_reminder') {
+    $config['whatsapp']['template_name'] = 'space_management_reminder';
+}
 date_default_timezone_set($config['whatsapp']['timezone'] ?? 'Europe/Lisbon');
 $pdo = database();
 $lock = (int) $pdo->query("SELECT GET_LOCK('room_check_whatsapp_reminders', 0)")->fetchColumn();
@@ -14,6 +18,7 @@ $client = new WhatsAppCloudClient($config['whatsapp']);
 try {
     $query = $pdo->query(
         "SELECT r.id, r.attempt_count, r.due_date, r.property_name, u.display_name, u.mobile,
+                u.preferred_language,
                 COUNT(a.id) AS assignment_count
          FROM whatsapp_assignment_reminders r
          JOIN users u ON u.id = r.assigned_to_user_id
@@ -21,18 +26,32 @@ try {
               AND a.due_date = r.due_date AND a.property_name = r.property_name AND a.completed_at IS NULL
          WHERE r.status IN ('pending','failed') AND r.scheduled_at <= NOW()
            AND (r.next_attempt_at IS NULL OR r.next_attempt_at <= NOW())
-         GROUP BY r.id, r.attempt_count, r.due_date, r.property_name, u.display_name, u.mobile, r.scheduled_at
+         GROUP BY r.id, r.attempt_count, r.due_date, r.property_name, u.display_name, u.mobile,
+                  u.preferred_language, r.scheduled_at
          ORDER BY r.scheduled_at LIMIT 50"
     );
     foreach ($query->fetchAll() as $row) {
         $pdo->prepare("UPDATE whatsapp_assignment_reminders SET status = 'processing', attempt_count = attempt_count + 1 WHERE id = :id")
             ->execute(['id' => (int) $row['id']]);
         try {
+            $preferredLanguage = (string) ($row['preferred_language'] ?? 'pt');
+            $templateLanguages = $config['whatsapp']['template_languages'] ?? [
+                'pt' => 'pt_PT',
+                'en' => 'en',
+            ];
+            $languageCode = (string) ($templateLanguages[$preferredLanguage]
+                ?? $templateLanguages['pt']
+                ?? 'pt_PT');
+            $portalInstruction = $preferredLanguage === 'en'
+                ? 'Open the Management Portal to view the assigned items and instructions.'
+                : 'Consulte no Portal de Gestão os itens e respetivas instruções.';
             $messageId = $client->sendTemplate((string) $row['mobile'], [
-                (string) $row['display_name'], (new DateTimeImmutable((string) $row['due_date']))->format('d/m/Y'),
-                (string) $row['property_name'], (string) $row['assignment_count'],
-                'Consulte no Portal de Gestão os itens e respetivas instruções.',
-            ]);
+                (string) $row['display_name'],
+                (new DateTimeImmutable((string) $row['due_date']))->format('d/m/Y'),
+                (string) $row['property_name'],
+                (string) $row['assignment_count'],
+                $portalInstruction,
+            ], $languageCode);
             $pdo->prepare("UPDATE whatsapp_assignment_reminders SET status = 'sent', meta_message_id = :message_id, sent_at = NOW(), last_error = NULL WHERE id = :id")
                 ->execute(['message_id' => $messageId, 'id' => (int) $row['id']]);
         } catch (Throwable $error) {

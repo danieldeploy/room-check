@@ -122,7 +122,7 @@ final class Auth
         Translator::boot();
     }
 
-    public static function attempt(PDO $pdo, string $username, string $password, array $config): bool
+    public static function attempt(PDO $pdo, string $username, string $password, array $config, ?string $language = null): bool
     {
         self::startSession($config);
         $username = trim($username);
@@ -132,7 +132,7 @@ final class Auth
         self::assertNotRateLimited($pdo, $usernameKey, $ipKey);
 
         $statement = $pdo->prepare(
-            'SELECT id, username, display_name, password_hash, role, is_active
+            'SELECT id, username, display_name, password_hash, role, is_active, preferred_language
              FROM users WHERE username = :username LIMIT 1'
         );
         $statement->execute(['username' => $username]);
@@ -159,8 +159,10 @@ final class Auth
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $user['id'];
         $_SESSION['last_activity'] = time();
-        $pdo->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = :id')
-            ->execute(['id' => $user['id']]);
+        $language = in_array($language, ['pt', 'en'], true) ? $language : (string) ($user['preferred_language'] ?? 'pt');
+        Translator::setLocale($language);
+        $pdo->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP(), preferred_language = :language WHERE id = :id')
+            ->execute(['language' => $language, 'id' => $user['id']]);
         self::audit($pdo, (int) $user['id'], 'login_success');
         return true;
     }
@@ -174,7 +176,7 @@ final class Auth
         }
 
         $statement = $pdo->prepare(
-            'SELECT id, username, display_name, role, is_active, last_login_at
+            'SELECT id, username, display_name, role, is_active, last_login_at, preferred_language
              FROM users WHERE id = :id LIMIT 1'
         );
         $statement->execute(['id' => $userId]);

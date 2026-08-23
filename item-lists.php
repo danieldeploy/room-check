@@ -5,6 +5,7 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/UI/SessionBar.php';
+require_once __DIR__ . '/src/I18n/ContentTranslator.php';
 
 try {
     $pdo = database();
@@ -37,6 +38,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $name = trim((string) ($_POST['name'] ?? ''));
         $area = trim((string) ($_POST['area'] ?? ''));
         $instructions = trim((string) ($_POST['default_instructions'] ?? ''));
+        $contentTranslator = new ContentTranslator($config['translation'] ?? []);
         if (in_array($action, ['create_list', 'rename_list'], true)) {
             if ($name === '' || mb_strlen($name) > 120) {
                 throw new InvalidArgumentException('O nome da lista deve ter entre 1 e 120 caracteres.');
@@ -84,29 +86,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $message = 'Lista apagada.';
         } elseif ($action === 'add_item') {
             itemList($pdo, $listId);
+            $instructionVersions = $contentTranslator->versions($instructions, Translator::locale());
             $position = $pdo->prepare(
                 'SELECT COALESCE(MAX(sort_order), 0) + 10 FROM item_list_items WHERE list_id = :list_id'
             );
             $position->execute(['list_id' => $listId]);
             $statement = $pdo->prepare(
-                'INSERT INTO item_list_items (list_id, name, default_instructions, sort_order)
-                 VALUES (:list_id, :name, :instructions, :sort_order)'
+                'INSERT INTO item_list_items (list_id, name, default_instructions, default_instructions_en, sort_order)
+                 VALUES (:list_id, :name, :instructions_pt, :instructions_en, :sort_order)'
             );
             $statement->execute([
-                'list_id' => $listId, 'name' => $name, 'instructions' => $instructions,
+                'list_id' => $listId, 'name' => $name,
+                'instructions_pt' => $instructionVersions['pt'], 'instructions_en' => $instructionVersions['en'],
                 'sort_order' => (int) $position->fetchColumn(),
             ]);
             $message = 'Item adicionado.';
         } elseif ($action === 'rename_item') {
             $pdo->beginTransaction();
             $statement = $pdo->prepare(
-                'SELECT name FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+                'SELECT name, default_instructions, default_instructions_en FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
             );
             $statement->execute(['id' => $itemId, 'list_id' => $listId]);
-            $oldName = $statement->fetchColumn();
-            if ($oldName === false) {
+            $oldItem = $statement->fetch();
+            if (!is_array($oldItem)) {
                 throw new InvalidArgumentException('Item não encontrado.');
             }
+            $oldName = (string) $oldItem['name'];
+            $instructionVersions = $contentTranslator->versions(
+                $instructions, Translator::locale(),
+                (string) $oldItem['default_instructions'], (string) ($oldItem['default_instructions_en'] ?? '')
+            );
             $renameValues = $pdo->prepare(
                 'UPDATE room_checklist_values SET item_name = :new_name
                  WHERE list_id = :list_id AND item_name = :old_name'
@@ -118,9 +127,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             );
             $renameAssignments->execute(['new_name' => $name, 'list_id' => $listId, 'old_name' => $oldName]);
             $renameItem = $pdo->prepare(
-                'UPDATE item_list_items SET name = :name, default_instructions = :instructions WHERE id = :id'
+                'UPDATE item_list_items SET name = :name, default_instructions = :instructions_pt,
+                 default_instructions_en = :instructions_en WHERE id = :id'
             );
-            $renameItem->execute(['name' => $name, 'instructions' => $instructions, 'id' => $itemId]);
+            $renameItem->execute([
+                'name' => $name,
+                'instructions_pt' => $instructionVersions['pt'],
+                'instructions_en' => $instructionVersions['en'],
+                'id' => $itemId,
+            ]);
             $pdo->commit();
             $message = 'Item atualizado em todos os registos.';
         } elseif ($action === 'delete_item') {
@@ -171,11 +186,17 @@ $selectedList = array_values(array_filter($lists, static fn(array $list): bool =
 $itemRows = [];
 if ($selectedList) {
     $statement = $pdo->prepare(
-        'SELECT id, name, default_instructions FROM item_list_items
+        'SELECT id, name, default_instructions, default_instructions_en FROM item_list_items
          WHERE list_id = :list_id ORDER BY sort_order, id'
     );
     $statement->execute(['list_id' => $listId]);
     $itemRows = $statement->fetchAll();
+    foreach ($itemRows as &$itemRow) {
+        $itemRow['default_instructions'] = Translator::localized(
+            (string) $itemRow['default_instructions'], (string) ($itemRow['default_instructions_en'] ?? '')
+        );
+    }
+    unset($itemRow);
 }
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);

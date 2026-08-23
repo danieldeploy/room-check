@@ -5,6 +5,7 @@ require __DIR__ . '/lib.php';
 $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
+require_once __DIR__ . '/src/I18n/ContentTranslator.php';
 
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -21,7 +22,7 @@ try {
         $listItems = $selectedList['items'];
 
         $statement = $pdo->prepare(
-            'SELECT item_name, problem, status
+            'SELECT item_name, problem, problem_en, status
              FROM room_checklist_values
              WHERE list_id = :list_id AND property_name = :property AND room_number = :room'
         );
@@ -30,7 +31,7 @@ try {
         $saved = [];
         foreach ($statement->fetchAll() as $row) {
             $saved[$row['item_name']] = [
-                'problem' => (string) $row['problem'],
+                'problem' => Translator::localized((string) $row['problem'], (string) $row['problem_en']),
                 'status' => $row['status'],
             ];
         }
@@ -56,7 +57,8 @@ try {
         $roomAssignmentCounts = [];
         if (Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)) {
             $assignmentStatement = $pdo->prepare(
-                "SELECT a.item_name, a.assigned_to_user_id, a.due_date, a.verification_instructions, a.completed_at
+                "SELECT a.item_name, a.assigned_to_user_id, a.due_date, a.verification_instructions,
+                        a.verification_instructions_en, a.completed_at
                  FROM room_item_assignments a
                  WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
                    AND room_number = :room"
@@ -71,7 +73,10 @@ try {
                 $assignments[(string) $assignment['item_name']] = [
                     'employeeId' => (int) $assignment['assigned_to_user_id'],
                     'dueDate' => (string) $assignment['due_date'],
-                    'instructions' => (string) $assignment['verification_instructions'],
+                    'instructions' => Translator::localized(
+                        (string) $assignment['verification_instructions'],
+                        (string) $assignment['verification_instructions_en']
+                    ),
                     'completed' => $assignment['completed_at'] !== null,
                 ];
             }
@@ -101,6 +106,7 @@ try {
     $rawBody = file_get_contents('php://input');
     $payload = json_decode($rawBody ?: '', true, 512, JSON_THROW_ON_ERROR);
     $pdo = database();
+    $contentTranslator = new ContentTranslator($config['translation'] ?? []);
     if (($payload['action'] ?? '') === 'create_interval') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
@@ -306,9 +312,11 @@ try {
             if (mb_strlen($instructions) > 5000) {
                 throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
             }
+            $instructionVersions = $contentTranslator->versions($instructions, Translator::locale());
             $normalizedChanges[$name] = [
                 'selected' => filter_var($change['selected'] ?? false, FILTER_VALIDATE_BOOL),
-                'instructions' => $instructions,
+                'instructions' => $instructionVersions['pt'],
+                'instructions_en' => $instructionVersions['en'],
             ];
         }
 
@@ -338,11 +346,12 @@ try {
         );
         $upsert = $pdo->prepare(
             'INSERT INTO room_item_assignments
-                (interval_id, list_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
-             VALUES (:interval_id, :list_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
+                (interval_id, list_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, verification_instructions_en, completed_at, completed_by_user_id)
+             VALUES (:interval_id, :list_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, :instructions_en, NULL, NULL)
              ON DUPLICATE KEY UPDATE assigned_to_user_id = VALUES(assigned_to_user_id),
                 assigned_by_user_id = VALUES(assigned_by_user_id), assigned_at = CURRENT_TIMESTAMP,
                 due_date = VALUES(due_date), verification_instructions = VALUES(verification_instructions),
+                verification_instructions_en = VALUES(verification_instructions_en),
                 completed_at = NULL, completed_by_user_id = NULL'
         );
         $remove = $pdo->prepare(
@@ -369,6 +378,7 @@ try {
                 $upsert->execute($identity + [
                     'assignee' => $employeeId, 'assigner' => (int) $currentUser['id'],
                     'due_date' => $dueDate, 'instructions' => $change['instructions'],
+                    'instructions_en' => $change['instructions_en'],
                 ]);
             } else {
                 $remove->execute($identity + ['assignee' => $employeeId, 'due_date' => $dueDate]);
@@ -453,7 +463,7 @@ try {
             if (mb_strlen($instruction) > 5000) {
                 throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
             }
-            $normalizedInstructions[$name] = $instruction;
+            $normalizedInstructions[$name] = $contentTranslator->versions($instruction, Translator::locale());
         }
         $pdo->beginTransaction();
         $assignmentLock = $pdo->prepare(
@@ -463,11 +473,12 @@ try {
         );
         $upsert = $pdo->prepare(
             'INSERT INTO room_item_assignments
-                (interval_id, list_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, completed_at, completed_by_user_id)
-             VALUES (:interval_id, :list_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, NULL, NULL)
+                (interval_id, list_id, property_name, room_number, item_name, assigned_to_user_id, assigned_by_user_id, due_date, verification_instructions, verification_instructions_en, completed_at, completed_by_user_id)
+             VALUES (:interval_id, :list_id, :property, :room, :item, :assignee, :assigner, :due_date, :instructions, :instructions_en, NULL, NULL)
              ON DUPLICATE KEY UPDATE assigned_to_user_id = VALUES(assigned_to_user_id),
                 assigned_by_user_id = VALUES(assigned_by_user_id), assigned_at = CURRENT_TIMESTAMP,
                 due_date = VALUES(due_date), verification_instructions = VALUES(verification_instructions),
+                verification_instructions_en = VALUES(verification_instructions_en),
                 completed_at = NULL, completed_by_user_id = NULL'
         );
         $remove = $pdo->prepare(
@@ -497,7 +508,8 @@ try {
                 }
                 $upsert->execute($parameters + [
                     'assigner' => (int) $currentUser['id'], 'due_date' => $dueDate,
-                    'instructions' => $normalizedInstructions[$name],
+                    'instructions' => $normalizedInstructions[$name]['pt'],
+                    'instructions_en' => $normalizedInstructions[$name]['en'],
                 ]);
             } else {
                 $remove->execute($parameters + ['due_date' => $dueDate]);
@@ -566,30 +578,37 @@ try {
             throw new InvalidArgumentException("Estado inválido em {$name}.");
         }
 
-        $normalized[$name] = ['problem' => $problem, 'status' => $status];
+        $problemVersions = $contentTranslator->versions($problem, Translator::locale());
+        $normalized[$name] = [
+            'problem' => $problemVersions['pt'],
+            'problem_en' => $problemVersions['en'],
+            'status' => $status,
+        ];
     }
 
     $pdo->beginTransaction();
 
     $statement = $pdo->prepare(
         'INSERT INTO room_checklist_values
-            (property_name, room_number, list_id, item_name, problem, status)
+            (property_name, room_number, list_id, item_name, problem, problem_en, status)
          VALUES
-            (:property, :room, :list_id, :item, :problem, :status)
+            (:property, :room, :list_id, :item, :problem, :problem_en, :status)
          ON DUPLICATE KEY UPDATE
             problem = VALUES(problem),
+            problem_en = VALUES(problem_en),
             status = VALUES(status),
             updated_at = CURRENT_TIMESTAMP'
     );
 
     foreach ($listItems as $name) {
-        $value = $normalized[$name] ?? ['problem' => '', 'status' => null];
+        $value = $normalized[$name] ?? ['problem' => '', 'problem_en' => '', 'status' => null];
         $statement->execute([
             'property' => $property,
             'room' => $room,
             'list_id' => $listId,
             'item' => $name,
             'problem' => $value['problem'],
+            'problem_en' => $value['problem_en'],
             'status' => $value['status'],
         ]);
     }

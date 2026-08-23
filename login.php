@@ -26,7 +26,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             database(),
             (string) ($_POST['username'] ?? ''),
             (string) ($_POST['password'] ?? ''),
-            $config
+            $config,
+            (string) ($_POST['language'] ?? Translator::locale())
         );
         if (!$success) {
             throw new RuntimeException('Utilizador ou password inválidos.');

@@ -166,7 +166,9 @@ if ($canAssign) {
 } else {
     $statement = $pdo->prepare(
         'SELECT a.id, a.list_id, a.property_name, a.room_number, a.item_name, a.assigned_at, a.due_date,
-                COALESCE(NULLIF(TRIM(a.verification_instructions), \'\'), item.default_instructions, \'\') AS verification_instructions,
+                CASE WHEN :locale = \'en\' THEN
+                    COALESCE(NULLIF(TRIM(a.verification_instructions_en), \'\'), NULLIF(TRIM(item.default_instructions_en), \'\'), a.verification_instructions, item.default_instructions, \'\')
+                ELSE COALESCE(NULLIF(TRIM(a.verification_instructions), \'\'), NULLIF(TRIM(item.default_instructions), \'\'), a.verification_instructions_en, item.default_instructions_en, \'\') END AS verification_instructions,
                 list_row.name AS list_name, list_row.area, v.problem, v.status
          FROM room_item_assignments a
          INNER JOIN item_lists list_row ON list_row.id = a.list_id
@@ -181,7 +183,7 @@ if ($canAssign) {
          WHERE a.assigned_to_user_id = :user_id AND a.completed_at IS NULL AND a.due_date = :due_date
          ORDER BY a.property_name, a.room_number, list_row.name, a.item_name'
     );
-    $statement->execute(['user_id' => (int) $currentUser['id'], 'due_date' => $selectedDateValue]);
+    $statement->execute(['locale' => Translator::locale(), 'user_id' => (int) $currentUser['id'], 'due_date' => $selectedDateValue]);
     $tasks = $statement->fetchAll();
     $dateStatement = $pdo->prepare(
         'SELECT DISTINCT due_date FROM room_item_assignments

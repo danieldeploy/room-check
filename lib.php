@@ -74,7 +74,7 @@ function itemLists(PDO $pdo): array
 {
     $rows = $pdo->query(
         'SELECT list_row.id, list_row.name, list_row.area, list_row.is_system,
-                item.name AS item_name, item.default_instructions
+                item.name AS item_name, item.default_instructions, item.default_instructions_en
          FROM item_lists list_row
          LEFT JOIN item_list_items item ON item.list_id = list_row.id
          ORDER BY list_row.is_system DESC, list_row.name, item.sort_order, item.id'
@@ -95,7 +95,9 @@ function itemLists(PDO $pdo): array
         if ($row['item_name'] !== null) {
             $itemName = (string) $row['item_name'];
             $lists[$id]['items'][] = $itemName;
-            $lists[$id]['defaults'][$itemName] = (string) $row['default_instructions'];
+            $lists[$id]['defaults'][$itemName] = Translator::localized(
+                (string) $row['default_instructions'], (string) ($row['default_instructions_en'] ?? '')
+            );
         }
     }
     return array_values($lists);

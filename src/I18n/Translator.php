@@ -13,10 +13,10 @@ final class Translator
 
         $requested = strtolower(trim((string) ($_POST['language'] ?? '')));
         if (in_array($requested, ['pt', 'en'], true)) {
-            $_SESSION['locale'] = $requested;
-        }
-        if (!isset($_SESSION['locale']) || !in_array($_SESSION['locale'], ['pt', 'en'], true)) {
-            $_SESSION['locale'] = 'pt';
+            self::setLocale($requested);
+        } elseif (!isset($_SESSION['locale']) || !in_array($_SESSION['locale'], ['pt', 'en'], true)) {
+            $remembered = strtolower(trim((string) ($_COOKIE['room_check_language'] ?? '')));
+            $_SESSION['locale'] = in_array($remembered, ['pt', 'en'], true) ? $remembered : 'pt';
         }
 
         if (self::locale() === 'en' && PHP_SAPI !== 'cli' && !self::$started) {
@@ -28,6 +28,33 @@ final class Translator
     public static function locale(): string
     {
         return (string) ($_SESSION['locale'] ?? 'pt');
+    }
+
+    public static function setLocale(string $locale, bool $remember = true): void
+    {
+        $locale = strtolower(trim($locale));
+        if (!in_array($locale, ['pt', 'en'], true)) {
+            $locale = 'pt';
+        }
+        $_SESSION['locale'] = $locale;
+        if ($remember && PHP_SAPI !== 'cli' && !headers_sent()) {
+            setcookie('room_check_language', $locale, [
+                'expires' => time() + 31536000,
+                'path' => '/',
+                'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        }
+    }
+
+    public static function localized(?string $portuguese, ?string $english): string
+    {
+        $portuguese = trim((string) $portuguese);
+        $english = trim((string) $english);
+        return self::locale() === 'en'
+            ? ($english !== '' ? $english : $portuguese)
+            : ($portuguese !== '' ? $portuguese : $english);
     }
 
     public static function translateOutput(string $output): string

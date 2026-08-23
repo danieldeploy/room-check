@@ -5,7 +5,7 @@ final class WhatsAppCloudClient
 {
     public function __construct(private array $config) {}
 
-    public function sendTemplate(string $mobile, array $values): string
+    public function sendTemplate(string $mobile, array $values, string $languageCode): string
     {
         if (!function_exists('curl_init')) throw new RuntimeException('A extensão PHP cURL não está disponível.');
         $secrets = $this->loadSecrets();
@@ -17,7 +17,7 @@ final class WhatsAppCloudClient
             'messaging_product' => 'whatsapp', 'to' => $to, 'type' => 'template',
             'template' => [
                 'name' => (string) $this->config['template_name'],
-                'language' => ['code' => (string) $this->config['template_language']],
+                'language' => ['code' => $languageCode],
                 'components' => [['type' => 'body', 'parameters' => $parameters]],
             ],
         ];
