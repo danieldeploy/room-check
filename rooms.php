@@ -154,9 +154,10 @@ try {
                     <select id="intervalSelect" aria-label="Intervalo de verificação">
                         <option value="">Escolher intervalo</option>
                         <?php foreach ($intervals as $interval): ?>
-                            <option value="<?= (int) $interval['id'] ?>"><?= htmlspecialchars((string) $interval['name'], ENT_QUOTES, 'UTF-8') ?> — <?= (new DateTimeImmutable((string) $interval['start_date']))->format('d/m/Y') ?> a <?= (new DateTimeImmutable((string) $interval['end_date']))->format('d/m/Y') ?></option>
+                            <option value="<?= (int) $interval['id'] ?>"><?= htmlspecialchars((string) $interval['name'], ENT_QUOTES, 'UTF-8') ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <small id="intervalDates" class="interval-dates" aria-live="polite"></small>
                 </label>
                 <label class="room-field"><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
                 <label class="assignment-field"><span>Atribuir</span>
