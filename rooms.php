@@ -111,7 +111,7 @@ try {
                     <?php if ($canAssign): ?><a href="item-lists.php">LISTAS DE ITENS</a><?php endif; ?>
                 </nav>
             </div>
-            <div id="saveStatus" class="save-status" role="status" aria-live="polite">A carregar…</div>
+            <div id="saveStatus" class="status-announcer" role="status" aria-live="polite">A carregar…</div>
         </header>
         <?php if ($canAssign): ?>
             <details class="interval-creator">
