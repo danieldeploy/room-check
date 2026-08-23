@@ -88,7 +88,7 @@ select:focus, textarea:focus, input:focus, button:focus-visible { outline: 3px s
 .assignment-heading-control[hidden] { display: none; }
 .checklist-card.assignment-controls-visible .assignment-heading-control { grid-column: 1; grid-row: 1; justify-self: start; }
 .assignment-heading-control .select-all { grid-column: 1; justify-self: start; }
-.check-row { padding: 14px 20px; border-top: 1px solid var(--line); }
+.check-row { min-height: 125px; padding: 14px 20px; border-top: 1px solid var(--line); }
 .check-row:first-child { border-top: 0; }
 .check-row h2 { margin: 0; font-size: 1rem; font-weight: 750; }
 .item-heading { min-width: 0; }
@@ -148,7 +148,7 @@ noscript { display: block; margin-top: 18px; color: var(--wrong); }
     .list-heading-select { display: block !important; }
     .checklist-card.assignment-controls-visible .list-heading-select { padding-left: 56px; }
     .selectors.has-assignment ~ .checklist-card .assignment-heading-control { grid-column: 1; }
-    .check-row, .selectors.has-assignment ~ .checklist-card .check-row { grid-template-columns: 1fr; gap: 10px; padding: 17px 15px; }
+    .check-row, .selectors.has-assignment ~ .checklist-card .check-row { min-height: 0; grid-template-columns: 1fr; gap: 10px; padding: 17px 15px; }
     .assignment-check { justify-content: start; }
     .check-row h2 { color: var(--brand-dark); }
 }
