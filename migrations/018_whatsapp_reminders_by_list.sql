@@ -1,5 +1,8 @@
 ALTER TABLE whatsapp_assignment_reminders
     ADD COLUMN list_id BIGINT UNSIGNED NULL AFTER assigned_to_user_id,
+    ADD KEY idx_whatsapp_reminder_employee (assigned_to_user_id);
+
+ALTER TABLE whatsapp_assignment_reminders
     DROP INDEX uq_whatsapp_reminder_employee_date_property;
 
 INSERT INTO whatsapp_assignment_reminders
