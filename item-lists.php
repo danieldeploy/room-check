@@ -189,7 +189,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Listas de Itens — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-list-area-1">
+    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-clear-navigation-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
 <body>
@@ -206,11 +206,15 @@ header('Cache-Control: no-store');
     <?php if ($error): ?><div class="notice error" role="alert"><?= listEscape($error) ?></div><?php endif; ?>
 
     <section class="list-toolbar">
-        <form method="get">
-            <label><span>Lista a editar</span><select name="list_id" onchange="this.form.submit()">
+        <form method="get" class="list-selector">
+            <label><span>Selecionar lista para editar</span><select name="list_id" onchange="this.form.submit()">
                 <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape($list['name']) ?></option><?php endforeach; ?>
             </select></label>
         </form>
+    </section>
+
+    <details class="list-create-panel">
+        <summary>Criar nova lista</summary>
         <form method="post" class="create-list">
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
             <input type="hidden" name="action" value="create_list">
@@ -218,10 +222,11 @@ header('Cache-Control: no-store');
             <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>"><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
             <button type="submit">Criar lista</button>
         </form>
-    </section>
+    </details>
 
     <?php if ($selectedList): ?>
     <section class="list-card">
+        <h2 class="section-title">Editar lista selecionada</h2>
         <div class="list-card-heading">
             <form method="post" class="rename-list">
                 <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
@@ -231,11 +236,14 @@ header('Cache-Control: no-store');
                 <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>" <?= $selectedList['area'] === $value ? 'selected' : '' ?>><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
                 <button type="submit">Guardar lista</button>
             </form>
-            <?php if (!$selectedList['isSystem']): ?><form method="post" onsubmit="return confirm('Apagar esta lista?')">
+            <div class="delete-list-control">
+            <form method="post" <?= $selectedList['isSystem'] ? '' : 'onsubmit="return confirm(\'Apagar esta lista?\')"' ?>>
                 <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                 <input type="hidden" name="action" value="delete_list"><input type="hidden" name="list_id" value="<?= $listId ?>">
-                <button class="danger" type="submit">Apagar lista</button>
-            </form><?php endif; ?>
+                <button class="danger" type="submit" <?= $selectedList['isSystem'] ? 'disabled title="Lista base protegida"' : '' ?>>Apagar lista</button>
+            </form>
+            <?php if ($selectedList['isSystem']): ?><small>Lista base protegida — não pode ser apagada.</small><?php endif; ?>
+            </div>
         </div>
         <div class="items-heading"><span>Item</span><span>Descreva a verificação</span><span>Ações</span></div>
         <?php if ($itemRows === []): ?><p class="empty">Esta lista ainda não tem itens.</p><?php endif; ?>
