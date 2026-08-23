@@ -624,7 +624,7 @@
         if (!employeeId || !dueDate) return;
         try {
             const response = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ action: 'get_whatsapp_reminder', csrfToken: config.csrfToken, employeeId, dueDate }) });
+                body: JSON.stringify({ action: 'get_whatsapp_reminder', csrfToken: config.csrfToken, employeeId, dueDate, property: propertySelect.value }) });
             const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao carregar alerta.');
             whatsappReminderEnabled.checked = Boolean(result.reminderTime);
             whatsappReminderTime.value = result.reminderTime || '09:00';
@@ -637,7 +637,7 @@
         whatsappReminderEnabled.disabled = true; whatsappReminderTime.disabled = true;
         try {
             const response = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ action: 'schedule_whatsapp_reminder', csrfToken: config.csrfToken, employeeId, dueDate,
+                body: JSON.stringify({ action: 'schedule_whatsapp_reminder', csrfToken: config.csrfToken, employeeId, dueDate, property: propertySelect.value,
                     enabled: whatsappReminderEnabled.checked, time: whatsappReminderTime.value }) });
             const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar alerta.');
             showSavedFeedback(whatsappReminderSaved);
@@ -816,6 +816,7 @@
         roomAssignmentCounts = {};
         renderRooms(1);
         loadChecklist();
+        loadWhatsAppReminder();
     });
     listSelect.addEventListener('change', () => {
         clearInstructionSaveTimers();
