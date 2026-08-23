@@ -411,6 +411,18 @@
     const loadChecklist = async () => {
         const version = ++requestVersion;
         const current = selection();
+        if (!current.listId) {
+            clearTimeout(saveTimer);
+            assignments = {};
+            roomAssignmentCounts = {};
+            renderChecklist([]);
+            applyRoomAssignmentStates();
+            checklist.classList.remove('assignment-view-mode');
+            checklist.setAttribute('aria-busy', 'false');
+            isLoading = false;
+            setStatus('Sem listas nesta área');
+            return;
+        }
         isLoading = true;
         checklist.classList.toggle('assignment-view-mode', Boolean(selectedInterval()));
         checklist.setAttribute('aria-busy', 'true');

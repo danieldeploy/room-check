@@ -19,14 +19,22 @@ try {
 }
 $canEdit = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_ROOM_CHECK_EDIT);
 $canAssign = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN);
-$lists = itemLists($pdo);
+$navigationAreas = ['rooms', 'shared_bathrooms', 'corridors', 'kitchens', 'terraces'];
+$navigationArea = (string) ($_GET['area'] ?? 'rooms');
+if (!in_array($navigationArea, $navigationAreas, true)) {
+    $navigationArea = 'rooms';
+}
+$lists = array_values(array_filter(
+    itemLists($pdo),
+    static fn(array $list): bool => $list['area'] === $navigationArea
+));
 $initialListId = (int) ($_GET['list_id'] ?? ($lists[0]['id'] ?? 0));
 if (!array_filter($lists, static fn(array $list): bool => $list['id'] === $initialListId)) {
     $initialListId = (int) ($lists[0]['id'] ?? 0);
 }
 $initialList = array_values(array_filter(
     $lists, static fn(array $list): bool => $list['id'] === $initialListId
-))[0] ?? ['items' => []];
+))[0] ?? ['items' => [], 'defaults' => []];
 $employees = $canAssign ? $pdo->query(
     "SELECT id, display_name FROM users
      WHERE role = 'empregada_andares' AND is_active = 1
@@ -43,11 +51,6 @@ $intervals = $canAssign ? $pdo->query(
 )->fetchAll() : [];
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
-$navigationAreas = ['rooms', 'shared_bathrooms', 'corridors', 'kitchens', 'terraces'];
-$navigationArea = (string) ($_GET['area'] ?? 'rooms');
-if (!in_array($navigationArea, $navigationAreas, true)) {
-    $navigationArea = 'rooms';
-}
 $initialProperty = trim((string) ($_GET['property'] ?? array_key_first(PROPERTIES)));
 $initialRoom = (int) ($_GET['room'] ?? 1);
 try {
@@ -73,6 +76,7 @@ try {
             'itemDefaults' => $initialList['defaults'],
             'lists' => $lists,
             'initialListId' => $initialListId,
+            'area' => $navigationArea,
             'canEdit' => $canEdit,
             'canAssign' => $canAssign,
             'employees' => $employees,
@@ -90,7 +94,7 @@ try {
             'initialRoom' => $initialRoom,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     </script>
-    <script src="assets/app.js?v=<?= (int) filemtime(__DIR__ . '/assets/app.js') ?>-assignment-controls-3" defer></script>
+    <script src="assets/app.js?v=<?= (int) filemtime(__DIR__ . '/assets/app.js') ?>-area-lists-1" defer></script>
 </head>
 <body>
     <main class="app-shell">
@@ -169,7 +173,7 @@ try {
             <?php endif; ?>
         </section>
         <section class="checklist-card">
-            <div class="table-heading"><label class="list-heading-select"><select id="listSelect" aria-label="Lista de itens"><?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $initialListId ? 'selected' : '' ?>><?= htmlspecialchars($list['name'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control" hidden><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
+            <div class="table-heading"><label class="list-heading-select"><select id="listSelect" aria-label="Lista de itens" <?= $lists === [] ? 'disabled' : '' ?>><?php if ($lists === []): ?><option value="">Sem listas nesta área</option><?php endif; ?><?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $initialListId ? 'selected' : '' ?>><?= htmlspecialchars($list['name'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><span>Problema <strong>a identificar</strong></span><?php if ($canAssign): ?><div class="assignment-heading-control" hidden><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
             <div id="checklist" class="checklist"></div>
         </section>
         <noscript>Esta aplicação necessita de JavaScript para carregar os dados.</noscript>
