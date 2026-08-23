@@ -228,8 +228,10 @@ try {
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
         $employeeId = (int) ($payload['employeeId'] ?? 0); $dueDate = trim((string) ($payload['dueDate'] ?? ''));
         $property = trim((string) ($payload['property'] ?? ''));
-        $statement = $pdo->prepare("SELECT TIME_FORMAT(scheduled_at, '%H:%i') AS reminder_time, status FROM whatsapp_assignment_reminders WHERE assigned_to_user_id = :employee_id AND due_date = :due_date AND property_name = :property");
-        $statement->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property]);
+        $listId = (int) ($payload['listId'] ?? 0);
+        if ($listId < 1) throw new InvalidArgumentException('Escolha a lista de itens.');
+        $statement = $pdo->prepare("SELECT TIME_FORMAT(scheduled_at, '%H:%i') AS reminder_time, status FROM whatsapp_assignment_reminders WHERE assigned_to_user_id = :employee_id AND due_date = :due_date AND property_name = :property AND list_id = :list_id");
+        $statement->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property, 'list_id' => $listId]);
         $reminder = $statement->fetch();
         jsonResponse(['ok' => true, 'reminderTime' => $reminder ? (string) $reminder['reminder_time'] : null, 'reminderStatus' => $reminder ? (string) $reminder['status'] : null]);
     }
@@ -238,6 +240,7 @@ try {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
         $employeeId = (int) ($payload['employeeId'] ?? 0);
+        $listId = (int) ($payload['listId'] ?? 0);
         $dueDate = trim((string) ($payload['dueDate'] ?? ''));
         $property = trim((string) ($payload['property'] ?? ''));
         $enabled = filter_var($payload['enabled'] ?? false, FILTER_VALIDATE_BOOL);
@@ -245,32 +248,33 @@ try {
         if ($enabled && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $time)) {
             throw new InvalidArgumentException('Escolha uma hora válida para o alerta WhatsApp.');
         }
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate) || $employeeId < 1 || $property === '') throw new InvalidArgumentException('Escolha o alojamento, a empregada e a data.');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate) || $employeeId < 1 || $listId < 1 || $property === '') throw new InvalidArgumentException('Escolha o alojamento, a lista, a empregada e a data.');
+        $selectedList = itemList($pdo, $listId);
         $pdo->beginTransaction();
         $find = $pdo->prepare(
             'SELECT u.mobile, COUNT(a.id) AS assignment_count FROM users u
-             LEFT JOIN room_item_assignments a ON a.assigned_to_user_id = u.id AND a.due_date = :due_date AND a.property_name = :property AND a.completed_at IS NULL
+             LEFT JOIN room_item_assignments a ON a.assigned_to_user_id = u.id AND a.due_date = :due_date AND a.property_name = :property AND a.list_id = :list_id AND a.completed_at IS NULL
              WHERE u.id = :employee_id GROUP BY u.id, u.mobile'
         );
-        $find->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property]);
+        $find->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property, 'list_id' => $listId]);
         $assignment = $find->fetch();
         if (!$assignment || (int) $assignment['assignment_count'] < 1) throw new InvalidArgumentException('Esta empregada não tem itens atribuídos nessa data.');
         if ($enabled && trim((string) $assignment['mobile']) === '') throw new InvalidArgumentException('A empregada não tem telemóvel configurado.');
         if ($enabled) {
             $scheduledAt = $dueDate . ' ' . $time . ':00';
             $save = $pdo->prepare(
-                "INSERT INTO whatsapp_assignment_reminders (assigned_to_user_id, due_date, property_name, scheduled_at, status, created_by_user_id)
-                 VALUES (:employee_id, :due_date, :property, :scheduled_at, 'pending', :creator)
+                "INSERT INTO whatsapp_assignment_reminders (assigned_to_user_id, list_id, due_date, property_name, scheduled_at, status, created_by_user_id)
+                 VALUES (:employee_id, :list_id, :due_date, :property, :scheduled_at, 'pending', :creator)
                  ON DUPLICATE KEY UPDATE scheduled_at = VALUES(scheduled_at), status = 'pending', attempt_count = 0,
                     next_attempt_at = NULL, meta_message_id = NULL, last_error = NULL, sent_at = NULL"
             );
-            $save->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property, 'scheduled_at' => $scheduledAt, 'creator' => (int) $currentUser['id']]);
+            $save->execute(['employee_id' => $employeeId, 'list_id' => $listId, 'due_date' => $dueDate, 'property' => $property, 'scheduled_at' => $scheduledAt, 'creator' => (int) $currentUser['id']]);
         } else {
-            $delete = $pdo->prepare('DELETE FROM whatsapp_assignment_reminders WHERE assigned_to_user_id = :employee_id AND due_date = :due_date AND property_name = :property');
-            $delete->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property]);
+            $delete = $pdo->prepare('DELETE FROM whatsapp_assignment_reminders WHERE assigned_to_user_id = :employee_id AND due_date = :due_date AND property_name = :property AND list_id = :list_id');
+            $delete->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property, 'list_id' => $listId]);
         }
         Auth::audit($pdo, (int) $currentUser['id'], 'whatsapp_assignment_reminder_changed', [
-            'employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property, 'enabled' => $enabled, 'time' => $enabled ? $time : null,
+            'employee_id' => $employeeId, 'list_id' => $listId, 'list_name' => (string) $selectedList['name'], 'due_date' => $dueDate, 'property' => $property, 'enabled' => $enabled, 'time' => $enabled ? $time : null,
         ]);
         $pdo->commit();
         jsonResponse(['ok' => true, 'reminderTime' => $enabled ? $time : null, 'reminderStatus' => $enabled ? 'pending' : null]);
