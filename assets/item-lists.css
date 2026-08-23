@@ -21,7 +21,7 @@ input,select { width:100%; min-height:46px; padding:0 13px; border:1px solid #cb
 textarea { display:block; width:100%; min-height:46px; padding:11px 13px; overflow:hidden; resize:none; field-sizing:content; border:1px solid #cbd9d7; border-radius:11px; color:var(--ink); background:#fbfdfd; line-height:1.45; }
 textarea::placeholder { color:#9aabaa; }
 input:focus,select:focus,textarea:focus,button:focus-visible { outline:3px solid rgba(15,118,110,.2); outline-offset:2px; border-color:var(--brand); }
-button { min-height:44px; padding:0 16px; border:0; border-radius:10px; color:#fff; background:var(--brand); font-weight:800; cursor:pointer; white-space:nowrap; }
+button { min-height:40px; padding:0 14px; border:0; border-radius:9px; color:#fff; background:var(--brand); font-size:.9rem; font-weight:800; cursor:pointer; white-space:nowrap; }
 button.danger { background:var(--danger); }
 button.subtle { color:var(--danger); border:1px solid #f0c7c2; background:#fff5f4; }
 .list-card-heading { display:flex; justify-content:space-between; gap:12px; margin-bottom:18px; }
@@ -31,6 +31,7 @@ button.subtle { color:var(--danger); border:1px solid #f0c7c2; background:#fff5f
 .items-heading span:last-child { text-align:right; }
 .items-heading { padding:12px 0; border-bottom:1px solid var(--line); }
 .item-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(320px,2.2fr) auto auto; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
+.item-row button { min-height:34px; padding:0 12px; border-radius:8px; font-size:.8rem; }
 .rename-item { display:contents; }
 .add-item { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); }
 .add-item .new-instructions { flex:2.2; }
