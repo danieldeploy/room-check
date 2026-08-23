@@ -46,7 +46,7 @@ h1 { margin: 0; color: #102a43; font-family: inherit; font-size: clamp(2rem, 5vw
 .interval-fields button.danger { background: var(--wrong); }
 label { display: grid; gap: 7px; }
 label span { color: var(--muted); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
-.interval-dates { min-height: 1.1em; padding-left: 3px; color: var(--muted); font-size: 0.76rem; line-height: 1.2; }
+.interval-dates { display: block; height: 15px; padding-left: 3px; overflow: hidden; color: var(--muted); font-size: 0.76rem; line-height: 15px; white-space: nowrap; }
 select { width: 100%; min-height: 42px; padding: 0 42px 0 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: var(--ink); background: var(--surface); cursor: pointer; }
 #roomSelect option.room-full, #roomSelect.room-full { color: #fff; background: #be123c; }
 #roomSelect option.room-partial, #roomSelect.room-partial { color: #831843; background: #fbcfe8; }
