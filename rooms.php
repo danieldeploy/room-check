@@ -43,6 +43,11 @@ $intervals = $canAssign ? $pdo->query(
 )->fetchAll() : [];
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
+$navigationAreas = ['rooms', 'shared_bathrooms', 'corridors', 'kitchens', 'terraces'];
+$navigationArea = (string) ($_GET['area'] ?? 'rooms');
+if (!in_array($navigationArea, $navigationAreas, true)) {
+    $navigationArea = 'rooms';
+}
 $initialProperty = trim((string) ($_GET['property'] ?? array_key_first(PROPERTIES)));
 $initialRoom = (int) ($_GET['room'] ?? 1);
 try {
@@ -59,7 +64,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Gestão dos Espaços — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-spaces-navigation-1">
+    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-area-navigation-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
     <script>
         window.ROOM_CHECK = <?= json_encode([
@@ -93,8 +98,12 @@ try {
         <header class="hero compact-page-header">
             <div class="compact-page-heading">
                 <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
-                <nav class="module-tabs" aria-label="Gestão dos espaços e listas">
-                    <a class="active" href="rooms.php" aria-current="page">OPERAÇÕES DE VERIFICAÇÃO</a>
+                <nav class="module-tabs" aria-label="Áreas da gestão dos espaços">
+                    <a class="<?= $navigationArea === 'rooms' ? 'active' : '' ?>" href="rooms.php" <?= $navigationArea === 'rooms' ? 'aria-current="page"' : '' ?>>QUARTOS</a>
+                    <a class="<?= $navigationArea === 'shared_bathrooms' ? 'active' : '' ?>" href="rooms.php?area=shared_bathrooms" <?= $navigationArea === 'shared_bathrooms' ? 'aria-current="page"' : '' ?>>CASAS DE BANHO COMUNS</a>
+                    <a class="<?= $navigationArea === 'corridors' ? 'active' : '' ?>" href="rooms.php?area=corridors" <?= $navigationArea === 'corridors' ? 'aria-current="page"' : '' ?>>CORREDORES</a>
+                    <a class="<?= $navigationArea === 'kitchens' ? 'active' : '' ?>" href="rooms.php?area=kitchens" <?= $navigationArea === 'kitchens' ? 'aria-current="page"' : '' ?>>COZINHAS</a>
+                    <a class="<?= $navigationArea === 'terraces' ? 'active' : '' ?>" href="rooms.php?area=terraces" <?= $navigationArea === 'terraces' ? 'aria-current="page"' : '' ?>>TERRAÇOS</a>
                     <?php if ($canAssign): ?><a href="item-lists.php">LISTAS DE ITENS</a><?php endif; ?>
                 </nav>
             </div>

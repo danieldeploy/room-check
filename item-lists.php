@@ -189,7 +189,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Listas de Itens — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-spaces-navigation-1">
+    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-area-navigation-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
 <body>
@@ -197,8 +197,12 @@ header('Cache-Control: no-store');
     <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
     <header class="module-header">
         <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
-        <nav class="module-tabs" aria-label="Gestão dos espaços e listas">
-            <a href="rooms.php">OPERAÇÕES DE VERIFICAÇÃO</a>
+        <nav class="module-tabs" aria-label="Áreas da gestão dos espaços">
+            <a href="rooms.php">QUARTOS</a>
+            <a href="rooms.php?area=shared_bathrooms">CASAS DE BANHO COMUNS</a>
+            <a href="rooms.php?area=corridors">CORREDORES</a>
+            <a href="rooms.php?area=kitchens">COZINHAS</a>
+            <a href="rooms.php?area=terraces">TERRAÇOS</a>
             <a class="active" href="item-lists.php" aria-current="page">LISTAS DE ITENS</a>
         </nav>
     </header>
