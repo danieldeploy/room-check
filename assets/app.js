@@ -32,6 +32,7 @@
     let rows = [];
     let saveTimer = null;
     const instructionSaveTimers = new Map();
+    const savedFeedbackTimers = new WeakMap();
     let assignmentSaveQueue = Promise.resolve();
     let requestVersion = 0;
     let isLoading = false;
@@ -41,6 +42,16 @@
     const clearInstructionSaveTimers = () => {
         instructionSaveTimers.forEach((timer) => window.clearTimeout(timer));
         instructionSaveTimers.clear();
+    };
+
+    const showSavedFeedback = (element) => {
+        if (!element) return;
+        window.clearTimeout(savedFeedbackTimers.get(element));
+        element.classList.add('is-visible');
+        savedFeedbackTimers.set(element, window.setTimeout(() => {
+            element.classList.remove('is-visible');
+            savedFeedbackTimers.delete(element);
+        }, 2000));
     };
 
     roomSelect.classList.add('room-select-native');
@@ -238,7 +249,16 @@
         assignmentHint.className = 'assignment-hint';
         assignmentHint.textContent = 'A verificar';
         assignmentHint.hidden = true;
-        problemField.append(textarea);
+        const instructionSaved = document.createElement('span');
+        instructionSaved.className = 'row-save-feedback';
+        instructionSaved.textContent = 'Guardado';
+        instructionSaved.setAttribute('aria-live', 'polite');
+        problemField.append(textarea, instructionSaved);
+
+        const assignmentSaved = document.createElement('span');
+        assignmentSaved.className = 'row-save-feedback assignment-save-feedback';
+        assignmentSaved.textContent = 'Guardado';
+        assignmentSaved.setAttribute('aria-live', 'polite');
 
         const status = document.createElement('div');
         status.className = 'status-options';
@@ -294,14 +314,14 @@
             const itemTitle = document.createElement('div');
             itemTitle.className = 'item-title';
             itemTitle.append(name);
-            itemHeading.append(assignmentLabel, itemTitle, assignmentHint);
+            itemHeading.append(assignmentLabel, itemTitle, assignmentHint, assignmentSaved);
             row.append(itemHeading, problemField, status);
         } else {
             itemHeading.append(name);
             row.append(itemHeading, problemField, status);
         }
 
-        return { element: row, name: item.name, textarea, assignmentHint, status, assignmentCheckbox, assignmentLabel, itemHeading };
+        return { element: row, name: item.name, textarea, assignmentHint, assignmentSaved, instructionSaved, status, assignmentCheckbox, assignmentLabel, itemHeading };
     };
 
     function updateSelectAllState() {
@@ -483,7 +503,7 @@
         }
     };
 
-    const queueAssignmentSave = (changes, affectedCheckboxes = []) => {
+    const queueAssignmentSave = (changes, affectedCheckboxes = [], feedbackKind = affectedCheckboxes.length ? 'assignment' : 'instructions') => {
         const intervalId = Number(intervalSelect.value);
         const listId = Number(listSelect.value);
         const employeeId = Number(employeeSelect.value);
@@ -528,6 +548,10 @@
                 roomAssignmentCounts[String(current.room)] = Number(result.roomAssignedItems || 0);
                 applyRoomAssignmentStates();
                 updateAssignmentMode();
+                changes.forEach((change) => {
+                    const row = rows.find((candidate) => candidate.name === change.itemName);
+                    showSavedFeedback(feedbackKind === 'assignment' ? row?.assignmentSaved : row?.instructionSaved);
+                });
             }
             setStatus('Guardado automaticamente', 'success');
             return true;
