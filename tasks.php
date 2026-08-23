@@ -34,6 +34,19 @@ $error = null;
 $requestData = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' ? $_POST : $_GET;
 $property = trim((string) ($requestData['property'] ?? array_key_first(PROPERTIES)));
 $room = (int) ($requestData['room'] ?? 1);
+$today = new DateTimeImmutable('today', new DateTimeZone('Europe/Lisbon'));
+$selectedDateValue = trim((string) ($requestData['date'] ?? $today->format('Y-m-d')));
+$selectedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $selectedDateValue, new DateTimeZone('Europe/Lisbon'));
+if (!$selectedDate || $selectedDate->format('Y-m-d') !== $selectedDateValue) {
+    $selectedDate = $today;
+    $selectedDateValue = $today->format('Y-m-d');
+}
+$calendarMonthValue = trim((string) ($requestData['month'] ?? $selectedDate->format('Y-m')));
+$calendarMonth = DateTimeImmutable::createFromFormat('!Y-m', $calendarMonthValue, new DateTimeZone('Europe/Lisbon'));
+if (!$calendarMonth || $calendarMonth->format('Y-m') !== $calendarMonthValue) {
+    $calendarMonth = $selectedDate->modify('first day of this month');
+    $calendarMonthValue = $calendarMonth->format('Y-m');
+}
 
 try {
     validateSelection($property, $room);
@@ -133,6 +146,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 $employees = [];
 $assignments = [];
 $tasks = [];
+$taskDates = [];
+$taskGroups = [];
 if ($canAssign) {
     $employees = $pdo->query(
         "SELECT id, display_name FROM users
@@ -152,7 +167,7 @@ if ($canAssign) {
     $statement = $pdo->prepare(
         'SELECT a.id, a.list_id, a.property_name, a.room_number, a.item_name, a.assigned_at, a.due_date,
                 a.verification_instructions,
-                list_row.name AS list_name, v.problem, v.status
+                list_row.name AS list_name, list_row.area, v.problem, v.status
          FROM room_item_assignments a
          INNER JOIN item_lists list_row ON list_row.id = a.list_id
          LEFT JOIN room_checklist_values v
@@ -160,12 +175,37 @@ if ($canAssign) {
           AND v.property_name = a.property_name
           AND v.room_number = a.room_number
           AND v.item_name = a.item_name
-         WHERE a.assigned_to_user_id = :user_id AND a.completed_at IS NULL
-         ORDER BY a.due_date, a.property_name, a.room_number, a.item_name'
+         WHERE a.assigned_to_user_id = :user_id AND a.completed_at IS NULL AND a.due_date = :due_date
+         ORDER BY a.property_name, a.room_number, list_row.name, a.item_name'
     );
-    $statement->execute(['user_id' => (int) $currentUser['id']]);
+    $statement->execute(['user_id' => (int) $currentUser['id'], 'due_date' => $selectedDateValue]);
     $tasks = $statement->fetchAll();
+    $dateStatement = $pdo->prepare(
+        'SELECT DISTINCT due_date FROM room_item_assignments
+         WHERE assigned_to_user_id = :user_id AND completed_at IS NULL
+         ORDER BY due_date'
+    );
+    $dateStatement->execute(['user_id' => (int) $currentUser['id']]);
+    $taskDates = array_fill_keys(array_map('strval', $dateStatement->fetchAll(PDO::FETCH_COLUMN)), true);
+    foreach ($tasks as $task) {
+        $groupKey = (string) $task['property_name'] . "\0" . (string) $task['room_number'];
+        if (!isset($taskGroups[$groupKey])) {
+            $taskGroups[$groupKey] = [
+                'property' => (string) $task['property_name'],
+                'room' => (int) $task['room_number'],
+                'items' => [],
+            ];
+        }
+        $taskGroups[$groupKey]['items'][] = $task;
+    }
 }
+
+$monthNames = [1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+$calendarStart = $calendarMonth->modify('first day of this month');
+$calendarDays = (int) $calendarStart->format('t');
+$calendarOffset = (int) $calendarStart->format('N') - 1;
+$previousMonth = $calendarStart->modify('-1 month')->format('Y-m');
+$nextMonth = $calendarStart->modify('+1 month')->format('Y-m');
 
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
@@ -180,7 +220,7 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
     <meta name="robots" content="noindex,nofollow">
     <meta name="theme-color" content="#0f766e">
     <title>Tarefas dos Quartos — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/tasks.css?v=<?= (int) filemtime(__DIR__ . '/assets/tasks.css') ?>">
+    <link rel="stylesheet" href="assets/tasks.css?v=<?= (int) filemtime(__DIR__ . '/assets/tasks.css') ?>-employee-calendar-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
 <body>
@@ -188,7 +228,7 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
     <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
     <header class="tasks-header compact-page-header">
         <div class="compact-page-heading">
-            <p class="eyebrow">Operação diária</p>
+            <p class="eyebrow">Operações de verificação</p>
             <h1 class="page-title"><?= $canAssign ? 'Atribuir itens a verificar' : 'Os meus itens a verificar' ?></h1>
         </div>
     </header>
@@ -226,30 +266,61 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
             </form>
         <?php endif; ?>
     <?php else: ?>
+        <section class="task-calendar" aria-label="Calendário de itens atribuídos">
+            <div class="calendar-heading">
+                <a href="tasks.php?date=<?= taskEscape($selectedDateValue) ?>&amp;month=<?= $previousMonth ?>" aria-label="Mês anterior">‹</a>
+                <h2><?= $monthNames[(int) $calendarStart->format('n')] ?> <?= $calendarStart->format('Y') ?></h2>
+                <a href="tasks.php?date=<?= taskEscape($selectedDateValue) ?>&amp;month=<?= $nextMonth ?>" aria-label="Mês seguinte">›</a>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true"><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span></div>
+            <div class="calendar-days">
+                <?php for ($blank = 0; $blank < $calendarOffset; $blank++): ?><span class="calendar-blank"></span><?php endfor; ?>
+                <?php for ($day = 1; $day <= $calendarDays; $day++):
+                    $dayValue = $calendarStart->setDate((int) $calendarStart->format('Y'), (int) $calendarStart->format('n'), $day)->format('Y-m-d');
+                    $hasTasks = isset($taskDates[$dayValue]);
+                    $isSelected = $dayValue === $selectedDateValue;
+                    $isToday = $dayValue === $today->format('Y-m-d');
+                ?>
+                    <a class="calendar-day<?= $hasTasks ? ' has-tasks' : '' ?><?= $isSelected ? ' selected' : '' ?><?= $isToday ? ' today' : '' ?>" href="tasks.php?date=<?= $dayValue ?>&amp;month=<?= $calendarMonthValue ?>" <?= $isSelected ? 'aria-current="date"' : '' ?>><?= $day ?></a>
+                <?php endfor; ?>
+            </div>
+            <p class="calendar-legend"><span></span> Dia com itens atribuídos</p>
+        </section>
+        <div class="selected-day-heading">
+            <span>Itens de</span>
+            <strong><?= taskEscape($selectedDate->format('d/m/Y')) ?><?= $selectedDateValue === $today->format('Y-m-d') ? ' — Hoje' : '' ?></strong>
+        </div>
         <?php if ($tasks === []): ?>
-            <section class="empty-state"><h2>Não tem itens pendentes</h2><p>Quando a Governanta lhe atribuir uma verificação, ela aparecerá aqui.</p></section>
+            <section class="empty-state"><h2>Sem itens para esta data</h2><p>Escolha no calendário um dia assinalado a verde para consultar os itens atribuídos.</p></section>
         <?php else: ?>
-            <section class="task-list" aria-label="Itens pendentes">
-                <?php foreach ($tasks as $task): ?>
+            <div class="room-task-groups">
+            <?php foreach ($taskGroups as $group): ?>
+                <section class="room-task-group" aria-label="<?= taskEscape($group['property']) ?>, quarto <?= $group['room'] ?>">
+                    <header class="room-group-heading"><span><?= taskEscape($group['property']) ?></span><strong>Quarto <?= $group['room'] ?></strong><small><?= count($group['items']) ?> <?= count($group['items']) === 1 ? 'item' : 'itens' ?></small></header>
+                    <div class="task-list">
+                <?php foreach ($group['items'] as $task): ?>
                     <article class="task-card">
-                        <div class="task-location"><span><?= taskEscape((string) $task['property_name']) ?></span><strong>Quarto <?= (int) $task['room_number'] ?></strong></div>
                         <p class="task-list-name"><?= taskEscape((string) $task['list_name']) ?></p>
                         <h2><?= taskEscape((string) $task['item_name']) ?></h2>
-                        <p class="task-date"><strong>Data:</strong> <?= taskEscape((new DateTimeImmutable((string) $task['due_date']))->format('d/m/Y')) ?></p>
                         <?php if (trim((string) ($task['verification_instructions'] ?? '')) !== ''): ?><div class="instructions"><strong>Instruções da verificação</strong><p><?= nl2br(taskEscape((string) $task['verification_instructions'])) ?></p></div><?php endif; ?>
                         <?php if (trim((string) ($task['problem'] ?? '')) !== ''): ?><p class="problem"><?= nl2br(taskEscape((string) $task['problem'])) ?></p><?php endif; ?>
                         <div class="task-actions">
-                            <a href="rooms.php?property=<?= rawurlencode((string) $task['property_name']) ?>&amp;room=<?= (int) $task['room_number'] ?>&amp;list_id=<?= (int) $task['list_id'] ?>">Abrir quarto</a>
+                            <a href="rooms.php?area=<?= rawurlencode((string) $task['area']) ?>&amp;property=<?= rawurlencode((string) $task['property_name']) ?>&amp;room=<?= (int) $task['room_number'] ?>&amp;list_id=<?= (int) $task['list_id'] ?>">Abrir espaço</a>
                             <form method="post">
                                 <input type="hidden" name="csrf_token" value="<?= taskEscape(Csrf::token()) ?>">
                                 <input type="hidden" name="action" value="complete">
                                 <input type="hidden" name="assignment_id" value="<?= (int) $task['id'] ?>">
+                                <input type="hidden" name="date" value="<?= taskEscape($selectedDateValue) ?>">
+                                <input type="hidden" name="month" value="<?= taskEscape($calendarMonthValue) ?>">
                                 <button type="submit">Marcar concluído</button>
                             </form>
                         </div>
                     </article>
                 <?php endforeach; ?>
-            </section>
+                    </div>
+                </section>
+            <?php endforeach; ?>
+            </div>
         <?php endif; ?>
     <?php endif; ?>
 </main>

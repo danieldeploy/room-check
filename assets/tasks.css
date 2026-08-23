@@ -22,8 +22,33 @@ select { min-height: 44px; border: 1px solid #bcccdc; border-radius: 10px; backg
 .item-name small { display: inline-block; margin-left: 8px; padding: 4px 7px; border-radius: 999px; background: #d1fae5; color: #047857; font-size: .68rem; text-transform: uppercase; }
 .save-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 16px 20px; border-top: 1px solid #d9e2ec; background: rgba(255,255,255,.96); }
 button { border: 0; border-radius: 10px; background: #0f766e; padding: 12px 18px; color: #fff; font: inherit; font-weight: 850; cursor: pointer; }
+.task-calendar { margin-bottom: 18px; padding: 18px; border: 1px solid #d9e2ec; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(16,42,67,.07); }
+.calendar-heading { display: grid; grid-template-columns: 42px 1fr 42px; align-items: center; gap: 10px; margin-bottom: 14px; }
+.calendar-heading h2 { margin: 0; color: #17313a; font-size: 1.05rem; text-align: center; text-transform: capitalize; }
+.calendar-heading a { display: grid; width: 42px; height: 38px; place-items: center; border: 1px solid #cbd9d7; border-radius: 10px; color: #0f766e; font-size: 1.6rem; font-weight: 800; line-height: 1; text-decoration: none; }
+.calendar-heading a:hover { background: #e7f6f3; }
+.calendar-weekdays,.calendar-days { display: grid; grid-template-columns: repeat(7,minmax(34px,1fr)); gap: 7px; }
+.calendar-weekdays { margin-bottom: 7px; color: #65777d; font-size: .68rem; font-weight: 800; text-align: center; text-transform: uppercase; }
+.calendar-day,.calendar-blank { min-height: 42px; }
+.calendar-day { display: grid; place-items: center; border: 1px solid #e1e9e8; border-radius: 10px; color: #52646b; background: #f9fbfb; font-weight: 750; text-decoration: none; }
+.calendar-day:hover { border-color: #8fc7c0; background: #edf8f6; }
+.calendar-day.has-tasks { border-color: #86c9a0; color: #fff; background: #198754; box-shadow: 0 4px 10px rgba(25,135,84,.18); }
+.calendar-day.has-tasks:hover { background: #147345; }
+.calendar-day.today { outline: 2px solid #0f766e; outline-offset: 2px; }
+.calendar-day.selected { border-color: #102a43; box-shadow: 0 0 0 3px rgba(15,118,110,.2); }
+.calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 13px 0 0; color: #65777d; font-size: .76rem; }
+.calendar-legend span { width: 14px; height: 14px; border-radius: 4px; background: #198754; }
+.selected-day-heading { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 14px; color: #65777d; }
+.selected-day-heading strong { color: #17313a; font-size: 1.08rem; }
+.room-task-groups { display: grid; gap: 20px; }
+.room-task-group { overflow: hidden; border: 1px solid #d9e2ec; border-radius: 18px; background: rgba(255,255,255,.72); box-shadow: 0 12px 30px rgba(16,42,67,.07); }
+.room-group-heading { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #fff; background: linear-gradient(135deg,#115e59,#0f766e); }
+.room-group-heading span { flex: 1; font-weight: 750; }
+.room-group-heading strong { font-size: 1.05rem; }
+.room-group-heading small { padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,.18); font-weight: 800; }
 .task-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.task-card { padding: 20px; border: 1px solid #d9e2ec; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(16,42,67,.07); }
+.room-task-group .task-list { padding: 16px; }
+.task-card { padding: 20px; border: 1px solid #d9e2ec; border-radius: 14px; background: #fff; }
 .task-location { display: flex; justify-content: space-between; gap: 12px; color: #486581; font-size: .83rem; }
 .task-location strong { color: #0f766e; }
 .task-list-name { margin: 10px 0 0; color: #0f766e; font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
@@ -47,6 +72,12 @@ button { border: 0; border-radius: 10px; background: #0f766e; padding: 12px 18px
     .assignment-heading { display: none; }
     .assignment-row { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
     .task-list { grid-template-columns: 1fr; }
+    .task-calendar { padding: 13px; }
+    .calendar-weekdays,.calendar-days { gap: 4px; }
+    .calendar-day,.calendar-blank { min-height: 36px; }
+    .room-group-heading { align-items: flex-start; flex-wrap: wrap; }
+    .room-group-heading span { flex-basis: 100%; }
+    .room-task-group .task-list { padding: 10px; }
     .task-actions { align-items: stretch; flex-direction: column; }
     .task-actions button { width: 100%; }
 }
