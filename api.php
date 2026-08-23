@@ -56,9 +56,12 @@ try {
         $roomAssignmentCounts = [];
         if (Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN)) {
             $assignmentStatement = $pdo->prepare(
-                'SELECT item_name, assigned_to_user_id, due_date, verification_instructions, completed_at FROM room_item_assignments
+                "SELECT a.item_name, a.assigned_to_user_id, a.due_date, a.verification_instructions, a.completed_at,
+                        TIME_FORMAT(r.scheduled_at, '%H:%i') AS reminder_time, r.status AS reminder_status
+                 FROM room_item_assignments a
+                 LEFT JOIN whatsapp_assignment_reminders r ON r.assignment_id = a.id
                  WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
-                   AND room_number = :room'
+                   AND room_number = :room"
             );
             $assignmentStatement->execute([
                 'interval_id' => $intervalId,
@@ -72,6 +75,8 @@ try {
                     'dueDate' => (string) $assignment['due_date'],
                     'instructions' => (string) $assignment['verification_instructions'],
                     'completed' => $assignment['completed_at'] !== null,
+                    'reminderTime' => $assignment['reminder_time'] !== null ? (string) $assignment['reminder_time'] : null,
+                    'reminderStatus' => $assignment['reminder_status'] !== null ? (string) $assignment['reminder_status'] : null,
                 ];
             }
             $roomCountStatement = $pdo->prepare(
@@ -214,6 +219,51 @@ try {
         ]);
         $pdo->commit();
         jsonResponse(['ok' => true, 'deletedAssignments' => $deletedAssignments]);
+    }
+
+    if (($payload['action'] ?? '') === 'schedule_whatsapp_reminder') {
+        $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
+        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
+        $property = trim((string) ($payload['property'] ?? ''));
+        $room = (int) ($payload['room'] ?? 0);
+        $intervalId = (int) ($payload['intervalId'] ?? 0);
+        $listId = (int) ($payload['listId'] ?? 0);
+        $itemName = trim((string) ($payload['itemName'] ?? ''));
+        $enabled = filter_var($payload['enabled'] ?? false, FILTER_VALIDATE_BOOL);
+        $time = trim((string) ($payload['time'] ?? ''));
+        validateSelection($property, $room);
+        if ($enabled && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $time)) {
+            throw new InvalidArgumentException('Escolha uma hora válida para o alerta WhatsApp.');
+        }
+        $pdo->beginTransaction();
+        $find = $pdo->prepare(
+            'SELECT a.id, a.due_date, a.completed_at, u.mobile
+             FROM room_item_assignments a JOIN users u ON u.id = a.assigned_to_user_id
+             WHERE a.interval_id = :interval_id AND a.list_id = :list_id AND a.property_name = :property
+               AND a.room_number = :room AND a.item_name = :item FOR UPDATE'
+        );
+        $find->execute(['interval_id' => $intervalId, 'list_id' => $listId, 'property' => $property, 'room' => $room, 'item' => $itemName]);
+        $assignment = $find->fetch();
+        if (!$assignment || $assignment['completed_at'] !== null) throw new InvalidArgumentException('A atribuição já não pode ser alterada.');
+        if ($enabled && trim((string) $assignment['mobile']) === '') throw new InvalidArgumentException('A empregada não tem telemóvel configurado.');
+        if ($enabled) {
+            $scheduledAt = (string) $assignment['due_date'] . ' ' . $time . ':00';
+            $save = $pdo->prepare(
+                "INSERT INTO whatsapp_assignment_reminders (assignment_id, scheduled_at, status, created_by_user_id)
+                 VALUES (:assignment_id, :scheduled_at, 'pending', :creator)
+                 ON DUPLICATE KEY UPDATE scheduled_at = VALUES(scheduled_at), status = 'pending', attempt_count = 0,
+                    next_attempt_at = NULL, meta_message_id = NULL, last_error = NULL, sent_at = NULL"
+            );
+            $save->execute(['assignment_id' => (int) $assignment['id'], 'scheduled_at' => $scheduledAt, 'creator' => (int) $currentUser['id']]);
+        } else {
+            $delete = $pdo->prepare('DELETE FROM whatsapp_assignment_reminders WHERE assignment_id = :assignment_id');
+            $delete->execute(['assignment_id' => (int) $assignment['id']]);
+        }
+        Auth::audit($pdo, (int) $currentUser['id'], 'whatsapp_assignment_reminder_changed', [
+            'assignment_id' => (int) $assignment['id'], 'enabled' => $enabled, 'time' => $enabled ? $time : null,
+        ]);
+        $pdo->commit();
+        jsonResponse(['ok' => true, 'reminderTime' => $enabled ? $time : null, 'reminderStatus' => $enabled ? 'pending' : null]);
     }
 
     if (($payload['action'] ?? '') === 'set_assignments_atomic') {
