@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/I18n/Translator.php';
+
 final class Auth
 {
     public const PERMISSION_ROOM_CHECK_VIEW = 'room_check.view';
@@ -117,6 +119,7 @@ final class Auth
             session_start();
         }
         $_SESSION['last_activity'] = time();
+        Translator::boot();
     }
 
     public static function attempt(PDO $pdo, string $username, string $password, array $config): bool

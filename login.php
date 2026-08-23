@@ -69,6 +69,13 @@ header('Cache-Control: no-store');
                     <span>Password</span>
                     <input type="password" name="password" required autocomplete="current-password">
                 </label>
+                <label>
+                    <span>Idioma</span>
+                    <select name="language" aria-label="Idioma">
+                        <option value="pt" <?= Translator::locale() === 'pt' ? 'selected' : '' ?>>Português</option>
+                        <option value="en" <?= Translator::locale() === 'en' ? 'selected' : '' ?>>English</option>
+                    </select>
+                </label>
                 <button type="submit">Entrar</button>
             </form>
         </section>
