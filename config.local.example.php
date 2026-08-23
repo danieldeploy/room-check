@@ -30,8 +30,19 @@ return [
     'whatsapp' => [
         'secrets_file' => '/home/CPANEL_USER/room-check-private/whatsapp-secrets.json',
         'graph_version' => 'v23.0',
-        'template_name' => 'room_assignment_reminder',
-        'template_language' => 'pt_PT',
+        'template_name' => 'space_management_reminder',
+        'template_languages' => [
+            'pt' => 'pt_PT',
+            'en' => 'en',
+        ],
         'default_country_code' => '351',
+    ],
+    'translation' => [
+        // Free MyMemory REST translation; no API key is required.
+        'enabled' => true,
+        'endpoint' => 'https://api.mymemory.translated.net/get',
+        // Optional identification recommended by the provider.
+        'contact_email' => '',
+        'timeout_seconds' => 12,
     ],
 ];
