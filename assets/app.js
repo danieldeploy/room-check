@@ -281,8 +281,8 @@
             assignmentLabel.append(assignmentCheckbox, marker);
             const itemTitle = document.createElement('div');
             itemTitle.className = 'item-title';
-            itemTitle.append(name, assignmentHint);
-            itemHeading.append(assignmentLabel, itemTitle);
+            itemTitle.append(name);
+            itemHeading.append(assignmentLabel, itemTitle, assignmentHint);
             row.append(itemHeading, problemField, status);
         } else {
             itemHeading.append(name);
