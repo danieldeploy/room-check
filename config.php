@@ -59,8 +59,22 @@ return [
         'timezone' => 'Europe/Lisbon',
         'secrets_file' => $localConfig['whatsapp']['secrets_file'] ?? getenv('WHATSAPP_SECRETS_FILE') ?: $defaultWhatsAppSecretsFile,
         'graph_version' => $localConfig['whatsapp']['graph_version'] ?? getenv('WHATSAPP_GRAPH_VERSION') ?: 'v23.0',
-        'template_name' => $localConfig['whatsapp']['template_name'] ?? getenv('WHATSAPP_TEMPLATE_NAME') ?: 'room_assignment_reminder',
-        'template_language' => $localConfig['whatsapp']['template_language'] ?? getenv('WHATSAPP_TEMPLATE_LANGUAGE') ?: 'pt_PT',
+        'template_name' => $localConfig['whatsapp']['template_name'] ?? getenv('WHATSAPP_TEMPLATE_NAME') ?: 'space_management_reminder',
+        'template_languages' => $localConfig['whatsapp']['template_languages'] ?? [
+            'pt' => 'pt_PT',
+            'en' => 'en',
+        ],
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
+    ],
+    'translation' => [
+        // Free MyMemory REST translation; no API key is required.
+        'enabled' => (bool) ($localConfig['translation']['enabled'] ?? true),
+        'endpoint' => $localConfig['translation']['endpoint']
+            ?? getenv('MYMEMORY_TRANSLATION_ENDPOINT')
+            ?: 'https://api.mymemory.translated.net/get',
+        'contact_email' => $localConfig['translation']['contact_email']
+            ?? getenv('MYMEMORY_CONTACT_EMAIL')
+            ?: '',
+        'timeout_seconds' => (int) ($localConfig['translation']['timeout_seconds'] ?? 12),
     ],
 ];
