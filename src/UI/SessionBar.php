@@ -24,6 +24,7 @@ final class SessionBar
                 <a class="session-brand" href="<?= self::escape($prefix . 'index.php') ?>"><?= self::COMPANY_NAME ?></a>
                 <div class="session-links">
                     <a href="<?= self::escape($prefix . 'index.php') ?>">Portal</a>
+                    <?php if ($role === 'empregada_andares'): ?><a href="<?= self::escape($prefix . 'tasks.php') ?>">Minha agenda</a><?php endif; ?>
                     <?php if ($canManageUsers): ?><a href="<?= self::escape($prefix . 'admin/users.php') ?>">Utilizadores</a><?php endif; ?>
                     <?php if ($canManagePermissions): ?><a href="<?= self::escape($prefix . 'admin/permissions.php') ?>">Permissões</a><?php endif; ?>
                 </div>

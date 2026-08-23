@@ -6,9 +6,15 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
 
+function loginDestination(array $user): string
+{
+    return ($user['role'] ?? '') === 'empregada_andares' ? 'tasks.php' : 'index.php';
+}
+
 Auth::startSession($config);
-if (Auth::currentUser(database(), $config) !== null) {
-    header('Location: index.php');
+$loggedUser = Auth::currentUser(database(), $config);
+if ($loggedUser !== null) {
+    header('Location: ' . loginDestination($loggedUser));
     exit;
 }
 
@@ -25,7 +31,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (!$success) {
             throw new RuntimeException('Utilizador ou password inválidos.');
         }
-        header('Location: index.php');
+        $loggedUser = Auth::currentUser(database(), $config);
+        header('Location: ' . loginDestination($loggedUser ?? []));
         exit;
     } catch (Throwable $exception) {
         $error = $exception->getMessage();
