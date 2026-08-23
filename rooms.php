@@ -169,6 +169,7 @@ try {
                     </select>
                 </label>
                 <label class="assignment-date-field"><span>Data da verificação</span><input id="assignmentDate" type="date" value="<?= (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d') ?>" aria-label="Data da verificação"></label>
+                <label class="whatsapp-reminder-field"><span>Alerta WhatsApp</span><span class="whatsapp-reminder-group"><input id="whatsappReminderEnabled" type="checkbox" aria-label="Enviar alerta WhatsApp"><input id="whatsappReminderTime" type="time" value="09:00" step="300" disabled aria-label="Hora do alerta WhatsApp"></span><small id="whatsappReminderSaved" class="row-save-feedback">Guardado</small></label>
             <?php else: ?>
                 <label class="room-field"><span>Quarto</span><select id="roomSelect" aria-label="Quarto"></select></label>
             <?php endif; ?>
