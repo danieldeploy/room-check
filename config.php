@@ -22,6 +22,7 @@ if ($serverHome === '') {
 $defaultMy2NSecretsFile = $serverHome === ''
     ? ''
     : $serverHome . '/room-check-private/my2n-secrets.json';
+$defaultWhatsAppSecretsFile = $serverHome === '' ? '' : $serverHome . '/room-check-private/whatsapp-secrets.json';
 
 return [
     'db' => [
@@ -53,5 +54,13 @@ return [
         'allow_writes' => getenv('MY2N_ALLOW_WRITES') === '1',
         'base_url' => 'https://my2n.com/middleware/api/partner/v1',
         'auth_url' => 'https://auth.my2n.com/self-service/login',
+    ],
+    'whatsapp' => [
+        'timezone' => 'Europe/Lisbon',
+        'secrets_file' => $localConfig['whatsapp']['secrets_file'] ?? getenv('WHATSAPP_SECRETS_FILE') ?: $defaultWhatsAppSecretsFile,
+        'graph_version' => $localConfig['whatsapp']['graph_version'] ?? getenv('WHATSAPP_GRAPH_VERSION') ?: 'v23.0',
+        'template_name' => $localConfig['whatsapp']['template_name'] ?? getenv('WHATSAPP_TEMPLATE_NAME') ?: 'room_assignment_reminder',
+        'template_language' => $localConfig['whatsapp']['template_language'] ?? getenv('WHATSAPP_TEMPLATE_LANGUAGE') ?: 'pt_PT',
+        'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
     ],
 ];
