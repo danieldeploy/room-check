@@ -22,7 +22,7 @@ button,input,select,textarea { font:inherit; }
 .create-list .list-area,.rename-list .list-area { flex:0 1 250px; }
 label { display:grid; flex:1; gap:7px; }
 label span,.items-heading { color:var(--muted); font-size:.75rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
-input,select { width:100%; min-height:46px; padding:0 13px; border:1px solid #cbd9d7; border-radius:11px; color:var(--ink); background:var(--surface); }
+input,select { width:100%; min-height:42px; padding:0 13px; border:1px solid #cbd9d7; border-radius:11px; color:var(--ink); background:var(--surface); }
 textarea { display:block; width:100%; min-height:46px; padding:11px 13px; overflow:hidden; resize:none; field-sizing:content; border:1px solid #cbd9d7; border-radius:11px; color:var(--ink); background:#fbfdfd; line-height:1.45; }
 textarea::placeholder { color:#9aabaa; }
 input:focus,select:focus,textarea:focus,button:focus-visible { outline:3px solid rgba(15,118,110,.2); outline-offset:2px; border-color:var(--brand); }
