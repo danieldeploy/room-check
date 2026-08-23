@@ -189,16 +189,16 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Listas de Itens — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-fixed-list-actions-1">
+    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-spaces-navigation-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
 <body>
 <main class="lists-shell">
     <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
     <header class="module-header">
-        <p class="eyebrow">Operações do Alojamento</p>
-        <nav class="module-tabs" aria-label="Gestão de quartos e listas">
-            <a href="rooms.php">GESTÃO QUARTOS</a>
+        <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
+        <nav class="module-tabs" aria-label="Gestão dos espaços e listas">
+            <a href="rooms.php">OPERAÇÕES DE VERIFICAÇÃO</a>
             <a class="active" href="item-lists.php" aria-current="page">LISTAS DE ITENS</a>
         </nav>
     </header>

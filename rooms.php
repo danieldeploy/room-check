@@ -58,8 +58,8 @@ try {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
-    <title>Gestão Quartos — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-assignment-controls-3">
+    <title>Gestão dos Espaços — Active Lines Unip. Lda.</title>
+    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-spaces-navigation-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
     <script>
         window.ROOM_CHECK = <?= json_encode([
@@ -92,9 +92,9 @@ try {
         <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
         <header class="hero compact-page-header">
             <div class="compact-page-heading">
-                <p class="eyebrow">Operações do Alojamento</p>
-                <nav class="module-tabs" aria-label="Gestão de quartos e listas">
-                    <a class="active" href="rooms.php" aria-current="page">GESTÃO QUARTOS</a>
+                <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
+                <nav class="module-tabs" aria-label="Gestão dos espaços e listas">
+                    <a class="active" href="rooms.php" aria-current="page">OPERAÇÕES DE VERIFICAÇÃO</a>
                     <?php if ($canAssign): ?><a href="item-lists.php">LISTAS DE ITENS</a><?php endif; ?>
                 </nav>
             </div>
