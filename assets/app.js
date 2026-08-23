@@ -313,15 +313,55 @@
             assignmentLabel.append(assignmentCheckbox, marker);
             const itemTitle = document.createElement('div');
             itemTitle.className = 'item-title';
-            itemTitle.append(name);
+            const reminderControls = document.createElement('div');
+            reminderControls.className = 'whatsapp-reminder';
+            reminderControls.hidden = true;
+            const reminderToggleLabel = document.createElement('label');
+            reminderToggleLabel.className = 'whatsapp-reminder-toggle';
+            const reminderToggle = document.createElement('input');
+            reminderToggle.type = 'checkbox';
+            const reminderText = document.createElement('span');
+            reminderText.textContent = 'WhatsApp';
+            reminderToggleLabel.append(reminderToggle, reminderText);
+            const reminderTime = document.createElement('input');
+            reminderTime.type = 'time';
+            reminderTime.step = '300';
+            reminderTime.value = '09:00';
+            reminderTime.disabled = true;
+            reminderControls.append(reminderToggleLabel, reminderTime);
+            const saveReminder = async () => {
+                const current = selection();
+                reminderToggle.disabled = true; reminderTime.disabled = true;
+                try {
+                    const response = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                        body: JSON.stringify({ action: 'schedule_whatsapp_reminder', csrfToken: config.csrfToken, ...current,
+                            intervalId: Number(intervalSelect.value), listId: Number(listSelect.value), itemName: item.name,
+                            enabled: reminderToggle.checked, time: reminderTime.value }) });
+                    const result = await response.json();
+                    if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar alerta WhatsApp.');
+                    if (assignments[item.name]) {
+                        assignments[item.name].reminderTime = result.reminderTime;
+                        assignments[item.name].reminderStatus = result.reminderStatus;
+                    }
+                    showSavedFeedback(assignmentSaved);
+                } catch (error) { setStatus(error.message, 'error'); }
+                updateAssignmentMode();
+            };
+            reminderToggle.addEventListener('change', () => { reminderTime.disabled = !reminderToggle.checked; saveReminder(); });
+            reminderTime.addEventListener('change', () => { if (reminderToggle.checked) saveReminder(); });
+            itemTitle.append(name, reminderControls);
             itemHeading.append(assignmentLabel, itemTitle, assignmentHint, assignmentSaved);
             row.append(itemHeading, problemField, status);
+            row._reminderControls = reminderControls;
+            row._reminderToggle = reminderToggle;
+            row._reminderTime = reminderTime;
         } else {
             itemHeading.append(name);
             row.append(itemHeading, problemField, status);
         }
 
-        return { element: row, name: item.name, textarea, assignmentHint, assignmentSaved, instructionSaved, status, assignmentCheckbox, assignmentLabel, itemHeading };
+        return { element: row, name: item.name, textarea, assignmentHint, assignmentSaved, instructionSaved, status, assignmentCheckbox, assignmentLabel, itemHeading,
+            reminderControls: row._reminderControls, reminderToggle: row._reminderToggle, reminderTime: row._reminderTime };
     };
 
     function updateSelectAllState() {
@@ -408,6 +448,14 @@
                 'same-employee-other-date', active && locked && sameEmployeeOtherDate
             );
             row.assignmentHint.hidden = !viewingAssignments || !hasAssignment;
+            if (row.reminderControls) {
+                const reminderEditable = active && !locked && sameAssignment;
+                row.reminderControls.hidden = !reminderEditable;
+                row.reminderToggle.checked = reminderEditable && Boolean(assignment.reminderTime);
+                row.reminderTime.value = assignment.reminderTime || '09:00';
+                row.reminderToggle.disabled = !reminderEditable;
+                row.reminderTime.disabled = !reminderEditable || !row.reminderToggle.checked;
+            }
             row.textarea.readOnly = viewingAssignments ? (!active || locked) : !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = viewingAssignments || !canEdit; });
             autoGrow(row.textarea);
@@ -540,6 +588,8 @@
                     if (change.selected) {
                         assignments[change.itemName] = {
                             employeeId, dueDate, instructions: change.instructions || '', completed: false,
+                            reminderTime: assignments[change.itemName]?.reminderTime || null,
+                            reminderStatus: assignments[change.itemName]?.reminderStatus || null,
                         };
                     } else {
                         delete assignments[change.itemName];
