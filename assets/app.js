@@ -264,7 +264,7 @@
         let assignmentLabel = null;
         if (canAssign) {
             assignmentLabel = document.createElement('label');
-            assignmentLabel.className = 'assignment-check';
+            assignmentLabel.className = 'assignment-check is-hidden';
             assignmentLabel.hidden = true;
             assignmentCheckbox = document.createElement('input');
             assignmentCheckbox.type = 'checkbox';
@@ -335,6 +335,7 @@
                 && assignment.completed !== true;
             const locked = hasAssignment && (!active || !sameAssignment || assignment.completed === true);
             row.assignmentLabel.hidden = !active;
+            row.assignmentLabel.classList.toggle('is-hidden', !active);
             row.itemHeading.classList.toggle('has-assignment-check', active);
             row.assignmentCheckbox.disabled = !active || locked;
             row.assignmentCheckbox.checked = viewingAssignments && hasAssignment;

@@ -59,7 +59,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Gestão Quartos — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-assignment-controls-2">
+    <link rel="stylesheet" href="assets/app.css?v=<?= (int) filemtime(__DIR__ . '/assets/app.css') ?>-assignment-controls-3">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
     <script>
         window.ROOM_CHECK = <?= json_encode([
@@ -85,7 +85,7 @@ try {
             'initialRoom' => $initialRoom,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     </script>
-    <script src="assets/app.js?v=<?= (int) filemtime(__DIR__ . '/assets/app.js') ?>-assignment-controls-1" defer></script>
+    <script src="assets/app.js?v=<?= (int) filemtime(__DIR__ . '/assets/app.js') ?>-assignment-controls-3" defer></script>
 </head>
 <body>
     <main class="app-shell">
