@@ -13,13 +13,15 @@ if ($lock !== 1) exit(0);
 $client = new WhatsAppCloudClient($config['whatsapp']);
 try {
     $query = $pdo->query(
-        "SELECT r.id, r.attempt_count, a.item_name, a.property_name, a.room_number, a.due_date,
-                a.verification_instructions, u.display_name, u.mobile
+        "SELECT r.id, r.attempt_count, r.due_date, u.display_name, u.mobile,
+                COUNT(a.id) AS assignment_count
          FROM whatsapp_assignment_reminders r
-         JOIN room_item_assignments a ON a.id = r.assignment_id
-         JOIN users u ON u.id = a.assigned_to_user_id
+         JOIN users u ON u.id = r.assigned_to_user_id
+         JOIN room_item_assignments a ON a.assigned_to_user_id = r.assigned_to_user_id
+              AND a.due_date = r.due_date AND a.completed_at IS NULL
          WHERE r.status IN ('pending','failed') AND r.scheduled_at <= NOW()
            AND (r.next_attempt_at IS NULL OR r.next_attempt_at <= NOW())
+         GROUP BY r.id, r.attempt_count, r.due_date, u.display_name, u.mobile, r.scheduled_at
          ORDER BY r.scheduled_at LIMIT 50"
     );
     foreach ($query->fetchAll() as $row) {
@@ -27,9 +29,8 @@ try {
             ->execute(['id' => (int) $row['id']]);
         try {
             $messageId = $client->sendTemplate((string) $row['mobile'], [
-                (string) $row['display_name'], (string) $row['property_name'], (string) $row['room_number'],
-                (string) $row['item_name'], (new DateTimeImmutable((string) $row['due_date']))->format('d/m/Y'),
-                trim((string) $row['verification_instructions']) ?: 'Sem instruções adicionais',
+                (string) $row['display_name'], (new DateTimeImmutable((string) $row['due_date']))->format('d/m/Y'),
+                (string) $row['assignment_count'], 'Consulte no Portal de Gestão os itens e respetivas instruções.',
             ]);
             $pdo->prepare("UPDATE whatsapp_assignment_reminders SET status = 'sent', meta_message_id = :message_id, sent_at = NOW(), last_error = NULL WHERE id = :id")
                 ->execute(['message_id' => $messageId, 'id' => (int) $row['id']]);
