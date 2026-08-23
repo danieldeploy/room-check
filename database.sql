@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS item_lists (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(120) NOT NULL,
+    area VARCHAR(32) NOT NULL DEFAULT 'rooms',
     is_system TINYINT(1) NOT NULL DEFAULT 0,
     created_by_user_id BIGINT UNSIGNED NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS item_list_items (
     CONSTRAINT fk_item_list_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO item_lists (id, name, is_system) VALUES (1, 'Check Geral', 1);
+INSERT IGNORE INTO item_lists (id, name, area, is_system) VALUES (1, 'Check Geral', 'rooms', 1);
 INSERT IGNORE INTO item_list_items (list_id, name, default_instructions, sort_order) VALUES
     (1, 'Espelho', '', 10), (1, 'Lampadas', '', 20), (1, 'Armarios', '', 30),
     (1, 'Cabeceiras', '', 40), (1, 'Ventoinhas', '', 50), (1, 'Cortinas', '', 60),

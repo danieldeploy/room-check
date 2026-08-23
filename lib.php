@@ -73,7 +73,7 @@ function validateSelection(string $property, int $room): void
 function itemLists(PDO $pdo): array
 {
     $rows = $pdo->query(
-        'SELECT list_row.id, list_row.name, list_row.is_system,
+        'SELECT list_row.id, list_row.name, list_row.area, list_row.is_system,
                 item.name AS item_name, item.default_instructions
          FROM item_lists list_row
          LEFT JOIN item_list_items item ON item.list_id = list_row.id
@@ -86,6 +86,7 @@ function itemLists(PDO $pdo): array
             $lists[$id] = [
                 'id' => $id,
                 'name' => (string) $row['name'],
+                'area' => (string) $row['area'],
                 'isSystem' => (bool) $row['is_system'],
                 'items' => [],
                 'defaults' => [],

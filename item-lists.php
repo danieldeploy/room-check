@@ -20,6 +20,13 @@ try {
 
 $message = null;
 $error = null;
+$verificationAreas = [
+    'rooms' => 'Quartos',
+    'shared_bathrooms' => 'Casas de banho comuns',
+    'corridors' => 'Corredores',
+    'kitchens' => 'Cozinhas',
+    'terraces' => 'Terraços',
+];
 $listId = (int) ($_GET['list_id'] ?? 0);
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
@@ -28,10 +35,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $listId = (int) ($_POST['list_id'] ?? 0);
         $itemId = (int) ($_POST['item_id'] ?? 0);
         $name = trim((string) ($_POST['name'] ?? ''));
+        $area = trim((string) ($_POST['area'] ?? ''));
         $instructions = trim((string) ($_POST['default_instructions'] ?? ''));
         if (in_array($action, ['create_list', 'rename_list'], true)) {
             if ($name === '' || mb_strlen($name) > 120) {
                 throw new InvalidArgumentException('O nome da lista deve ter entre 1 e 120 caracteres.');
+            }
+            if (!isset($verificationAreas[$area])) {
+                throw new InvalidArgumentException('Escolha uma área a verificar válida.');
             }
         } elseif (in_array($action, ['add_item', 'rename_item'], true)) {
             if ($name === '' || mb_strlen($name) > 80) {
@@ -44,16 +55,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         if ($action === 'create_list') {
             $statement = $pdo->prepare(
-                'INSERT INTO item_lists (name, created_by_user_id) VALUES (:name, :user_id)'
+                'INSERT INTO item_lists (name, area, created_by_user_id) VALUES (:name, :area, :user_id)'
             );
-            $statement->execute(['name' => $name, 'user_id' => (int) $currentUser['id']]);
+            $statement->execute(['name' => $name, 'area' => $area, 'user_id' => (int) $currentUser['id']]);
             $listId = (int) $pdo->lastInsertId();
             $message = 'Lista criada.';
         } elseif ($action === 'rename_list') {
             itemList($pdo, $listId);
-            $statement = $pdo->prepare('UPDATE item_lists SET name = :name WHERE id = :id');
-            $statement->execute(['name' => $name, 'id' => $listId]);
-            $message = 'Nome da lista atualizado.';
+            $statement = $pdo->prepare('UPDATE item_lists SET name = :name, area = :area WHERE id = :id');
+            $statement->execute(['name' => $name, 'area' => $area, 'id' => $listId]);
+            $message = 'Lista atualizada.';
         } elseif ($action === 'delete_list') {
             $list = itemList($pdo, $listId);
             if ($list['isSystem']) {
@@ -178,7 +189,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Listas de Itens — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-compact-actions-1">
+    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-list-area-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
 <body>
@@ -204,6 +215,7 @@ header('Cache-Control: no-store');
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
             <input type="hidden" name="action" value="create_list">
             <label><span>Nova lista</span><input name="name" maxlength="120" required placeholder="Nome da nova lista"></label>
+            <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>"><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
             <button type="submit">Criar lista</button>
         </form>
     </section>
@@ -215,8 +227,9 @@ header('Cache-Control: no-store');
                 <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                 <input type="hidden" name="action" value="rename_list">
                 <input type="hidden" name="list_id" value="<?= $listId ?>">
-                <input name="name" maxlength="120" required value="<?= listEscape($selectedList['name']) ?>" aria-label="Nome da lista">
-                <button type="submit">Guardar nome</button>
+                <label><span>Nome da lista</span><input name="name" maxlength="120" required value="<?= listEscape($selectedList['name']) ?>" aria-label="Nome da lista"></label>
+                <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>" <?= $selectedList['area'] === $value ? 'selected' : '' ?>><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
+                <button type="submit">Guardar lista</button>
             </form>
             <?php if (!$selectedList['isSystem']): ?><form method="post" onsubmit="return confirm('Apagar esta lista?')">
                 <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">

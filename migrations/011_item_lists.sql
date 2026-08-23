@@ -1,6 +1,7 @@
 CREATE TABLE item_lists (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(120) NOT NULL,
+    area VARCHAR(32) NOT NULL DEFAULT 'rooms',
     is_system TINYINT(1) NOT NULL DEFAULT 0,
     created_by_user_id BIGINT UNSIGNED NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -23,7 +24,7 @@ CREATE TABLE item_list_items (
     CONSTRAINT fk_item_list_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO item_lists (name, is_system) VALUES ('Check Geral', 1);
+INSERT INTO item_lists (name, area, is_system) VALUES ('Check Geral', 'rooms', 1);
 SET @room_check_list_id = LAST_INSERT_ID();
 
 INSERT INTO item_list_items (list_id, name, default_instructions, sort_order) VALUES
