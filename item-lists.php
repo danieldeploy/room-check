@@ -178,7 +178,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
     <title>Listas de Itens — Active Lines Unip. Lda.</title>
-    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>">
+    <link rel="stylesheet" href="assets/item-lists.css?v=<?= (int) filemtime(__DIR__ . '/assets/item-lists.css') ?>-compact-textareas-1">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
 <body>
@@ -232,7 +232,7 @@ header('Cache-Control: no-store');
                     <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                     <input type="hidden" name="action" value="rename_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>">
                     <input name="name" maxlength="80" required value="<?= listEscape((string) $item['name']) ?>" aria-label="Nome do item">
-                    <textarea name="default_instructions" maxlength="5000" rows="2" placeholder="Descreva a verificação…" aria-label="Descrição da verificação: <?= listEscape((string) $item['name']) ?>"><?= listEscape((string) $item['default_instructions']) ?></textarea>
+                    <textarea name="default_instructions" maxlength="5000" rows="1" placeholder="Descreva a verificação…" aria-label="Descrição da verificação: <?= listEscape((string) $item['name']) ?>"><?= listEscape((string) $item['default_instructions']) ?></textarea>
                     <button type="submit">Guardar</button>
                 </form>
                 <form method="post" onsubmit="return confirm('Apagar este item?')">
@@ -246,7 +246,7 @@ header('Cache-Control: no-store');
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
             <input type="hidden" name="action" value="add_item"><input type="hidden" name="list_id" value="<?= $listId ?>">
             <label><span>Novo item</span><input name="name" maxlength="80" required placeholder="Nome do item"></label>
-            <label class="new-instructions"><span>Descrição da verificação</span><textarea name="default_instructions" maxlength="5000" rows="2" placeholder="Descreva a verificação…"></textarea></label>
+            <label class="new-instructions"><span>Descrição da verificação</span><textarea name="default_instructions" maxlength="5000" rows="1" placeholder="Descreva a verificação…"></textarea></label>
             <button type="submit">Adicionar item</button>
         </form>
     </section>
