@@ -96,7 +96,11 @@ final class Translator
         if (!root) return;
         if (root.nodeType === Node.TEXT_NODE) {
             const parent = root.parentElement;
-            if (parent && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) root.nodeValue = translate(root.nodeValue);
+            if (parent && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) {
+                const current = root.nodeValue || '';
+                const translated = translate(current);
+                if (translated !== current) root.nodeValue = translated;
+            }
             return;
         }
         if (root.nodeType !== Node.ELEMENT_NODE) return;
