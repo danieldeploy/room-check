@@ -5,7 +5,7 @@ final class ContentTranslator
 {
     private const MYMEMORY_MAX_QUERY_BYTES = 500;
 
-    public function __construct(private array $config)
+    public function __construct(private PDO $pdo, private array $config)
     {
     }
 
@@ -44,6 +44,12 @@ final class ContentTranslator
         if ($text === '') {
             return '';
         }
+
+        $cached = $this->cachedTranslation($text, $source, $target);
+        if ($cached !== null) {
+            return $cached;
+        }
+
         if (($this->config['enabled'] ?? true) !== true || !function_exists('curl_init')) {
             return null;
         }
@@ -57,7 +63,66 @@ final class ContentTranslator
             $translatedChunks[] = $translation;
         }
 
-        return trim(implode("\n", $translatedChunks));
+        $translated = trim(implode("\n", $translatedChunks));
+        if ($translated !== '') {
+            $this->storeTranslation($text, $translated, $source, $target);
+        }
+
+        return $translated;
+    }
+
+    private function cachedTranslation(string $text, string $source, string $target): ?string
+    {
+        try {
+            $statement = $this->pdo->prepare(
+                'SELECT translated_text
+                 FROM translation_cache
+                 WHERE source_language = :source_language
+                   AND target_language = :target_language
+                   AND source_hash = :source_hash
+                   AND source_text = :source_text
+                 LIMIT 1'
+            );
+            $statement->execute([
+                'source_language' => $source,
+                'target_language' => $target,
+                'source_hash' => hash('sha256', $text),
+                'source_text' => $text,
+            ]);
+            $translated = $statement->fetchColumn();
+            if (is_string($translated) && trim($translated) !== '') {
+                return trim($translated);
+            }
+        } catch (Throwable) {
+            // The migration may not have been applied yet. Translation still works without cache.
+        }
+
+        return null;
+    }
+
+    private function storeTranslation(string $text, string $translated, string $source, string $target): void
+    {
+        try {
+            $statement = $this->pdo->prepare(
+                'INSERT INTO translation_cache
+                    (source_language, target_language, source_hash, source_text, translated_text)
+                 VALUES
+                    (:source_language, :target_language, :source_hash, :source_text, :translated_text)
+                 ON DUPLICATE KEY UPDATE
+                    source_text = VALUES(source_text),
+                    translated_text = VALUES(translated_text),
+                    updated_at = CURRENT_TIMESTAMP'
+            );
+            $statement->execute([
+                'source_language' => $source,
+                'target_language' => $target,
+                'source_hash' => hash('sha256', $text),
+                'source_text' => $text,
+                'translated_text' => $translated,
+            ]);
+        } catch (Throwable) {
+            // A cache failure must never prevent the original save operation.
+        }
     }
 
     private function translateChunk(string $text, string $source, string $target): ?string

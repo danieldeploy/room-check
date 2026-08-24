@@ -106,7 +106,7 @@ try {
     $rawBody = file_get_contents('php://input');
     $payload = json_decode($rawBody ?: '', true, 512, JSON_THROW_ON_ERROR);
     $pdo = database();
-    $contentTranslator = new ContentTranslator($config['translation'] ?? []);
+        $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
     if (($payload['action'] ?? '') === 'create_interval') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);

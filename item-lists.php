@@ -38,7 +38,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $name = trim((string) ($_POST['name'] ?? ''));
         $area = trim((string) ($_POST['area'] ?? ''));
         $instructions = trim((string) ($_POST['default_instructions'] ?? ''));
-        $contentTranslator = new ContentTranslator($config['translation'] ?? []);
+        $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
         if (in_array($action, ['create_list', 'rename_list'], true)) {
             if ($name === '' || mb_strlen($name) > 120) {
                 throw new InvalidArgumentException('O nome da lista deve ter entre 1 e 120 caracteres.');
