@@ -56,6 +56,21 @@ function database(): PDO
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 
+    if (class_exists('Translator') && method_exists('Translator', 'registerDynamic')) {
+        try {
+            $nameRows = $pdo->query(
+                "SELECT name AS name_pt, name_en FROM item_lists WHERE NULLIF(TRIM(name_en), '') IS NOT NULL
+                 UNION ALL
+                 SELECT name AS name_pt, name_en FROM item_list_items WHERE NULLIF(TRIM(name_en), '') IS NOT NULL"
+            )->fetchAll();
+            foreach ($nameRows as $nameRow) {
+                Translator::registerDynamic((string) $nameRow['name_pt'], (string) $nameRow['name_en']);
+            }
+        } catch (Throwable) {
+            // Keep the application compatible until the bilingual-name migration is applied.
+        }
+    }
+
     return $pdo;
 }
 
@@ -73,8 +88,9 @@ function validateSelection(string $property, int $room): void
 function itemLists(PDO $pdo): array
 {
     $rows = $pdo->query(
-        'SELECT list_row.id, list_row.name, list_row.area, list_row.is_system,
-                item.name AS item_name, item.default_instructions, item.default_instructions_en
+        'SELECT list_row.id, list_row.name, list_row.name_en, list_row.area, list_row.is_system,
+                item.name AS item_name, item.name_en AS item_name_en,
+                item.default_instructions, item.default_instructions_en
          FROM item_lists list_row
          LEFT JOIN item_list_items item ON item.list_id = list_row.id
          ORDER BY list_row.is_system DESC, list_row.name, item.sort_order, item.id'
@@ -86,15 +102,18 @@ function itemLists(PDO $pdo): array
             $lists[$id] = [
                 'id' => $id,
                 'name' => (string) $row['name'],
+                'nameEn' => (string) ($row['name_en'] ?? ''),
                 'area' => (string) $row['area'],
                 'isSystem' => (bool) $row['is_system'],
                 'items' => [],
+                'itemNamesEn' => [],
                 'defaults' => [],
             ];
         }
         if ($row['item_name'] !== null) {
             $itemName = (string) $row['item_name'];
             $lists[$id]['items'][] = $itemName;
+            $lists[$id]['itemNamesEn'][$itemName] = (string) ($row['item_name_en'] ?? '');
             $lists[$id]['defaults'][$itemName] = Translator::localized(
                 (string) $row['default_instructions'], (string) ($row['default_instructions_en'] ?? '')
             );
