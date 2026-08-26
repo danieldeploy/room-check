@@ -9,6 +9,7 @@
     const saveMembersButton = document.querySelector('#saveMembersButton');
     const selectionSummary = document.querySelector('#selectionSummary');
     const currentAssignments = new Map();
+    const uiLocale = document.documentElement.lang === 'en' ? 'en-GB' : 'pt-PT';
 
     const text = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
     const normalizedIds = (values) => [...new Set(values.map(Number))].sort((a, b) => a - b);
@@ -100,7 +101,7 @@
         const mobiles = Array.isArray(data.mobiles) ? data.mobiles : [];
         document.querySelector('#siteId').textContent = text(data.siteId);
         document.querySelector('#bellCount').textContent = String(bells.length);
-        document.querySelector('#readAt').textContent = new Date(data.readAt).toLocaleString('pt-PT');
+        document.querySelector('#readAt').textContent = new Date(data.readAt).toLocaleString(uiLocale);
         document.querySelector('#modeBadge').textContent = data.dryRun ? 'ALTERAÇÕES BLOQUEADAS' : 'ALTERAÇÕES AUTORIZADAS';
 
         currentAssignments.clear();
