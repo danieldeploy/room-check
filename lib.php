@@ -161,6 +161,53 @@ WHERE NULLIF(TRIM(name_en), '') IS NULL
   )
 SQL);
 
+    // The original room-check seed pre-dates bilingual content. Backfill the
+    // established English text for those legacy default instructions so the
+    // English UI reads the English column instead of falling back to Portuguese.
+    $pdo->exec(<<<'SQL'
+UPDATE item_list_items
+SET default_instructions_en = CASE TRIM(default_instructions)
+    WHEN 'Verificar se está limpo e sem danos.' THEN 'Check that it is clean and undamaged.'
+    WHEN 'Confirmar que todas as lâmpadas acendem.' THEN 'Confirm that all lights turn on.'
+    WHEN 'Verificar a limpeza e o funcionamento das portas.' THEN 'Check cleanliness and that the doors work correctly.'
+    WHEN 'Confirmar que estão limpas e bem fixas.' THEN 'Confirm that they are clean and securely fitted.'
+    WHEN 'Testar o funcionamento e verificar a limpeza.' THEN 'Test operation and check cleanliness.'
+    WHEN 'Verificar a limpeza e o movimento das cortinas.' THEN 'Check cleanliness and movement of the curtains.'
+    WHEN 'Confirmar que estão fixas e sem danos visíveis.' THEN 'Confirm that they are secure and have no visible damage.'
+    WHEN 'Verificar a estabilidade e o estado das camas.' THEN 'Check the stability and condition of the beds.'
+    WHEN 'Testar todas as luzes do quarto.' THEN 'Test all room lights.'
+    WHEN 'Confirmar que abrem e fecham corretamente.' THEN 'Confirm that they open and close correctly.'
+    WHEN 'Testar a fechadura e o trinco da porta.' THEN 'Test the door lock and latch.'
+    WHEN 'Verificar abertura, fecho e estado dos vidros.' THEN 'Check opening, closing and the condition of the glass.'
+    WHEN 'Confirmar que as chaves estão disponíveis e funcionam.' THEN 'Confirm that the keys are available and work.'
+    WHEN 'Verificar se está visível e bem fixada.' THEN 'Confirm that it is visible and securely fitted.'
+    WHEN 'Confirmar que está limpo e em bom estado.' THEN 'Confirm that it is clean and in good condition.'
+    WHEN 'Verificar manchas, fissuras ou danos.' THEN 'Check for stains, cracks or damage.'
+    WHEN 'Confirmar a quantidade e o estado dos cabides.' THEN 'Confirm the number and condition of the hangers.'
+    ELSE default_instructions_en
+END
+WHERE NULLIF(TRIM(default_instructions_en), '') IS NULL
+  AND TRIM(default_instructions) IN (
+      'Verificar se está limpo e sem danos.',
+      'Confirmar que todas as lâmpadas acendem.',
+      'Verificar a limpeza e o funcionamento das portas.',
+      'Confirmar que estão limpas e bem fixas.',
+      'Testar o funcionamento e verificar a limpeza.',
+      'Verificar a limpeza e o movimento das cortinas.',
+      'Confirmar que estão fixas e sem danos visíveis.',
+      'Verificar a estabilidade e o estado das camas.',
+      'Testar todas as luzes do quarto.',
+      'Confirmar que abrem e fecham corretamente.',
+      'Testar a fechadura e o trinco da porta.',
+      'Verificar abertura, fecho e estado dos vidros.',
+      'Confirmar que as chaves estão disponíveis e funcionam.',
+      'Verificar se está visível e bem fixada.',
+      'Confirmar que está limpo e em bom estado.',
+      'Verificar manchas, fissuras ou danos.',
+      'Confirmar a quantidade e o estado dos cabides.'
+  )
+SQL);
+
     $done = true;
 }
 
