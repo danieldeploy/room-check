@@ -21,7 +21,7 @@ final class ContentTranslator
         }
 
         if ($sourceLanguage === 'en') {
-            if ($existingEn === $text && $existingPt !== '') {
+            if ($existingEn === $text && $existingPt !== '' && $existingPt !== $existingEn) {
                 return ['pt' => $existingPt, 'en' => $text];
             }
             $translatedPt = $this->translate($text, 'en', 'pt');
@@ -33,7 +33,7 @@ final class ContentTranslator
             return ['pt' => trim($translatedPt), 'en' => $text];
         }
 
-        if ($existingPt === $text && $existingEn !== '') {
+        if ($existingPt === $text && $existingEn !== '' && $existingEn !== $existingPt) {
             return ['pt' => $text, 'en' => $existingEn];
         }
 
