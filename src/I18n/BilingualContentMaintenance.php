@@ -4,6 +4,8 @@ declare(strict_types=1);
 final class BilingualContentMaintenance
 {
     private const MAX_TRANSLATION_ATTEMPTS = 48;
+    private const SUSPICIOUS_ENGLISH_TARGET_PATTERN =
+        'verificar|confirmar|limpeza|funcionamento|lâmpad|estão|está|todas|todos|limpas|limpos|fixas|fixos|disponí|acendem|fechadur|fissur|moldur|danificad|cabides|quarto|corredor|portas|janelas|chaves|cortinas|camas|vidros|manchas|ventoinhas|armários';
 
     public static function run(PDO $pdo, array $translationConfig, string $schema): void
     {
@@ -52,7 +54,7 @@ final class BilingualContentMaintenance
         ];
 
         foreach ($renames as $rename) {
-            $find = $pdo->prepare('SELECT id, list_id FROM item_list_items WHERE name = :old_name');
+            $find = $pdo->prepare('SELECT id, list_id FROM item_list_items WHERE BINARY name = BINARY :old_name');
             $find->execute(['old_name' => $rename['old']]);
             foreach ($find->fetchAll() as $row) {
                 $itemId = (int) $row['id'];
@@ -60,7 +62,7 @@ final class BilingualContentMaintenance
 
                 $duplicate = $pdo->prepare(
                     'SELECT id FROM item_list_items
-                     WHERE list_id = :list_id AND name = :new_name AND id <> :id LIMIT 1'
+                     WHERE list_id = :list_id AND BINARY name = BINARY :new_name AND id <> :id LIMIT 1'
                 );
                 $duplicate->execute(['list_id' => $listId, 'new_name' => $rename['pt'], 'id' => $itemId]);
                 if ($duplicate->fetchColumn()) {
@@ -71,7 +73,7 @@ final class BilingualContentMaintenance
                     $pdo->beginTransaction();
                     $updateValues = $pdo->prepare(
                         'UPDATE room_checklist_values SET item_name = :new_name
-                         WHERE list_id = :list_id AND item_name = :old_name'
+                         WHERE list_id = :list_id AND BINARY item_name = BINARY :old_name'
                     );
                     $updateValues->execute([
                         'new_name' => $rename['pt'], 'list_id' => $listId, 'old_name' => $rename['old'],
@@ -79,7 +81,7 @@ final class BilingualContentMaintenance
 
                     $updateAssignments = $pdo->prepare(
                         'UPDATE room_item_assignments SET item_name = :new_name
-                         WHERE list_id = :list_id AND item_name = :old_name'
+                         WHERE list_id = :list_id AND BINARY item_name = BINARY :old_name'
                     );
                     $updateAssignments->execute([
                         'new_name' => $rename['pt'], 'list_id' => $listId, 'old_name' => $rename['old'],
@@ -103,43 +105,43 @@ final class BilingualContentMaintenance
 
     private static function backfillLegacyContent(PDO $pdo, array $translationConfig): void
     {
-        $known = self::knownEnglishTranslations();
-        $translator = null;
-        if (($translationConfig['enabled'] ?? true) === true) {
-            if (!class_exists('ContentTranslator')) {
-                require_once __DIR__ . '/ContentTranslator.php';
-            }
-            $translator = new ContentTranslator($pdo, $translationConfig);
+        if (!class_exists('ContentTranslator')) {
+            require_once __DIR__ . '/ContentTranslator.php';
         }
+
+        // The deterministic map repairs established seed text. Validated cache
+        // entries extend it so previously translated user content can also repair
+        // a bad legacy target without another provider request.
+        $known = self::englishRepairDictionary($pdo);
+        $translator = ($translationConfig['enabled'] ?? true) === true
+            ? new ContentTranslator($pdo, $translationConfig)
+            : null;
 
         $attemptsLeft = self::MAX_TRANSLATION_ATTEMPTS;
         $jobs = [
             [
-                'select' => "SELECT id, name AS source_text, name_en AS target_text
-                             FROM room_verification_intervals
-                             WHERE NULLIF(TRIM(name), '') IS NOT NULL
-                               AND NULLIF(TRIM(name_en), '') IS NULL
-                             ORDER BY id LIMIT 48",
+                'select' => self::legacyTextSelect(
+                    'room_verification_intervals', 'id, name AS source_text, name_en AS target_text',
+                    'name', 'name_en', 'id'
+                ),
                 'update' => 'UPDATE room_verification_intervals SET name_en = :translated WHERE id = :id',
                 'keys' => ['id' => 'id'],
                 'max_length' => 120,
             ],
             [
-                'select' => "SELECT id, name AS source_text, name_en AS target_text
-                             FROM item_lists
-                             WHERE NULLIF(TRIM(name), '') IS NOT NULL
-                               AND NULLIF(TRIM(name_en), '') IS NULL
-                             ORDER BY id LIMIT 48",
+                'select' => self::legacyTextSelect(
+                    'item_lists', 'id, name AS source_text, name_en AS target_text',
+                    'name', 'name_en', 'id'
+                ),
                 'update' => 'UPDATE item_lists SET name_en = :translated WHERE id = :id',
                 'keys' => ['id' => 'id'],
                 'max_length' => 120,
             ],
             [
-                'select' => "SELECT id, name AS source_text, name_en AS target_text
-                             FROM item_list_items
-                             WHERE NULLIF(TRIM(name), '') IS NOT NULL
-                               AND NULLIF(TRIM(name_en), '') IS NULL
-                             ORDER BY id LIMIT 48",
+                'select' => self::legacyTextSelect(
+                    'item_list_items', 'id, name AS source_text, name_en AS target_text',
+                    'name', 'name_en', 'id'
+                ),
                 'update' => 'UPDATE item_list_items SET name_en = :translated WHERE id = :id',
                 'keys' => ['id' => 'id'],
                 'max_length' => 80,
@@ -197,7 +199,14 @@ final class BilingualContentMaintenance
                 }
 
                 $sourceText = trim((string) ($row['source_text'] ?? ''));
+                $currentTarget = trim((string) ($row['target_text'] ?? ''));
                 if ($sourceText === '') {
+                    continue;
+                }
+
+                // SQL deliberately over-selects suspicious targets. Keep any text
+                // that passes the conservative target-language guard.
+                if ($currentTarget !== '' && ContentTranslator::isPlausibleTargetText($currentTarget, 'en')) {
                     continue;
                 }
 
@@ -212,7 +221,7 @@ final class BilingualContentMaintenance
                 }
 
                 $translated = trim((string) $translated);
-                if ($translated === '') {
+                if ($translated === '' || !ContentTranslator::isPlausibleTargetText($translated, 'en')) {
                     continue;
                 }
                 if (is_int($job['max_length']) && mb_strlen($translated) > $job['max_length']) {
@@ -239,25 +248,40 @@ final class BilingualContentMaintenance
         string $targetColumn,
         string $orderBy
     ): string {
+        $pattern = str_replace("'", "''", self::SUSPICIOUS_ENGLISH_TARGET_PATTERN);
         return "SELECT {$columns}
                 FROM {$table}
                 WHERE NULLIF(TRIM({$sourceColumn}), '') IS NOT NULL
                   AND (
                       NULLIF(TRIM({$targetColumn}), '') IS NULL
-                      OR (
-                          TRIM({$targetColumn}) = TRIM({$sourceColumn})
-                          AND NOT EXISTS (
-                              SELECT 1 FROM translation_cache cache_row
-                              WHERE cache_row.source_language = 'pt'
-                                AND cache_row.target_language = 'en'
-                                AND cache_row.source_hash = SHA2({$sourceColumn}, 256)
-                                AND cache_row.source_text = {$sourceColumn}
-                                AND TRIM(cache_row.translated_text) = TRIM({$targetColumn})
-                          )
-                      )
+                      OR LOWER({$targetColumn}) REGEXP '{$pattern}'
                   )
                 ORDER BY {$orderBy}
                 LIMIT 48";
+    }
+
+    private static function englishRepairDictionary(PDO $pdo): array
+    {
+        $dictionary = self::knownEnglishTranslations();
+        try {
+            $rows = $pdo->query(
+                "SELECT source_text, translated_text
+                 FROM translation_cache
+                 WHERE source_language = 'pt' AND target_language = 'en'
+                   AND NULLIF(TRIM(source_text), '') IS NOT NULL
+                   AND NULLIF(TRIM(translated_text), '') IS NOT NULL"
+            )->fetchAll();
+            foreach ($rows as $row) {
+                $source = trim((string) ($row['source_text'] ?? ''));
+                $translated = trim((string) ($row['translated_text'] ?? ''));
+                if ($source !== '' && ContentTranslator::isPlausibleTargetText($translated, 'en')) {
+                    $dictionary[$source] = $translated;
+                }
+            }
+        } catch (Throwable) {
+            // The cache is optional; deterministic translations remain available.
+        }
+        return $dictionary;
     }
 
     private static function registerDynamicTranslations(PDO $pdo): void

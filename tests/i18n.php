@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/I18n/SiteTranslations.php';
+require_once dirname(__DIR__) . '/src/I18n/ContentTranslator.php';
 
 function assertI18n(bool $condition, string $message): void
 {
@@ -35,5 +36,35 @@ $html = '<html><body><span>Controlo My2N</span></body></html>';
 $translatedOutput = Translator::translateOutput($html);
 assertI18n(str_contains($translatedOutput, 'My2N Control'), 'HTML output receives the shared English catalogue');
 assertI18n(str_contains($translatedOutput, 'MutationObserver'), 'dynamic DOM translation remains enabled for JS-rendered UI');
+
+// Regression coverage for the production hybrid-translation failure mode.
+assertI18n(
+    ContentTranslator::isPlausibleTargetText('Confirm that they are clean and securely fitted.', 'en'),
+    'valid English translation passes the provider quality guard'
+);
+assertI18n(
+    !ContentTranslator::isPlausibleTargetText('Confirm que estão limpas e bem fixas.', 'en'),
+    'hybrid Portuguese/English output is rejected for an English target'
+);
+assertI18n(
+    !ContentTranslator::isPlausibleTargetText('Confirm que todas as lâmpadas acendem.', 'en'),
+    'partially translated lamp instruction is rejected for an English target'
+);
+assertI18n(
+    ContentTranslator::isPlausibleTargetText('Café', 'en'),
+    'language-neutral loan words are not rejected merely because they contain an accent'
+);
+assertI18n(
+    ContentTranslator::isPlausibleTargetText('WiFi', 'en'),
+    'language-neutral technical terms remain valid in English'
+);
+assertI18n(
+    ContentTranslator::isPlausibleTargetText('Confirmar que estão limpas e bem fixas.', 'pt'),
+    'valid Portuguese translation passes the provider quality guard'
+);
+assertI18n(
+    !ContentTranslator::isPlausibleTargetText('Confirm that it is clean and in good condition.', 'pt'),
+    'obvious English provider output is rejected for a Portuguese target'
+);
 
 echo 'Site-wide i18n tests passed.' . PHP_EOL;
