@@ -35,3 +35,4 @@ jobs:
         run: |
           php tests/run.php
           php tests/i18n.php
+          php tests/static-i18n-audit.php

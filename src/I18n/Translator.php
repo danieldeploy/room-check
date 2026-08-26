@@ -83,26 +83,46 @@ final class Translator
 (() => {
     const dictionary = __DICTIONARY__;
     const keys = Object.keys(dictionary).sort((a, b) => b.length - a.length);
-    const partialKeys = keys.filter(key => key.length >= 4 || /^\s.+\s$/.test(key));
     const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const templateKeys = keys.filter(key => key.includes('{value}'));
+    const staticKeys = keys.filter(key => !key.includes('{value}'));
+    const templatePatterns = templateKeys.map(key => ({
+        key,
+        regex: new RegExp('^' + key.split('{value}').map(escapePattern).join('(.*?)') + '$', 's')
+    }));
+    const partialKeys = staticKeys.filter(key => key.length >= 4 || /^\s.+\s$/.test(key));
     const partialPattern = partialKeys.length
         ? new RegExp(partialKeys.map(escapePattern).join('|'), 'g')
         : null;
+    const fillTemplate = (template, values) => {
+        let index = 0;
+        return template.replace(/\{value\}/g, () => values[index++] ?? '');
+    };
     const translate = value => {
         if (typeof value !== 'string' || value === '') return value;
         const trimmed = value.trim();
         if (Object.prototype.hasOwnProperty.call(dictionary, trimmed)) {
             return value.replace(trimmed, dictionary[trimmed]);
         }
+        for (const template of templatePatterns) {
+            const match = trimmed.match(template.regex);
+            if (!match) continue;
+            const translated = fillTemplate(dictionary[template.key], match.slice(1));
+            return value.replace(trimmed, translated);
+        }
         return partialPattern
             ? value.replace(partialPattern, match => dictionary[match] ?? match)
             : value;
     };
+    const skippedTags = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE', 'KBD', 'SAMP']);
+    const isSkippedElement = element => Boolean(
+        element && (skippedTags.has(element.tagName) || element.closest('[data-i18n-skip]'))
+    );
     const translateNode = root => {
         if (!root) return;
         if (root.nodeType === Node.TEXT_NODE) {
             const parent = root.parentElement;
-            if (parent && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) {
+            if (parent && !isSkippedElement(parent)) {
                 const current = root.nodeValue || '';
                 const translated = translate(current);
                 if (translated !== current) root.nodeValue = translated;
@@ -110,17 +130,13 @@ final class Translator
             return;
         }
         if (root.nodeType !== Node.ELEMENT_NODE) return;
-        if (['SCRIPT', 'STYLE'].includes(root.tagName)) return;
+        if (isSkippedElement(root)) return;
         ['placeholder', 'title', 'aria-label'].forEach(attribute => {
             if (!root.hasAttribute(attribute)) return;
             const current = root.getAttribute(attribute);
             const translated = translate(current);
             if (translated !== current) root.setAttribute(attribute, translated);
         });
-        if (root.matches('input[name="name"]') && typeof root.value === 'string') {
-            const translatedValue = translate(root.value);
-            if (translatedValue !== root.value) root.value = translatedValue;
-        }
         root.childNodes.forEach(translateNode);
     };
     document.documentElement.lang = 'en';
