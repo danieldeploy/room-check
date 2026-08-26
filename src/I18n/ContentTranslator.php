@@ -27,7 +27,7 @@ final class ContentTranslator
             $translatedPt = $this->translate($text, 'en', 'pt');
             if ($translatedPt === null || trim($translatedPt) === '') {
                 throw new InvalidArgumentException(
-                    'Não foi possível traduzir automaticamente o conteúdo para português. Tente novamente.'
+                    'Automatic translation to Portuguese failed. Please try again.'
                 );
             }
             return ['pt' => trim($translatedPt), 'en' => $text];
@@ -37,10 +37,13 @@ final class ContentTranslator
             return ['pt' => $text, 'en' => $existingEn];
         }
 
-        return [
-            'pt' => $text,
-            'en' => $this->translate($text, 'pt', 'en') ?? '',
-        ];
+        $translatedEn = $this->translate($text, 'pt', 'en');
+        if ($translatedEn === null || trim($translatedEn) === '') {
+            throw new InvalidArgumentException(
+                'Não foi possível traduzir automaticamente o conteúdo para inglês. Tente novamente.'
+            );
+        }
+        return ['pt' => $text, 'en' => trim($translatedEn)];
     }
 
     /**
