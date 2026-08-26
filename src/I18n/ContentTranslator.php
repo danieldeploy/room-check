@@ -25,7 +25,7 @@ final class ContentTranslator
                 return ['pt' => $existingPt, 'en' => $text];
             }
             return [
-                'pt' => $this->translate($text, 'en', 'pt') ?? $text,
+                'pt' => $this->translate($text, 'en', 'pt') ?? '',
                 'en' => $text,
             ];
         }
@@ -35,7 +35,7 @@ final class ContentTranslator
         }
         return [
             'pt' => $text,
-            'en' => $this->translate($text, 'pt', 'en') ?? $text,
+            'en' => $this->translate($text, 'pt', 'en') ?? '',
         ];
     }
 
