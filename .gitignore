@@ -3,3 +3,4 @@ my2n-secrets.json
 .env
 .DS_Store
 Thumbs.db
+error_log
