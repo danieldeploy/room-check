@@ -44,7 +44,7 @@ final class SiteTranslations
 
     public static function catalog(): array
     {
-        return [
+        $catalog = [
             // Shared shell / portal.
             'Sessão e navegação principal' => 'Session and main navigation',
             'Minha agenda' => 'My schedule',
@@ -201,7 +201,7 @@ final class SiteTranslations
             'Nova password' => 'New password',
             'Utilizador criado.' => 'User created.',
             'Dados do utilizador atualizados.' => 'User details updated.',
-            'Estado da conta atualizado.' => 'Account status updated.',
+            'Estado da conta atualizado.' => 'User status updated.',
             'Password atualizada.' => 'Password updated.',
             'Email inválido.' => 'Invalid email.',
             'Telemóvel inválido.' => 'Invalid mobile number.',
@@ -238,5 +238,8 @@ final class SiteTranslations
             'Atribuir itens a verificar' => 'Assign inspection items',
             'Consultar tarefas próprias' => 'View own tasks',
         ];
+
+        $coverage = require __DIR__ . '/SiteTranslationsCoverage.php';
+        return array_replace($catalog, is_array($coverage) ? $coverage : []);
     }
 }
