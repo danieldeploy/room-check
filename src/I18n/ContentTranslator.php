@@ -33,7 +33,8 @@ final class ContentTranslator
             return ['pt' => trim($translatedPt), 'en' => $text];
         }
 
-        if ($existingPt === $text && $existingEn !== '' && $existingEn !== $existingPt) {
+        if ($existingPt === $text && $existingEn !== '' && $existingEn !== $existingPt
+            && self::isPlausibleTargetText($existingEn, 'en')) {
             return ['pt' => $text, 'en' => $existingEn];
         }
 
@@ -69,6 +70,82 @@ final class ContentTranslator
         return $this->translate($text, $source, $target);
     }
 
+    /**
+     * Conservative language-quality guard for provider/cache output.
+     *
+     * It deliberately rejects only strong signs that the target text is still
+     * written in the opposite language. Neutral terms and brands (WiFi, SIP,
+     * My2N, TV, Café, etc.) remain valid. This is not intended to be a general
+     * language detector; it prevents the concrete hybrid failure mode observed
+     * in production such as "Confirm que estão limpas e bem fixas.".
+     */
+    public static function isPlausibleTargetText(string $text, string $targetLanguage): bool
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return false;
+        }
+
+        $targetLanguage = $targetLanguage === 'pt' ? 'pt' : 'en';
+        $lower = mb_strtolower($text, 'UTF-8');
+        $tokens = preg_split('/[^\p{L}\p{N}_]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($tokens === []) {
+            return true;
+        }
+        $tokenSet = array_fill_keys($tokens, true);
+
+        if ($targetLanguage === 'en') {
+            $strongPortuguese = [
+                'verificar', 'confirmar', 'limpeza', 'funcionamento', 'lâmpada', 'lâmpadas',
+                'acendem', 'fechadura', 'fechaduras', 'disponível', 'disponíveis', 'fissuras',
+                'moldura', 'danificada', 'danificado', 'cabides', 'quarto', 'quartos',
+                'corredor', 'corredores', 'portas', 'janelas', 'chaves', 'cortinas', 'camas',
+                'vidros', 'manchas', 'ventoinhas', 'armários', 'armarios', 'cabeceiras',
+            ];
+            foreach ($strongPortuguese as $token) {
+                if (isset($tokenSet[$token])) {
+                    return false;
+                }
+            }
+
+            $commonPortuguese = [
+                'que', 'está', 'estão', 'todas', 'todos', 'limpa', 'limpo', 'limpas', 'limpos',
+                'bem', 'fixa', 'fixas', 'fixo', 'fixos', 'funcionam', 'sem', 'danos',
+                'visível', 'visíveis', 'estado', 'quantidade', 'abrem', 'fecham', 'corretamente',
+            ];
+            $matches = 0;
+            foreach ($commonPortuguese as $token) {
+                if (isset($tokenSet[$token]) && ++$matches >= 2) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        $strongEnglish = [
+            'undamaged', 'wardrobes', 'headboards', 'curtains', 'sockets', 'securely', 'fitted',
+            'hangers', 'cracks', 'damaged', 'september', 'corridors', 'doors', 'windows', 'keys',
+            'lights', 'beds', 'fans', 'locks', 'walls', 'mirror',
+        ];
+        foreach ($strongEnglish as $token) {
+            if (isset($tokenSet[$token])) {
+                return false;
+            }
+        }
+
+        $commonEnglish = [
+            'check', 'confirm', 'clean', 'turn', 'available', 'working', 'damage', 'visible',
+            'stains', 'condition', 'number', 'open', 'close', 'correctly',
+        ];
+        $matches = 0;
+        foreach ($commonEnglish as $token) {
+            if (isset($tokenSet[$token]) && ++$matches >= 2) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private function translate(string $text, string $source, string $target): ?string
     {
         if ($text === '') {
@@ -87,17 +164,19 @@ final class ContentTranslator
         $translatedChunks = [];
         foreach ($this->chunks($text) as $chunk) {
             $translation = $this->translateChunk($chunk, $source, $target);
-            if ($translation === null || $translation === '') {
+            if ($translation === null || $translation === ''
+                || !self::isPlausibleTargetText($translation, $target)) {
                 return null;
             }
             $translatedChunks[] = $translation;
         }
 
         $translated = trim(implode("\n", $translatedChunks));
-        if ($translated !== '') {
-            $this->storeTranslation($text, $translated, $source, $target);
+        if ($translated === '' || !self::isPlausibleTargetText($translated, $target)) {
+            return null;
         }
 
+        $this->storeTranslation($text, $translated, $source, $target);
         return $translated;
     }
 
@@ -113,15 +192,33 @@ final class ContentTranslator
                    AND source_text = :source_text
                  LIMIT 1'
             );
-            $statement->execute([
+            $parameters = [
                 'source_language' => $source,
                 'target_language' => $target,
                 'source_hash' => hash('sha256', $text),
                 'source_text' => $text,
-            ]);
+            ];
+            $statement->execute($parameters);
             $translated = $statement->fetchColumn();
             if (is_string($translated) && trim($translated) !== '') {
-                return trim($translated);
+                $translated = trim($translated);
+                if (self::isPlausibleTargetText($translated, $target)) {
+                    return $translated;
+                }
+
+                // An invalid legacy cache entry must not keep poisoning future saves.
+                try {
+                    $delete = $this->pdo->prepare(
+                        'DELETE FROM translation_cache
+                         WHERE source_language = :source_language
+                           AND target_language = :target_language
+                           AND source_hash = :source_hash
+                           AND source_text = :source_text'
+                    );
+                    $delete->execute($parameters);
+                } catch (Throwable) {
+                    // A cache cleanup failure must not block a fresh provider request.
+                }
             }
         } catch (Throwable) {
             // The migration may not have been applied yet. Translation still works without cache.
@@ -132,6 +229,10 @@ final class ContentTranslator
 
     private function storeTranslation(string $text, string $translated, string $source, string $target): void
     {
+        if (!self::isPlausibleTargetText($translated, $target)) {
+            return;
+        }
+
         try {
             $statement = $this->pdo->prepare(
                 'INSERT INTO translation_cache
