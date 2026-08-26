@@ -23,7 +23,7 @@ const CHECKLIST_ITEMS = [
     'Placa de Saida',
     'Caixote de Lixo',
     'Paredes',
-    'Hangers',
+    'Cabides',
 ];
 
 function database(): PDO
@@ -57,7 +57,8 @@ function database(): PDO
     ]);
 
     ensureDynamicListItemNameSchema($pdo, (string) $db['name']);
-    backfillLegacyBilingualContent($pdo, $config['translation'] ?? []);
+    require_once __DIR__ . '/src/I18n/BilingualContentMaintenance.php';
+    BilingualContentMaintenance::run($pdo, $config['translation'] ?? [], (string) $db['name']);
 
     if (class_exists('Translator') && method_exists('Translator', 'registerDynamic')) {
         $nameRows = $pdo->query(
@@ -213,13 +214,8 @@ SQL);
 }
 
 /**
- * Translate legacy rows that pre-date bilingual storage.
- *
- * New content is already translated when it is saved. This function only
- * selects rows whose English column is still empty, translates them once and
- * persists the result. A bounded batch prevents a single request from being
- * held up by too many external translation calls; subsequent requests continue
- * with whatever legacy rows remain.
+ * Legacy helper retained for backwards-compatible installations. The complete
+ * bilingual maintenance now runs through BilingualContentMaintenance.
  */
 function backfillLegacyBilingualContent(PDO $pdo, array $translationConfig): void
 {
