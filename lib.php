@@ -57,6 +57,7 @@ function database(): PDO
     ]);
 
     ensureDynamicListItemNameSchema($pdo, (string) $db['name']);
+    backfillLegacyBilingualContent($pdo, $config['translation'] ?? []);
 
     if (class_exists('Translator') && method_exists('Translator', 'registerDynamic')) {
         $nameRows = $pdo->query(
@@ -209,6 +210,111 @@ WHERE NULLIF(TRIM(default_instructions_en), '') IS NULL
 SQL);
 
     $done = true;
+}
+
+/**
+ * Translate legacy rows that pre-date bilingual storage.
+ *
+ * New content is already translated when it is saved. This function only
+ * selects rows whose English column is still empty, translates them once and
+ * persists the result. A bounded batch prevents a single request from being
+ * held up by too many external translation calls; subsequent requests continue
+ * with whatever legacy rows remain.
+ */
+function backfillLegacyBilingualContent(PDO $pdo, array $translationConfig): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    if (($translationConfig['enabled'] ?? true) !== true) {
+        return;
+    }
+
+    if (!class_exists('ContentTranslator')) {
+        require_once __DIR__ . '/src/I18n/ContentTranslator.php';
+    }
+
+    $translator = new ContentTranslator($pdo, $translationConfig);
+    $attemptsLeft = 24;
+
+    $jobs = [
+        [
+            'select' => "SELECT id, name AS source_text FROM item_lists
+                         WHERE NULLIF(TRIM(name_en), '') IS NULL
+                           AND NULLIF(TRIM(name), '') IS NOT NULL
+                         ORDER BY id LIMIT 24",
+            'update' => "UPDATE item_lists SET name_en = :translated
+                         WHERE id = :id AND NULLIF(TRIM(name_en), '') IS NULL",
+            'max_length' => 120,
+        ],
+        [
+            'select' => "SELECT id, name AS source_text FROM item_list_items
+                         WHERE NULLIF(TRIM(name_en), '') IS NULL
+                           AND NULLIF(TRIM(name), '') IS NOT NULL
+                         ORDER BY id LIMIT 24",
+            'update' => "UPDATE item_list_items SET name_en = :translated
+                         WHERE id = :id AND NULLIF(TRIM(name_en), '') IS NULL",
+            'max_length' => 80,
+        ],
+        [
+            'select' => "SELECT id, default_instructions AS source_text FROM item_list_items
+                         WHERE NULLIF(TRIM(default_instructions_en), '') IS NULL
+                           AND NULLIF(TRIM(default_instructions), '') IS NOT NULL
+                         ORDER BY id LIMIT 24",
+            'update' => "UPDATE item_list_items SET default_instructions_en = :translated
+                         WHERE id = :id AND NULLIF(TRIM(default_instructions_en), '') IS NULL",
+            'max_length' => null,
+        ],
+    ];
+
+    foreach ($jobs as $job) {
+        if ($attemptsLeft <= 0) {
+            break;
+        }
+
+        try {
+            $rows = $pdo->query($job['select'])->fetchAll();
+        } catch (Throwable) {
+            continue;
+        }
+
+        $update = $pdo->prepare($job['update']);
+        foreach ($rows as $row) {
+            if ($attemptsLeft <= 0) {
+                break 2;
+            }
+            $attemptsLeft--;
+
+            $sourceText = trim((string) ($row['source_text'] ?? ''));
+            if ($sourceText === '') {
+                continue;
+            }
+
+            try {
+                $translated = $translator->translateStrict($sourceText, 'pt', 'en');
+            } catch (Throwable) {
+                $translated = null;
+            }
+            $translated = trim((string) $translated);
+            if ($translated === '') {
+                continue;
+            }
+
+            $maxLength = $job['max_length'];
+            if (is_int($maxLength) && mb_strlen($translated) > $maxLength) {
+                $translated = mb_substr($translated, 0, $maxLength);
+            }
+
+            try {
+                $update->execute(['translated' => $translated, 'id' => (int) $row['id']]);
+            } catch (Throwable) {
+                // A single problematic legacy row must not break the page load.
+            }
+        }
+    }
 }
 
 function validateSelection(string $property, int $room): void
