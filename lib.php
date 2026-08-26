@@ -56,22 +56,112 @@ function database(): PDO
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 
+    ensureDynamicListItemNameSchema($pdo, (string) $db['name']);
+
     if (class_exists('Translator') && method_exists('Translator', 'registerDynamic')) {
-        try {
-            $nameRows = $pdo->query(
-                "SELECT name AS name_pt, name_en FROM item_lists WHERE NULLIF(TRIM(name_en), '') IS NOT NULL
-                 UNION ALL
-                 SELECT name AS name_pt, name_en FROM item_list_items WHERE NULLIF(TRIM(name_en), '') IS NOT NULL"
-            )->fetchAll();
-            foreach ($nameRows as $nameRow) {
-                Translator::registerDynamic((string) $nameRow['name_pt'], (string) $nameRow['name_en']);
-            }
-        } catch (Throwable) {
-            // Keep the application compatible until the bilingual-name migration is applied.
+        $nameRows = $pdo->query(
+            "SELECT name AS name_pt, name_en FROM item_lists WHERE NULLIF(TRIM(name_en), '') IS NOT NULL
+             UNION ALL
+             SELECT name AS name_pt, name_en FROM item_list_items WHERE NULLIF(TRIM(name_en), '') IS NOT NULL"
+        )->fetchAll();
+        foreach ($nameRows as $nameRow) {
+            Translator::registerDynamic((string) $nameRow['name_pt'], (string) $nameRow['name_en']);
         }
     }
 
     return $pdo;
+}
+
+function ensureDynamicListItemNameSchema(PDO $pdo, string $schema): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+
+    $columnExists = static function (string $table, string $column) use ($pdo, $schema): bool {
+        $statement = $pdo->prepare(
+            'SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table AND COLUMN_NAME = :column'
+        );
+        $statement->execute(['schema' => $schema, 'table' => $table, 'column' => $column]);
+        return (int) $statement->fetchColumn() > 0;
+    };
+
+    if (!$columnExists('item_lists', 'name_en')) {
+        try {
+            $pdo->exec('ALTER TABLE item_lists ADD COLUMN name_en VARCHAR(120) NULL AFTER name');
+        } catch (PDOException $exception) {
+            if (!$columnExists('item_lists', 'name_en')) {
+                throw $exception;
+            }
+        }
+    }
+
+    if (!$columnExists('item_list_items', 'name_en')) {
+        try {
+            $pdo->exec('ALTER TABLE item_list_items ADD COLUMN name_en VARCHAR(80) NULL AFTER name');
+        } catch (PDOException $exception) {
+            if (!$columnExists('item_list_items', 'name_en')) {
+                throw $exception;
+            }
+        }
+    }
+
+    $pdo->exec(<<<'SQL'
+UPDATE item_lists
+SET name_en = CASE name
+    WHEN 'Check Geral' THEN 'General Check'
+    WHEN 'Check Geral Quartos' THEN 'General Room Check'
+    WHEN 'Check Casas Banho Comuns' THEN 'Shared Bathrooms Check'
+    WHEN 'Check Corredores' THEN 'Corridors Check'
+    WHEN 'Check Cozinhas' THEN 'Kitchens Check'
+    WHEN 'Check Terraços' THEN 'Terraces Check'
+    ELSE name_en
+END
+WHERE NULLIF(TRIM(name_en), '') IS NULL
+  AND name IN (
+      'Check Geral', 'Check Geral Quartos', 'Check Casas Banho Comuns',
+      'Check Corredores', 'Check Cozinhas', 'Check Terraços'
+  )
+SQL);
+
+    $pdo->exec(<<<'SQL'
+UPDATE item_list_items
+SET name_en = CASE name
+    WHEN 'Espelho' THEN 'Mirror'
+    WHEN 'Lampadas' THEN 'Lights'
+    WHEN 'Lâmpadas' THEN 'Lights'
+    WHEN 'Armarios' THEN 'Wardrobes'
+    WHEN 'Armários' THEN 'Wardrobes'
+    WHEN 'Cabeceiras' THEN 'Headboards'
+    WHEN 'Ventoinhas' THEN 'Fans'
+    WHEN 'Cortinas' THEN 'Curtains'
+    WHEN 'Fichas' THEN 'Power sockets'
+    WHEN 'Camas' THEN 'Beds'
+    WHEN 'Luzes' THEN 'Lights'
+    WHEN 'Portas' THEN 'Doors'
+    WHEN 'Fechaduras' THEN 'Locks'
+    WHEN 'Janelas' THEN 'Windows'
+    WHEN 'Chaves' THEN 'Keys'
+    WHEN 'Placa de Saida' THEN 'Exit sign'
+    WHEN 'Placa de Saída' THEN 'Exit sign'
+    WHEN 'Caixote de Lixo' THEN 'Waste bin'
+    WHEN 'Paredes' THEN 'Walls'
+    WHEN 'Extintores' THEN 'Fire extinguishers'
+    WHEN 'Item teste' THEN 'Test item'
+    ELSE name_en
+END
+WHERE NULLIF(TRIM(name_en), '') IS NULL
+  AND name IN (
+      'Espelho', 'Lampadas', 'Lâmpadas', 'Armarios', 'Armários', 'Cabeceiras',
+      'Ventoinhas', 'Cortinas', 'Fichas', 'Camas', 'Luzes', 'Portas', 'Fechaduras',
+      'Janelas', 'Chaves', 'Placa de Saida', 'Placa de Saída', 'Caixote de Lixo',
+      'Paredes', 'Extintores', 'Item teste'
+  )
+SQL);
+
+    $done = true;
 }
 
 function validateSelection(string $property, int $room): void
