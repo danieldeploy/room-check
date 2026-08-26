@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS item_lists (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(120) NOT NULL,
+    name_en VARCHAR(120) NULL,
     area VARCHAR(32) NOT NULL DEFAULT 'rooms',
     is_system TINYINT(1) NOT NULL DEFAULT 0,
     created_by_user_id BIGINT UNSIGNED NULL,
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS item_list_items (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     list_id BIGINT UNSIGNED NOT NULL,
     name VARCHAR(80) NOT NULL,
+    name_en VARCHAR(80) NULL,
     default_instructions TEXT NOT NULL,
     default_instructions_en TEXT NULL,
     sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
@@ -43,14 +45,26 @@ CREATE TABLE IF NOT EXISTS item_list_items (
     CONSTRAINT fk_item_list_item_list FOREIGN KEY (list_id) REFERENCES item_lists(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO item_lists (id, name, area, is_system) VALUES (1, 'Check Geral', 'rooms', 1);
-INSERT IGNORE INTO item_list_items (list_id, name, default_instructions, sort_order) VALUES
-    (1, 'Espelho', '', 10), (1, 'Lampadas', '', 20), (1, 'Armarios', '', 30),
-    (1, 'Cabeceiras', '', 40), (1, 'Ventoinhas', '', 50), (1, 'Cortinas', '', 60),
-    (1, 'Fichas', '', 70), (1, 'Camas', '', 80), (1, 'Luzes', '', 90),
-    (1, 'Portas', '', 100), (1, 'Fechaduras', '', 110), (1, 'Janelas', '', 120),
-    (1, 'Chaves', '', 130), (1, 'Placa de Saida', '', 140),
-    (1, 'Caixote de Lixo', '', 150), (1, 'Paredes', '', 160), (1, 'Hangers', '', 170);
+INSERT IGNORE INTO item_lists (id, name, name_en, area, is_system)
+VALUES (1, 'Check Geral', 'General Check', 'rooms', 1);
+INSERT IGNORE INTO item_list_items (list_id, name, name_en, default_instructions, sort_order) VALUES
+    (1, 'Espelho', 'Mirror', '', 10),
+    (1, 'Lampadas', 'Lights', '', 20),
+    (1, 'Armarios', 'Wardrobes', '', 30),
+    (1, 'Cabeceiras', 'Headboards', '', 40),
+    (1, 'Ventoinhas', 'Fans', '', 50),
+    (1, 'Cortinas', 'Curtains', '', 60),
+    (1, 'Fichas', 'Power sockets', '', 70),
+    (1, 'Camas', 'Beds', '', 80),
+    (1, 'Luzes', 'Lights', '', 90),
+    (1, 'Portas', 'Doors', '', 100),
+    (1, 'Fechaduras', 'Locks', '', 110),
+    (1, 'Janelas', 'Windows', '', 120),
+    (1, 'Chaves', 'Keys', '', 130),
+    (1, 'Placa de Saida', 'Exit sign', '', 140),
+    (1, 'Caixote de Lixo', 'Waste bin', '', 150),
+    (1, 'Paredes', 'Walls', '', 160),
+    (1, 'Cabides', 'Hangers', '', 170);
 
 CREATE TABLE IF NOT EXISTS room_checklist_values (
     property_name VARCHAR(80) NOT NULL,
@@ -99,6 +113,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS room_verification_intervals (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(120) NOT NULL,
+    name_en VARCHAR(120) NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     created_by_user_id BIGINT UNSIGNED NOT NULL,
