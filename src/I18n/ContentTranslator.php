@@ -21,22 +21,29 @@ final class ContentTranslator
         }
 
         if ($sourceLanguage === 'en') {
-            if ($existingEn === $text && $existingPt !== '') {
+            if ($existingEn === $text && $existingPt !== '' && $existingPt !== $existingEn) {
                 return ['pt' => $existingPt, 'en' => $text];
             }
-            return [
-                'pt' => $this->translate($text, 'en', 'pt') ?? $text,
-                'en' => $text,
-            ];
+            $translatedPt = $this->translate($text, 'en', 'pt');
+            if ($translatedPt === null || trim($translatedPt) === '') {
+                throw new InvalidArgumentException(
+                    'Automatic translation to Portuguese failed. Please try again.'
+                );
+            }
+            return ['pt' => trim($translatedPt), 'en' => $text];
         }
 
-        if ($existingPt === $text && $existingEn !== '') {
+        if ($existingPt === $text && $existingEn !== '' && $existingEn !== $existingPt) {
             return ['pt' => $text, 'en' => $existingEn];
         }
-        return [
-            'pt' => $text,
-            'en' => $this->translate($text, 'pt', 'en') ?? $text,
-        ];
+
+        $translatedEn = $this->translate($text, 'pt', 'en');
+        if ($translatedEn === null || trim($translatedEn) === '') {
+            throw new InvalidArgumentException(
+                'Não foi possível traduzir automaticamente o conteúdo para inglês. Tente novamente.'
+            );
+        }
+        return ['pt' => $text, 'en' => trim($translatedEn)];
     }
 
     /**

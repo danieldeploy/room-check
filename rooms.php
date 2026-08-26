@@ -41,14 +41,23 @@ $employees = $canAssign ? $pdo->query(
      ORDER BY display_name, username"
 )->fetchAll() : [];
 $intervals = $canAssign ? $pdo->query(
-    'SELECT interval_row.id, interval_row.name, interval_row.start_date, interval_row.end_date,
+    'SELECT interval_row.id, interval_row.name, interval_row.name_en,
+            interval_row.start_date, interval_row.end_date,
             MIN(assignment.due_date) AS first_due_date,
             MAX(assignment.due_date) AS last_due_date
      FROM room_verification_intervals interval_row
      LEFT JOIN room_item_assignments assignment ON assignment.interval_id = interval_row.id
-     GROUP BY interval_row.id, interval_row.name, interval_row.start_date, interval_row.end_date
+     GROUP BY interval_row.id, interval_row.name, interval_row.name_en,
+              interval_row.start_date, interval_row.end_date
      ORDER BY interval_row.start_date DESC, interval_row.id DESC'
 )->fetchAll() : [];
+foreach ($intervals as &$interval) {
+    $interval['name'] = Translator::localized(
+        (string) $interval['name'],
+        (string) ($interval['name_en'] ?? '')
+    );
+}
+unset($interval);
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
 $initialProperty = trim((string) ($_GET['property'] ?? array_key_first(PROPERTIES)));

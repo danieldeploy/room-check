@@ -106,7 +106,8 @@ try {
     $rawBody = file_get_contents('php://input');
     $payload = json_decode($rawBody ?: '', true, 512, JSON_THROW_ON_ERROR);
     $pdo = database();
-        $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
+    $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
+
     if (($payload['action'] ?? '') === 'create_interval') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
@@ -126,21 +127,30 @@ try {
         if ($endDate < $startDate) {
             throw new InvalidArgumentException('A data final não pode ser anterior à data inicial.');
         }
+
+        $nameVersions = $contentTranslator->versions($name, Translator::locale());
         $statement = $pdo->prepare(
-            'INSERT INTO room_verification_intervals (name, start_date, end_date, created_by_user_id)
-             VALUES (:name, :start_date, :end_date, :created_by)'
+            'INSERT INTO room_verification_intervals (name, name_en, start_date, end_date, created_by_user_id)
+             VALUES (:name_pt, :name_en, :start_date, :end_date, :created_by)'
         );
         $statement->execute([
-            'name' => $name, 'start_date' => $startDate, 'end_date' => $endDate,
+            'name_pt' => $nameVersions['pt'],
+            'name_en' => $nameVersions['en'],
+            'start_date' => $startDate,
+            'end_date' => $endDate,
             'created_by' => (int) $currentUser['id'],
         ]);
         $intervalId = (int) $pdo->lastInsertId();
+        $displayName = Translator::localized($nameVersions['pt'], $nameVersions['en']);
         Auth::audit($pdo, (int) $currentUser['id'], 'room_verification_interval_created', [
-            'interval_id' => $intervalId, 'name' => $name,
-            'start_date' => $startDate, 'end_date' => $endDate,
+            'interval_id' => $intervalId,
+            'name_pt' => $nameVersions['pt'],
+            'name_en' => $nameVersions['en'],
+            'start_date' => $startDate,
+            'end_date' => $endDate,
         ]);
         jsonResponse(['ok' => true, 'interval' => [
-            'id' => $intervalId, 'name' => $name, 'startDate' => $startDate, 'endDate' => $endDate,
+            'id' => $intervalId, 'name' => $displayName, 'startDate' => $startDate, 'endDate' => $endDate,
         ]]);
     }
 
@@ -164,6 +174,22 @@ try {
         if ($endDate < $startDate) {
             throw new InvalidArgumentException('A data final não pode ser anterior à data inicial.');
         }
+
+        $currentIntervalStatement = $pdo->prepare(
+            'SELECT name, name_en FROM room_verification_intervals WHERE id = :id'
+        );
+        $currentIntervalStatement->execute(['id' => $intervalId]);
+        $currentInterval = $currentIntervalStatement->fetch();
+        if (!$currentInterval) {
+            throw new InvalidArgumentException('Intervalo de verificação não encontrado.');
+        }
+        $nameVersions = $contentTranslator->versions(
+            $name,
+            Translator::locale(),
+            (string) $currentInterval['name'],
+            (string) ($currentInterval['name_en'] ?? '')
+        );
+
         $boundsStatement = $pdo->prepare(
             'SELECT MIN(due_date) AS first_due_date, MAX(due_date) AS last_due_date, COUNT(*) AS assignment_count
              FROM room_item_assignments WHERE interval_id = :id'
@@ -180,22 +206,27 @@ try {
             }
         }
         $statement = $pdo->prepare(
-            'UPDATE room_verification_intervals SET name = :name, start_date = :start_date, end_date = :end_date
+            'UPDATE room_verification_intervals
+             SET name = :name_pt, name_en = :name_en, start_date = :start_date, end_date = :end_date
              WHERE id = :id'
         );
-        $statement->execute(['id' => $intervalId, 'name' => $name, 'start_date' => $startDate, 'end_date' => $endDate]);
-        if ($statement->rowCount() === 0) {
-            $exists = $pdo->prepare('SELECT id FROM room_verification_intervals WHERE id = :id');
-            $exists->execute(['id' => $intervalId]);
-            if (!$exists->fetchColumn()) {
-                throw new InvalidArgumentException('Intervalo de verificação não encontrado.');
-            }
-        }
+        $statement->execute([
+            'id' => $intervalId,
+            'name_pt' => $nameVersions['pt'],
+            'name_en' => $nameVersions['en'],
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+        ]);
+        $displayName = Translator::localized($nameVersions['pt'], $nameVersions['en']);
         Auth::audit($pdo, (int) $currentUser['id'], 'room_verification_interval_updated', [
-            'interval_id' => $intervalId, 'name' => $name, 'start_date' => $startDate, 'end_date' => $endDate,
+            'interval_id' => $intervalId,
+            'name_pt' => $nameVersions['pt'],
+            'name_en' => $nameVersions['en'],
+            'start_date' => $startDate,
+            'end_date' => $endDate,
         ]);
         jsonResponse(['ok' => true, 'interval' => [
-            'id' => $intervalId, 'name' => $name, 'startDate' => $startDate, 'endDate' => $endDate,
+            'id' => $intervalId, 'name' => $displayName, 'startDate' => $startDate, 'endDate' => $endDate,
         ]]);
     }
 
