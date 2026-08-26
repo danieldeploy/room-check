@@ -24,15 +24,19 @@ final class ContentTranslator
             if ($existingEn === $text && $existingPt !== '') {
                 return ['pt' => $existingPt, 'en' => $text];
             }
-            return [
-                'pt' => $this->translate($text, 'en', 'pt') ?? '',
-                'en' => $text,
-            ];
+            $translatedPt = $this->translate($text, 'en', 'pt');
+            if ($translatedPt === null || trim($translatedPt) === '') {
+                throw new InvalidArgumentException(
+                    'Não foi possível traduzir automaticamente o conteúdo para português. Tente novamente.'
+                );
+            }
+            return ['pt' => trim($translatedPt), 'en' => $text];
         }
 
         if ($existingPt === $text && $existingEn !== '') {
             return ['pt' => $text, 'en' => $existingEn];
         }
+
         return [
             'pt' => $text,
             'en' => $this->translate($text, 'pt', 'en') ?? '',
