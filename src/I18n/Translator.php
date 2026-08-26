@@ -4,6 +4,7 @@ declare(strict_types=1);
 final class Translator
 {
     private static bool $started = false;
+    private static array $dynamicDictionary = [];
 
     public static function boot(): void
     {
@@ -57,20 +58,25 @@ final class Translator
             : ($portuguese !== '' ? $portuguese : $english);
     }
 
+    public static function registerDynamic(?string $portuguese, ?string $english): void
+    {
+        $portuguese = trim((string) $portuguese);
+        $english = trim((string) $english);
+        if ($portuguese === '' || $english === '' || $portuguese === $english) {
+            return;
+        }
+        self::$dynamicDictionary[$portuguese] = $english;
+    }
+
     public static function translateOutput(string $output): string
     {
-        $dictionary = self::dictionary();
-        $serverDictionary = array_filter(
-            $dictionary,
-            static fn (string $key): bool => mb_strlen($key) >= 4 || preg_match('/^\s.+\s$/u', $key) === 1,
-            ARRAY_FILTER_USE_KEY
-        );
-        $output = strtr($output, $serverDictionary);
-
+        // API/JSON responses and script data must keep canonical database values unchanged.
+        // Translation is applied only to visible DOM content in HTML pages.
         if (stripos($output, '<html') === false || stripos($output, '</body>') === false) {
             return $output;
         }
 
+        $dictionary = self::dictionary();
         $json = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
         $script = <<<'HTML'
 <script>
@@ -111,6 +117,10 @@ final class Translator
             const translated = translate(current);
             if (translated !== current) root.setAttribute(attribute, translated);
         });
+        if (root.matches('input[name="name"]') && typeof root.value === 'string') {
+            const translatedValue = translate(root.value);
+            if (translatedValue !== root.value) root.value = translatedValue;
+        }
         root.childNodes.forEach(translateNode);
     };
     document.documentElement.lang = 'en';
@@ -141,7 +151,7 @@ HTML;
 
     private static function dictionary(): array
     {
-        return [
+        $dictionary = [
             'lang="pt"' => 'lang="en"',
             'Portal de Gestão' => 'Management Portal',
             'Entre com a sua conta de trabalho para aceder aos módulos autorizados.' => 'Sign in with your work account to access the authorised modules.',
@@ -269,8 +279,6 @@ HTML;
             'Ações' => 'Actions',
             'Guardar' => 'Save',
             'Apagar' => 'Delete',
-            // Known list and item names stored in Portuguese. These labels are
-            // translated only for display; their database values stay intact.
             'Check Casas Banho Comuns' => 'Shared Bathrooms Check',
             'CHECK CASAS BANHO COMUNS' => 'SHARED BATHROOMS CHECK',
             'Check Corredores' => 'Corridors Check',
@@ -369,5 +377,6 @@ HTML;
             'Sim' => 'Yes',
             'Não' => 'No',
         ];
+        return array_replace($dictionary, self::$dynamicDictionary);
     }
 }
