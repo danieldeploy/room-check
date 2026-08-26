@@ -39,6 +39,29 @@ final class ContentTranslator
         ];
     }
 
+    /**
+     * Translate without falling back to the source text.
+     *
+     * This is used by legacy-content backfills: a failed provider request must
+     * leave the target column empty so it can be retried later instead of
+     * incorrectly persisting Portuguese as if it were an English translation.
+     */
+    public function translateStrict(string $text, string $sourceLanguage, string $targetLanguage): ?string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        $source = $sourceLanguage === 'en' ? 'en' : 'pt';
+        $target = $targetLanguage === 'pt' ? 'pt' : 'en';
+        if ($source === $target) {
+            return $text;
+        }
+
+        return $this->translate($text, $source, $target);
+    }
+
     private function translate(string $text, string $source, string $target): ?string
     {
         if ($text === '') {
