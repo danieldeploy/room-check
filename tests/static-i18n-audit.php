@@ -10,13 +10,25 @@ $catalog = SiteTranslations::catalog();
 $dictionaryMethod = new ReflectionMethod(Translator::class, 'dictionary');
 $dictionaryMethod->setAccessible(true);
 $dictionary = array_replace($dictionaryMethod->invoke(null), $catalog);
-$portugueseKeys = array_keys($dictionary);
+$portugueseKeys = [];
+foreach (array_keys($dictionary) as $key) {
+    $key = trim((string) $key);
+    if ($key !== '' && mb_strlen($key) >= 2) {
+        $portugueseKeys[$key] = true;
+    }
+}
+$portugueseKeys = array_keys($portugueseKeys);
 usort($portugueseKeys, static fn(string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
 
 $excludedPaths = [
     '/migrations/', '/tests/', '/deploy/', '/docs/', '/.github/',
     '/src/I18n/', '/database.sql', '/lib.php', '/config.php', '/config.local.example.php',
 ];
+
+$technicalLiterals = array_fill_keys([
+    'gerente', 'governanta', 'tecnico_manutencao', 'empregada_andares',
+    'utilizador', 'rooms', 'shared_bathrooms', 'corridors', 'kitchens', 'terraces',
+], true);
 
 $strongPortuguese = [
     'não', 'guardar', 'guardado', 'utilizador', 'utilizadores', 'configuração', 'configurar',
@@ -58,13 +70,13 @@ function uncoveredRemainder(string $text, array $portugueseKeys): string
 {
     $remaining = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     foreach ($portugueseKeys as $key) {
-        if ($key === '' || mb_strlen(trim($key)) < 2) {
-            continue;
-        }
         $remaining = str_replace($key, ' ', $remaining);
     }
-    // Ignore interpolation/format placeholders and machine-looking fragments.
-    $remaining = preg_replace('/\$\{[^}]*\}|\{[A-Za-z0-9_.-]+\}|%[0-9$+\-.]*[bcdeEfFgGosuxX]|<\?=.*?\?>/s', ' ', $remaining) ?? $remaining;
+    $remaining = preg_replace(
+        '/\$\{[^}]*\}|\{[A-Za-z0-9_.-]+\}|%[0-9$+\-.]*[bcdeEfFgGosuxX]|<\?=.*?\?>/s',
+        ' ',
+        $remaining
+    ) ?? $remaining;
     return trim(preg_replace('/\s+/u', ' ', $remaining) ?? $remaining);
 }
 
@@ -84,16 +96,47 @@ function decodeQuotedLiteral(string $literal): string
 function phpCandidates(string $content): array
 {
     $result = [];
-    foreach (token_get_all($content) as $token) {
+    $tokens = token_get_all($content);
+    $inInterpolated = false;
+    $interpolated = '';
+    $interpolatedLine = 1;
+
+    foreach ($tokens as $token) {
         if (!is_array($token)) {
+            if ($token === '"') {
+                if ($inInterpolated) {
+                    $result[] = ['line' => $interpolatedLine, 'text' => $interpolated];
+                    $inInterpolated = false;
+                    $interpolated = '';
+                } else {
+                    $inInterpolated = true;
+                    $interpolated = '';
+                }
+            } elseif ($inInterpolated && $token === '{') {
+                $interpolated .= '{value}';
+            }
             continue;
         }
+
         [$type, $text, $line] = $token;
         if ($type === T_CONSTANT_ENCAPSED_STRING) {
             $result[] = ['line' => $line, 'text' => decodeQuotedLiteral($text)];
-        } elseif ($type === T_ENCAPSED_AND_WHITESPACE) {
-            $result[] = ['line' => $line, 'text' => $text];
-        } elseif ($type === T_INLINE_HTML) {
+            continue;
+        }
+
+        if ($inInterpolated) {
+            if ($interpolated === '') {
+                $interpolatedLine = $line;
+            }
+            if ($type === T_ENCAPSED_AND_WHITESPACE) {
+                $interpolated .= $text;
+            } elseif (in_array($type, [T_VARIABLE, T_STRING_VARNAME, T_NUM_STRING], true)) {
+                $interpolated .= '{value}';
+            }
+            continue;
+        }
+
+        if ($type === T_INLINE_HTML) {
             $visible = preg_replace('/<script\b[^>]*>.*?<\/script>|<style\b[^>]*>.*?<\/style>/is', ' ', $text) ?? $text;
             $visible = preg_replace('/<[^>]+>/', "\n", $visible) ?? $visible;
             foreach (preg_split('/\R/u', $visible) ?: [] as $offset => $piece) {
@@ -155,6 +198,9 @@ foreach ($files as [$absolute, $relative]) {
     $candidates = str_ends_with($relative, '.php') ? phpCandidates($content) : jsCandidates($content);
     foreach ($candidates as $candidate) {
         $text = trim((string) $candidate['text']);
+        if ($text === '' || isset($technicalLiterals[mb_strtolower($text, 'UTF-8')])) {
+            continue;
+        }
         if (!looksPortuguese($text, $strongPortuguese)) {
             continue;
         }
@@ -162,7 +208,8 @@ foreach ($files as [$absolute, $relative]) {
         if (!looksPortuguese($remaining, $strongPortuguese)) {
             continue;
         }
-        $findings[] = [
+        $key = $relative . ':' . (int) $candidate['line'] . ':' . $text;
+        $findings[$key] = [
             'file' => $relative,
             'line' => (int) $candidate['line'],
             'text' => $text,
@@ -170,6 +217,7 @@ foreach ($files as [$absolute, $relative]) {
         ];
     }
 }
+$findings = array_values($findings);
 
 if ($findings === []) {
     echo "PASS: no uncovered Portuguese-looking static UI literals found.\n";
@@ -187,6 +235,6 @@ foreach ($findings as $finding) {
     );
 }
 
-// Report-only for the first audit pass. Once all findings are classified, this
-// script is switched to fail closed so future modules cannot add uncovered PT UI.
+// Report-only for the audit pass. Once existing findings are classified this is
+// switched to fail closed so new modules cannot introduce uncovered PT UI.
 exit(0);
