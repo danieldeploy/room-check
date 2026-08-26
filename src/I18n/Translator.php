@@ -70,20 +70,13 @@ final class Translator
 
     public static function translateOutput(string $output): string
     {
-        // API/JSON responses must keep canonical database values unchanged.
-        // Translation is a presentation concern and is applied only to HTML pages.
+        // API/JSON responses and script data must keep canonical database values unchanged.
+        // Translation is applied only to visible DOM content in HTML pages.
         if (stripos($output, '<html') === false || stripos($output, '</body>') === false) {
             return $output;
         }
 
         $dictionary = self::dictionary();
-        $serverDictionary = array_filter(
-            $dictionary,
-            static fn (string $key): bool => mb_strlen($key) >= 4 || preg_match('/^\s.+\s$/u', $key) === 1,
-            ARRAY_FILTER_USE_KEY
-        );
-        $output = strtr($output, $serverDictionary);
-
         $json = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
         $script = <<<'HTML'
 <script>
@@ -124,6 +117,10 @@ final class Translator
             const translated = translate(current);
             if (translated !== current) root.setAttribute(attribute, translated);
         });
+        if (root.matches('input[name="name"]') && typeof root.value === 'string') {
+            const translatedValue = translate(root.value);
+            if (translatedValue !== root.value) root.value = translatedValue;
+        }
         root.childNodes.forEach(translateNode);
     };
     document.documentElement.lang = 'en';
@@ -282,8 +279,6 @@ HTML;
             'Ações' => 'Actions',
             'Guardar' => 'Save',
             'Apagar' => 'Delete',
-            // Known list and item names stored in Portuguese. These labels are
-            // translated only for display; their database values stay intact.
             'Check Casas Banho Comuns' => 'Shared Bathrooms Check',
             'CHECK CASAS BANHO COMUNS' => 'SHARED BATHROOMS CHECK',
             'Check Corredores' => 'Corridors Check',
