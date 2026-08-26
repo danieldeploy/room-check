@@ -4,6 +4,7 @@ declare(strict_types=1);
 final class Translator
 {
     private static bool $started = false;
+    private static array $dynamicDictionary = [];
 
     public static function boot(): void
     {
@@ -57,8 +58,24 @@ final class Translator
             : ($portuguese !== '' ? $portuguese : $english);
     }
 
+    public static function registerDynamic(?string $portuguese, ?string $english): void
+    {
+        $portuguese = trim((string) $portuguese);
+        $english = trim((string) $english);
+        if ($portuguese === '' || $english === '' || $portuguese === $english) {
+            return;
+        }
+        self::$dynamicDictionary[$portuguese] = $english;
+    }
+
     public static function translateOutput(string $output): string
     {
+        // API/JSON responses must keep canonical database values unchanged.
+        // Translation is a presentation concern and is applied only to HTML pages.
+        if (stripos($output, '<html') === false || stripos($output, '</body>') === false) {
+            return $output;
+        }
+
         $dictionary = self::dictionary();
         $serverDictionary = array_filter(
             $dictionary,
@@ -66,10 +83,6 @@ final class Translator
             ARRAY_FILTER_USE_KEY
         );
         $output = strtr($output, $serverDictionary);
-
-        if (stripos($output, '<html') === false || stripos($output, '</body>') === false) {
-            return $output;
-        }
 
         $json = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
         $script = <<<'HTML'
@@ -141,7 +154,7 @@ HTML;
 
     private static function dictionary(): array
     {
-        return [
+        $dictionary = [
             'lang="pt"' => 'lang="en"',
             'Portal de Gestão' => 'Management Portal',
             'Entre com a sua conta de trabalho para aceder aos módulos autorizados.' => 'Sign in with your work account to access the authorised modules.',
@@ -369,5 +382,6 @@ HTML;
             'Sim' => 'Yes',
             'Não' => 'No',
         ];
+        return array_replace($dictionary, self::$dynamicDictionary);
     }
 }
