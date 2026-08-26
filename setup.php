@@ -5,8 +5,10 @@ require __DIR__ . '/lib.php';
 $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
+require_once __DIR__ . '/src/I18n/SiteTranslations.php';
 
 Auth::startSession($config);
+SiteTranslations::boot();
 $pdo = database();
 $userCount = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
 if ($userCount > 0) {

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/Auth/Auth.php';
 require_once dirname(__DIR__) . '/Security/Csrf.php';
+require_once dirname(__DIR__) . '/I18n/SiteTranslations.php';
 
 final class SessionBar
 {
@@ -14,6 +15,8 @@ final class SessionBar
         bool $canManageUsers = false,
         bool $canManagePermissions = false
     ): void {
+        SiteTranslations::boot();
+
         $prefix = $basePath === '' ? '' : rtrim($basePath, '/') . '/';
         $displayName = (string) ($user['display_name'] ?? $user['username'] ?? 'Utilizador');
         $role = (string) ($user['role'] ?? '');

@@ -32,4 +32,6 @@ jobs:
           if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
 
       - name: Run PHP tests
-        run: php tests/run.php
+        run: |
+          php tests/run.php
+          php tests/i18n.php

@@ -17,6 +17,8 @@ final class AdminGuard
         }
         require_once dirname(__DIR__, 2) . '/lib.php';
         require_once __DIR__ . '/Auth.php';
+        require_once dirname(__DIR__) . '/I18n/SiteTranslations.php';
+        SiteTranslations::boot();
     }
 
     private static function requireExternalBootstrap(string $path): void

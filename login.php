@@ -5,6 +5,7 @@ require __DIR__ . '/lib.php';
 $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
+require_once __DIR__ . '/src/I18n/SiteTranslations.php';
 
 function loginDestination(array $user): string
 {
@@ -12,6 +13,7 @@ function loginDestination(array $user): string
 }
 
 Auth::startSession($config);
+SiteTranslations::boot();
 $loggedUser = Auth::currentUser(database(), $config);
 if ($loggedUser !== null) {
     header('Location: ' . loginDestination($loggedUser));
