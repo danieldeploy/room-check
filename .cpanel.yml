@@ -5,7 +5,6 @@ deployment:
     - export PRIVATEPATH=$HOME/room-check-private/
     - /bin/mkdir -p $DEPLOYPATH
     - /bin/mkdir -p $PRIVATEPATH
-    - if command -v php >/dev/null 2>&1; then php deploy/migrate_dynamic_list_item_names.php "$DEPLOYPATH"; elif [ -x /usr/local/bin/php ]; then /usr/local/bin/php deploy/migrate_dynamic_list_item_names.php "$DEPLOYPATH"; else echo "PHP CLI not found; aborting deployment before application files are changed."; exit 1; fi
     - /bin/cp -R assets $DEPLOYPATH
     - /bin/cp -R admin src $DEPLOYPATH
     - /bin/cp -R cron $PRIVATEPATH
