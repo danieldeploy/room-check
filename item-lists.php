@@ -56,16 +56,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
 
         if ($action === 'create_list') {
+            $nameVersions = $contentTranslator->versions($name, Translator::locale());
             $statement = $pdo->prepare(
-                'INSERT INTO item_lists (name, area, created_by_user_id) VALUES (:name, :area, :user_id)'
+                'INSERT INTO item_lists (name, name_en, area, created_by_user_id)
+                 VALUES (:name_pt, :name_en, :area, :user_id)'
             );
-            $statement->execute(['name' => $name, 'area' => $area, 'user_id' => (int) $currentUser['id']]);
+            $statement->execute([
+                'name_pt' => $nameVersions['pt'], 'name_en' => $nameVersions['en'],
+                'area' => $area, 'user_id' => (int) $currentUser['id'],
+            ]);
             $listId = (int) $pdo->lastInsertId();
             $message = 'Lista criada.';
         } elseif ($action === 'rename_list') {
-            itemList($pdo, $listId);
-            $statement = $pdo->prepare('UPDATE item_lists SET name = :name, area = :area WHERE id = :id');
-            $statement->execute(['name' => $name, 'area' => $area, 'id' => $listId]);
+            $oldList = itemList($pdo, $listId);
+            $nameVersions = $contentTranslator->versions(
+                $name, Translator::locale(),
+                (string) $oldList['name'], (string) ($oldList['nameEn'] ?? '')
+            );
+            $statement = $pdo->prepare(
+                'UPDATE item_lists SET name = :name_pt, name_en = :name_en, area = :area WHERE id = :id'
+            );
+            $statement->execute([
+                'name_pt' => $nameVersions['pt'], 'name_en' => $nameVersions['en'],
+                'area' => $area, 'id' => $listId,
+            ]);
             $message = 'Lista atualizada.';
         } elseif ($action === 'delete_list') {
             $list = itemList($pdo, $listId);
@@ -86,17 +100,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $message = 'Lista apagada.';
         } elseif ($action === 'add_item') {
             itemList($pdo, $listId);
+            $nameVersions = $contentTranslator->versions($name, Translator::locale());
             $instructionVersions = $contentTranslator->versions($instructions, Translator::locale());
             $position = $pdo->prepare(
                 'SELECT COALESCE(MAX(sort_order), 0) + 10 FROM item_list_items WHERE list_id = :list_id'
             );
             $position->execute(['list_id' => $listId]);
             $statement = $pdo->prepare(
-                'INSERT INTO item_list_items (list_id, name, default_instructions, default_instructions_en, sort_order)
-                 VALUES (:list_id, :name, :instructions_pt, :instructions_en, :sort_order)'
+                'INSERT INTO item_list_items
+                    (list_id, name, name_en, default_instructions, default_instructions_en, sort_order)
+                 VALUES (:list_id, :name_pt, :name_en, :instructions_pt, :instructions_en, :sort_order)'
             );
             $statement->execute([
-                'list_id' => $listId, 'name' => $name,
+                'list_id' => $listId,
+                'name_pt' => $nameVersions['pt'], 'name_en' => $nameVersions['en'],
                 'instructions_pt' => $instructionVersions['pt'], 'instructions_en' => $instructionVersions['en'],
                 'sort_order' => (int) $position->fetchColumn(),
             ]);
@@ -104,7 +121,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         } elseif ($action === 'rename_item') {
             $pdo->beginTransaction();
             $statement = $pdo->prepare(
-                'SELECT name, default_instructions, default_instructions_en FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+                'SELECT name, name_en, default_instructions, default_instructions_en
+                 FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
             );
             $statement->execute(['id' => $itemId, 'list_id' => $listId]);
             $oldItem = $statement->fetch();
@@ -112,26 +130,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 throw new InvalidArgumentException('Item não encontrado.');
             }
             $oldName = (string) $oldItem['name'];
+            $nameVersions = $contentTranslator->versions(
+                $name, Translator::locale(),
+                $oldName, (string) ($oldItem['name_en'] ?? '')
+            );
             $instructionVersions = $contentTranslator->versions(
                 $instructions, Translator::locale(),
                 (string) $oldItem['default_instructions'], (string) ($oldItem['default_instructions_en'] ?? '')
             );
+            $newCanonicalName = $nameVersions['pt'];
             $renameValues = $pdo->prepare(
                 'UPDATE room_checklist_values SET item_name = :new_name
                  WHERE list_id = :list_id AND item_name = :old_name'
             );
-            $renameValues->execute(['new_name' => $name, 'list_id' => $listId, 'old_name' => $oldName]);
+            $renameValues->execute(['new_name' => $newCanonicalName, 'list_id' => $listId, 'old_name' => $oldName]);
             $renameAssignments = $pdo->prepare(
                 'UPDATE room_item_assignments SET item_name = :new_name
                  WHERE list_id = :list_id AND item_name = :old_name'
             );
-            $renameAssignments->execute(['new_name' => $name, 'list_id' => $listId, 'old_name' => $oldName]);
+            $renameAssignments->execute(['new_name' => $newCanonicalName, 'list_id' => $listId, 'old_name' => $oldName]);
             $renameItem = $pdo->prepare(
-                'UPDATE item_list_items SET name = :name, default_instructions = :instructions_pt,
-                 default_instructions_en = :instructions_en WHERE id = :id'
+                'UPDATE item_list_items SET name = :name_pt, name_en = :name_en,
+                 default_instructions = :instructions_pt, default_instructions_en = :instructions_en WHERE id = :id'
             );
             $renameItem->execute([
-                'name' => $name,
+                'name_pt' => $newCanonicalName,
+                'name_en' => $nameVersions['en'],
                 'instructions_pt' => $instructionVersions['pt'],
                 'instructions_en' => $instructionVersions['en'],
                 'id' => $itemId,
@@ -186,12 +210,15 @@ $selectedList = array_values(array_filter($lists, static fn(array $list): bool =
 $itemRows = [];
 if ($selectedList) {
     $statement = $pdo->prepare(
-        'SELECT id, name, default_instructions, default_instructions_en FROM item_list_items
+        'SELECT id, name, name_en, default_instructions, default_instructions_en FROM item_list_items
          WHERE list_id = :list_id ORDER BY sort_order, id'
     );
     $statement->execute(['list_id' => $listId]);
     $itemRows = $statement->fetchAll();
     foreach ($itemRows as &$itemRow) {
+        $itemRow['name'] = Translator::localized(
+            (string) $itemRow['name'], (string) ($itemRow['name_en'] ?? '')
+        );
         $itemRow['default_instructions'] = Translator::localized(
             (string) $itemRow['default_instructions'], (string) ($itemRow['default_instructions_en'] ?? '')
         );
