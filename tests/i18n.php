@@ -37,6 +37,7 @@ $translatedOutput = Translator::translateOutput($html);
 assertI18n(str_contains($translatedOutput, 'My2N Control'), 'HTML output receives the shared English catalogue');
 assertI18n(str_contains($translatedOutput, 'MutationObserver'), 'dynamic DOM translation remains enabled for JS-rendered UI');
 
+// Regression coverage for the production hybrid-translation failure mode.
 assertI18n(
     ContentTranslator::isPlausibleTargetText('Confirm that they are clean and securely fitted.', 'en'),
     'valid English translation passes the provider quality guard'
