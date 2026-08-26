@@ -6,7 +6,7 @@ require_once dirname(__DIR__) . '/src/I18n/SiteTranslations.php';
 $root = dirname(__DIR__);
 $catalog = SiteTranslations::catalog();
 
-// Include the legacy Translator dictionary as well as the new shared catalogue.
+// Include the legacy Translator dictionary as well as the shared catalogue.
 $dictionaryMethod = new ReflectionMethod(Translator::class, 'dictionary');
 $dictionaryMethod->setAccessible(true);
 $dictionary = array_replace($dictionaryMethod->invoke(null), $catalog);
@@ -25,10 +25,29 @@ $excludedPaths = [
     '/src/I18n/', '/database.sql', '/lib.php', '/config.php', '/config.local.example.php',
 ];
 
+// Machine identifiers are deliberately not translated. Keep this list small:
+// new human-readable literals must be covered by the PT/EN catalogue instead.
 $technicalLiterals = array_fill_keys([
     'gerente', 'governanta', 'tecnico_manutencao', 'empregada_andares',
     'utilizador', 'rooms', 'shared_bathrooms', 'corridors', 'kitchens', 'terraces',
 ], true);
+
+// Exact server-only exceptions. These are not website UI: they are transport
+// diagnostics or the PT branch of a message that already has an explicit EN branch.
+$technicalExceptions = [
+    'cron/whatsapp-reminders.php' => [
+        '. Consulte no Portal de Gestão os itens e respetivas instruções.',
+    ],
+    'src/Notifications/WhatsAppCloudClient.php' => [
+        'A extensão PHP cURL não está disponível.',
+        'Número de telemóvel inválido.',
+        'A Meta não devolveu o identificador da mensagem.',
+        'Credenciais WhatsApp Cloud API não configuradas.',
+    ],
+];
+foreach ($technicalExceptions as $path => $values) {
+    $technicalExceptions[$path] = array_fill_keys($values, true);
+}
 
 $strongPortuguese = [
     'não', 'guardar', 'guardado', 'utilizador', 'utilizadores', 'configuração', 'configurar',
@@ -201,6 +220,9 @@ foreach ($files as [$absolute, $relative]) {
         if ($text === '' || isset($technicalLiterals[mb_strtolower($text, 'UTF-8')])) {
             continue;
         }
+        if (isset($technicalExceptions[$relative][$text])) {
+            continue;
+        }
         if (!looksPortuguese($text, $strongPortuguese)) {
             continue;
         }
@@ -224,7 +246,7 @@ if ($findings === []) {
     exit(0);
 }
 
-echo "Static PT/EN audit found " . count($findings) . " candidate(s):\n";
+echo "Static PT/EN audit failed with " . count($findings) . " uncovered candidate(s):\n";
 foreach ($findings as $finding) {
     echo sprintf(
         "- %s:%d\n  text: %s\n  uncovered: %s\n",
@@ -235,6 +257,4 @@ foreach ($findings as $finding) {
     );
 }
 
-// Report-only for the audit pass. Once existing findings are classified this is
-// switched to fail closed so new modules cannot introduce uncovered PT UI.
-exit(0);
+exit(1);
