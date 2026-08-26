@@ -18,6 +18,16 @@ assertI18n(($catalog['Estado da integração'] ?? null) === 'Integration status'
 assertI18n(($catalog['Novo utilizador'] ?? null) === 'New user', 'Users UI is in the shared catalogue');
 assertI18n(($catalog['Permissões dos perfis'] ?? null) === 'Role permissions', 'Permissions UI is in the shared catalogue');
 assertI18n(($catalog['Configuração inicial'] ?? null) === 'Initial setup', 'Setup UI is in the shared catalogue');
+assertI18n(
+    ($catalog['O item {value} já está atribuído ou concluído noutra data deste intervalo.'] ?? null)
+        === 'The item {value} is already assigned or completed on another date in this period.',
+    'audited dynamic template is in the shared catalogue'
+);
+assertI18n(
+    ($catalog['Credenciais My2N não configuradas no servidor.'] ?? null)
+        === 'My2N credentials are not configured on the server.',
+    'provider errors that can reach the UI are covered'
+);
 
 $_SESSION = [];
 Translator::setLocale('pt', false);
@@ -32,10 +42,14 @@ assertI18n(
 SiteTranslations::boot();
 $json = '{"label":"Controlo My2N"}';
 assertI18n(Translator::translateOutput($json) === $json, 'JSON/API payloads are never globally translated');
-$html = '<html><body><span>Controlo My2N</span></body></html>';
+$html = '<html><body><span>Controlo My2N</span><code>device_id=123</code><div data-i18n-skip>rooms</div></body></html>';
 $translatedOutput = Translator::translateOutput($html);
 assertI18n(str_contains($translatedOutput, 'My2N Control'), 'HTML output receives the shared English catalogue');
 assertI18n(str_contains($translatedOutput, 'MutationObserver'), 'dynamic DOM translation remains enabled for JS-rendered UI');
+assertI18n(str_contains($translatedOutput, 'templatePatterns'), 'runtime supports audited {value} templates');
+assertI18n(str_contains($translatedOutput, "closest('[data-i18n-skip]')"), 'technical DOM subtrees can opt out of translation');
+assertI18n(str_contains($translatedOutput, "'CODE', 'PRE', 'KBD', 'SAMP'"), 'technical markup tags are excluded from translation');
+assertI18n(!str_contains($translatedOutput, 'input[name="name"]'), 'user-authored input values are not DOM-translated');
 
 // Regression coverage for the production hybrid-translation failure mode.
 assertI18n(
