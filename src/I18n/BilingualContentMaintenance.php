@@ -293,6 +293,7 @@ final class BilingualContentMaintenance
             'Corredores Setembro' => 'September Corridors',
             'Cabides' => 'Hangers',
             'Sofás' => 'Sofas',
+            'moldura danificada' => 'damaged frame',
             'Verificar se está limpo e sem danos.' => 'Check that it is clean and undamaged.',
             'Confirmar que todas as lâmpadas acendem.' => 'Confirm that all lights turn on.',
             'Verificar a limpeza e o funcionamento das portas.' => 'Check cleanliness and that the doors work correctly.',
