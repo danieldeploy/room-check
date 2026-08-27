@@ -209,6 +209,9 @@ if ($listId === 0 || !array_filter($lists, static fn(array $list): bool => $list
 $selectedList = array_values(array_filter($lists, static fn(array $list): bool => $list['id'] === $listId))[0] ?? null;
 $itemRows = [];
 if ($selectedList) {
+    $selectedList['displayName'] = Translator::localized(
+        (string) $selectedList['name'], (string) ($selectedList['nameEn'] ?? '')
+    );
     $statement = $pdo->prepare(
         'SELECT id, name, name_en, default_instructions, default_instructions_en FROM item_list_items
          WHERE list_id = :list_id ORDER BY sort_order, id'
@@ -271,7 +274,7 @@ header('Cache-Control: no-store');
     <section class="list-toolbar">
         <form method="get" class="list-selector">
             <label><span>Selecionar lista para editar</span><select name="list_id" onchange="this.form.submit()">
-                <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape($list['name']) ?></option><?php endforeach; ?>
+                <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
             </select></label>
         </form>
     </section>
@@ -284,7 +287,7 @@ header('Cache-Control: no-store');
                 <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                 <input type="hidden" name="action" value="rename_list">
                 <input type="hidden" name="list_id" value="<?= $listId ?>">
-                <label><span>Nome da lista</span><input name="name" maxlength="120" required value="<?= listEscape($selectedList['name']) ?>" aria-label="Nome da lista"></label>
+                <label><span>Nome da lista</span><input name="name" maxlength="120" required value="<?= listEscape((string) $selectedList['displayName']) ?>" aria-label="Nome da lista"></label>
                 <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>" <?= $selectedList['area'] === $value ? 'selected' : '' ?>><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
             </form>
             <div class="list-edit-actions">
