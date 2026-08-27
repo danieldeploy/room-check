@@ -34,9 +34,8 @@ assertRuntimeI18n(
     'non-empty legacy repairs are explicitly separated from normal requests'
 );
 
-// This exact mixed phrase was captured in the production HAR. It previously
-// returned HTTP 200 and was then rewritten by runtime maintenance. New/edited
-// mixed text must now be rejected before translation or persistence.
+// Mixed PT/EN text captured during production testing must be rejected before
+// translation or persistence.
 assertRuntimeI18nThrows(
     static fn() => LanguageGuard::assertExpectedLanguage(
         'Check that it is clean and undamaged quarto',
@@ -47,15 +46,33 @@ assertRuntimeI18nThrows(
 );
 assertRuntimeI18nThrows(
     static fn() => LanguageGuard::assertExpectedLanguage(
+        'Check that it is clean and undamaged escada',
+        'en'
+    ),
+    'mixes Portuguese and English',
+    'EN input containing Portuguese stair vocabulary is rejected'
+);
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage(
         'Verificar o quarto room',
         'pt'
     ),
     'mistura português e inglês',
     'PT input containing a strong English word is rejected'
 );
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage(
+        'Verificar a escada stairs',
+        'pt'
+    ),
+    'mistura português e inglês',
+    'PT input containing English stair vocabulary is rejected'
+);
 
 LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged in the room', 'en');
+LanguageGuard::assertExpectedLanguage('Check that the stairs are clean and undamaged', 'en');
 LanguageGuard::assertExpectedLanguage('Verificar se o quarto está limpo e sem danos', 'pt');
+LanguageGuard::assertExpectedLanguage('Verificar se a escada está limpa e sem danos', 'pt');
 assertRuntimeI18n(true, 'clean PT and EN input remains accepted');
 
 echo "Runtime bilingual preservation regression passed.\n";
