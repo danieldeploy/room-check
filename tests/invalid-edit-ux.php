@@ -35,4 +35,8 @@ assertInvalidEditUx(str_contains($rooms, "'languageDecisionCancel' => SiteTransl
 assertInvalidEditUx(str_contains($catalog, "'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?' =>"), 'dialog warning is registered in the static translation catalogue');
 assertInvalidEditUx(str_contains($catalog, "'Anular edição' => 'Cancel edit'"), 'cancel-edit label is registered in the static translation catalogue');
 
+// The pending marker deliberately survives local typing changes and is cleared
+// only after a successful server save or an explicit Cancel edit restoration.
+assertInvalidEditUx(str_contains($feedback, 'delete textarea.dataset.languageNeedsValidation'), 'pending validation marker has an explicit success/cancel clear path');
+
 echo "Invalid edit UX contract passed.\n";
