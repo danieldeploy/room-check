@@ -31,9 +31,7 @@
     const selectAllItems = document.querySelector('#selectAllItems');
     const canEdit = config.canEdit !== false;
     const canAssign = config.canAssign === true;
-    const TEXT_AUTOSAVE_DELAY_MS = 1200;
-    const BLUR_AUTOSAVE_DELAY_MS = 120;
-    const SAVE_BOUNDARY_PATTERN = /[\s.,;:!?…)}\]]$/u;
+    const BLUR_AUTOSAVE_DELAY_MS = 0;
 
     let rows = [];
     let saveTimer = null;
@@ -99,16 +97,7 @@
         textarea.style.height = `${Math.max(46, textarea.scrollHeight)}px`;
     };
 
-    const textIsReadyForAutosave = (textarea, inputEvent = null) => {
-        const value = textarea.value;
-        if (value.trim() === '') return true;
-        if (inputEvent?.inputType?.startsWith('insertFrom')) return true;
-        const cursor = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : value.length;
-        if (cursor <= 0) return false;
-        return SAVE_BOUNDARY_PATTERN.test(value.slice(cursor - 1, cursor));
-    };
-
-    const scheduleInstructionSave = (itemName, textarea, delay = TEXT_AUTOSAVE_DELAY_MS) => {
+    const scheduleInstructionSave = (itemName, textarea, delay = BLUR_AUTOSAVE_DELAY_MS) => {
         window.clearTimeout(instructionSaveTimers.get(itemName));
         instructionSaveTimers.set(itemName, window.setTimeout(() => {
             instructionSaveTimers.delete(itemName);
@@ -257,21 +246,16 @@
         textarea.maxLength = 5000;
         textarea.readOnly = !canEdit;
         textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
-        textarea.addEventListener('input', (event) => {
+        textarea.addEventListener('input', () => {
             autoGrow(textarea);
             if (row.classList.contains('assignment-mode')) {
                 if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;
                 window.clearTimeout(instructionSaveTimers.get(item.name));
+                instructionSaveTimers.delete(item.name);
                 setStatus('Alterações por guardar');
-                if (textIsReadyForAutosave(textarea, event)) {
-                    scheduleInstructionSave(item.name, textarea);
-                }
             } else if (canEdit) {
                 clearTimeout(saveTimer);
                 setStatus('Alterações por guardar');
-                if (textIsReadyForAutosave(textarea, event)) {
-                    scheduleSave();
-                }
             }
         });
         textarea.addEventListener('blur', () => {
@@ -698,7 +682,7 @@
         }
     };
 
-    const scheduleSave = (delay = TEXT_AUTOSAVE_DELAY_MS) => {
+    const scheduleSave = (delay = BLUR_AUTOSAVE_DELAY_MS) => {
         if (isLoading || !canEdit) {
             return;
         }

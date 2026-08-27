@@ -13,20 +13,17 @@ $source = file_get_contents(dirname(__DIR__) . '/assets/app.js');
 assertAutosaveHardening(is_string($source), 'app.js source is readable');
 
 assertAutosaveHardening(
-    str_contains($source, 'const TEXT_AUTOSAVE_DELAY_MS = 1200;'),
-    'text autosave waits for a real debounce interval'
+    !str_contains($source, 'TEXT_AUTOSAVE_DELAY_MS')
+        && !str_contains($source, 'textIsReadyForAutosave')
+        && !str_contains($source, 'SAVE_BOUNDARY_PATTERN'),
+    'typing never schedules a text save before blur'
 );
 assertAutosaveHardening(
-    str_contains($source, 'textIsReadyForAutosave(textarea, event)'),
-    'typing is gated by a word/paste boundary before autosave is scheduled'
-);
-assertAutosaveHardening(
-    str_contains($source, 'SAVE_BOUNDARY_PATTERN'),
-    'word-boundary autosave guard is present'
-);
-assertAutosaveHardening(
-    str_contains($source, "textarea.addEventListener('blur'"),
-    'unfinished final words are flushed on blur'
+    str_contains($source, "textarea.addEventListener('blur'")
+        && str_contains($source, 'BLUR_AUTOSAVE_DELAY_MS = 0')
+        && str_contains($source, 'scheduleInstructionSave(item.name, textarea, BLUR_AUTOSAVE_DELAY_MS)')
+        && str_contains($source, 'scheduleSave(BLUR_AUTOSAVE_DELAY_MS)'),
+    'textarea text saves when focus leaves the field'
 );
 assertAutosaveHardening(
     str_contains($source, 'lastSavedChecklistFingerprint')
