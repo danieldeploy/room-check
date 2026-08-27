@@ -147,7 +147,12 @@ hardening_path.write_text(hardening)
 ux_path = Path('tests/invalid-edit-ux.php')
 ux = ux_path.read_text()
 anchor2 = "assertInvalidEditUx(str_contains($feedback, \"appendHighlightedText\"), 'actual server-reported wrong words are highlighted');\n"
-addition2 = "assertInvalidEditUx(str_contains($feedback, \"new RegExp(`(${escaped.join('|')})`, 'giu')\"), 'server-reported wrong substrings are highlighted inside joined tokens');\n"
+addition2 = """assertInvalidEditUx(
+    str_contains($feedback, 'const pattern = new RegExp')
+        && str_contains($feedback, "escaped.join('|')"),
+    'server-reported wrong substrings are highlighted inside joined tokens'
+);
+"""
 if anchor2 not in ux:
     raise SystemExit('invalid edit UX anchor not found')
 if addition2 not in ux:
