@@ -1,0 +1,129 @@
+name: Apply autosave language hardening
+
+on:
+  push:
+    branches:
+      - agent/autosave-language-guard-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[hardening-ready]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autosave-language-guard-hardening
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+          coverage: none
+      - name: Vendor large EN PT subset and patch application
+        shell: bash
+        run: |
+          set -euo pipefail
+          TMPDIR="$(mktemp -d)"
+          cd "$TMPDIR"
+          composer init --name=room-check/language-hardening --no-interaction
+          composer require nitotm/efficient-language-detector:3.2.0 --prefer-dist --no-interaction
+          cat > build.php <<'PHP'
+          <?php
+          require __DIR__ . '/vendor/autoload.php';
+          use Nitotm\Eld\EldMode;
+          use Nitotm\Eld\EldScheme;
+          use Nitotm\Eld\LanguageDetector;
+          $d = new LanguageDetector('large', EldScheme::ISO639_1, EldMode::MODE_ARRAY);
+          $r = $d->langSubset(['en', 'pt'], true, true);
+          if (!$r->success || !$r->file) {
+              throw new RuntimeException($r->error ?? 'Could not build EN/PT subset');
+          }
+          echo $r->file;
+          PHP
+          SUBSET="$(php build.php)"
+          SRC="$TMPDIR/vendor/nitotm/efficient-language-detector/resources/ngrams/subset/${SUBSET}.php"
+          DEST="$GITHUB_WORKSPACE/src/ThirdParty/efficient-language-detector/resources/ngrams/subset"
+          mkdir -p "$DEST"
+          rm -f "$DEST"/small_2_1niz1ni.php
+          cp "$SRC" "$DEST/${SUBSET}.php"
+
+          cd "$GITHUB_WORKSPACE"
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
+              return text.replace(old, new, 1)
+
+          guard_path = Path('src/I18n/LanguageGuard.php')
+          guard = guard_path.read_text()
+          guard = replace_once(guard, "private const MODEL = 'small_2_1niz1ni';", "private const MODEL = 'large_2_1niz1ni';", 'guard model')
+          guard = replace_once(guard, 'private const COMPONENT_MIN_SCORE = 0.06;', 'private const COMPONENT_MIN_SCORE = 0.18;', 'guard min score')
+          guard = replace_once(guard, 'private const COMPONENT_MIN_GAP = 0.025;', 'private const COMPONENT_MIN_GAP = 0.08;', 'guard min gap')
+          guard = replace_once(guard, 'private const COMPONENT_MIN_RATIO = 1.55;', 'private const COMPONENT_MIN_RATIO = 1.35;', 'guard min ratio')
+          guard_path.write_text(guard)
+
+          app_path = Path('assets/app.js')
+          app = app_path.read_text()
+
+          app = replace_once(app,
+          """    const canEdit = config.canEdit !== false;\n    const canAssign = config.canAssign === true;\n""",
+          """    const canEdit = config.canEdit !== false;\n    const canAssign = config.canAssign === true;\n    const TEXT_AUTOSAVE_DELAY_MS = 1200;\n    const BLUR_AUTOSAVE_DELAY_MS = 120;\n    const SAVE_BOUNDARY_PATTERN = /[\\s.,;:!?…)}\\]]$/u;\n""",
+          'autosave constants')
+
+          app = replace_once(app,
+          """    let rows = [];\n    let saveTimer = null;\n    const instructionSaveTimers = new Map();\n""",
+          """    let rows = [];\n    let saveTimer = null;\n    let lastSavedChecklistFingerprint = '';\n    const instructionSaveTimers = new Map();\n    const instructionLastAttemptedValues = new Map();\n""",
+          'autosave state')
+
+          app = replace_once(app,
+          """    const clearInstructionSaveTimers = () => {\n        instructionSaveTimers.forEach((timer) => window.clearTimeout(timer));\n        instructionSaveTimers.clear();\n    };\n""",
+          """    const clearInstructionSaveTimers = () => {\n        instructionSaveTimers.forEach((timer) => window.clearTimeout(timer));\n        instructionSaveTimers.clear();\n        instructionLastAttemptedValues.clear();\n    };\n""",
+          'clear instruction timers')
+
+          app = replace_once(app,
+          """    const autoGrow = (textarea) => {\n        textarea.style.height = 'auto';\n        textarea.style.height = `${Math.max(46, textarea.scrollHeight)}px`;\n    };\n""",
+          """    const autoGrow = (textarea) => {\n        textarea.style.height = 'auto';\n        textarea.style.height = `${Math.max(46, textarea.scrollHeight)}px`;\n    };\n\n    const textIsReadyForAutosave = (textarea, inputEvent = null) => {\n        const value = textarea.value;\n        if (value.trim() === '') return true;\n        if (inputEvent?.inputType?.startsWith('insertFrom')) return true;\n        const cursor = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : value.length;\n        if (cursor <= 0) return false;\n        return SAVE_BOUNDARY_PATTERN.test(value.slice(cursor - 1, cursor));\n    };\n\n    const scheduleInstructionSave = (itemName, textarea, delay = TEXT_AUTOSAVE_DELAY_MS) => {\n        window.clearTimeout(instructionSaveTimers.get(itemName));\n        instructionSaveTimers.set(itemName, window.setTimeout(() => {\n            instructionSaveTimers.delete(itemName);\n            const instructions = textarea.value.trim();\n            if (instructionLastAttemptedValues.get(itemName) === instructions) return;\n            instructionLastAttemptedValues.set(itemName, instructions);\n            queueAssignmentSave([{ itemName, selected: true, instructions }]).then((saved) => {\n                if (!saved && instructionLastAttemptedValues.get(itemName) === instructions) {\n                    instructionLastAttemptedValues.delete(itemName);\n                }\n            });\n        }, delay));\n    };\n""",
+          'autosave helpers')
+
+          old_input = """        textarea.addEventListener('input', () => {\n            autoGrow(textarea);\n            if (row.classList.contains('assignment-mode')) {\n                if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;\n                window.clearTimeout(instructionSaveTimers.get(item.name));\n                instructionSaveTimers.set(item.name, window.setTimeout(() => {\n                    queueAssignmentSave([{\n                        itemName: item.name,\n                        selected: true,\n                        instructions: textarea.value.trim(),\n                    }]);\n                }, 700));\n            } else if (canEdit) {\n                textarea.dataset.problem = textarea.value;\n                scheduleSave();\n            }\n        });\n"""
+          new_input = """        textarea.addEventListener('input', (event) => {\n            autoGrow(textarea);\n            if (row.classList.contains('assignment-mode')) {\n                if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;\n                window.clearTimeout(instructionSaveTimers.get(item.name));\n                setStatus('Alterações por guardar');\n                if (textIsReadyForAutosave(textarea, event)) {\n                    scheduleInstructionSave(item.name, textarea);\n                }\n            } else if (canEdit) {\n                clearTimeout(saveTimer);\n                setStatus('Alterações por guardar');\n                if (textIsReadyForAutosave(textarea, event)) {\n                    scheduleSave();\n                }\n            }\n        });\n        textarea.addEventListener('blur', () => {\n            if (row.classList.contains('assignment-mode')) {\n                if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;\n                scheduleInstructionSave(item.name, textarea, BLUR_AUTOSAVE_DELAY_MS);\n            } else if (canEdit) {\n                scheduleSave(BLUR_AUTOSAVE_DELAY_MS);\n            }\n        });\n"""
+          app = replace_once(app, old_input, new_input, 'textarea input handler')
+
+          app = replace_once(app,
+          """    const collectItems = () => rows.map((row) => {\n        const selected = row.status.querySelector('[aria-pressed=\"true\"]');\n        return {\n            name: row.name,\n            problem: row.textarea.value,\n            status: selected ? selected.dataset.value : null,\n        };\n    });\n""",
+          """    const collectItems = () => rows.map((row) => {\n        const selected = row.status.querySelector('[aria-pressed=\"true\"]');\n        return {\n            name: row.name,\n            problem: row.textarea.value,\n            status: selected ? selected.dataset.value : null,\n        };\n    });\n\n    const checklistSnapshot = () => {\n        const items = collectItems();\n        return { items, fingerprint: JSON.stringify(items) };\n    };\n""",
+          'checklist snapshot')
+
+          app = replace_once(app,
+          """            renderChecklist(result.items);\n            updateAssignmentMode();\n            setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');\n""",
+          """            renderChecklist(result.items);\n            updateAssignmentMode();\n            lastSavedChecklistFingerprint = checklistSnapshot().fingerprint;\n            setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');\n""",
+          'load fingerprint')
+
+          old_queue_start = """    const queueAssignmentSave = (changes, affectedCheckboxes = [], feedbackKind = affectedCheckboxes.length ? 'assignment' : 'instructions') => {\n        const intervalId = Number(intervalSelect.value);\n        const listId = Number(listSelect.value);\n        const employeeId = Number(employeeSelect.value);\n        const dueDate = assignmentDate.value;\n        if (!intervalId || !listId || !employeeId || !dueDate || changes.length === 0) return Promise.resolve(false);\n        const current = selection();\n"""
+          new_queue_start = """    const queueAssignmentSave = (changes, affectedCheckboxes = [], feedbackKind = affectedCheckboxes.length ? 'assignment' : 'instructions') => {\n        const intervalId = Number(intervalSelect.value);\n        const listId = Number(listSelect.value);\n        const employeeId = Number(employeeSelect.value);\n        const dueDate = assignmentDate.value;\n        if (!intervalId || !listId || !employeeId || !dueDate || changes.length === 0) return Promise.resolve(false);\n        const effectiveChanges = changes.filter((change) => {\n            const existing = assignments[change.itemName];\n            if (!change.selected) return Boolean(existing);\n            if (!existing) return true;\n            return Number(existing.employeeId) !== employeeId\n                || existing.dueDate !== dueDate\n                || String(existing.instructions || '').trim() !== String(change.instructions || '').trim();\n        });\n        if (effectiveChanges.length === 0) return Promise.resolve(false);\n        changes = effectiveChanges;\n        const current = selection();\n"""
+          app = replace_once(app, old_queue_start, new_queue_start, 'assignment dedupe')
+
+          old_save = """    const saveChecklist = async () => {\n        if (isLoading || !canEdit) {\n            return;\n        }\n\n        const current = selection();\n        const version = requestVersion;\n        setStatus('A guardar…');\n\n        try {\n            const response = await fetch('api.php', {\n                method: 'POST',\n                headers: {\n                    'Content-Type': 'application/json',\n                    Accept: 'application/json',\n                },\n                body: JSON.stringify({ ...current, items: collectItems() }),\n            });\n            const result = await response.json();\n\n            if (!response.ok || !result.ok) {\n                throw new Error(result.error || 'Erro ao guardar.');\n            }\n            if (version === requestVersion) {\n                setStatus('Guardado', 'success');\n            }\n        } catch (error) {\n            if (version === requestVersion) {\n                setStatus(error.message, 'error');\n            }\n        }\n    };\n\n    const scheduleSave = () => {\n        if (isLoading || !canEdit) {\n            return;\n        }\n        clearTimeout(saveTimer);\n        setStatus('Alterações por guardar');\n        saveTimer = window.setTimeout(saveChecklist, 600);\n    };\n"""
+          new_save = """    const saveChecklist = async (snapshot = checklistSnapshot()) => {\n        if (isLoading || !canEdit || snapshot.fingerprint === lastSavedChecklistFingerprint) {\n            return false;\n        }\n\n        const current = selection();\n        const version = requestVersion;\n        setStatus('A guardar…');\n\n        try {\n            const response = await fetch('api.php', {\n                method: 'POST',\n                headers: {\n                    'Content-Type': 'application/json',\n                    Accept: 'application/json',\n                },\n                body: JSON.stringify({ ...current, items: snapshot.items }),\n            });\n            const result = await response.json();\n\n            if (!response.ok || !result.ok) {\n                throw new Error(result.error || 'Erro ao guardar.');\n            }\n            if (version === requestVersion) {\n                lastSavedChecklistFingerprint = snapshot.fingerprint;\n                const persistedByName = new Map(snapshot.items.map((item) => [item.name, item.problem]));\n                rows.forEach((row) => {\n                    if (persistedByName.has(row.name)) row.textarea.dataset.problem = persistedByName.get(row.name);\n                });\n                if (checklistSnapshot().fingerprint === snapshot.fingerprint) {\n                    setStatus('Guardado', 'success');\n                } else {\n                    setStatus('Alterações por guardar');\n                }\n            }\n            return true;\n        } catch (error) {\n            if (version === requestVersion) {\n                setStatus(error.message, 'error');\n            }\n            return false;\n        }\n    };\n\n    const scheduleSave = (delay = TEXT_AUTOSAVE_DELAY_MS) => {\n        if (isLoading || !canEdit) {\n            return;\n        }\n        clearTimeout(saveTimer);\n        const snapshot = checklistSnapshot();\n        if (snapshot.fingerprint === lastSavedChecklistFingerprint) {\n            return;\n        }\n        setStatus('Alterações por guardar');\n        saveTimer = window.setTimeout(() => saveChecklist(snapshot), delay);\n    };\n"""
+          app = replace_once(app, old_save, new_save, 'checklist save debounce')
+
+          app = replace_once(app,
+          """    window.addEventListener('beforeunload', () => {\n        clearTimeout(saveTimer);\n        clearInstructionSaveTimers();\n    });\n""",
+          """    window.addEventListener('beforeunload', () => {\n        clearTimeout(saveTimer);\n        clearInstructionSaveTimers();\n        if (!canEdit || isLoading || checklist.classList.contains('assignment-view-mode')) return;\n        const snapshot = checklistSnapshot();\n        if (snapshot.fingerprint === lastSavedChecklistFingerprint) return;\n        const current = selection();\n        fetch('api.php', {\n            method: 'POST',\n            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },\n            body: JSON.stringify({ ...current, items: snapshot.items }),\n            keepalive: true,\n        }).catch(() => {});\n    });\n""",
+          'beforeunload flush')
+
+          app_path.write_text(app)
+          PY
+
+          rm -f .github/workflows/probe-language-hardening.yml .github/workflows/apply-autosave-language-hardening.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Harden autosave and PT EN detection [hardening-ready]'
+          git push origin HEAD:agent/autosave-language-guard-hardening
