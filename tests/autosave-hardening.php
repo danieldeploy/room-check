@@ -43,7 +43,8 @@ assertAutosaveHardening(
     'unsaved text is not mislabeled as persisted problem data'
 );
 assertAutosaveHardening(
-    str_contains($source, 'row.textarea.dataset.problem = persistedByName.get(row.name)'),
+    str_contains($source, 'row.textarea.dataset.problem = persisted;')
+        && str_contains($source, 'row.textarea.dataset.persistedText = persisted;'),
     'persisted problem baseline advances only after server success'
 );
 assertAutosaveHardening(

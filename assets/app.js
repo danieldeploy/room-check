@@ -966,6 +966,9 @@
             setStatus('Preencha o nome e as duas datas do intervalo', 'error');
             return;
         }
+        if (!(await resolveDirtyTextBeforeContextChange())) {
+            return;
+        }
         createInterval.disabled = true;
         setStatus('A criar intervalo…');
         try {
@@ -1049,6 +1052,10 @@
             `Apagar o intervalo “${interval.name}”? Todas as atribuições deste intervalo também serão apagadas. Esta ação não pode ser anulada.`
         );
         if (!confirmed) return;
+        const deletingActiveInterval = Number(intervalSelect.value || 0) === interval.id;
+        if (deletingActiveInterval && !(await resolveDirtyTextBeforeContextChange())) {
+            return;
+        }
         saveInterval.disabled = true;
         deleteInterval.disabled = true;
         setStatus('A apagar intervalo…');
@@ -1066,13 +1073,12 @@
             intervalSelect.querySelector(`option[value="${interval.id}"]`)?.remove();
             editIntervalSelect.querySelector(`option[value="${interval.id}"]`)?.remove();
             editIntervalSelect.value = '';
-            const deletedActiveInterval = Number(intervalSelect.value || 0) === interval.id;
-            if (deletedActiveInterval) {
+            if (deletingActiveInterval) {
                 intervalSelect.value = '';
                 employeeSelect.value = '';
             }
             syncIntervalManager();
-            if (deletedActiveInterval) await loadChecklist();
+            if (deletingActiveInterval) await loadChecklist();
             setStatus(`Intervalo apagado (${result.deletedAssignments} atribuições removidas)`, 'success');
         } catch (error) {
             setStatus(error.message, 'error');

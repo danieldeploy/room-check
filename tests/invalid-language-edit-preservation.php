@@ -23,6 +23,8 @@ okp(str_contains($api, "'invalidWords' => \$exception->invalidWords"), '422 incl
 okp(str_contains($app, 'text-validation-overlay'), 'client overlays wrong-language word without replacing textarea');
 okp(str_contains($app, 'language-edit-dialog'), 'context change has correction/cancel dialog');
 okp(str_contains($app, 'resolveDirtyTextBeforeContextChange'), 'context changes validate pending text first');
+okp(str_contains($app, 'if (!(await resolveDirtyTextBeforeContextChange()))'), 'programmatic interval creation guards pending text before changing context');
+okp(str_contains($app, 'deletingActiveInterval && !(await resolveDirtyTextBeforeContextChange())'), 'deleting the active interval guards pending text before changing context');
 okp(str_contains($css, '.invalid-language-word'), 'wrong-language word has separate red style');
 okp(str_contains($rooms, "'locale' => Translator::locale()"), 'client receives active locale');
 echo "Invalid-language edit preservation contract passed.\n";
