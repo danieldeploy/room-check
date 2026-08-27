@@ -48,10 +48,14 @@ final class LanguageGuard
 
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
         $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
+        $naturalText = self::naturalText($text);
+        if ($naturalText === '') {
+            return;
+        }
 
-        // 1. Validate the complete text. A reliable opposite-language result is
-        // enough to reject a wholly wrong-language value.
-        $whole = self::detect($text);
+        // 1. Validate the complete natural-language text after removing neutral
+        // technical/brand/loan tokens so they cannot distort the language score.
+        $whole = self::detect($naturalText);
         if ($whole->language === $oppositeLanguage && $whole->isReliable()) {
             self::throwMismatch($expectedLanguage);
         }
@@ -77,7 +81,12 @@ final class LanguageGuard
             return null;
         }
 
-        $result = self::detect($text);
+        $naturalText = self::naturalText($text);
+        if ($naturalText === '') {
+            return null;
+        }
+
+        $result = self::detect($naturalText);
         if (($result->language === 'pt' || $result->language === 'en') && $result->isReliable()) {
             return $result->language;
         }
@@ -143,6 +152,14 @@ final class LanguageGuard
         }
 
         return true;
+    }
+
+    private static function naturalText(string $text): string
+    {
+        $lower = mb_strtolower($text, 'UTF-8');
+        $tokens = preg_split('/[^\p{L}\p{N}_-]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $natural = array_values(array_filter($tokens, [self::class, 'isNaturalLanguageToken']));
+        return implode(' ', $natural);
     }
 
     /**
