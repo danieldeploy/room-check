@@ -15,6 +15,19 @@
     const textareaForRow = (row) => row?.querySelector('.problem-field textarea') || null;
     const allRows = () => Array.from(document.querySelectorAll('.check-row'));
 
+
+    const keepValidationTextareaEditable = (textarea) => {
+        if (!textarea || config.canEdit === false) return;
+        const row = textarea.closest('.check-row');
+        if (!row) return;
+        if (!row.classList.contains('assignment-mode')) {
+            textarea.readOnly = false;
+            return;
+        }
+        const checkbox = row.querySelector('.assignment-check input[type="checkbox"]');
+        if (checkbox && checkbox.checked && !checkbox.disabled) textarea.readOnly = false;
+    };
+
     const resetFeedback = (feedback, visible = false) => {
         if (!feedback) return;
         window.clearTimeout(feedbackTimers.get(feedback));
@@ -91,6 +104,7 @@
 
     const renderHighlight = (textarea, invalidWords = []) => {
         if (!textarea) return;
+        keepValidationTextareaEditable(textarea);
         removeHighlight(textarea);
         const value = textarea.value;
         const baseline = textarea.dataset.lastValidValue ?? '';
@@ -286,7 +300,10 @@
 
     document.addEventListener('focusin', (event) => {
         const textarea = event.target.closest?.('.check-row textarea');
-        if (textarea && textarea.dataset.lastValidValue === undefined) textarea.dataset.lastValidValue = textarea.value;
+        if (textarea) {
+            if (textarea.dataset.lastValidValue === undefined) textarea.dataset.lastValidValue = textarea.value;
+            keepValidationTextareaEditable(textarea);
+        }
         if (contextControl(event.target)) previousControlValues.set(event.target, event.target.value);
     }, true);
     document.addEventListener('pointerdown', (event) => {

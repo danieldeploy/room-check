@@ -86,4 +86,17 @@ assertInvalidEditUx(
     'invalid-language highlight never makes the textarea itself transparent or non-interactive'
 );
 
+assertInvalidEditUx(
+    str_contains($feedback, 'keepValidationTextareaEditable')
+        && str_contains($feedback, 'checkbox && checkbox.checked && !checkbox.disabled')
+        && str_contains($feedback, 'textarea.readOnly = false'),
+    'language validation errors keep an active assigned textarea editable on every retry'
+);
+assertInvalidEditUx(
+    str_contains($app, "feedbackKind === 'instructions'")
+        && str_contains($app, 'row?.assignmentCheckbox?.checked && !row.assignmentCheckbox.disabled')
+        && str_contains($app, 'row.textarea.readOnly = false'),
+    'rejected assignment instructions explicitly restore editability without unlocking unassigned items'
+);
+
 echo "Invalid edit UX contract passed.\n";

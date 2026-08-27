@@ -600,9 +600,18 @@
             setStatus('Guardado automaticamente', 'success');
             return true;
         }).catch((error) => {
-            // Keep rejected instruction text visible so the user can correct it.
-            // Checkbox/assignment failures still resync from persisted state.
+            // Keep rejected instruction text visible and editable so the user can
+            // retry as many times as needed. Checkbox/assignment failures still
+            // resync from persisted state.
             if (contextMatches() && feedbackKind === 'assignment') updateAssignmentMode();
+            if (contextMatches() && feedbackKind === 'instructions') {
+                changes.forEach((change) => {
+                    const row = rows.find((candidate) => candidate.name === change.itemName);
+                    if (row?.assignmentCheckbox?.checked && !row.assignmentCheckbox.disabled) {
+                        row.textarea.readOnly = false;
+                    }
+                });
+            }
             setStatus(error.message, 'error');
             return false;
         });
