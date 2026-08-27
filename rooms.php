@@ -105,6 +105,13 @@ try {
                 'lastDueDate' => $interval['last_due_date'] !== null ? (string) $interval['last_due_date'] : null,
             ], $intervals),
             'csrfToken' => Csrf::token(),
+            'locale' => Translator::locale(),
+            'languageDecisionMessage' => SiteTranslations::text(
+                'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?',
+                'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?'
+            ),
+            'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct'),
+            'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit'),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
             'initialRoom' => $initialRoom,

@@ -70,6 +70,8 @@ final class SiteTranslations
             'Painel administrativo' => 'Administration panel',
             'Administração' => 'Administration',
             'Ação inválida.' => 'Invalid action.',
+            'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?' => 'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?',
+            'Anular edição' => 'Cancel edit',
             'Não tem permissão para esta ação.' => 'You do not have permission to perform this action.',
             'Não tem permissão para consultar tarefas.' => 'You do not have permission to view tasks.',
             'Configuração' => 'Configuration',
