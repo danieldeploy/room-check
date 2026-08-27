@@ -32,19 +32,19 @@ assertPersistentI18n(
     'list edit input cannot render the canonical PT name directly'
 );
 assertPersistentI18n(
-    str_contains($itemLists, "$selectedList['displayName'] = Translator::localized("),
+    str_contains($itemLists, '$selectedList[\'displayName\'] = Translator::localized('),
     'list edit input receives an explicit active-language value'
 );
 assertPersistentI18n(
-    str_contains($itemLists, "$itemRow['name'] = Translator::localized("),
+    str_contains($itemLists, '$itemRow[\'name\'] = Translator::localized('),
     'item-name editor receives the active persisted language'
 );
 assertPersistentI18n(
-    str_contains($itemLists, "$itemRow['default_instructions'] = Translator::localized("),
+    str_contains($itemLists, '$itemRow[\'default_instructions\'] = Translator::localized('),
     'item-instructions editor receives the active persisted language'
 );
 assertPersistentI18n(
-    str_contains($rooms, "$interval['name'] = Translator::localized("),
+    str_contains($rooms, '$interval[\'name\'] = Translator::localized('),
     'interval editor receives the active persisted language'
 );
 assertPersistentI18n(
@@ -60,11 +60,11 @@ assertPersistentI18n(
 // columns at the server/data boundary instead of relying on accidental DOM
 // replacement of the canonical Portuguese text.
 assertPersistentI18n(
-    str_contains($rooms, "$list['displayName'] = Translator::localized("),
+    str_contains($rooms, '$list[\'displayName\'] = Translator::localized('),
     'room list view-model exposes an explicit localized list name'
 );
 assertPersistentI18n(
-    str_contains($rooms, "htmlspecialchars((string) $list['displayName']"),
+    str_contains($rooms, 'htmlspecialchars((string) $list[\'displayName\']'),
     'room list selector renders the localized view-model value'
 );
 assertPersistentI18n(
@@ -83,7 +83,7 @@ assertPersistentI18n(
 // Machine identity must remain canonical. Display localization must never
 // replace internal list IDs, assignment IDs or canonical item keys.
 assertPersistentI18n(
-    str_contains($api, "$listItems = $selectedList['items'];"),
+    str_contains($api, '$listItems = $selectedList[\'items\'];'),
     'API keeps canonical item keys for writes and assignment identity'
 );
 assertPersistentI18n(
