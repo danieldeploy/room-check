@@ -305,6 +305,7 @@
             assignmentCheckbox.addEventListener('change', () => {
                 window.clearTimeout(instructionSaveTimers.get(item.name));
                 instructionSaveTimers.delete(item.name);
+                textarea.readOnly = true;
                 updateSelectAllState();
                 queueAssignmentSave([{
                     itemName: item.name,
@@ -411,7 +412,7 @@
                 'same-employee-other-date', active && locked && sameEmployeeOtherDate
             );
             row.assignmentHint.hidden = !viewingAssignments || !hasAssignment;
-            row.textarea.readOnly = viewingAssignments ? (!active || locked) : !canEdit;
+            row.textarea.readOnly = viewingAssignments ? (!active || locked || !sameAssignment) : !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = viewingAssignments || !canEdit; });
             autoGrow(row.textarea);
         });
@@ -857,6 +858,7 @@
         rows.forEach((row) => {
             if (row.assignmentCheckbox.disabled) return;
             row.assignmentCheckbox.checked = selectAllItems.checked;
+            row.textarea.readOnly = true;
             changes.push({
                 itemName: row.name,
                 selected: selectAllItems.checked,
