@@ -28,15 +28,23 @@ $tasks = $read('tasks.php');
 // Editable bilingual content must use the active persisted language, never the
 // canonical PT column merely because it is the internal identity.
 assertPersistentI18n(
-    !str_contains($itemLists, "value=\"<?= listEscape($selectedList['name']) ?>\""),
+    !str_contains($itemLists, 'value="<?= listEscape($selectedList[\'name\']) ?>"'),
     'list edit input cannot render the canonical PT name directly'
 );
 assertPersistentI18n(
-    str_contains($itemLists, 'Translator::localized('),
-    'item-list editor localizes persisted bilingual values explicitly'
+    str_contains($itemLists, "$selectedList['displayName'] = Translator::localized("),
+    'list edit input receives an explicit active-language value'
 );
 assertPersistentI18n(
-    str_contains($rooms, "interval['name'] = Translator::localized("),
+    str_contains($itemLists, "$itemRow['name'] = Translator::localized("),
+    'item-name editor receives the active persisted language'
+);
+assertPersistentI18n(
+    str_contains($itemLists, "$itemRow['default_instructions'] = Translator::localized("),
+    'item-instructions editor receives the active persisted language'
+);
+assertPersistentI18n(
+    str_contains($rooms, "$interval['name'] = Translator::localized("),
     'interval editor receives the active persisted language'
 );
 assertPersistentI18n(
@@ -52,7 +60,7 @@ assertPersistentI18n(
 // columns at the server/data boundary instead of relying on accidental DOM
 // replacement of the canonical Portuguese text.
 assertPersistentI18n(
-    str_contains($rooms, "'displayName' => Translator::localized("),
+    str_contains($rooms, "$list['displayName'] = Translator::localized("),
     'room list view-model exposes an explicit localized list name'
 );
 assertPersistentI18n(
@@ -60,27 +68,27 @@ assertPersistentI18n(
     'room list selector renders the localized view-model value'
 );
 assertPersistentI18n(
-    str_contains($tasks, "NULLIF(TRIM(list_row.name_en)"),
+    str_contains($tasks, 'NULLIF(TRIM(list_row.name_en)'),
     'employee task list names select the active persisted language'
 );
 assertPersistentI18n(
-    str_contains($tasks, "NULLIF(TRIM(item.name_en)"),
+    str_contains($tasks, 'NULLIF(TRIM(item.name_en)'),
     'employee task item names select the active persisted language'
 );
 assertPersistentI18n(
-    str_contains($tasks, "NULLIF(TRIM(v.problem_en)"),
+    str_contains($tasks, 'NULLIF(TRIM(v.problem_en)'),
     'employee task problem text selects the active persisted language'
 );
 
 // Machine identity must remain canonical. Display localization must never
 // replace internal list IDs, assignment IDs or canonical item keys.
 assertPersistentI18n(
-    str_contains($api, '$listItems = $selectedList[\'items\'];'),
+    str_contains($api, "$listItems = $selectedList['items'];"),
     'API keeps canonical item keys for writes and assignment identity'
 );
 assertPersistentI18n(
-    str_contains($tasks, 'a.item_name AS canonical_item_name') || str_contains($tasks, 'a.item_name,'),
-    'task query keeps access to the canonical item identity'
+    str_contains($tasks, 'a.item_name AS canonical_item_name'),
+    'task query keeps the canonical item identity separate from display text'
 );
 
 echo "Persistent bilingual boundary audit passed.\n";
