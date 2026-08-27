@@ -217,12 +217,12 @@ final class LanguageGuard
         $invalidWords = array_values(array_unique(array_filter(array_map('strval', $invalidWords))));
         if ($expectedLanguage === 'en') {
             throw new LanguageValidationException(
-                'This text mixes Portuguese and English. Please write it in English only.',
+                'This text contains errors. Please write it in English only.',
                 $invalidWords
             );
         }
         throw new LanguageValidationException(
-            'Este texto mistura português e inglês. Escreva-o apenas em português.',
+            'Este texto contém erros. Escreva-o apenas em português.',
             $invalidWords
         );
     }

@@ -56,12 +56,17 @@ assertValidationFeedback(
 $englishMessage = captureLanguageGuardMessage('Check the room quarto', 'en');
 $portugueseMessage = captureLanguageGuardMessage('Verificar o quarto room', 'pt');
 assertValidationFeedback(
-    str_starts_with($englishMessage, 'This text mixes Portuguese and English.'),
-    'English login receives the validation message in English'
+    $englishMessage === 'This text contains errors. Please write it in English only.',
+    'English login receives the concise validation message in English'
 );
 assertValidationFeedback(
-    str_starts_with($portugueseMessage, 'Este texto mistura português e inglês.'),
-    'Portuguese login receives the validation message in Portuguese'
+    $portugueseMessage === 'Este texto contém erros. Escreva-o apenas em português.',
+    'Portuguese login receives the concise validation message in Portuguese'
+);
+assertValidationFeedback(
+    !str_contains($englishMessage, 'mixes Portuguese and English')
+        && !str_contains($portugueseMessage, 'mistura português e inglês'),
+    'obsolete mixed-language wording cannot return'
 );
 
 echo "Inline bilingual validation feedback contract passed.\n";

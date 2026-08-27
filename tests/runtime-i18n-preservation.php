@@ -40,7 +40,7 @@ assertRuntimeI18nThrows(
         'Verificar se o quarto está limpo e sem danos',
         'en'
     ),
-    'Please write it in English only.',
+    'This text contains errors. Please write it in English only.',
     'PT text is rejected when the selected interface language is EN'
 );
 assertRuntimeI18nThrows(
@@ -48,7 +48,7 @@ assertRuntimeI18nThrows(
         'Check that the room is clean and undamaged',
         'pt'
     ),
-    'Escreva-o apenas em português.',
+    'Este texto contém erros. Escreva-o apenas em português.',
     'EN text is rejected when the selected interface language is PT'
 );
 
@@ -60,7 +60,7 @@ assertRuntimeI18nThrows(
         'Check that it is clean and undamaged. quarto',
         'en'
     ),
-    'This text mixes Portuguese and English. Please write it in English only.',
+    'This text contains errors. Please write it in English only.',
     'EN input containing Portuguese component quarto is rejected'
 );
 assertRuntimeI18nThrows(
@@ -68,7 +68,7 @@ assertRuntimeI18nThrows(
         'Check that it is clean and undamaged. escada',
         'en'
     ),
-    'This text mixes Portuguese and English. Please write it in English only.',
+    'This text contains errors. Please write it in English only.',
     'EN input containing Portuguese component escada is rejected'
 );
 assertRuntimeI18nThrows(
@@ -76,7 +76,7 @@ assertRuntimeI18nThrows(
         'Verificar se está limpo e sem danos. room',
         'pt'
     ),
-    'Este texto mistura português e inglês. Escreva-o apenas em português.',
+    'Este texto contém erros. Escreva-o apenas em português.',
     'PT input containing English component room is rejected'
 );
 assertRuntimeI18nThrows(
@@ -84,7 +84,7 @@ assertRuntimeI18nThrows(
         'Verificar se está limpo e sem danos. stairs',
         'pt'
     ),
-    'Este texto mistura português e inglês. Escreva-o apenas em português.',
+    'Este texto contém erros. Escreva-o apenas em português.',
     'PT input containing English component stairs is rejected'
 );
 
