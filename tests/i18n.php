@@ -12,6 +12,17 @@ function assertI18n(bool $condition, string $message): void
     echo 'PASS: ' . $message . PHP_EOL;
 }
 
+function assertThrowsI18n(callable $callback, string $expectedFragment, string $message): void
+{
+    try {
+        $callback();
+    } catch (InvalidArgumentException $exception) {
+        assertI18n(str_contains($exception->getMessage(), $expectedFragment), $message);
+        return;
+    }
+    throw new RuntimeException('FAIL: ' . $message);
+}
+
 $catalog = SiteTranslations::catalog();
 assertI18n(($catalog['Controlo My2N'] ?? null) === 'My2N Control', 'My2N/Bell UI is in the shared catalogue');
 assertI18n(($catalog['Estado da integração'] ?? null) === 'Integration status', 'ZKAccess UI is in the shared catalogue');
@@ -60,6 +71,34 @@ assertI18n(
 assertI18n(
     !str_contains((string) $itemListsSource, "value=\"<?= listEscape(\$selectedList['name']) ?>\""),
     'list editor cannot fall back to the old PT-only editable value path'
+);
+
+// User-authored source-language guard: one server-side algorithm for every
+// current/future bilingual save that passes through ContentTranslator::versions().
+assertI18n(LanguageGuard::confidentLanguage('Verificação da cozinha') === 'pt', 'Portuguese user text is detected with high confidence');
+assertI18n(LanguageGuard::confidentLanguage('Kitchen inspection') === 'en', 'English user text is detected with high confidence');
+assertI18n(LanguageGuard::confidentLanguage('Limpeza') === 'pt', 'short Portuguese domain text can be detected');
+assertI18n(LanguageGuard::confidentLanguage('Kitchen') === 'en', 'short English domain text can be detected');
+assertI18n(LanguageGuard::confidentLanguage('WiFi Café') === null, 'neutral technical/loan words remain ambiguous and are allowed');
+assertI18n(LanguageGuard::confidentLanguage('Café Central') === null, 'proper-name-like neutral text is not blocked');
+LanguageGuard::assertExpectedLanguage('Check kitchen cleanliness', 'en');
+LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha', 'pt');
+assertI18n(true, 'matching user language is accepted');
+assertThrowsI18n(
+    static fn() => LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha', 'en'),
+    'written in Portuguese',
+    'Portuguese text is blocked when the active input language is English'
+);
+assertThrowsI18n(
+    static fn() => LanguageGuard::assertExpectedLanguage('Check kitchen cleanliness', 'pt'),
+    'escrito em inglês',
+    'English text is blocked when the active input language is Portuguese'
+);
+$contentTranslatorSource = file_get_contents(dirname(__DIR__) . '/src/I18n/ContentTranslator.php');
+assertI18n(
+    is_string($contentTranslatorSource)
+        && str_contains($contentTranslatorSource, 'LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);'),
+    'all bilingual versions() saves pass through the central language guard before translation'
 );
 
 SiteTranslations::boot();
