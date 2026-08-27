@@ -20,24 +20,36 @@ jobs:
           php-version: '8.2'
           extensions: mbstring
           coverage: none
-      - name: Probe PT EN scores
+      - name: Build and probe large PT EN subset
+        shell: bash
         run: |
-          php <<'PHP'
+          set -euo pipefail
+          TMPDIR="$(mktemp -d)"
+          cd "$TMPDIR"
+          composer init --name=room-check/probe --no-interaction
+          composer require nitotm/efficient-language-detector:3.2.0 --prefer-dist --no-interaction
+          cat > probe.php <<'PHP'
           <?php
-          require __DIR__ . '/src/ThirdParty/efficient-language-detector/manual_loader.php';
+          require __DIR__ . '/vendor/autoload.php';
           use Nitotm\Eld\EldMode;
           use Nitotm\Eld\EldScheme;
           use Nitotm\Eld\LanguageDetector;
-          $d = new LanguageDetector('small_2_1niz1ni', EldScheme::ISO639_1, EldMode::MODE_ARRAY);
+
+          $builder = new LanguageDetector('large', EldScheme::ISO639_1, EldMode::MODE_ARRAY);
+          $subset = $builder->langSubset(['en', 'pt'], true, true);
+          if (!$subset->success || !$subset->file) {
+              throw new RuntimeException($subset->error ?? 'Could not build subset');
+          }
+          echo "subset=" . $subset->file . "\n";
+          $d = new LanguageDetector($subset->file, EldScheme::ISO639_1, EldMode::MODE_ARRAY);
           $cases = [
             'bloco','terreno','barco','nuvem','escada','quarto','espelho','cozinha','limpeza','janela','cama','porta','parede','cortina',
             'block','land','boat','cloud','stairs','room','mirror','kitchen','cleaning','window','bed','door','wall','curtain',
-            'café','hotel','hostel','item','online','offline','central','lisboa','porto','welcome','wifi','netflix','booking','airbnb','tv','minibar',
-            'Check that it is clean and undamaged. bloco','Check that it is clean and undamaged. terreno','Check that it is clean and undamaged. nuvem',
-            'Verificar se está limpo e sem danos. block','Verificar se está limpo e sem danos. cloud'
+            'café','hotel','hostel','item','online','offline','central','lisboa','porto','welcome','wifi','netflix','booking','airbnb','tv','minibar'
           ];
           foreach ($cases as $text) {
               $r = $d->detect($text);
               echo $text . "\tlang=" . $r->language . "\treliable=" . ($r->isReliable() ? 'yes' : 'no') . "\tscores=" . json_encode($r->scores(), JSON_UNESCAPED_UNICODE) . "\n";
           }
           PHP
+          php probe.php
