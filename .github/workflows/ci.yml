@@ -43,3 +43,5 @@ jobs:
           php tests/runtime-i18n-preservation.php
           php tests/assignment-textarea-lock.php
           php tests/validation-feedback-contract.php
+          php tests/language-guard-hardening.php
+          php tests/autosave-hardening.php
