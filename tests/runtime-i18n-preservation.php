@@ -25,7 +25,7 @@ function assertRuntimeI18nThrows(callable $callback, string $fragment, string $m
 $maintenance = file_get_contents(dirname(__DIR__) . '/src/I18n/BilingualContentMaintenance.php');
 assertRuntimeI18n(is_string($maintenance), 'runtime bilingual maintenance source is readable');
 assertRuntimeI18n(
-    str_contains($maintenance, "$sourceText === '' || $currentTarget !== ''"),
+    str_contains($maintenance, '$sourceText === \'\' || $currentTarget !== \'\''),
     'runtime maintenance never rewrites a non-empty EN value'
 );
 assertRuntimeI18n(
