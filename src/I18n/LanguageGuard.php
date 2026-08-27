@@ -18,23 +18,24 @@ use Nitotm\Eld\LanguageResult;
  */
 final class LanguageGuard
 {
-    private const MODEL = 'small_2_1niz1ni';
+    private const MODEL = 'large_2_1niz1ni';
 
     // Calibrated against the vendored EN/PT subset. A short component is only
     // considered opposite-language evidence when all three conditions hold.
-    private const COMPONENT_MIN_SCORE = 0.06;
-    private const COMPONENT_MIN_GAP = 0.025;
-    private const COMPONENT_MIN_RATIO = 1.55;
+    private const COMPONENT_MIN_SCORE = 0.18;
+    private const COMPONENT_MIN_GAP = 0.08;
+    private const COMPONENT_MIN_RATIO = 1.35;
     private const MAX_COMPONENT_TOKENS = 40;
 
     /**
-     * Technical/brand/loan terms that are deliberately language-neutral in the app.
-     * This is not a language vocabulary list; it only prevents known machine or
-     * product terms from being treated as natural-language evidence.
+     * Technical, brand, proper-name and shared loan terms that are deliberately
+     * language-neutral in the app. This is not a language vocabulary list; it
+     * prevents machine/product names from being treated as linguistic evidence.
      */
     private const NEUTRAL = [
         'wifi', 'wi-fi', 'sip', 'my2n', 'zkaccess', 'cloudbeds', 'whatsapp', 'api',
         'pin', 'tv', 'usb', 'qr', 'café', 'hotel', 'hostel', 'online', 'offline', 'item',
+        'airbnb', 'booking', 'netflix', 'welcome',
     ];
 
     private static ?LanguageDetector $detector = null;
@@ -48,10 +49,14 @@ final class LanguageGuard
 
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
         $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
+        $naturalText = self::naturalText($text);
+        if ($naturalText === '') {
+            return;
+        }
 
-        // 1. Validate the complete text. A reliable opposite-language result is
-        // enough to reject a wholly wrong-language value.
-        $whole = self::detect($text);
+        // 1. Validate the complete natural-language text after removing neutral
+        // technical/brand/loan tokens so they cannot distort the language score.
+        $whole = self::detect($naturalText);
         if ($whole->language === $oppositeLanguage && $whole->isReliable()) {
             self::throwMismatch($expectedLanguage);
         }
@@ -77,7 +82,12 @@ final class LanguageGuard
             return null;
         }
 
-        $result = self::detect($text);
+        $naturalText = self::naturalText($text);
+        if ($naturalText === '') {
+            return null;
+        }
+
+        $result = self::detect($naturalText);
         if (($result->language === 'pt' || $result->language === 'en') && $result->isReliable()) {
             return $result->language;
         }
@@ -143,6 +153,14 @@ final class LanguageGuard
         }
 
         return true;
+    }
+
+    private static function naturalText(string $text): string
+    {
+        $lower = mb_strtolower($text, 'UTF-8');
+        $tokens = preg_split('/[^\p{L}\p{N}_-]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $natural = array_values(array_filter($tokens, [self::class, 'isNaturalLanguageToken']));
+        return implode(' ', $natural);
     }
 
     /**
