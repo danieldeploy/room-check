@@ -10,7 +10,11 @@ function assertAssignmentTextareaLock(bool $condition, string $message): void
 }
 
 $app = file_get_contents(dirname(__DIR__) . '/assets/app.js');
+$readonlyCss = file_get_contents(dirname(__DIR__) . '/assets/readonly-textarea.css');
+$sessionBar = file_get_contents(dirname(__DIR__) . '/src/UI/SessionBar.php');
 assertAssignmentTextareaLock(is_string($app), 'assets/app.js is readable');
+assertAssignmentTextareaLock(is_string($readonlyCss), 'read-only textarea stylesheet is readable');
+assertAssignmentTextareaLock(is_string($sessionBar), 'SessionBar source is readable');
 
 assertAssignmentTextareaLock(
     str_contains($app, "row.textarea.readOnly = viewingAssignments ? (!active || locked || !sameAssignment) : !canEdit;"),
@@ -37,6 +41,18 @@ assertAssignmentTextareaLock(
     str_contains($app, "if (change.selected) {\n                        assignments[change.itemName] = {")
         && str_contains($app, 'updateAssignmentMode();'),
     'successful assignment save updates assignment state before the textarea can become editable'
+);
+
+assertAssignmentTextareaLock(
+    str_contains($readonlyCss, '.check-row textarea[readonly]:focus')
+        && str_contains($readonlyCss, 'outline: none;')
+        && str_contains($readonlyCss, 'border-color: #cbd9d7;')
+        && str_contains($readonlyCss, 'box-shadow: none;'),
+    'read-only room textareas do not display the editable focus ring'
+);
+assertAssignmentTextareaLock(
+    str_contains($sessionBar, "assets/readonly-textarea.css"),
+    'authenticated room UI loads the read-only textarea focus override'
 );
 
 echo "Assignment textarea lock contract passed.\n";
