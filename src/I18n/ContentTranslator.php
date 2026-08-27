@@ -22,15 +22,30 @@ final class ContentTranslator
             return ['pt' => '', 'en' => ''];
         }
 
-        // Single project-wide server boundary for user-authored bilingual text.
-        // If the text is clearly in the opposite language, stop here: do not
-        // call the translation provider and do not return values for persistence.
+        // A value already stored for the active language is not new user input.
+        // Reuse the existing bilingual pair before language validation so an
+        // unrelated edit cannot be blocked by legacy/ambiguous unchanged text.
+        if ($sourceLanguage === 'en'
+            && $existingEn === $text
+            && $existingPt !== ''
+            && $existingPt !== $existingEn
+            && self::isPlausibleTargetText($existingPt, 'pt')) {
+            return ['pt' => $existingPt, 'en' => $text];
+        }
+        if ($sourceLanguage === 'pt'
+            && $existingPt === $text
+            && $existingEn !== ''
+            && $existingEn !== $existingPt
+            && self::isPlausibleTargetText($existingEn, 'en')) {
+            return ['pt' => $text, 'en' => $existingEn];
+        }
+
+        // Single project-wide server boundary for newly entered/changed
+        // user-authored bilingual text. If the text is clearly in the opposite
+        // language, stop here: do not call the provider or persist anything.
         LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);
 
         if ($sourceLanguage === 'en') {
-            if ($existingEn === $text && $existingPt !== '' && $existingPt !== $existingEn) {
-                return ['pt' => $existingPt, 'en' => $text];
-            }
             $translatedPt = $this->translate($text, 'en', 'pt');
             if ($translatedPt === null || trim($translatedPt) === '') {
                 throw new InvalidArgumentException(
@@ -38,11 +53,6 @@ final class ContentTranslator
                 );
             }
             return ['pt' => trim($translatedPt), 'en' => $text];
-        }
-
-        if ($existingPt === $text && $existingEn !== '' && $existingEn !== $existingPt
-            && self::isPlausibleTargetText($existingEn, 'en')) {
-            return ['pt' => $text, 'en' => $existingEn];
         }
 
         $translatedEn = $this->translate($text, 'pt', 'en');
