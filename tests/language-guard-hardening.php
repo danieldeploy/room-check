@@ -92,30 +92,30 @@ assertHardeningInvalidWord(
     'PT input detects EN prefix inside joined token: roadcasa'
 );
 
-// A one- or two-character accidental edge must not hide a confident opposite-language word.
+// Duplicated edge characters must not hide a confident opposite-language word.
 assertHardeningInvalidWord(
     'Check the ccasa carefully.',
     'en',
     'casa',
-    'EN input detects PT word after one-character attached prefix: ccasa'
+    'EN input detects PT word after duplicated leading character: ccasa'
 );
 assertHardeningInvalidWord(
-    'Check the casax carefully.',
+    'Check the casaa carefully.',
     'en',
     'casa',
-    'EN input detects PT word before one-character attached suffix: casax'
+    'EN input detects PT word before duplicated trailing character: casaa'
 );
 assertHardeningInvalidWord(
     'Verificar a rroad cuidadosamente.',
     'pt',
     'road',
-    'PT input detects EN word after one-character attached prefix: rroad'
+    'PT input detects EN word after duplicated leading character: rroad'
 );
 assertHardeningInvalidWord(
-    'Verificar a roadx cuidadosamente.',
+    'Verificar a roadd cuidadosamente.',
     'pt',
     'road',
-    'PT input detects EN word before one-character attached suffix: roadx'
+    'PT input detects EN word before duplicated trailing character: roadd'
 );
 
 // Whole-field opposite language remains blocked.
