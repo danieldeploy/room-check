@@ -18,11 +18,10 @@ $css = file_get_contents($root . '/assets/bilingual-textareas.css');
 
 assertBilingualTextarea(is_string($itemLists) && is_string($api) && is_string($session) && is_string($client) && is_string($css), 'transversal bilingual textarea sources are readable');
 
-preg_match_all('/<textarea\b[^>]*>/i', (string) $itemLists, $matches);
-assertBilingualTextarea(count($matches[0]) >= 2, 'item-list editor exposes its instruction textareas');
-foreach ($matches[0] as $tag) {
-    assertBilingualTextarea(str_contains($tag, 'data-bilingual-textarea'), 'every item-list textarea opts into the transversal bilingual contract');
-}
+$textareaCount = substr_count((string) $itemLists, '<textarea');
+$contractCount = substr_count((string) $itemLists, 'data-bilingual-textarea');
+assertBilingualTextarea($textareaCount >= 2, 'item-list editor exposes its instruction textareas');
+assertBilingualTextarea($contractCount === $textareaCount, 'every item-list textarea opts into the transversal bilingual contract');
 assertBilingualTextarea(str_contains((string) $itemLists, 'data-bilingual-autosave-action="save_item_list_instructions"'), 'existing item instructions autosave on textarea blur');
 assertBilingualTextarea(str_contains((string) $itemLists, 'data-bilingual-new-item="1"'), 'new-item instructions use validation-only until the item exists');
 assertBilingualTextarea(str_contains((string) $api, "save_item_list_instructions"), 'API exposes item-list instruction autosave');
