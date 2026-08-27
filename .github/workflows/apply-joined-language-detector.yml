@@ -1,0 +1,35 @@
+name: Apply joined mixed-language detector
+
+on:
+  push:
+    branches:
+      - agent/detect-joined-mixed-language
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/detect-joined-mixed-language
+          fetch-depth: 0
+      - name: Apply and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git log -1 --format=%B | grep -Fq '[joined-language-ready]'; then exit 0; fi
+          python .github/scripts/detect-joined-mixed-language.py
+          php -l src/I18n/LanguageGuard.php
+          node --check assets/validation-feedback.js
+          php -l tests/language-guard-hardening.php
+          php -l tests/invalid-edit-ux.php
+          php tests/language-guard-hardening.php
+          php tests/invalid-edit-ux.php
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/I18n/LanguageGuard.php assets/validation-feedback.js tests/language-guard-hardening.php tests/invalid-edit-ux.php
+          git commit -m 'Detect joined mixed-language words [joined-language-ready]'
+          git push origin HEAD:agent/detect-joined-mixed-language
