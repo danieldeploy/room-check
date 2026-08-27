@@ -28,13 +28,14 @@ final class LanguageGuard
     private const MAX_COMPONENT_TOKENS = 40;
 
     /**
-     * Technical/brand/loan terms that are deliberately language-neutral in the app.
-     * This is not a language vocabulary list; it only prevents known machine or
-     * product terms from being treated as natural-language evidence.
+     * Technical, brand, proper-name and shared loan terms that are deliberately
+     * language-neutral in the app. This is not a language vocabulary list; it
+     * prevents machine/product names from being treated as linguistic evidence.
      */
     private const NEUTRAL = [
         'wifi', 'wi-fi', 'sip', 'my2n', 'zkaccess', 'cloudbeds', 'whatsapp', 'api',
         'pin', 'tv', 'usb', 'qr', 'café', 'hotel', 'hostel', 'online', 'offline', 'item',
+        'airbnb', 'booking', 'netflix', 'welcome',
     ];
 
     private static ?LanguageDetector $detector = null;
