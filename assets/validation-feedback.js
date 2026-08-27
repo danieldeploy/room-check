@@ -63,25 +63,30 @@
     const highlightBackground = (layer) => layer.dataset.textareaBackground || '#fbfdfd';
 
     const appendHighlightedText = (layer, value, invalidWords) => {
-        const normalized = new Set(
-            (Array.isArray(invalidWords) ? invalidWords : [])
-                .map((word) => String(word).trim().toLowerCase())
-                .filter(Boolean)
-        );
-        if (normalized.size === 0) return false;
+        const words = (Array.isArray(invalidWords) ? invalidWords : [])
+            .map((word) => String(word).trim())
+            .filter(Boolean)
+            .sort((a, b) => b.length - a.length);
+        if (words.length === 0) return false;
 
-        value.split(/(\p{L}[\p{L}\p{N}_-]*)/u).forEach((part) => {
-            if (normalized.has(part.toLowerCase())) {
+        const escaped = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const pattern = new RegExp(`(${escaped.join('|')})`, 'giu');
+        let matched = false;
+
+        value.split(pattern).forEach((part) => {
+            const isWrong = words.some((word) => part.localeCompare(word, undefined, { sensitivity: 'accent' }) === 0);
+            if (isWrong) {
                 const wrong = document.createElement('span');
                 wrong.className = 'language-wrong-segment';
                 wrong.textContent = part;
                 wrong.style.backgroundColor = highlightBackground(layer);
                 layer.append(wrong);
+                matched = true;
             } else {
                 layer.append(document.createTextNode(part));
             }
         });
-        return true;
+        return matched;
     };
 
     const renderHighlight = (textarea, invalidWords = []) => {

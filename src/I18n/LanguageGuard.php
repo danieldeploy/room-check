@@ -154,6 +154,46 @@ final class LanguageGuard
         return self::scoreDominates($result->scores(), $oppositeLanguage, $expectedLanguage);
     }
 
+    private static function isConfidentExpectedComponent(string $component, string $expectedLanguage): bool
+    {
+        $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
+        $result = self::detect($component);
+        if ($result->language !== $expectedLanguage) {
+            return false;
+        }
+
+        return self::scoreDominates($result->scores(), $expectedLanguage, $oppositeLanguage);
+    }
+
+    /** @return string[] */
+    private static function embeddedOppositeParts(string $token, string $expectedLanguage): array
+    {
+        $length = mb_strlen($token, 'UTF-8');
+        if ($length < 6 || in_array($token, self::NEUTRAL, true)) {
+            return [];
+        }
+
+        $invalid = [];
+        for ($split = 3; $split <= ($length - 3); $split++) {
+            $left = mb_substr($token, 0, $split, 'UTF-8');
+            $right = mb_substr($token, $split, null, 'UTF-8');
+            if (!self::isNaturalLanguageToken($left) || !self::isNaturalLanguageToken($right)) {
+                continue;
+            }
+
+            if (self::isConfidentExpectedComponent($left, $expectedLanguage)
+                && self::isConfidentOppositeComponent($right, $expectedLanguage)) {
+                $invalid[$right] = true;
+            }
+            if (self::isConfidentOppositeComponent($left, $expectedLanguage)
+                && self::isConfidentExpectedComponent($right, $expectedLanguage)) {
+                $invalid[$left] = true;
+            }
+        }
+
+        return array_keys($invalid);
+    }
+
     /**
      * @param array<string, float> $scores
      */
@@ -204,6 +244,10 @@ final class LanguageGuard
         foreach ($tokens as $token) {
             if (self::isConfidentOppositeComponent($token, $expectedLanguage)) {
                 $invalid[$token] = true;
+                continue;
+            }
+            foreach (self::embeddedOppositeParts($token, $expectedLanguage) as $part) {
+                $invalid[$part] = true;
             }
         }
         if ($invalid !== []) {
