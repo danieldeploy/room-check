@@ -1,13 +1,6 @@
 from pathlib import Path
 p=Path('assets/app.js')
 s=p.read_text()
-replacements=[
-    (r"/(\\p{L}[\\p{L}\\p{N}_-]*)/u", r"/(\p{L}[\p{L}\p{N}_-]*)/u"),
-    (r"/\\p{L}[\\p{L}\\p{N}_-]*/gu", r"/\p{L}[\p{L}\p{N}_-]*/gu"),
-]
-for old,new in replacements:
-    if old not in s: raise SystemExit('regex pattern missing: '+old)
-    s=s.replace(old,new)
 old="    let lastSavedChecklistFingerprint = '';\n"
 new="    let lastSavedChecklistFingerprint = '';\n    let lastInvalidChecklistFingerprint = '';\n"
 if old not in s: raise SystemExit('fingerprint state missing')
