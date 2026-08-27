@@ -176,7 +176,9 @@ final class LanguageGuard
                 if ($natural === []) {
                     continue;
                 }
-                $component = implode(' ', $slice);
+                // Neutral/technical tokens are deliberately removed from the
+                // detector input so they cannot distort a natural-language score.
+                $component = implode(' ', $natural);
                 $components[$component] = true;
             }
         }
@@ -191,7 +193,7 @@ final class LanguageGuard
         }
 
         // One- and two-character tokens are too noisy for word-level language
-        // decisions; they still contribute when part of a 2/3-word window.
+        // decisions; they still contribute through neighboring natural tokens.
         return mb_strlen($token, 'UTF-8') >= 3;
     }
 
