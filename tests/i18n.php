@@ -32,11 +32,34 @@ assertI18n(
 $_SESSION = [];
 Translator::setLocale('pt', false);
 assertI18n(SiteTranslations::text('Guardar exemplo', 'Save example') === 'Guardar exemplo', 'static helper returns Portuguese in PT locale');
+assertI18n(
+    Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Verificação da cozinha',
+    'user-authored bilingual value uses Portuguese column in PT locale'
+);
 Translator::setLocale('en', false);
 assertI18n(SiteTranslations::text('Guardar exemplo 2', 'Save example 2') === 'Save example 2', 'static helper returns English in EN locale');
 assertI18n(
+    Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Kitchen Check',
+    'user-authored bilingual value uses English column in EN locale'
+);
+assertI18n(
     SiteTranslations::format('Foram guardados {count} registos.', '{count} records were saved.', ['{count}' => '3']) === '3 records were saved.',
     'formatted static text follows active locale'
+);
+
+$itemListsSource = file_get_contents(dirname(__DIR__) . '/item-lists.php');
+assertI18n(is_string($itemListsSource), 'item-list editor source is readable');
+assertI18n(
+    str_contains((string) $itemListsSource, "\$selectedList['displayName'] = Translator::localized("),
+    'list editor derives the editable list name from both saved languages'
+);
+assertI18n(
+    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) \$selectedList['displayName']) ?>\""),
+    'list editor renders the active-language value instead of the canonical PT value'
+);
+assertI18n(
+    !str_contains((string) $itemListsSource, "value=\"<?= listEscape(\$selectedList['name']) ?>\""),
+    'list editor cannot fall back to the old PT-only editable value path'
 );
 
 SiteTranslations::boot();
