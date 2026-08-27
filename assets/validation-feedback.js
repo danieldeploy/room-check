@@ -106,14 +106,16 @@
         }
 
         Object.assign(layer.style, {
-            position: 'absolute', left: `${textarea.offsetLeft}px`, top: `${textarea.offsetTop}px`,
-            width: `${textarea.offsetWidth}px`, minHeight: `${textarea.offsetHeight}px`,
+            position: 'absolute', left: '0', top: '0',
+            width: '100%', height: `${textarea.offsetHeight}px`,
             padding: computed.padding, borderWidth: computed.borderWidth, borderStyle: 'solid',
-            borderColor: 'transparent', boxSizing: computed.boxSizing, font: computed.font,
+            borderColor: 'transparent', borderRadius: computed.borderRadius,
+            boxSizing: computed.boxSizing, font: computed.font,
             lineHeight: computed.lineHeight, letterSpacing: computed.letterSpacing,
-            whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', pointerEvents: 'none', zIndex: '1',
+            textAlign: computed.textAlign, textIndent: computed.textIndent, wordSpacing: computed.wordSpacing,
+            whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
+            pointerEvents: 'none', zIndex: '1',
         });
-        textarea.parentElement.style.position = 'relative';
         textarea.dataset.languageOriginalColor = textarea.style.color || '';
         textarea.dataset.languageOriginalBackground = textarea.style.backgroundColor || '';
         textarea.style.color = 'transparent';
