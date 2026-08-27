@@ -1,0 +1,66 @@
+name: Probe statistical language detector
+
+on:
+  push:
+    branches:
+      - agent/statistical-language-detector
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: agent/statistical-language-detector
+
+      - name: Configure PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+          coverage: none
+
+      - name: Probe scores
+        run: |
+          php <<'PHP'
+          <?php
+          require __DIR__ . '/src/ThirdParty/efficient-language-detector/manual_loader.php';
+
+          use Nitotm\Eld\EldMode;
+          use Nitotm\Eld\EldScheme;
+          use Nitotm\Eld\LanguageDetector;
+
+          $detector = new LanguageDetector('small_2_1niz1ni', EldScheme::ISO639_1, EldMode::MODE_ARRAY);
+          $cases = [
+              'EN pure' => 'Check that it is clean and undamaged.',
+              'EN + escada' => 'Check that it is clean and undamaged. escada',
+              'EN + quarto' => 'Check that it is clean and undamaged. quarto',
+              'PT pure' => 'Verificar se está limpo e sem danos.',
+              'PT + room' => 'Verificar se está limpo e sem danos. room',
+              'PT + stairs' => 'Verificar se está limpo e sem danos. stairs',
+              'escada' => 'escada',
+              'quarto' => 'quarto',
+              'room' => 'room',
+              'stairs' => 'stairs',
+              'WiFi' => 'WiFi',
+              'My2N' => 'My2N',
+              'Café' => 'Café',
+              'Hotel' => 'Hotel',
+              'Hostel' => 'Hostel',
+              'Mirror' => 'Mirror',
+              'Espelho' => 'Espelho',
+              'Check stairs' => 'Check stairs',
+              'Verificar escada' => 'Verificar escada',
+          ];
+          foreach ($cases as $label => $text) {
+              $result = $detector->detect($text);
+              echo "=== {$label} ===\n";
+              echo $text . "\n";
+              echo 'language=' . $result->language . ' reliable=' . ($result->isReliable() ? 'yes' : 'no') . "\n";
+              echo json_encode($result->scores(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
+          }
+          PHP
