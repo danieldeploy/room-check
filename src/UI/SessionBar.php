@@ -44,7 +44,9 @@ final class SessionBar
             </div>
         </nav>
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/readonly-textarea.css') ?>">
+        <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/bilingual-textareas.css') ?>">
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js') ?>"></script>
+        <script src="<?= self::escape($prefix . 'assets/bilingual-textareas.js') ?>" data-bilingual-api="<?= self::escape($prefix . 'api.php') ?>"></script>
         <?php
     }
 

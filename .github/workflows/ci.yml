@@ -30,6 +30,7 @@ jobs:
         run: |
           node --check assets/app.js
           node --check assets/validation-feedback.js
+          node --check assets/bilingual-textareas.js
           if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
 
       - name: Run PHP tests
@@ -46,3 +47,4 @@ jobs:
           php tests/language-guard-hardening.php
           php tests/autosave-hardening.php
           php tests/invalid-edit-ux.php
+          php tests/bilingual-textarea-transversal.php

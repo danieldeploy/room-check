@@ -144,6 +144,57 @@ try {
         jsonResponse(['ok' => true, 'valid' => true]);
     }
 
+    if (($payload['action'] ?? '') === 'save_item_list_instructions') {
+        $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
+        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
+        $listId = (int) ($payload['listId'] ?? 0);
+        $itemId = (int) ($payload['itemId'] ?? 0);
+        $textValue = trim((string) ($payload['text'] ?? ''));
+        if ($listId < 1 || $itemId < 1) {
+            throw new InvalidArgumentException('Item não encontrado.');
+        }
+        if (mb_strlen($textValue) > 5000) {
+            throw new InvalidArgumentException('A descrição da verificação não pode ultrapassar 5000 caracteres.');
+        }
+        itemList($pdo, $listId);
+        $pdo->beginTransaction();
+        $currentStatement = $pdo->prepare(
+            'SELECT default_instructions, default_instructions_en
+             FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+        );
+        $currentStatement->execute(['id' => $itemId, 'list_id' => $listId]);
+        $currentItem = $currentStatement->fetch();
+        if (!is_array($currentItem)) {
+            throw new InvalidArgumentException('Item não encontrado.');
+        }
+        $instructionVersions = $contentTranslator->versions(
+            $textValue,
+            Translator::locale(),
+            (string) ($currentItem['default_instructions'] ?? ''),
+            (string) ($currentItem['default_instructions_en'] ?? '')
+        );
+        $updateStatement = $pdo->prepare(
+            'UPDATE item_list_items
+             SET default_instructions = :instructions_pt, default_instructions_en = :instructions_en
+             WHERE id = :id AND list_id = :list_id'
+        );
+        $updateStatement->execute([
+            'instructions_pt' => $instructionVersions['pt'],
+            'instructions_en' => $instructionVersions['en'],
+            'id' => $itemId,
+            'list_id' => $listId,
+        ]);
+        Auth::audit($pdo, (int) $currentUser['id'], 'item_list_instructions_updated', [
+            'list_id' => $listId,
+            'item_id' => $itemId,
+        ]);
+        $pdo->commit();
+        jsonResponse([
+            'ok' => true,
+            'value' => Translator::localized($instructionVersions['pt'], $instructionVersions['en']),
+        ]);
+    }
+
     if (($payload['action'] ?? '') === 'create_interval') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
