@@ -19,7 +19,7 @@ $app = file_get_contents(dirname(__DIR__).'/assets/app.js');
 $css = file_get_contents(dirname(__DIR__).'/assets/app.css');
 $rooms = file_get_contents(dirname(__DIR__).'/rooms.php');
 okp(str_contains($api, 'validate_bilingual_texts'), 'server exposes validation-only endpoint');
-okp(str_contains($api, "'invalidWords' => $exception->invalidWords"), '422 includes offending words');
+okp(str_contains($api, "'invalidWords' => \$exception->invalidWords"), '422 includes offending words');
 okp(str_contains($app, 'text-validation-overlay'), 'client overlays wrong-language word without replacing textarea');
 okp(str_contains($app, 'language-edit-dialog'), 'context change has correction/cancel dialog');
 okp(str_contains($app, 'resolveDirtyTextBeforeContextChange'), 'context changes validate pending text first');
