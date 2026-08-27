@@ -16,6 +16,23 @@ use Nitotm\Eld\LanguageResult;
  * sentence containing a Portuguese insertion (or the inverse) is not silently
  * accepted. Ambiguous/neutral technical text remains allowed.
  */
+final class LanguageValidationException extends InvalidArgumentException
+{
+    public function __construct(
+        string $message,
+        public readonly array $invalidWords = [],
+        public ?string $fieldKey = null
+    ) {
+        parent::__construct($message);
+    }
+
+    public function withField(string $fieldKey): self
+    {
+        $this->fieldKey = $fieldKey;
+        return $this;
+    }
+}
+
 final class LanguageGuard
 {
     private const MODEL = 'large_2_1niz1ni';
@@ -57,17 +74,19 @@ final class LanguageGuard
         // 1. Validate the complete natural-language text after removing neutral
         // technical/brand/loan tokens so they cannot distort the language score.
         $whole = self::detect($naturalText);
+        $invalidWords = self::oppositeWords($text, $expectedLanguage);
         if ($whole->language === $oppositeLanguage && $whole->isReliable()) {
-            self::throwMismatch($expectedLanguage);
+            if ($invalidWords === []) {
+                $invalidWords = array_slice(self::naturalTokens($text), 0, 20);
+            }
+            self::throwMismatch($expectedLanguage, $invalidWords);
         }
 
-        // 2. Validate the components. This catches mixed input where the complete
-        // sentence is still dominated by the expected language, e.g.
-        // "Check that it is clean. escada" or "Verificar se está limpo. stairs".
-        foreach (self::components($text) as $component) {
-            if (self::isConfidentOppositeComponent($component, $expectedLanguage)) {
-                self::throwMismatch($expectedLanguage);
-            }
+        // 2. Validate individual words and short components. Return the actual
+        // offending words so the client can highlight them without discarding
+        // the user's unsaved edit.
+        if ($invalidWords !== []) {
+            self::throwMismatch($expectedLanguage, $invalidWords);
         }
     }
 
@@ -163,6 +182,47 @@ final class LanguageGuard
         return implode(' ', $natural);
     }
 
+    /** @return string[] */
+    private static function naturalTokens(string $text): array
+    {
+        $lower = mb_strtolower($text, 'UTF-8');
+        $tokens = preg_split('/[^\p{L}\p{N}_-]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        return array_values(array_filter(
+            array_slice($tokens, 0, self::MAX_COMPONENT_TOKENS),
+            [self::class, 'isNaturalLanguageToken']
+        ));
+    }
+
+    /** @return string[] */
+    private static function oppositeWords(string $text, string $expectedLanguage): array
+    {
+        $tokens = self::naturalTokens($text);
+        if ($tokens === []) {
+            return [];
+        }
+        $invalid = [];
+        foreach ($tokens as $token) {
+            if (self::isConfidentOppositeComponent($token, $expectedLanguage)) {
+                $invalid[$token] = true;
+            }
+        }
+        if ($invalid !== []) {
+            return array_keys($invalid);
+        }
+        $count = count($tokens);
+        for ($i = 0; $i < $count; $i++) {
+            for ($window = 2; $window <= 3 && ($i + $window) <= $count; $window++) {
+                $slice = array_slice($tokens, $i, $window);
+                if (self::isConfidentOppositeComponent(implode(' ', $slice), $expectedLanguage)) {
+                    foreach ($slice as $token) {
+                        $invalid[$token] = true;
+                    }
+                }
+            }
+        }
+        return array_keys($invalid);
+    }
+
     /**
      * Build language evidence from individual words plus contiguous 2- and
      * 3-word windows. This is deliberately bounded because validation runs on
@@ -215,16 +275,18 @@ final class LanguageGuard
         return mb_strlen($token, 'UTF-8') >= 3;
     }
 
-    private static function throwMismatch(string $expectedLanguage): never
+    private static function throwMismatch(string $expectedLanguage, array $invalidWords = []): never
     {
+        $invalidWords = array_values(array_unique(array_filter(array_map('strval', $invalidWords))));
         if ($expectedLanguage === 'en') {
-            throw new InvalidArgumentException(
-                'This text mixes Portuguese and English. Please write it in English only.'
+            throw new LanguageValidationException(
+                'This text mixes Portuguese and English. Please write it in English only.',
+                $invalidWords
             );
         }
-
-        throw new InvalidArgumentException(
-            'Este texto mistura português e inglês. Escreva-o apenas em português.'
+        throw new LanguageValidationException(
+            'Este texto mistura português e inglês. Escreva-o apenas em português.',
+            $invalidWords
         );
     }
 }
