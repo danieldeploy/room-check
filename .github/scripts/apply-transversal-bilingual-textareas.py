@@ -94,19 +94,6 @@ if anchor not in text:
 text = text.replace(anchor, block + anchor, 1)
 path.write_text(text)
 
-# CI: syntax-check the shared client and run the transversal contract.
-path = Path('.github/workflows/ci.yml')
-text = path.read_text()
-js_anchor = '          node --check assets/validation-feedback.js\n'
-if js_anchor not in text:
-    raise SystemExit('CI JS anchor not found')
-text = text.replace(js_anchor, js_anchor + '          node --check assets/bilingual-textareas.js\n', 1)
-test_anchor = '          php tests/invalid-edit-ux.php\n'
-if test_anchor not in text:
-    raise SystemExit('CI test anchor not found')
-text = text.replace(test_anchor, test_anchor + '          php tests/bilingual-textarea-transversal.php\n', 1)
-path.write_text(text)
-
 # I18N developer contract: future item-list instruction textareas must opt in.
 path = Path('docs/I18N.md')
 text = path.read_text()
