@@ -13,8 +13,9 @@ $app = file_get_contents(dirname(__DIR__) . '/assets/app.js');
 $feedback = file_get_contents(dirname(__DIR__) . '/assets/validation-feedback.js');
 $css = file_get_contents(dirname(__DIR__) . '/assets/app.css');
 $rooms = file_get_contents(dirname(__DIR__) . '/rooms.php');
+$catalog = file_get_contents(dirname(__DIR__) . '/src/I18n/SiteTranslations.php');
 
-assertInvalidEditUx(is_string($app) && is_string($feedback) && is_string($css) && is_string($rooms), 'UX sources are readable');
+assertInvalidEditUx(is_string($app) && is_string($feedback) && is_string($css) && is_string($rooms) && is_string($catalog), 'UX sources are readable');
 assertInvalidEditUx(str_contains($app, "feedbackKind === 'assignment'"), 'instruction validation failure does not force persisted-state rerender');
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid');
 assertInvalidEditUx(str_contains($feedback, "language-wrong-segment"), 'changed language segment is highlighted separately');
@@ -29,5 +30,7 @@ assertInvalidEditUx(str_contains($css, '.language-decision-overlay') && str_cont
 assertInvalidEditUx(str_contains($rooms, "'languageDecisionMessage' => SiteTranslations::text("), 'dialog message is declared bilingually server-side');
 assertInvalidEditUx(str_contains($rooms, "'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct')"), 'Correct button is declared bilingually server-side');
 assertInvalidEditUx(str_contains($rooms, "'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit')"), 'Cancel edit button is declared bilingually server-side');
+assertInvalidEditUx(str_contains($catalog, "'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?' =>"), 'dialog warning is registered in the static translation catalogue');
+assertInvalidEditUx(str_contains($catalog, "'Anular edição' => 'Cancel edit'"), 'cancel-edit label is registered in the static translation catalogue');
 
 echo "Invalid edit UX contract passed.\n";
