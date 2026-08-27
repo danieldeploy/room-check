@@ -55,11 +55,12 @@ assertHardeningRejects('Verificar a limpeza da cozinha e das janelas.', 'en', 'w
 assertHardeningRejects('Check the kitchen, windows and curtains.', 'pt', 'whole English text is rejected in PT mode');
 
 // Deliberately neutral technical/brand/loan terms must remain usable.
-foreach (['WiFi', 'My2N', 'Café', 'Hotel', 'Hostel'] as $neutral) {
+foreach (['WiFi', 'My2N', 'Café', 'Hotel', 'Hostel', 'Airbnb', 'Booking', 'Netflix', 'Welcome'] as $neutral) {
     LanguageGuard::assertExpectedLanguage($neutral, 'en');
     LanguageGuard::assertExpectedLanguage($neutral, 'pt');
+    assertHardening(LanguageGuard::confidentLanguage($neutral) === null, 'neutral term remains unclassified: ' . $neutral);
 }
-assertHardening(true, 'neutral technical and loan terms remain accepted in both modes');
+assertHardening(true, 'neutral technical, brand and loan terms remain accepted in both modes');
 
 $guardSource = file_get_contents(dirname(__DIR__) . '/src/I18n/LanguageGuard.php');
 assertHardening(is_string($guardSource), 'LanguageGuard source is readable');
