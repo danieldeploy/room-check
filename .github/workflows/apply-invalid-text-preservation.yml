@@ -25,6 +25,17 @@ jobs:
       - name: Patch and validate
         run: |
           set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/apply-invalid-text-preservation.py')
+          s = p.read_text()
+          ci = """p = Path('.github/workflows/ci.yml')\ns = p.read_text()\nold = '          php tests/autosave-hardening.php\\n'\nif old not in s:\n    raise SystemExit('CI autosave test line missing')\np.write_text(s.replace(old, old + '          php tests/invalid-language-edit-preservation.php\\n', 1))\n\n"""
+          if ci not in s:
+              raise SystemExit('CI patch block missing from helper script')
+          s = s.replace(ci, '')
+          s = s.replace("Path('.github/workflows/apply-invalid-text-preservation.yml').unlink(missing_ok=True)\n", '')
+          p.write_text(s)
+          PY
           python .github/scripts/apply-invalid-text-preservation.py
           node --check assets/app.js
           find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l >/dev/null
