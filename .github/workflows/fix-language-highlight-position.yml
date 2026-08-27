@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, '[highlight-position-ready]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +20,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if git log -1 --format=%B | grep -Fq '[highlight-position-ready]'; then exit 0; fi
           python <<'PY'
           from pathlib import Path
 
