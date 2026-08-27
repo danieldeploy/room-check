@@ -61,15 +61,15 @@ assertI18n(
 $itemListsSource = file_get_contents(dirname(__DIR__) . '/item-lists.php');
 assertI18n(is_string($itemListsSource), 'item-list editor source is readable');
 assertI18n(
-    str_contains((string) $itemListsSource, "$selectedList['displayName'] = Translator::localized("),
+    str_contains((string) $itemListsSource, "\$selectedList['displayName'] = Translator::localized("),
     'list editor derives the editable list name from both saved languages'
 );
 assertI18n(
-    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) $selectedList['displayName']) ?>\""),
+    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) \$selectedList['displayName']) ?>\""),
     'list editor renders the active-language value instead of the canonical PT value'
 );
 assertI18n(
-    !str_contains((string) $itemListsSource, "value=\"<?= listEscape($selectedList['name']) ?>\""),
+    !str_contains((string) $itemListsSource, "value=\"<?= listEscape(\$selectedList['name']) ?>\""),
     'list editor cannot fall back to the old PT-only editable value path'
 );
 
