@@ -43,6 +43,7 @@ final class SessionBar
                 </form>
             </div>
         </nav>
+        <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/readonly-textarea.css') ?>">
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js') ?>"></script>
         <?php
     }
