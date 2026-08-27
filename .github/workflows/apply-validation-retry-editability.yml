@@ -1,0 +1,34 @@
+name: Apply validation retry editability fix
+
+on:
+  push:
+    branches:
+      - agent/keep-invalid-textarea-editable
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/keep-invalid-textarea-editable
+          fetch-depth: 0
+      - name: Apply and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git log -1 --format=%B | grep -Fq '[retry-editable-ready]'; then exit 0; fi
+          python .github/scripts/fix-validation-retry-editability.py
+          node --check assets/app.js
+          node --check assets/validation-feedback.js
+          php -l tests/invalid-edit-ux.php
+          php tests/invalid-edit-ux.php
+          php tests/assignment-textarea-lock.php
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/app.js assets/validation-feedback.js tests/invalid-edit-ux.php
+          git commit -m 'Keep invalid assignment text editable across retries [retry-editable-ready]'
+          git push origin HEAD:agent/keep-invalid-textarea-editable
