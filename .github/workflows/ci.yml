@@ -45,3 +45,4 @@ jobs:
           php tests/validation-feedback-contract.php
           php tests/language-guard-hardening.php
           php tests/autosave-hardening.php
+          php tests/invalid-language-edit-preservation.php
