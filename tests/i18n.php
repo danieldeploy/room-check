@@ -61,15 +61,15 @@ assertI18n(
 $itemListsSource = file_get_contents(dirname(__DIR__) . '/item-lists.php');
 assertI18n(is_string($itemListsSource), 'item-list editor source is readable');
 assertI18n(
-    str_contains((string) $itemListsSource, "\$selectedList['displayName'] = Translator::localized("),
+    str_contains((string) $itemListsSource, "$selectedList['displayName'] = Translator::localized("),
     'list editor derives the editable list name from both saved languages'
 );
 assertI18n(
-    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) \$selectedList['displayName']) ?>\""),
+    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) $selectedList['displayName']) ?>\""),
     'list editor renders the active-language value instead of the canonical PT value'
 );
 assertI18n(
-    !str_contains((string) $itemListsSource, "value=\"<?= listEscape(\$selectedList['name']) ?>\""),
+    !str_contains((string) $itemListsSource, "value=\"<?= listEscape($selectedList['name']) ?>\""),
     'list editor cannot fall back to the old PT-only editable value path'
 );
 
@@ -94,11 +94,37 @@ assertThrowsI18n(
     'escrito em inglês',
     'English text is blocked when the active input language is Portuguese'
 );
-$contentTranslatorSource = file_get_contents(dirname(__DIR__) . '/src/I18n/ContentTranslator.php');
+
+// Regression: multi-field/batch forms submit unchanged values alongside the
+// value the user actually edited. Those existing values must be reused before
+// language detection, without touching PDO/cache/provider state.
+$contentTranslatorWithoutProvider = (new ReflectionClass(ContentTranslator::class))->newInstanceWithoutConstructor();
 assertI18n(
-    is_string($contentTranslatorSource)
-        && str_contains($contentTranslatorSource, 'LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);'),
-    'all bilingual versions() saves pass through the central language guard before translation'
+    $contentTranslatorWithoutProvider->versions(
+        'Kitchen Check', 'en', 'Verificação da cozinha', 'Kitchen Check'
+    ) === ['pt' => 'Verificação da cozinha', 'en' => 'Kitchen Check'],
+    'unchanged English value is reused without translation/provider access'
+);
+assertI18n(
+    $contentTranslatorWithoutProvider->versions(
+        'Verificação da cozinha', 'pt', 'Verificação da cozinha', 'Kitchen Check'
+    ) === ['pt' => 'Verificação da cozinha', 'en' => 'Kitchen Check'],
+    'unchanged Portuguese value is reused without translation/provider access'
+);
+assertI18n(
+    $contentTranslatorWithoutProvider->versions(
+        'Verificação cozinha legacy', 'en', 'Verificação antiga', 'Verificação cozinha legacy'
+    ) === ['pt' => 'Verificação antiga', 'en' => 'Verificação cozinha legacy'],
+    'unchanged legacy text cannot block an unrelated English-form save'
+);
+
+$contentTranslatorSource = file_get_contents(dirname(__DIR__) . '/src/I18n/ContentTranslator.php');
+assertI18n(is_string($contentTranslatorSource), 'content translator source is readable');
+$guardPosition = strpos((string) $contentTranslatorSource, 'LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);');
+$reusePosition = strpos((string) $contentTranslatorSource, '$existingEn === $text');
+assertI18n(
+    $guardPosition !== false && $reusePosition !== false && $reusePosition < $guardPosition,
+    'unchanged-value reuse happens before the central language guard'
 );
 
 SiteTranslations::boot();
