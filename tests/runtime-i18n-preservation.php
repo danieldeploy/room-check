@@ -89,22 +89,12 @@ assertRuntimeI18nThrows(
 );
 
 // Matching language and deliberately neutral/ambiguous values remain accepted.
-$acceptedCases = [
-    ['Check that it is clean and undamaged in the room', 'en', 'clean EN sentence'],
-    ['Verificar se o quarto está limpo e sem danos', 'pt', 'clean PT sentence'],
-    ['WiFi Café', 'en', 'neutral EN'],
-    ['WiFi Café', 'pt', 'neutral PT'],
-    ['Café Central', 'en', 'proper-name-like EN neutral'],
-    ['Café Central', 'pt', 'proper-name-like PT neutral'],
-];
-foreach ($acceptedCases as [$text, $language, $label]) {
-    try {
-        LanguageGuard::assertExpectedLanguage($text, $language);
-    } catch (LanguageValidationException $exception) {
-        echo 'STRICT-WORD-PROBE ' . $label . ': ' . json_encode($exception->invalidWords, JSON_UNESCAPED_UNICODE) . PHP_EOL;
-        throw $exception;
-    }
-}
+LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged in the room', 'en');
+LanguageGuard::assertExpectedLanguage('Verificar se o quarto está limpo e sem danos', 'pt');
+LanguageGuard::assertExpectedLanguage('WiFi Café', 'en');
+LanguageGuard::assertExpectedLanguage('WiFi Café', 'pt');
+LanguageGuard::assertExpectedLanguage('Café Central', 'en');
+LanguageGuard::assertExpectedLanguage('Café Central', 'pt');
 assertRuntimeI18n(true, 'clean PT/EN and neutral text remain accepted');
 
 echo "Runtime bilingual preservation regression passed.\n";
