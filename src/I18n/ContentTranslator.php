@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/LanguageGuard.php';
+
 final class ContentTranslator
 {
     private const MYMEMORY_MAX_QUERY_BYTES = 500;
@@ -19,6 +21,11 @@ final class ContentTranslator
         if ($text === '') {
             return ['pt' => '', 'en' => ''];
         }
+
+        // Single project-wide server boundary for user-authored bilingual text.
+        // If the text is clearly in the opposite language, stop here: do not
+        // call the translation provider and do not return values for persistence.
+        LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);
 
         if ($sourceLanguage === 'en') {
             if ($existingEn === $text && $existingPt !== '' && $existingPt !== $existingEn) {
