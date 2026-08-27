@@ -54,7 +54,7 @@ final class LanguageGuard
     private const NEUTRAL = [
         'wifi', 'wi-fi', 'sip', 'my2n', 'zkaccess', 'cloudbeds', 'whatsapp', 'api',
         'pin', 'tv', 'usb', 'qr', 'café', 'hotel', 'hostel', 'online', 'offline', 'item',
-        'airbnb', 'booking', 'netflix', 'welcome',
+        'airbnb', 'booking', 'netflix', 'welcome', 'central',
     ];
 
     private static ?LanguageDetector $detector = null;
