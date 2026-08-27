@@ -1,0 +1,40 @@
+name: Add invalid dialog i18n
+
+on:
+  push:
+    branches:
+      - agent/preserve-invalid-edits
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[dialog-i18n-ready]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/preserve-invalid-edits
+          fetch-depth: 0
+      - name: Add localized dialog copy to room config
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('rooms.php')
+          s = p.read_text()
+          marker = "            'locale' => Translator::locale(),"
+          addition = """            'locale' => Translator::locale(),\n            'languageDecisionMessage' => SiteTranslations::text(\n                'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?',\n                'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?'\n            ),\n            'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct'),\n            'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit'),"""
+          if "'languageDecisionMessage'" not in s:
+              if marker not in s:
+                  raise SystemExit('locale marker not found')
+              s = s.replace(marker, addition, 1)
+              p.write_text(s)
+          Path('.github/workflows/add-invalid-dialog-i18n.yml').unlink()
+          PY
+          php -l rooms.php
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Localize invalid edit decision dialog [dialog-i18n-ready]'
+          git push origin HEAD:agent/preserve-invalid-edits
