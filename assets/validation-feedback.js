@@ -60,6 +60,8 @@
         delete textarea.dataset.languageInvalidWords;
     };
 
+    const highlightBackground = (layer) => layer.dataset.textareaBackground || '#fbfdfd';
+
     const appendHighlightedText = (layer, value, invalidWords) => {
         const normalized = new Set(
             (Array.isArray(invalidWords) ? invalidWords : [])
@@ -73,6 +75,7 @@
                 const wrong = document.createElement('span');
                 wrong.className = 'language-wrong-segment';
                 wrong.textContent = part;
+                wrong.style.backgroundColor = highlightBackground(layer);
                 layer.append(wrong);
             } else {
                 layer.append(document.createTextNode(part));
@@ -90,6 +93,7 @@
         const layer = document.createElement('div');
         layer.className = 'language-highlight-layer';
         layer.setAttribute('aria-hidden', 'true');
+        layer.dataset.textareaBackground = computed.backgroundColor || '#fbfdfd';
 
         if (!appendHighlightedText(layer, value, invalidWords)) {
             const range = changedRange(baseline, value);
@@ -98,6 +102,7 @@
             const wrong = document.createElement('span');
             wrong.className = 'language-wrong-segment';
             wrong.textContent = value.slice(range.start, range.end) || value;
+            wrong.style.backgroundColor = highlightBackground(layer);
             const tail = document.createElement('span');
             tail.textContent = value.slice(range.end);
             layer.append(normal, wrong, tail);

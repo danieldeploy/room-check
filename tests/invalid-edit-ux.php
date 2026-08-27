@@ -68,6 +68,12 @@ assertInvalidEditUx(str_contains($catalog, "'Tem texto errado em Inglês. Quer c
 assertInvalidEditUx(str_contains($catalog, "'Anular edição' => 'Cancel edit'"), 'cancel-edit label is registered in the static translation catalogue');
 assertInvalidEditUx(str_contains($feedback, 'delete textarea.dataset.languageNeedsValidation'), 'pending validation marker has explicit success/cancel clear paths');
 assertInvalidEditUx(
+    str_contains($feedback, 'highlightBackground')
+        && str_contains($feedback, 'wrong.style.backgroundColor = highlightBackground(layer)')
+        && str_contains($css, '.language-highlight-layer .language-wrong-segment { color: var(--wrong, #b91c1c); font-weight: inherit; }'),
+    'invalid-language word covers the underlying glyphs without changing text width'
+);
+assertInvalidEditUx(
     !str_contains($feedback, "textarea.style.color = 'transparent'")
         && !str_contains($feedback, "textarea.style.backgroundColor = 'transparent'")
         && str_contains($feedback, "color: 'transparent'")
