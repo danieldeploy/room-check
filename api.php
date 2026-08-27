@@ -108,6 +108,42 @@ try {
     $pdo = database();
     $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
 
+    if (($payload['action'] ?? '') === 'validate_bilingual_texts') {
+        Auth::requireLogin($pdo, $config);
+        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
+        $fields = $payload['fields'] ?? null;
+        if (!is_array($fields) || count($fields) > 100) {
+            throw new InvalidArgumentException('Invalid language validation request.');
+        }
+        $invalidFields = [];
+        foreach ($fields as $field) {
+            if (!is_array($field)) continue;
+            $fieldKey = trim((string) ($field['fieldKey'] ?? ''));
+            $text = trim((string) ($field['text'] ?? ''));
+            if (mb_strlen($text) > 5000) {
+                throw new InvalidArgumentException('Text is too long.');
+            }
+            try {
+                LanguageGuard::assertExpectedLanguage($text, Translator::locale());
+            } catch (LanguageValidationException $exception) {
+                $invalidFields[] = [
+                    'fieldKey' => $fieldKey,
+                    'invalidWords' => $exception->invalidWords,
+                    'error' => $exception->getMessage(),
+                ];
+            }
+        }
+        if ($invalidFields !== []) {
+            jsonResponse([
+                'ok' => false,
+                'validation' => true,
+                'error' => (string) $invalidFields[0]['error'],
+                'invalidFields' => $invalidFields,
+            ], 422);
+        }
+        jsonResponse(['ok' => true, 'valid' => true]);
+    }
+
     if (($payload['action'] ?? '') === 'create_interval') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
@@ -362,12 +398,16 @@ try {
                 throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
             }
             $existingInstruction = $existingInstructions[$name] ?? [];
-            $instructionVersions = $contentTranslator->versions(
-                $instructions,
-                Translator::locale(),
-                (string) ($existingInstruction['verification_instructions'] ?? ''),
-                (string) ($existingInstruction['verification_instructions_en'] ?? '')
-            );
+            try {
+                $instructionVersions = $contentTranslator->versions(
+                    $instructions,
+                    Translator::locale(),
+                    (string) ($existingInstruction['verification_instructions'] ?? ''),
+                    (string) ($existingInstruction['verification_instructions_en'] ?? '')
+                );
+            } catch (LanguageValidationException $exception) {
+                throw $exception->withField($name);
+            }
             $normalizedChanges[$name] = [
                 'selected' => filter_var($change['selected'] ?? false, FILTER_VALIDATE_BOOL),
                 'instructions' => $instructionVersions['pt'],
@@ -676,12 +716,16 @@ try {
             $problem = '';
         }
 
-        $problemVersions = $contentTranslator->versions(
-            $problem,
-            Translator::locale(),
-            $existingPt,
-            $existingEn
-        );
+        try {
+            $problemVersions = $contentTranslator->versions(
+                $problem,
+                Translator::locale(),
+                $existingPt,
+                $existingEn
+            );
+        } catch (LanguageValidationException $exception) {
+            throw $exception->withField($name);
+        }
         $normalized[$name] = [
             'problem' => $problemVersions['pt'],
             'problem_en' => $problemVersions['en'],
@@ -718,6 +762,17 @@ try {
 
     $pdo->commit();
     jsonResponse(['ok' => true, 'savedAt' => gmdate('c')]);
+} catch (LanguageValidationException $exception) {
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    jsonResponse([
+        'ok' => false,
+        'validation' => true,
+        'error' => $exception->getMessage(),
+        'invalidWords' => $exception->invalidWords,
+        'fieldKey' => $exception->fieldKey,
+    ], 422);
 } catch (JsonException | InvalidArgumentException $exception) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
         $pdo->rollBack();
