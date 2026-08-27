@@ -113,16 +113,9 @@
             boxSizing: computed.boxSizing, font: computed.font,
             lineHeight: computed.lineHeight, letterSpacing: computed.letterSpacing,
             textAlign: computed.textAlign, textIndent: computed.textIndent, wordSpacing: computed.wordSpacing,
-            whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
-            pointerEvents: 'none', zIndex: '1',
+            color: 'transparent', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
+            pointerEvents: 'none', zIndex: '3',
         });
-        textarea.dataset.languageOriginalColor = textarea.style.color || '';
-        textarea.dataset.languageOriginalBackground = textarea.style.backgroundColor || '';
-        textarea.style.color = 'transparent';
-        textarea.style.backgroundColor = 'transparent';
-        textarea.style.caretColor = computed.color;
-        textarea.style.position = 'relative';
-        textarea.style.zIndex = '2';
         textarea.classList.add('language-invalid');
         textarea.dataset.languageNeedsValidation = '1';
         textarea.setAttribute('aria-invalid', 'true');
