@@ -43,6 +43,7 @@ final class SessionBar
                 </form>
             </div>
         </nav>
+        <script src="<?= self::escape($prefix . 'assets/validation-feedback.js') ?>"></script>
         <?php
     }
 
