@@ -31,10 +31,15 @@
     const selectAllItems = document.querySelector('#selectAllItems');
     const canEdit = config.canEdit !== false;
     const canAssign = config.canAssign === true;
+    const TEXT_AUTOSAVE_DELAY_MS = 1200;
+    const BLUR_AUTOSAVE_DELAY_MS = 120;
+    const SAVE_BOUNDARY_PATTERN = /[\s.,;:!?…)}\]]$/u;
 
     let rows = [];
     let saveTimer = null;
+    let lastSavedChecklistFingerprint = '';
     const instructionSaveTimers = new Map();
+    const instructionLastAttemptedValues = new Map();
     const savedFeedbackTimers = new WeakMap();
     let assignmentSaveQueue = Promise.resolve();
     let requestVersion = 0;
@@ -45,6 +50,7 @@
     const clearInstructionSaveTimers = () => {
         instructionSaveTimers.forEach((timer) => window.clearTimeout(timer));
         instructionSaveTimers.clear();
+        instructionLastAttemptedValues.clear();
     };
 
     const showSavedFeedback = (element) => {
@@ -91,6 +97,30 @@
     const autoGrow = (textarea) => {
         textarea.style.height = 'auto';
         textarea.style.height = `${Math.max(46, textarea.scrollHeight)}px`;
+    };
+
+    const textIsReadyForAutosave = (textarea, inputEvent = null) => {
+        const value = textarea.value;
+        if (value.trim() === '') return true;
+        if (inputEvent?.inputType?.startsWith('insertFrom')) return true;
+        const cursor = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : value.length;
+        if (cursor <= 0) return false;
+        return SAVE_BOUNDARY_PATTERN.test(value.slice(cursor - 1, cursor));
+    };
+
+    const scheduleInstructionSave = (itemName, textarea, delay = TEXT_AUTOSAVE_DELAY_MS) => {
+        window.clearTimeout(instructionSaveTimers.get(itemName));
+        instructionSaveTimers.set(itemName, window.setTimeout(() => {
+            instructionSaveTimers.delete(itemName);
+            const instructions = textarea.value.trim();
+            if (instructionLastAttemptedValues.get(itemName) === instructions) return;
+            instructionLastAttemptedValues.set(itemName, instructions);
+            queueAssignmentSave([{ itemName, selected: true, instructions }]).then((saved) => {
+                if (!saved && instructionLastAttemptedValues.get(itemName) === instructions) {
+                    instructionLastAttemptedValues.delete(itemName);
+                }
+            });
+        }, delay));
     };
 
     const renderRooms = (preferredRoom = 1) => {
@@ -227,21 +257,29 @@
         textarea.maxLength = 5000;
         textarea.readOnly = !canEdit;
         textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
-        textarea.addEventListener('input', () => {
+        textarea.addEventListener('input', (event) => {
             autoGrow(textarea);
             if (row.classList.contains('assignment-mode')) {
                 if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;
                 window.clearTimeout(instructionSaveTimers.get(item.name));
-                instructionSaveTimers.set(item.name, window.setTimeout(() => {
-                    queueAssignmentSave([{
-                        itemName: item.name,
-                        selected: true,
-                        instructions: textarea.value.trim(),
-                    }]);
-                }, 700));
+                setStatus('Alterações por guardar');
+                if (textIsReadyForAutosave(textarea, event)) {
+                    scheduleInstructionSave(item.name, textarea);
+                }
             } else if (canEdit) {
-                textarea.dataset.problem = textarea.value;
-                scheduleSave();
+                clearTimeout(saveTimer);
+                setStatus('Alterações por guardar');
+                if (textIsReadyForAutosave(textarea, event)) {
+                    scheduleSave();
+                }
+            }
+        });
+        textarea.addEventListener('blur', () => {
+            if (row.classList.contains('assignment-mode')) {
+                if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;
+                scheduleInstructionSave(item.name, textarea, BLUR_AUTOSAVE_DELAY_MS);
+            } else if (canEdit) {
+                scheduleSave(BLUR_AUTOSAVE_DELAY_MS);
             }
         });
         textarea.dataset.problem = item.problem || '';
@@ -442,6 +480,11 @@
         };
     });
 
+    const checklistSnapshot = () => {
+        const items = collectItems();
+        return { items, fingerprint: JSON.stringify(items) };
+    };
+
     const loadChecklist = async () => {
         const version = ++requestVersion;
         const current = selection();
@@ -488,6 +531,7 @@
             applyRoomAssignmentStates();
             renderChecklist(result.items);
             updateAssignmentMode();
+            lastSavedChecklistFingerprint = checklistSnapshot().fingerprint;
             setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');
         } catch (error) {
             if (version === requestVersion) {
@@ -513,6 +557,16 @@
         const employeeId = Number(employeeSelect.value);
         const dueDate = assignmentDate.value;
         if (!intervalId || !listId || !employeeId || !dueDate || changes.length === 0) return Promise.resolve(false);
+        const effectiveChanges = changes.filter((change) => {
+            const existing = assignments[change.itemName];
+            if (!change.selected) return Boolean(existing);
+            if (!existing) return true;
+            return Number(existing.employeeId) !== employeeId
+                || existing.dueDate !== dueDate
+                || String(existing.instructions || '').trim() !== String(change.instructions || '').trim();
+        });
+        if (effectiveChanges.length === 0) return Promise.resolve(false);
+        changes = effectiveChanges;
         const current = selection();
         const contextMatches = () => Number(intervalSelect.value) === intervalId
             && Number(listSelect.value) === listId
@@ -598,9 +652,9 @@
         whatsappReminderEnabled.disabled = false; whatsappReminderTime.disabled = !whatsappReminderEnabled.checked;
     };
 
-    const saveChecklist = async () => {
-        if (isLoading || !canEdit) {
-            return;
+    const saveChecklist = async (snapshot = checklistSnapshot()) => {
+        if (isLoading || !canEdit || snapshot.fingerprint === lastSavedChecklistFingerprint) {
+            return false;
         }
 
         const current = selection();
@@ -614,7 +668,7 @@
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
                 },
-                body: JSON.stringify({ ...current, items: collectItems() }),
+                body: JSON.stringify({ ...current, items: snapshot.items }),
             });
             const result = await response.json();
 
@@ -622,22 +676,37 @@
                 throw new Error(result.error || 'Erro ao guardar.');
             }
             if (version === requestVersion) {
-                setStatus('Guardado', 'success');
+                lastSavedChecklistFingerprint = snapshot.fingerprint;
+                const persistedByName = new Map(snapshot.items.map((item) => [item.name, item.problem]));
+                rows.forEach((row) => {
+                    if (persistedByName.has(row.name)) row.textarea.dataset.problem = persistedByName.get(row.name);
+                });
+                if (checklistSnapshot().fingerprint === snapshot.fingerprint) {
+                    setStatus('Guardado', 'success');
+                } else {
+                    setStatus('Alterações por guardar');
+                }
             }
+            return true;
         } catch (error) {
             if (version === requestVersion) {
                 setStatus(error.message, 'error');
             }
+            return false;
         }
     };
 
-    const scheduleSave = () => {
+    const scheduleSave = (delay = TEXT_AUTOSAVE_DELAY_MS) => {
         if (isLoading || !canEdit) {
             return;
         }
         clearTimeout(saveTimer);
+        const snapshot = checklistSnapshot();
+        if (snapshot.fingerprint === lastSavedChecklistFingerprint) {
+            return;
+        }
         setStatus('Alterações por guardar');
-        saveTimer = window.setTimeout(saveChecklist, 600);
+        saveTimer = window.setTimeout(() => saveChecklist(snapshot), delay);
     };
 
     const createVerificationInterval = async () => {
@@ -873,6 +942,16 @@
     window.addEventListener('beforeunload', () => {
         clearTimeout(saveTimer);
         clearInstructionSaveTimers();
+        if (!canEdit || isLoading || checklist.classList.contains('assignment-view-mode')) return;
+        const snapshot = checklistSnapshot();
+        if (snapshot.fingerprint === lastSavedChecklistFingerprint) return;
+        const current = selection();
+        fetch('api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ ...current, items: snapshot.items }),
+            keepalive: true,
+        }).catch(() => {});
     });
 
     if (config.initialProperty && Object.hasOwn(config.properties, config.initialProperty)) {

@@ -18,13 +18,13 @@ use Nitotm\Eld\LanguageResult;
  */
 final class LanguageGuard
 {
-    private const MODEL = 'small_2_1niz1ni';
+    private const MODEL = 'large_2_1niz1ni';
 
     // Calibrated against the vendored EN/PT subset. A short component is only
     // considered opposite-language evidence when all three conditions hold.
-    private const COMPONENT_MIN_SCORE = 0.06;
-    private const COMPONENT_MIN_GAP = 0.025;
-    private const COMPONENT_MIN_RATIO = 1.55;
+    private const COMPONENT_MIN_SCORE = 0.18;
+    private const COMPONENT_MIN_GAP = 0.08;
+    private const COMPONENT_MIN_RATIO = 1.35;
     private const MAX_COMPONENT_TOKENS = 40;
 
     /**
