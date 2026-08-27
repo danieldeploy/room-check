@@ -1,158 +1,210 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/ThirdParty/efficient-language-detector/manual_loader.php';
+
+use Nitotm\Eld\EldMode;
+use Nitotm\Eld\EldScheme;
+use Nitotm\Eld\LanguageDetector;
+use Nitotm\Eld\LanguageResult;
+
 /**
- * Conservative, local language guard for user-authored bilingual content.
+ * Project-wide server-side language guard for user-authored bilingual content.
  *
- * This is intentionally not a general-purpose language detector. It blocks
- * only high-confidence PT/EN mismatches before ContentTranslator translates or
- * persists user-authored natural language. Neutral technical terms, brands and
- * proper names should pass through unchanged.
+ * Detection is statistical (Nito-ELD), restricted to Portuguese and English.
+ * It validates both the complete text and short components so a mostly-English
+ * sentence containing a Portuguese insertion (or the inverse) is not silently
+ * accepted. Ambiguous/neutral technical text remains allowed.
  */
 final class LanguageGuard
 {
-    private const PORTUGUESE_STRONG = [
-        'verificação', 'verificacao', 'verificar', 'confirmar', 'limpeza', 'funcionamento',
-        'cozinha', 'cozinhas', 'quarto', 'quartos', 'casa', 'casas', 'banho',
-        'corredor', 'corredores', 'terraço', 'terraco', 'terraços', 'terracos',
-        'campainha', 'campainhas', 'telemóvel', 'telemovel', 'telemóveis', 'telemoveis',
-        'empregada', 'empregadas', 'governanta', 'alojamento', 'instrução', 'instrucao',
-        'instruções', 'instrucoes', 'problema', 'problemas', 'lâmpada', 'lampada',
-        'lâmpadas', 'lampadas', 'fechadura', 'fechaduras', 'porta', 'portas',
-        'janela', 'janelas', 'chave', 'chaves', 'cortina', 'cortinas', 'cama',
-        'camas', 'parede', 'paredes', 'cabide', 'cabides', 'cabeceira', 'cabeceiras',
-        'ventoinha', 'ventoinhas', 'espelho', 'armário', 'armario', 'armários', 'armarios',
-        'ficheiro', 'ficheiros', 'guardar', 'apagar', 'atribuir', 'atribuído', 'atribuido',
-        'atribuídos', 'atribuidos', 'disponível', 'disponivel', 'disponíveis', 'disponiveis',
-        'danificado', 'danificada', 'fissura', 'fissuras', 'geral', 'lista', 'listas', 'teste',
-    ];
+    private const MODEL = 'small_2_1niz1ni';
 
-    private const PORTUGUESE_COMMON = [
-        'que', 'está', 'esta', 'estao', 'estão', 'uma', 'umas', 'todos', 'todas',
-        'limpo', 'limpa', 'limpos', 'limpas', 'bem', 'sem', 'danos', 'estado',
-        'deve', 'devem', 'para', 'com', 'dos', 'das', 'este', 'estes', 'estas',
-        'não', 'nao', 'foi', 'ser', 'são', 'sao', 'tem', 'têm', 'entre', 'antes', 'depois',
-    ];
+    // Calibrated against the vendored EN/PT subset. A short component is only
+    // considered opposite-language evidence when all three conditions hold.
+    private const COMPONENT_MIN_SCORE = 0.06;
+    private const COMPONENT_MIN_GAP = 0.025;
+    private const COMPONENT_MIN_RATIO = 1.55;
+    private const MAX_COMPONENT_TOKENS = 40;
 
-    private const ENGLISH_STRONG = [
-        'verification', 'inspection', 'inspect', 'check', 'confirm', 'cleaning',
-        'kitchen', 'kitchens', 'room', 'rooms', 'bathroom', 'bathrooms', 'corridor',
-        'corridors', 'terrace', 'terraces', 'bell', 'bells', 'mobile', 'housekeeper',
-        'housekeeping', 'property', 'instruction', 'instructions', 'issue', 'issues',
-        'lamp', 'lamps', 'light', 'lights', 'lock', 'locks', 'door', 'doors',
-        'window', 'windows', 'key', 'keys', 'curtain', 'curtains', 'bed', 'beds',
-        'wall', 'walls', 'hanger', 'hangers', 'headboard', 'headboards', 'fan', 'fans',
-        'mirror', 'wardrobe', 'wardrobes', 'save', 'delete', 'assign', 'assigned',
-        'available', 'damaged', 'crack', 'cracks', 'general', 'list', 'lists', 'test',
-    ];
-
-    private const ENGLISH_COMMON = [
-        'the', 'that', 'this', 'these', 'those', 'is', 'are', 'was', 'were', 'with',
-        'without', 'and', 'for', 'from', 'before', 'after', 'between', 'all', 'each',
-        'must', 'should', 'has', 'have', 'not', 'clean', 'condition', 'working',
-    ];
-
+    /**
+     * Technical/brand/loan terms that are deliberately language-neutral in the app.
+     * This is not a language vocabulary list; it only prevents known machine or
+     * product terms from being treated as natural-language evidence.
+     */
     private const NEUTRAL = [
         'wifi', 'wi-fi', 'sip', 'my2n', 'zkaccess', 'cloudbeds', 'whatsapp', 'api',
         'pin', 'tv', 'usb', 'qr', 'café', 'hotel', 'hostel', 'online', 'offline', 'item',
     ];
 
+    private static ?LanguageDetector $detector = null;
+
     public static function assertExpectedLanguage(string $text, string $expectedLanguage): void
     {
-        $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
-        $tokens = self::tokens($text);
-        $ptStrong = self::countMatches($tokens, self::PORTUGUESE_STRONG);
-        $enStrong = self::countMatches($tokens, self::ENGLISH_STRONG);
-
-        // New/edited mixed-language text must not be silently accepted. Existing
-        // legacy values are reused by ContentTranslator::versions() before this
-        // guard runs, so this rule affects only text the user actually changed.
-        if ($expectedLanguage === 'en' && $ptStrong >= 1 && $enStrong >= 1) {
-            throw new InvalidArgumentException(
-                'This text mixes Portuguese and English. Please write it in English only or switch the interface to Portuguese.'
-            );
-        }
-        if ($expectedLanguage === 'pt' && $enStrong >= 1 && $ptStrong >= 1) {
-            throw new InvalidArgumentException(
-                'Este texto mistura português e inglês. Escreva-o apenas em português ou mude o idioma da interface para inglês.'
-            );
-        }
-
-        $detected = self::confidentLanguage($text);
-        if ($detected === null || $detected === $expectedLanguage) {
+        $text = trim($text);
+        if ($text === '') {
             return;
         }
 
-        if ($expectedLanguage === 'en') {
-            throw new InvalidArgumentException(
-                'This text appears to be written in Portuguese. Please write it in English or switch the interface to Portuguese.'
-            );
+        $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
+        $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
+
+        // 1. Validate the complete text. A reliable opposite-language result is
+        // enough to reject a wholly wrong-language value.
+        $whole = self::detect($text);
+        if ($whole->language === $oppositeLanguage && $whole->isReliable()) {
+            self::throwMismatch($expectedLanguage);
         }
 
-        throw new InvalidArgumentException(
-            'Este texto parece estar escrito em inglês. Escreva-o em português ou mude o idioma da interface para inglês.'
-        );
+        // 2. Validate the components. This catches mixed input where the complete
+        // sentence is still dominated by the expected language, e.g.
+        // "Check that it is clean. escada" or "Verificar se está limpo. stairs".
+        foreach (self::components($text) as $component) {
+            if (self::isConfidentOppositeComponent($component, $expectedLanguage)) {
+                self::throwMismatch($expectedLanguage);
+            }
+        }
     }
 
     /**
-     * Returns pt/en only when there is strong evidence; null means ambiguous.
+     * Returns pt/en only when the statistical result is sufficiently strong;
+     * null means ambiguous/neutral and must not block a save.
      */
     public static function confidentLanguage(string $text): ?string
     {
-        $tokens = self::tokens($text);
-        if ($tokens === []) {
+        $text = trim($text);
+        if ($text === '') {
             return null;
         }
 
-        $ptStrong = self::countMatches($tokens, self::PORTUGUESE_STRONG);
-        $enStrong = self::countMatches($tokens, self::ENGLISH_STRONG);
-        $ptCommon = self::countMatches($tokens, self::PORTUGUESE_COMMON);
-        $enCommon = self::countMatches($tokens, self::ENGLISH_COMMON);
-
-        // A single domain-specific marker is enough only when the opposite
-        // language has no evidence. This catches short names such as "Limpeza"
-        // or "Kitchen" without guessing neutral/proper-name text.
-        if ($ptStrong >= 1 && $enStrong === 0 && $enCommon === 0) {
-            return 'pt';
-        }
-        if ($enStrong >= 1 && $ptStrong === 0 && $ptCommon === 0) {
-            return 'en';
+        $result = self::detect($text);
+        if (($result->language === 'pt' || $result->language === 'en') && $result->isReliable()) {
+            return $result->language;
         }
 
-        $ptScore = ($ptStrong * 3) + $ptCommon;
-        $enScore = ($enStrong * 3) + $enCommon;
-        if ($ptScore >= 3 && $ptScore >= $enScore + 2) {
-            return 'pt';
-        }
-        if ($enScore >= 3 && $enScore >= $ptScore + 2) {
-            return 'en';
+        // Short values are often intentionally marked non-reliable by ELD even
+        // when the PT/EN score separation is clear. Apply the same conservative
+        // component thresholds used by the mixed-language guard.
+        $scores = $result->scores();
+        foreach (['pt', 'en'] as $language) {
+            $other = $language === 'pt' ? 'en' : 'pt';
+            if (self::scoreDominates($scores, $language, $other)) {
+                return $language;
+            }
         }
 
         return null;
     }
 
-    private static function tokens(string $text): array
+    private static function detector(): LanguageDetector
     {
-        $lower = mb_strtolower(trim($text), 'UTF-8');
-        if ($lower === '') {
-            return [];
+        if (self::$detector === null) {
+            self::$detector = new LanguageDetector(
+                self::MODEL,
+                EldScheme::ISO639_1,
+                EldMode::MODE_ARRAY
+            );
         }
-        $tokens = preg_split('/[^\p{L}\p{N}_-]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        return array_values(array_filter(
-            $tokens,
-            static fn(string $token): bool => !in_array($token, self::NEUTRAL, true)
-        ));
+
+        return self::$detector;
     }
 
-    private static function countMatches(array $tokens, array $dictionary): int
+    private static function detect(string $text): LanguageResult
     {
-        $set = array_fill_keys($dictionary, true);
-        $count = 0;
-        foreach ($tokens as $token) {
-            if (isset($set[$token])) {
-                $count++;
+        return self::detector()->detect($text);
+    }
+
+    private static function isConfidentOppositeComponent(string $component, string $expectedLanguage): bool
+    {
+        $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
+        $result = self::detect($component);
+        if ($result->language !== $oppositeLanguage) {
+            return false;
+        }
+
+        return self::scoreDominates($result->scores(), $oppositeLanguage, $expectedLanguage);
+    }
+
+    /**
+     * @param array<string, float> $scores
+     */
+    private static function scoreDominates(array $scores, string $language, string $otherLanguage): bool
+    {
+        $score = (float) ($scores[$language] ?? 0.0);
+        $otherScore = (float) ($scores[$otherLanguage] ?? 0.0);
+        if ($score < self::COMPONENT_MIN_SCORE) {
+            return false;
+        }
+        if (($score - $otherScore) < self::COMPONENT_MIN_GAP) {
+            return false;
+        }
+        if ($otherScore > 0.0 && ($score / $otherScore) < self::COMPONENT_MIN_RATIO) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Build language evidence from individual words plus contiguous 2- and
+     * 3-word windows. This is deliberately bounded because validation runs on
+     * every changed bilingual field before translation/persistence.
+     *
+     * @return string[]
+     */
+    private static function components(string $text): array
+    {
+        $lower = mb_strtolower($text, 'UTF-8');
+        $tokens = preg_split('/[^\p{L}\p{N}_-]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($tokens === []) {
+            return [];
+        }
+
+        $tokens = array_slice($tokens, 0, self::MAX_COMPONENT_TOKENS);
+        $components = [];
+        $tokenCount = count($tokens);
+
+        for ($i = 0; $i < $tokenCount; $i++) {
+            $token = $tokens[$i];
+            if (self::isNaturalLanguageToken($token)) {
+                $components[$token] = true;
+            }
+
+            for ($window = 2; $window <= 3 && ($i + $window) <= $tokenCount; $window++) {
+                $slice = array_slice($tokens, $i, $window);
+                $natural = array_values(array_filter($slice, [self::class, 'isNaturalLanguageToken']));
+                if ($natural === []) {
+                    continue;
+                }
+                $component = implode(' ', $slice);
+                $components[$component] = true;
             }
         }
-        return $count;
+
+        return array_keys($components);
+    }
+
+    private static function isNaturalLanguageToken(string $token): bool
+    {
+        if (in_array($token, self::NEUTRAL, true)) {
+            return false;
+        }
+
+        // One- and two-character tokens are too noisy for word-level language
+        // decisions; they still contribute when part of a 2/3-word window.
+        return mb_strlen($token, 'UTF-8') >= 3;
+    }
+
+    private static function throwMismatch(string $expectedLanguage): never
+    {
+        if ($expectedLanguage === 'en') {
+            throw new InvalidArgumentException(
+                'This text mixes Portuguese and English. Please write it in English only.'
+            );
+        }
+
+        throw new InvalidArgumentException(
+            'Este texto mistura português e inglês. Escreva-o apenas em português.'
+        );
     }
 }
