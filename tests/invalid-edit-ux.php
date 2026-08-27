@@ -19,14 +19,15 @@ assertInvalidEditUx(str_contains($app, "feedbackKind === 'assignment'"), 'instru
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid');
 assertInvalidEditUx(str_contains($feedback, "language-wrong-segment"), 'changed language segment is highlighted separately');
 assertInvalidEditUx(str_contains($feedback, "textarea.dataset.lastValidValue"), 'last server-confirmed value is retained for cancel edit');
-assertInvalidEditUx(str_contains($feedback, "Tem texto errado em Inglês. Quer corrigir, ou anular a edição?"), 'PT navigation warning is present');
-assertInvalidEditUx(str_contains($feedback, "There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?"), 'EN navigation warning is present');
-assertInvalidEditUx(str_contains($feedback, "correct.textContent = isEnglish ? 'Correct' : 'Corrigir'"), 'Correct action is bilingual');
-assertInvalidEditUx(str_contains($feedback, "cancel.textContent = isEnglish ? 'Cancel edit' : 'Anular edição'"), 'Cancel edit action is bilingual');
+assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionMessage'), 'dialog message comes from server-localized config');
+assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionCorrect'), 'Correct label comes from server-localized config');
+assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionCancel'), 'Cancel edit label comes from server-localized config');
 assertInvalidEditUx(str_contains($feedback, "#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate"), 'context changes are guarded');
 assertInvalidEditUx(str_contains($feedback, "a[href]"), 'page navigation is guarded');
 assertInvalidEditUx(str_contains($feedback, "restoreInvalidEdits()"), 'cancel edit restores persisted content before navigation');
 assertInvalidEditUx(str_contains($css, '.language-decision-overlay') && str_contains($css, '.language-wrong-segment'), 'highlight and decision dialog styles are present');
-assertInvalidEditUx(str_contains($rooms, "'locale' => Translator::locale(),"), 'active locale is exposed for bilingual decision copy');
+assertInvalidEditUx(str_contains($rooms, "'languageDecisionMessage' => SiteTranslations::text("), 'dialog message is declared bilingually server-side');
+assertInvalidEditUx(str_contains($rooms, "'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct')"), 'Correct button is declared bilingually server-side');
+assertInvalidEditUx(str_contains($rooms, "'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit')"), 'Cancel edit button is declared bilingually server-side');
 
 echo "Invalid edit UX contract passed.\n";
