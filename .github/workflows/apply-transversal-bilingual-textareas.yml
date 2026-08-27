@@ -1,0 +1,51 @@
+name: Apply transversal bilingual textareas
+
+on:
+  push:
+    branches:
+      - agent/transversal-bilingual-item-textareas
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/transversal-bilingual-item-textareas
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+          coverage: none
+      - name: Apply and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git log -1 --format=%B | grep -Fq '[transversal-bilingual-ready]'; then exit 0; fi
+          python .github/scripts/apply-transversal-bilingual-textareas.py
+          find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l >/dev/null
+          node --check assets/app.js
+          node --check assets/validation-feedback.js
+          node --check assets/bilingual-textareas.js
+          php tests/run.php
+          php tests/i18n.php
+          php tests/static-i18n-audit.php
+          php tests/persistent-i18n-boundaries.php
+          php tests/bilingual-write-audit.php
+          php tests/checklist-autosave-contract.php
+          php tests/runtime-i18n-preservation.php
+          php tests/assignment-textarea-lock.php
+          php tests/validation-feedback-contract.php
+          php tests/language-guard-hardening.php
+          php tests/autosave-hardening.php
+          php tests/invalid-edit-ux.php
+          php tests/bilingual-textarea-transversal.php
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add item-lists.php api.php .github/workflows/ci.yml docs/I18N.md
+          git commit -m 'Apply transversal bilingual textarea rules [transversal-bilingual-ready]'
+          git push origin HEAD:agent/transversal-bilingual-item-textareas
