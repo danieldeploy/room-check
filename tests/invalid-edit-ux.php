@@ -38,6 +38,11 @@ assertInvalidEditUx(str_contains($api, "validate_bilingual_texts"), 'server expo
 assertInvalidEditUx(str_contains($api, "'invalidWords' => $exception->invalidWords") || str_contains($api, "'invalidWords' => \\$exception->invalidWords"), 'server returns offending words on validation failure');
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid');
 assertInvalidEditUx(str_contains($feedback, "appendHighlightedText"), 'actual server-reported wrong words are highlighted');
+assertInvalidEditUx(
+    str_contains($feedback, 'const pattern = new RegExp')
+        && str_contains($feedback, "escaped.join('|')"),
+    'server-reported wrong substrings are highlighted inside joined tokens'
+);
 assertInvalidEditUx(str_contains($feedback, "field.invalidWords"), 'validation-only response supplies offending words to the highlight');
 assertInvalidEditUx(str_contains($feedback, "textarea.dataset.lastValidValue"), 'last server-confirmed value is retained for cancel edit');
 assertInvalidEditUx(str_contains($feedback, "textarea.dataset.languageNeedsValidation = '1'"), 'every changed textarea is marked pending before autosave');

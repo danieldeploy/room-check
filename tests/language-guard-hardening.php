@@ -50,6 +50,20 @@ foreach (['block', 'land', 'boat', 'cloud', 'stairs', 'room', 'bed', 'curtain'] 
     );
 }
 
+// Joined mixed-language tokens must also be rejected in both directions.
+try {
+    LanguageGuard::assertExpectedLanguage('Check the roadcasa carefully.', 'en');
+    throw new RuntimeException('FAIL: EN input accepted joined PT suffix roadcasa');
+} catch (LanguageValidationException $exception) {
+    assertHardening(in_array('casa', $exception->invalidWords, true), 'EN input detects PT suffix inside joined token: roadcasa');
+}
+try {
+    LanguageGuard::assertExpectedLanguage('Verificar a casaroad cuidadosamente.', 'pt');
+    throw new RuntimeException('FAIL: PT input accepted joined EN suffix casaroad');
+} catch (LanguageValidationException $exception) {
+    assertHardening(in_array('road', $exception->invalidWords, true), 'PT input detects EN suffix inside joined token: casaroad');
+}
+
 // Whole-field opposite language remains blocked.
 assertHardeningRejects('Verificar a limpeza da cozinha e das janelas.', 'en', 'whole Portuguese text is rejected in EN mode');
 assertHardeningRejects('Check the kitchen, windows and curtains.', 'pt', 'whole English text is rejected in PT mode');
