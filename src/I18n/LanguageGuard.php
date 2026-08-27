@@ -175,23 +175,42 @@ final class LanguageGuard
 
         $invalid = [];
 
-        // A mistyped/attached one- or two-character edge must not hide a strong
-        // opposite-language word. This catches values such as "ccasa" in EN or
-        // "rroad" in PT without treating the short fragment itself as language
-        // evidence. The opposite-language remainder still has to satisfy the
-        // normal statistical confidence thresholds.
-        for ($edge = 1; $edge <= 2 && $edge <= ($length - 3); $edge++) {
-            $suffix = mb_substr($token, $edge, null, 'UTF-8');
-            if (self::isNaturalLanguageToken($suffix)
-                && self::isConfidentOppositeComponent($suffix, $expectedLanguage)) {
-                $invalid[$suffix] = true;
+        // Repeated edge characters are a common typing error (for example
+        // "ccasa" or "rroad"). Remove only a duplicated leading/trailing
+        // character and test the remaining word. We deliberately do not strip
+        // arbitrary short prefixes/suffixes because that can split valid words
+        // such as "quarto" into misleading fragments.
+        if (mb_substr($token, 0, 1, 'UTF-8') === mb_substr($token, 1, 1, 'UTF-8')) {
+            $candidate = mb_substr($token, 1, null, 'UTF-8');
+            if (self::isNaturalLanguageToken($candidate)
+                && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                $invalid[$candidate] = true;
             }
 
-            $prefixLength = $length - $edge;
-            $prefix = mb_substr($token, 0, $prefixLength, 'UTF-8');
-            if (self::isNaturalLanguageToken($prefix)
-                && self::isConfidentOppositeComponent($prefix, $expectedLanguage)) {
-                $invalid[$prefix] = true;
+            if ($length >= 5
+                && mb_substr($token, 1, 1, 'UTF-8') === mb_substr($token, 2, 1, 'UTF-8')) {
+                $candidate = mb_substr($token, 2, null, 'UTF-8');
+                if (self::isNaturalLanguageToken($candidate)
+                    && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                    $invalid[$candidate] = true;
+                }
+            }
+        }
+
+        if (mb_substr($token, -1, 1, 'UTF-8') === mb_substr($token, -2, 1, 'UTF-8')) {
+            $candidate = mb_substr($token, 0, $length - 1, 'UTF-8');
+            if (self::isNaturalLanguageToken($candidate)
+                && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                $invalid[$candidate] = true;
+            }
+
+            if ($length >= 5
+                && mb_substr($token, -2, 1, 'UTF-8') === mb_substr($token, -3, 1, 'UTF-8')) {
+                $candidate = mb_substr($token, 0, $length - 2, 'UTF-8');
+                if (self::isNaturalLanguageToken($candidate)
+                    && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                    $invalid[$candidate] = true;
+                }
             }
         }
 
