@@ -26,6 +26,22 @@ function assertHardeningRejects(string $text, string $expectedLanguage, string $
     throw new RuntimeException('FAIL: ' . $message . ' — text was accepted');
 }
 
+function assertHardeningInvalidWord(
+    string $text,
+    string $expectedLanguage,
+    string $invalidWord,
+    string $message
+): void {
+    try {
+        LanguageGuard::assertExpectedLanguage($text, $expectedLanguage);
+    } catch (LanguageValidationException $exception) {
+        assertHardening(in_array($invalidWord, $exception->invalidWords, true), $message);
+        return;
+    }
+
+    throw new RuntimeException('FAIL: ' . $message . ' — text was accepted');
+}
+
 // Clean matching-language values remain valid in both directions.
 LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged in the room.', 'en');
 LanguageGuard::assertExpectedLanguage('Verificar se está limpo e sem danos no quarto.', 'pt');
@@ -50,19 +66,31 @@ foreach (['block', 'land', 'boat', 'cloud', 'stairs', 'room', 'bed', 'curtain'] 
     );
 }
 
-// Joined mixed-language tokens must also be rejected in both directions.
-try {
-    LanguageGuard::assertExpectedLanguage('Check the roadcasa carefully.', 'en');
-    throw new RuntimeException('FAIL: EN input accepted joined PT suffix roadcasa');
-} catch (LanguageValidationException $exception) {
-    assertHardening(in_array('casa', $exception->invalidWords, true), 'EN input detects PT suffix inside joined token: roadcasa');
-}
-try {
-    LanguageGuard::assertExpectedLanguage('Verificar a casaroad cuidadosamente.', 'pt');
-    throw new RuntimeException('FAIL: PT input accepted joined EN suffix casaroad');
-} catch (LanguageValidationException $exception) {
-    assertHardening(in_array('road', $exception->invalidWords, true), 'PT input detects EN suffix inside joined token: casaroad');
-}
+// Joined mixed-language tokens: prefix and suffix are protected in both directions.
+assertHardeningInvalidWord(
+    'Check the roadcasa carefully.',
+    'en',
+    'casa',
+    'EN input detects PT suffix inside joined token: roadcasa'
+);
+assertHardeningInvalidWord(
+    'Check the casaroad carefully.',
+    'en',
+    'casa',
+    'EN input detects PT prefix inside joined token: casaroad'
+);
+assertHardeningInvalidWord(
+    'Verificar a casaroad cuidadosamente.',
+    'pt',
+    'road',
+    'PT input detects EN suffix inside joined token: casaroad'
+);
+assertHardeningInvalidWord(
+    'Verificar a roadcasa cuidadosamente.',
+    'pt',
+    'road',
+    'PT input detects EN prefix inside joined token: roadcasa'
+);
 
 // Whole-field opposite language remains blocked.
 assertHardeningRejects('Verificar a limpeza da cozinha e das janelas.', 'en', 'whole Portuguese text is rejected in EN mode');
