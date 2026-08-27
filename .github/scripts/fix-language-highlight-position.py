@@ -38,11 +38,16 @@ css_path.write_text(css.replace(old, new, 1))
 
 test_path = Path('tests/invalid-edit-ux.php')
 test = test_path.read_text()
+old_api_assert = "assertInvalidEditUx(str_contains($api, \"'invalidWords' => $exception->invalidWords\") || str_contains($api, \"'invalidWords' => \\\\$exception->invalidWords\"), 'server returns offending words on validation failure');"
+new_api_assert = "assertInvalidEditUx(str_contains($api, \"'invalidWords' => \\\$exception->invalidWords\"), 'server returns offending words on validation failure');"
+if old_api_assert in test:
+    test = test.replace(old_api_assert, new_api_assert, 1)
 anchor = "assertInvalidEditUx(str_contains($css, '.language-decision-overlay') && str_contains($css, '.language-wrong-segment'), 'highlight and decision dialog styles are present');\n"
 addition = """assertInvalidEditUx(str_contains($css, '.problem-field { position: relative; min-width: 0; }'), 'highlight layer is anchored to the textarea field');
 assertInvalidEditUx(
     str_contains($feedback, \"position: 'absolute', left: '0', top: '0'\")
-        && str_contains($feedback, \"width: '100%', height: `${textarea.offsetHeight}px`\")
+        && str_contains($feedback, \"width: '100%', height:\")
+        && str_contains($feedback, 'textarea.offsetHeight')
         && !str_contains($feedback, 'textarea.offsetLeft')
         && !str_contains($feedback, 'textarea.offsetTop'),
     'highlight overlay starts at the textarea origin instead of reusing pre-anchor offsets'
