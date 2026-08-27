@@ -28,6 +28,13 @@ $lists = array_values(array_filter(
     itemLists($pdo),
     static fn(array $list): bool => $list['area'] === $navigationArea
 ));
+foreach ($lists as &$list) {
+    $list['displayName'] = Translator::localized(
+        (string) ($list['name'] ?? ''),
+        (string) ($list['nameEn'] ?? '')
+    );
+}
+unset($list);
 $initialListId = (int) ($_GET['list_id'] ?? ($lists[0]['id'] ?? 0));
 if (!array_filter($lists, static fn(array $list): bool => $list['id'] === $initialListId)) {
     $initialListId = (int) ($lists[0]['id'] ?? 0);
@@ -184,7 +191,7 @@ try {
             <?php endif; ?>
         </section>
         <section class="checklist-card">
-            <div class="table-heading"><label class="list-heading-select"><select id="listSelect" aria-label="Lista de itens" <?= $lists === [] ? 'disabled' : '' ?>><?php if ($lists === []): ?><option value="">Sem listas nesta área</option><?php endif; ?><?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $initialListId ? 'selected' : '' ?>><?= htmlspecialchars($list['name'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><span>Problema a identificar</span><?php if ($canAssign): ?><div class="assignment-heading-control" hidden><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
+            <div class="table-heading"><label class="list-heading-select"><select id="listSelect" aria-label="Lista de itens" <?= $lists === [] ? 'disabled' : '' ?>><?php if ($lists === []): ?><option value="">Sem listas nesta área</option><?php endif; ?><?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $initialListId ? 'selected' : '' ?>><?= htmlspecialchars((string) $list['displayName'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><span>Problema a identificar</span><?php if ($canAssign): ?><div class="assignment-heading-control" hidden><label class="assignment-check select-all"><input id="selectAllItems" type="checkbox" aria-label="Selecionar todos os itens"><span></span></label></div><?php else: ?><span>Estado</span><?php endif; ?></div>
             <div id="checklist" class="checklist"></div>
         </section>
         <noscript>Esta aplicação necessita de JavaScript para carregar os dados.</noscript>
