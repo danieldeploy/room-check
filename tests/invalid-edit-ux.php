@@ -52,6 +52,15 @@ assertInvalidEditUx(str_contains($feedback, "#createInterval, #deleteInterval"),
 assertInvalidEditUx(str_contains($feedback, "a[href]"), 'page navigation is guarded');
 assertInvalidEditUx(str_contains($feedback, "restorePendingEdits()"), 'cancel edit restores last server-confirmed content before navigation');
 assertInvalidEditUx(str_contains($css, '.language-decision-overlay') && str_contains($css, '.language-wrong-segment'), 'highlight and decision dialog styles are present');
+assertInvalidEditUx(str_contains($css, '.problem-field { position: relative; min-width: 0; }'), 'highlight layer is anchored to the textarea field');
+assertInvalidEditUx(
+    str_contains($feedback, "position: 'absolute', left: '0', top: '0'")
+        && str_contains($feedback, "width: '100%', height:")
+        && str_contains($feedback, 'textarea.offsetHeight')
+        && !str_contains($feedback, 'textarea.offsetLeft')
+        && !str_contains($feedback, 'textarea.offsetTop'),
+    'highlight overlay starts at the textarea origin instead of reusing pre-anchor offsets'
+);
 assertInvalidEditUx(str_contains($rooms, "'languageDecisionMessage' => SiteTranslations::text("), 'dialog message is declared bilingually server-side');
 assertInvalidEditUx(str_contains($rooms, "'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct')"), 'Correct button is declared bilingually server-side');
 assertInvalidEditUx(str_contains($rooms, "'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit')"), 'Cancel edit button is declared bilingually server-side');
