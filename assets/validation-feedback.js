@@ -92,6 +92,7 @@
         textarea.style.position = 'relative';
         textarea.style.zIndex = '2';
         textarea.classList.add('language-invalid');
+        textarea.dataset.languageNeedsValidation = '1';
         textarea.setAttribute('aria-invalid', 'true');
         textarea.parentElement.insertBefore(layer, textarea);
     };
@@ -115,6 +116,7 @@
         const textarea = textareaForRow(row);
         if (textarea) {
             textarea.dataset.lastValidValue = textarea.value;
+            delete textarea.dataset.languageNeedsValidation;
             removeHighlight(textarea);
         }
         if (!feedback) return;
@@ -125,11 +127,14 @@
         }, 2000));
     };
 
-    const invalidTextareas = () => Array.from(document.querySelectorAll('.check-row textarea.language-invalid'));
+    const invalidTextareas = () => Array.from(document.querySelectorAll(
+        '.check-row textarea.language-invalid, .check-row textarea[data-language-needs-validation="1"]'
+    ));
 
     const restoreInvalidEdits = () => {
         invalidTextareas().forEach((textarea) => {
             textarea.value = textarea.dataset.lastValidValue ?? '';
+            delete textarea.dataset.languageNeedsValidation;
             removeHighlight(textarea);
             resetFeedback(feedbackForRow(textarea.closest('.check-row')));
         });

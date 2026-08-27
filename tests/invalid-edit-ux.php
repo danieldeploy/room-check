@@ -20,6 +20,8 @@ assertInvalidEditUx(str_contains($app, "feedbackKind === 'assignment'"), 'instru
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid');
 assertInvalidEditUx(str_contains($feedback, "language-wrong-segment"), 'changed language segment is highlighted separately');
 assertInvalidEditUx(str_contains($feedback, "textarea.dataset.lastValidValue"), 'last server-confirmed value is retained for cancel edit');
+assertInvalidEditUx(str_contains($feedback, "textarea.dataset.languageNeedsValidation = '1'"), 'rejected edit remains pending until server validation succeeds');
+assertInvalidEditUx(str_contains($feedback, 'data-language-needs-validation'), 'navigation also guards a correction that has not yet been revalidated');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionMessage'), 'dialog message comes from server-localized config');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionCorrect'), 'Correct label comes from server-localized config');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionCancel'), 'Cancel edit label comes from server-localized config');
