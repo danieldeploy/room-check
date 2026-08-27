@@ -663,11 +663,24 @@ try {
         }
 
         $existingProblem = $existingProblems[$name] ?? [];
+        $existingPt = trim((string) ($existingProblem['problem'] ?? ''));
+        $existingEn = trim((string) ($existingProblem['problem_en'] ?? ''));
+        $defaultProblem = trim((string) ($selectedList['defaults'][$name] ?? ''));
+
+        // The UI displays default list instructions when no room-specific text
+        // exists. That fallback is not new user input. Multi-row autosave sends
+        // every visible textarea, so discard an untouched fallback before the
+        // language guard/provider sees it. A genuinely edited value differs
+        // from the fallback and continues through normal PT/EN persistence.
+        if ($existingPt === '' && $existingEn === '' && $problem === $defaultProblem) {
+            $problem = '';
+        }
+
         $problemVersions = $contentTranslator->versions(
             $problem,
             Translator::locale(),
-            (string) ($existingProblem['problem'] ?? ''),
-            (string) ($existingProblem['problem_en'] ?? '')
+            $existingPt,
+            $existingEn
         );
         $normalized[$name] = [
             'problem' => $problemVersions['pt'],
