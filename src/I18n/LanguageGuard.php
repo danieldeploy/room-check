@@ -15,6 +15,7 @@ final class LanguageGuard
         'verificação', 'verificacao', 'verificar', 'confirmar', 'limpeza', 'funcionamento',
         'cozinha', 'cozinhas', 'quarto', 'quartos', 'casa', 'casas', 'banho',
         'corredor', 'corredores', 'terraço', 'terraco', 'terraços', 'terracos',
+        'escada', 'escadas', 'escadaria', 'escadarias', 'degrau', 'degraus',
         'campainha', 'campainhas', 'telemóvel', 'telemovel', 'telemóveis', 'telemoveis',
         'empregada', 'empregadas', 'governanta', 'alojamento', 'instrução', 'instrucao',
         'instruções', 'instrucoes', 'problema', 'problemas', 'lâmpada', 'lampada',
@@ -37,7 +38,8 @@ final class LanguageGuard
     private const ENGLISH_STRONG = [
         'verification', 'inspection', 'inspect', 'check', 'confirm', 'cleaning',
         'kitchen', 'kitchens', 'room', 'rooms', 'bathroom', 'bathrooms', 'corridor',
-        'corridors', 'terrace', 'terraces', 'bell', 'bells', 'mobile', 'housekeeper',
+        'corridors', 'terrace', 'terraces', 'stair', 'stairs', 'staircase', 'staircases',
+        'step', 'steps', 'bell', 'bells', 'mobile', 'housekeeper',
         'housekeeping', 'property', 'instruction', 'instructions', 'issue', 'issues',
         'lamp', 'lamps', 'light', 'lights', 'lock', 'locks', 'door', 'doors',
         'window', 'windows', 'key', 'keys', 'curtain', 'curtains', 'bed', 'beds',
