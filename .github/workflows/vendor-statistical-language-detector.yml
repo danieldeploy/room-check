@@ -33,7 +33,7 @@ jobs:
           TMPDIR="$(mktemp -d)"
           cd "$TMPDIR"
           composer init --name=room-check/language-detector-build --no-interaction
-          composer require nitotm/efficient-language-detector:3.2.0 --no-dev --prefer-dist --no-interaction
+          composer require nitotm/efficient-language-detector:3.2.0 --prefer-dist --no-interaction
           cat > build-subset.php <<'PHP'
           <?php
           require __DIR__ . '/vendor/autoload.php';
