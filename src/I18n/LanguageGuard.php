@@ -12,24 +12,26 @@ declare(strict_types=1);
 final class LanguageGuard
 {
     private const PORTUGUESE_STRONG = [
-        'verificação', 'verificar', 'confirmar', 'limpeza', 'funcionamento',
+        'verificação', 'verificacao', 'verificar', 'confirmar', 'limpeza', 'funcionamento',
         'cozinha', 'cozinhas', 'quarto', 'quartos', 'casa', 'casas', 'banho',
-        'corredor', 'corredores', 'terraço', 'terraços', 'campainha', 'campainhas',
-        'telemóvel', 'telemóveis', 'empregada', 'empregadas', 'governanta',
-        'alojamento', 'instrução', 'instruções', 'problema', 'problemas',
-        'lâmpada', 'lâmpadas', 'fechadura', 'fechaduras', 'porta', 'portas',
+        'corredor', 'corredores', 'terraço', 'terraco', 'terraços', 'terracos',
+        'campainha', 'campainhas', 'telemóvel', 'telemovel', 'telemóveis', 'telemoveis',
+        'empregada', 'empregadas', 'governanta', 'alojamento', 'instrução', 'instrucao',
+        'instruções', 'instrucoes', 'problema', 'problemas', 'lâmpada', 'lampada',
+        'lâmpadas', 'lampadas', 'fechadura', 'fechaduras', 'porta', 'portas',
         'janela', 'janelas', 'chave', 'chaves', 'cortina', 'cortinas', 'cama',
         'camas', 'parede', 'paredes', 'cabide', 'cabides', 'cabeceira', 'cabeceiras',
-        'ventoinha', 'ventoinhas', 'espelho', 'armário', 'armários', 'ficheiro',
-        'ficheiros', 'guardar', 'apagar', 'atribuir', 'atribuído', 'atribuídos',
-        'disponível', 'disponíveis', 'danificado', 'danificada', 'fissura', 'fissuras',
+        'ventoinha', 'ventoinhas', 'espelho', 'armário', 'armario', 'armários', 'armarios',
+        'ficheiro', 'ficheiros', 'guardar', 'apagar', 'atribuir', 'atribuído', 'atribuido',
+        'atribuídos', 'atribuidos', 'disponível', 'disponivel', 'disponíveis', 'disponiveis',
+        'danificado', 'danificada', 'fissura', 'fissuras', 'geral', 'lista', 'listas', 'teste',
     ];
 
     private const PORTUGUESE_COMMON = [
-        'que', 'está', 'estão', 'uma', 'umas', 'todos', 'todas', 'limpo', 'limpa',
-        'limpos', 'limpas', 'bem', 'sem', 'danos', 'estado', 'deve', 'devem',
-        'para', 'com', 'dos', 'das', 'este', 'esta', 'estes', 'estas', 'não',
-        'foi', 'ser', 'são', 'tem', 'têm', 'entre', 'antes', 'depois',
+        'que', 'está', 'esta', 'estao', 'estão', 'uma', 'umas', 'todos', 'todas',
+        'limpo', 'limpa', 'limpos', 'limpas', 'bem', 'sem', 'danos', 'estado',
+        'deve', 'devem', 'para', 'com', 'dos', 'das', 'este', 'estes', 'estas',
+        'não', 'nao', 'foi', 'ser', 'são', 'sao', 'tem', 'têm', 'entre', 'antes', 'depois',
     ];
 
     private const ENGLISH_STRONG = [
@@ -41,7 +43,7 @@ final class LanguageGuard
         'window', 'windows', 'key', 'keys', 'curtain', 'curtains', 'bed', 'beds',
         'wall', 'walls', 'hanger', 'hangers', 'headboard', 'headboards', 'fan', 'fans',
         'mirror', 'wardrobe', 'wardrobes', 'save', 'delete', 'assign', 'assigned',
-        'available', 'damaged', 'crack', 'cracks',
+        'available', 'damaged', 'crack', 'cracks', 'general', 'list', 'lists', 'test',
     ];
 
     private const ENGLISH_COMMON = [
@@ -52,7 +54,7 @@ final class LanguageGuard
 
     private const NEUTRAL = [
         'wifi', 'wi-fi', 'sip', 'my2n', 'zkaccess', 'cloudbeds', 'whatsapp', 'api',
-        'pin', 'tv', 'usb', 'qr', 'café', 'hotel', 'hostel', 'online', 'offline',
+        'pin', 'tv', 'usb', 'qr', 'café', 'hotel', 'hostel', 'online', 'offline', 'item',
     ];
 
     public static function assertExpectedLanguage(string $text, string $expectedLanguage): void
@@ -91,7 +93,8 @@ final class LanguageGuard
 
         // A single domain-specific marker is enough only when the opposite
         // language has no evidence. This catches short names such as "Limpeza"
-        // or "Kitchen" without guessing neutral/proper-name text.
+        // or "Kitchen" without guessing neutral/proper-name text. Mixed legacy
+        // labels such as "Check Geral" stay ambiguous and therefore allowed.
         if ($ptStrong >= 1 && $enStrong === 0 && $enCommon === 0) {
             return 'pt';
         }
