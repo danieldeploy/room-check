@@ -46,6 +46,6 @@ jobs:
           php tests/bilingual-textarea-transversal.php
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add item-lists.php api.php .github/workflows/ci.yml docs/I18N.md
+          git add item-lists.php api.php docs/I18N.md
           git commit -m 'Apply transversal bilingual textarea rules [transversal-bilingual-ready]'
           git push origin HEAD:agent/transversal-bilingual-item-textareas
