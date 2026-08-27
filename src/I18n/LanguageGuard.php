@@ -169,11 +169,35 @@ final class LanguageGuard
     private static function embeddedOppositeParts(string $token, string $expectedLanguage): array
     {
         $length = mb_strlen($token, 'UTF-8');
-        if ($length < 6 || in_array($token, self::NEUTRAL, true)) {
+        if ($length < 4 || in_array($token, self::NEUTRAL, true)) {
             return [];
         }
 
         $invalid = [];
+
+        // A mistyped/attached one- or two-character edge must not hide a strong
+        // opposite-language word. This catches values such as "ccasa" in EN or
+        // "rroad" in PT without treating the short fragment itself as language
+        // evidence. The opposite-language remainder still has to satisfy the
+        // normal statistical confidence thresholds.
+        for ($edge = 1; $edge <= 2 && $edge <= ($length - 3); $edge++) {
+            $suffix = mb_substr($token, $edge, null, 'UTF-8');
+            if (self::isNaturalLanguageToken($suffix)
+                && self::isConfidentOppositeComponent($suffix, $expectedLanguage)) {
+                $invalid[$suffix] = true;
+            }
+
+            $prefixLength = $length - $edge;
+            $prefix = mb_substr($token, 0, $prefixLength, 'UTF-8');
+            if (self::isNaturalLanguageToken($prefix)
+                && self::isConfidentOppositeComponent($prefix, $expectedLanguage)) {
+                $invalid[$prefix] = true;
+            }
+        }
+
+        // For genuine joined words, require both sides to be independently
+        // strong language evidence before treating the internal boundary as a
+        // mixed-language join.
         for ($split = 3; $split <= ($length - 3); $split++) {
             $left = mb_substr($token, 0, $split, 'UTF-8');
             $right = mb_substr($token, $split, null, 'UTF-8');
