@@ -105,6 +105,7 @@ try {
                 'lastDueDate' => $interval['last_due_date'] !== null ? (string) $interval['last_due_date'] : null,
             ], $intervals),
             'csrfToken' => Csrf::token(),
+            'locale' => Translator::locale(),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
             'initialRoom' => $initialRoom,

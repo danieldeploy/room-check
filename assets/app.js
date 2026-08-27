@@ -616,7 +616,9 @@
             setStatus('Guardado automaticamente', 'success');
             return true;
         }).catch((error) => {
-            if (contextMatches()) updateAssignmentMode();
+            // Keep rejected instruction text visible so the user can correct it.
+            // Checkbox/assignment failures still resync from persisted state.
+            if (contextMatches() && feedbackKind === 'assignment') updateAssignmentMode();
             setStatus(error.message, 'error');
             return false;
         });
