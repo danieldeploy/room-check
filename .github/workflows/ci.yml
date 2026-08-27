@@ -39,3 +39,4 @@ jobs:
           php tests/persistent-i18n-boundaries.php
           php tests/bilingual-write-audit.php
           php tests/checklist-autosave-contract.php
+          php tests/runtime-i18n-preservation.php
