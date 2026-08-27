@@ -38,6 +38,7 @@
     let rows = [];
     let saveTimer = null;
     let lastSavedChecklistFingerprint = '';
+    let lastInvalidChecklistFingerprint = '';
     const instructionSaveTimers = new Map();
     const instructionLastAttemptedValues = new Map();
     const instructionInvalidValues = new Map();
@@ -446,6 +447,7 @@
         textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
         textarea.addEventListener('input', (event) => {
             autoGrow(textarea);
+            lastInvalidChecklistFingerprint = '';
             const rowState = rows.find((candidate) => candidate.element === row);
             if (rowState) {
                 if (instructionInvalidValues.has(item.name)
@@ -653,6 +655,12 @@
             row.textarea.readOnly = viewingAssignments ? (!active || locked || !sameAssignment) : !canEdit;
             row.status.querySelectorAll('button').forEach((button) => { button.disabled = viewingAssignments || !canEdit; });
             autoGrow(row.textarea);
+            if (!row.invalidWords?.length) {
+                row.textarea.dataset.persistedText = row.textarea.value;
+            }
+            if (row.validationOverlay && !row.validationOverlay.hidden) {
+                row.validationOverlay.style.height = `${row.textarea.offsetHeight}px`;
+            }
         });
         const hasLockedItems = active && rows.some((row) => row.assignmentCheckbox.disabled);
         selectAllItems.disabled = !active || hasLockedItems;
@@ -876,7 +884,9 @@
     };
 
     const saveChecklist = async (snapshot = checklistSnapshot()) => {
-        if (isLoading || !canEdit || snapshot.fingerprint === lastSavedChecklistFingerprint) {
+        if (isLoading || !canEdit
+            || snapshot.fingerprint === lastSavedChecklistFingerprint
+            || snapshot.fingerprint === lastInvalidChecklistFingerprint) {
             return false;
         }
 
@@ -904,6 +914,7 @@
             }
             if (version === requestVersion) {
                 lastSavedChecklistFingerprint = snapshot.fingerprint;
+                lastInvalidChecklistFingerprint = '';
                 const persistedByName = new Map(snapshot.items.map((item) => [item.name, item.problem]));
                 rows.forEach((row) => {
                     if (persistedByName.has(row.name)) {
@@ -923,6 +934,7 @@
         } catch (error) {
             if (version === requestVersion) {
                 if (error.validation === true) {
+                    lastInvalidChecklistFingerprint = snapshot.fingerprint;
                     const row = rows.find((candidate) => candidate.name === error.fieldKey);
                     if (row) renderLanguageValidation(row, error.invalidWords || []);
                 }
@@ -938,7 +950,8 @@
         }
         clearTimeout(saveTimer);
         const snapshot = checklistSnapshot();
-        if (snapshot.fingerprint === lastSavedChecklistFingerprint) {
+        if (snapshot.fingerprint === lastSavedChecklistFingerprint
+            || snapshot.fingerprint === lastInvalidChecklistFingerprint) {
             return;
         }
         setStatus('Alterações por guardar');
