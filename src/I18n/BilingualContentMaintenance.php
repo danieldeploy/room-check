@@ -109,9 +109,9 @@ final class BilingualContentMaintenance
             require_once __DIR__ . '/ContentTranslator.php';
         }
 
-        // The deterministic map repairs established seed text. Validated cache
-        // entries extend it so previously translated user content can also repair
-        // a bad legacy target without another provider request.
+        // Runtime maintenance may fill a missing EN value, but it must never
+        // rewrite a non-empty user-authored EN value. Historical repair of
+        // suspicious non-empty translations belongs in an explicit migration.
         $known = self::englishRepairDictionary($pdo);
         $translator = ($translationConfig['enabled'] ?? true) === true
             ? new ContentTranslator($pdo, $translationConfig)
@@ -200,13 +200,7 @@ final class BilingualContentMaintenance
 
                 $sourceText = trim((string) ($row['source_text'] ?? ''));
                 $currentTarget = trim((string) ($row['target_text'] ?? ''));
-                if ($sourceText === '') {
-                    continue;
-                }
-
-                // SQL deliberately over-selects suspicious targets. Keep any text
-                // that passes the conservative target-language guard.
-                if ($currentTarget !== '' && ContentTranslator::isPlausibleTargetText($currentTarget, 'en')) {
+                if ($sourceText === '' || $currentTarget !== '') {
                     continue;
                 }
 

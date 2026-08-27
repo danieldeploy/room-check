@@ -60,6 +60,24 @@ final class LanguageGuard
     public static function assertExpectedLanguage(string $text, string $expectedLanguage): void
     {
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
+        $tokens = self::tokens($text);
+        $ptStrong = self::countMatches($tokens, self::PORTUGUESE_STRONG);
+        $enStrong = self::countMatches($tokens, self::ENGLISH_STRONG);
+
+        // New/edited mixed-language text must not be silently accepted. Existing
+        // legacy values are reused by ContentTranslator::versions() before this
+        // guard runs, so this rule affects only text the user actually changed.
+        if ($expectedLanguage === 'en' && $ptStrong >= 1 && $enStrong >= 1) {
+            throw new InvalidArgumentException(
+                'This text mixes Portuguese and English. Please write it in English only or switch the interface to Portuguese.'
+            );
+        }
+        if ($expectedLanguage === 'pt' && $enStrong >= 1 && $ptStrong >= 1) {
+            throw new InvalidArgumentException(
+                'Este texto mistura português e inglês. Escreva-o apenas em português ou mude o idioma da interface para inglês.'
+            );
+        }
+
         $detected = self::confidentLanguage($text);
         if ($detected === null || $detected === $expectedLanguage) {
             return;
@@ -93,8 +111,7 @@ final class LanguageGuard
 
         // A single domain-specific marker is enough only when the opposite
         // language has no evidence. This catches short names such as "Limpeza"
-        // or "Kitchen" without guessing neutral/proper-name text. Mixed legacy
-        // labels such as "Check Geral" stay ambiguous and therefore allowed.
+        // or "Kitchen" without guessing neutral/proper-name text.
         if ($ptStrong >= 1 && $enStrong === 0 && $enCommon === 0) {
             return 'pt';
         }
