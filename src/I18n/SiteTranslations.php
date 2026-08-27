@@ -85,6 +85,8 @@ final class SiteTranslations
             'Guardar configuração' => 'Save configuration',
             'Configuração guardada.' => 'Configuration saved.',
             'A carregar…' => 'Loading…',
+            'Tem texto em inglês num campo em português. Quer corrigir ou anular a edição?' => 'There is Portuguese text in an English field. Do you want to correct it or cancel the edit?',
+            'Anular edição' => 'Cancel edit',
             'A carregar...' => 'Loading...',
             'Importe ' => 'Import ',
             ' para ativar esta configuração.' => ' to enable this configuration.',
