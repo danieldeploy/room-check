@@ -173,6 +173,14 @@ foreach (bilingualPhpFiles($root) as $path) {
         continue;
     }
 
+    // These exact files repair/migrate already persisted data. They are not
+    // user-submission paths, so writing only the missing target language is
+    // intentional. Ordinary modules cannot opt out through a broad directory.
+    if (isset($maintenanceExceptions[$path])) {
+        echo 'PASS: maintenance exception ' . $path . ' (' . $maintenanceExceptions[$path] . ')' . PHP_EOL;
+        continue;
+    }
+
     $writes = [];
     foreach ($pairsByTable as $table => $pairs) {
         $tablePattern = preg_quote($table, '/');
@@ -232,11 +240,6 @@ foreach (bilingualPhpFiles($root) as $path) {
     }
 
     if ($writes === []) {
-        continue;
-    }
-
-    if (isset($maintenanceExceptions[$path])) {
-        echo 'PASS: maintenance exception ' . $path . ' (' . $maintenanceExceptions[$path] . ')' . PHP_EOL;
         continue;
     }
 
