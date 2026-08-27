@@ -61,15 +61,15 @@ assertI18n(
 $itemListsSource = file_get_contents(dirname(__DIR__) . '/item-lists.php');
 assertI18n(is_string($itemListsSource), 'item-list editor source is readable');
 assertI18n(
-    str_contains((string) $itemListsSource, "\$selectedList['displayName'] = Translator::localized("),
+    str_contains((string) $itemListsSource, "$selectedList['displayName'] = Translator::localized("),
     'list editor derives the editable list name from both saved languages'
 );
 assertI18n(
-    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) \$selectedList['displayName']) ?>\""),
+    str_contains((string) $itemListsSource, "value=\"<?= listEscape((string) $selectedList['displayName']) ?>\""),
     'list editor renders the active-language value instead of the canonical PT value'
 );
 assertI18n(
-    !str_contains((string) $itemListsSource, "value=\"<?= listEscape(\$selectedList['name']) ?>\""),
+    !str_contains((string) $itemListsSource, "value=\"<?= listEscape($selectedList['name']) ?>\""),
     'list editor cannot fall back to the old PT-only editable value path'
 );
 
@@ -86,13 +86,23 @@ LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha', 'pt');
 assertI18n(true, 'matching user language is accepted');
 assertThrowsI18n(
     static fn() => LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha', 'en'),
-    'written in Portuguese',
+    'Please write it in English only.',
     'Portuguese text is blocked when the active input language is English'
 );
 assertThrowsI18n(
     static fn() => LanguageGuard::assertExpectedLanguage('Check kitchen cleanliness', 'pt'),
-    'escrito em inglês',
+    'Escreva-o apenas em português.',
     'English text is blocked when the active input language is Portuguese'
+);
+assertThrowsI18n(
+    static fn() => LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged. escada', 'en'),
+    'Please write it in English only.',
+    'Portuguese component inside English text is blocked'
+);
+assertThrowsI18n(
+    static fn() => LanguageGuard::assertExpectedLanguage('Verificar se está limpo e sem danos. stairs', 'pt'),
+    'Escreva-o apenas em português.',
+    'English component inside Portuguese text is blocked'
 );
 
 // Regression: multi-field/batch forms submit unchanged values alongside the
