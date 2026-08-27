@@ -29,6 +29,7 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check assets/app.js
+          node --check assets/validation-feedback.js
           if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
 
       - name: Run PHP tests
@@ -41,3 +42,4 @@ jobs:
           php tests/checklist-autosave-contract.php
           php tests/runtime-i18n-preservation.php
           php tests/assignment-textarea-lock.php
+          php tests/validation-feedback-contract.php
