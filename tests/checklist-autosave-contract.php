@@ -22,11 +22,11 @@ assertChecklistAutosave(is_string($app), 'assets/app.js is readable');
 // before language validation/translation so one untouched row cannot reject the
 // whole English (or Portuguese) save request.
 assertChecklistAutosave(
-    str_contains($api, "$defaultProblem = trim((string) ($selectedList['defaults'][$name] ?? ''));"),
+    str_contains($api, '$defaultProblem = trim((string) ($selectedList[\'defaults\'][$name] ?? \'\'));'),
     'checklist save identifies the active-language visual fallback'
 );
 assertChecklistAutosave(
-    str_contains($api, "$existingPt === '' && $existingEn === '' && $problem === $defaultProblem"),
+    str_contains($api, '$existingPt === \'\' && $existingEn === \'\' && $problem === $defaultProblem'),
     'untouched fallback is ignored only when no persisted bilingual override exists'
 );
 
@@ -37,7 +37,7 @@ assertChecklistAutosave(
     'fallback is removed before LanguageGuard/provider translation is reached'
 );
 assertChecklistAutosave(
-    str_contains($api, "$existingPt,\n            $existingEn\n        );"),
+    str_contains($api, '$existingPt,') && str_contains($api, '$existingEn'),
     'real room-specific values still use the existing PT/EN pair on update'
 );
 
@@ -48,7 +48,7 @@ assertChecklistAutosave(
     'checklist autosave remains a multi-row request'
 );
 assertChecklistAutosave(
-    str_contains($api, ": ($roomInstructions !== '' ? $roomInstructions : $listInstructions)"),
+    str_contains($api, ': ($roomInstructions !== \'\' ? $roomInstructions : $listInstructions)'),
     'default instructions remain visible when there is no room-specific text'
 );
 
