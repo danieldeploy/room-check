@@ -22,6 +22,7 @@ jobs:
           set -euo pipefail
           if git log -1 --format=%B | grep -Fq '[blur-save-ready]'; then exit 0; fi
           python .github/scripts/apply-blur-save-no-overlap.py
+          sed -i "s/const scheduleSave = (delay = TEXT_AUTOSAVE_DELAY_MS)/const scheduleSave = (delay = BLUR_AUTOSAVE_DELAY_MS)/" assets/app.js
           node --check assets/app.js
           node --check assets/validation-feedback.js
           php -l tests/autosave-hardening.php
