@@ -86,13 +86,23 @@ LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha', 'pt');
 assertI18n(true, 'matching user language is accepted');
 assertThrowsI18n(
     static fn() => LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha', 'en'),
-    'written in Portuguese',
+    'Please write it in English only.',
     'Portuguese text is blocked when the active input language is English'
 );
 assertThrowsI18n(
     static fn() => LanguageGuard::assertExpectedLanguage('Check kitchen cleanliness', 'pt'),
-    'escrito em inglês',
+    'Escreva-o apenas em português.',
     'English text is blocked when the active input language is Portuguese'
+);
+assertThrowsI18n(
+    static fn() => LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged. escada', 'en'),
+    'Please write it in English only.',
+    'Portuguese component inside English text is blocked'
+);
+assertThrowsI18n(
+    static fn() => LanguageGuard::assertExpectedLanguage('Verificar se está limpo e sem danos. stairs', 'pt'),
+    'Escreva-o apenas em português.',
+    'English component inside Portuguese text is blocked'
 );
 
 // Regression: multi-field/batch forms submit unchanged values alongside the

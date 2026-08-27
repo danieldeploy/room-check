@@ -34,28 +34,67 @@ assertRuntimeI18n(
     'non-empty legacy repairs are explicitly separated from normal requests'
 );
 
-// This exact mixed phrase was captured in the production HAR. It previously
-// returned HTTP 200 and was then rewritten by runtime maintenance. New/edited
-// mixed text must now be rejected before translation or persistence.
+// Complete-text validation in both directions.
 assertRuntimeI18nThrows(
     static fn() => LanguageGuard::assertExpectedLanguage(
-        'Check that it is clean and undamaged quarto',
+        'Verificar se o quarto está limpo e sem danos',
         'en'
     ),
-    'mixes Portuguese and English',
-    'EN input containing a strong Portuguese word is rejected'
+    'Please write it in English only.',
+    'PT text is rejected when the selected interface language is EN'
 );
 assertRuntimeI18nThrows(
     static fn() => LanguageGuard::assertExpectedLanguage(
-        'Verificar o quarto room',
+        'Check that the room is clean and undamaged',
         'pt'
     ),
-    'mistura português e inglês',
-    'PT input containing a strong English word is rejected'
+    'Escreva-o apenas em português.',
+    'EN text is rejected when the selected interface language is PT'
 );
 
+// Component validation in both directions. These cases remain globally dominated
+// by the selected interface language, so only word/short-segment analysis catches
+// the foreign insertion.
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage(
+        'Check that it is clean and undamaged. quarto',
+        'en'
+    ),
+    'This text mixes Portuguese and English. Please write it in English only.',
+    'EN input containing Portuguese component quarto is rejected'
+);
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage(
+        'Check that it is clean and undamaged. escada',
+        'en'
+    ),
+    'This text mixes Portuguese and English. Please write it in English only.',
+    'EN input containing Portuguese component escada is rejected'
+);
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage(
+        'Verificar se está limpo e sem danos. room',
+        'pt'
+    ),
+    'Este texto mistura português e inglês. Escreva-o apenas em português.',
+    'PT input containing English component room is rejected'
+);
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage(
+        'Verificar se está limpo e sem danos. stairs',
+        'pt'
+    ),
+    'Este texto mistura português e inglês. Escreva-o apenas em português.',
+    'PT input containing English component stairs is rejected'
+);
+
+// Matching language and deliberately neutral/ambiguous values remain accepted.
 LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged in the room', 'en');
 LanguageGuard::assertExpectedLanguage('Verificar se o quarto está limpo e sem danos', 'pt');
-assertRuntimeI18n(true, 'clean PT and EN input remains accepted');
+LanguageGuard::assertExpectedLanguage('WiFi Café', 'en');
+LanguageGuard::assertExpectedLanguage('WiFi Café', 'pt');
+LanguageGuard::assertExpectedLanguage('Café Central', 'en');
+LanguageGuard::assertExpectedLanguage('Café Central', 'pt');
+assertRuntimeI18n(true, 'clean PT/EN and neutral text remain accepted');
 
 echo "Runtime bilingual preservation regression passed.\n";
