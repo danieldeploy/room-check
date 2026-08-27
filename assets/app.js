@@ -40,17 +40,22 @@
     let lastSavedChecklistFingerprint = '';
     const instructionSaveTimers = new Map();
     const instructionLastAttemptedValues = new Map();
+    const instructionInvalidValues = new Map();
     const savedFeedbackTimers = new WeakMap();
     let assignmentSaveQueue = Promise.resolve();
     let requestVersion = 0;
     let isLoading = false;
     let assignments = {};
     let roomAssignmentCounts = {};
+    let navigationBypass = false;
+    let navigationGuardBusy = false;
+    const contextControlValues = new WeakMap();
 
     const clearInstructionSaveTimers = () => {
         instructionSaveTimers.forEach((timer) => window.clearTimeout(timer));
         instructionSaveTimers.clear();
         instructionLastAttemptedValues.clear();
+        instructionInvalidValues.clear();
     };
 
     const showSavedFeedback = (element) => {
@@ -113,14 +118,196 @@
         instructionSaveTimers.set(itemName, window.setTimeout(() => {
             instructionSaveTimers.delete(itemName);
             const instructions = textarea.value.trim();
+            if (instructionInvalidValues.get(itemName) === instructions) return;
             if (instructionLastAttemptedValues.get(itemName) === instructions) return;
             instructionLastAttemptedValues.set(itemName, instructions);
             queueAssignmentSave([{ itemName, selected: true, instructions }]).then((saved) => {
-                if (!saved && instructionLastAttemptedValues.get(itemName) === instructions) {
+                if (!saved
+                    && instructionInvalidValues.get(itemName) !== instructions
+                    && instructionLastAttemptedValues.get(itemName) === instructions) {
                     instructionLastAttemptedValues.delete(itemName);
                 }
             });
         }, delay));
+    };
+
+    const normalizeValidationWords = (words) => Array.from(new Set(
+        (Array.isArray(words) ? words : []).map((word) => String(word).trim().toLowerCase()).filter(Boolean)
+    ));
+
+    const renderLanguageValidation = (row, words) => {
+        if (!row?.validationOverlay) return;
+        const normalized = normalizeValidationWords(words);
+        row.invalidWords = normalized;
+        row.element.classList.toggle('has-language-error', normalized.length > 0);
+        row.validationOverlay.replaceChildren();
+        if (normalized.length === 0) {
+            row.validationOverlay.hidden = true;
+            return;
+        }
+        const invalid = new Set(normalized);
+        const parts = row.textarea.value.split(/(\p{L}[\p{L}\p{N}_-]*)/u);
+        const fragment = document.createDocumentFragment();
+        parts.forEach((part) => {
+            if (invalid.has(part.toLowerCase())) {
+                const span = document.createElement('span');
+                span.className = 'invalid-language-word';
+                span.textContent = part;
+                fragment.append(span);
+            } else {
+                fragment.append(document.createTextNode(part));
+            }
+        });
+        row.validationOverlay.append(fragment);
+        row.validationOverlay.hidden = false;
+        row.validationOverlay.style.height = `${row.textarea.offsetHeight}px`;
+    };
+
+    const clearLanguageValidation = (row) => {
+        if (!row) return;
+        row.invalidWords = [];
+        row.element.classList.remove('has-language-error');
+        if (row.validationOverlay) {
+            row.validationOverlay.replaceChildren();
+            row.validationOverlay.hidden = true;
+        }
+    };
+
+    const refreshLanguageValidation = (row) => {
+        if (!row?.invalidWords?.length) return;
+        const tokens = new Set((row.textarea.value.toLowerCase().match(/\p{L}[\p{L}\p{N}_-]*/gu) || []));
+        const stillInvalid = row.invalidWords.filter((word) => tokens.has(word));
+        if (stillInvalid.length === 0) clearLanguageValidation(row);
+        else renderLanguageValidation(row, stillInvalid);
+    };
+
+    const dirtyTextRows = () => rows.filter((row) =>
+        row.textarea.value !== (row.textarea.dataset.persistedText ?? row.textarea.value)
+    );
+
+    const revertDirtyTextRows = (dirtyRows) => {
+        dirtyRows.forEach((row) => {
+            row.textarea.value = row.textarea.dataset.persistedText ?? '';
+            instructionInvalidValues.delete(row.name);
+            instructionLastAttemptedValues.delete(row.name);
+            clearLanguageValidation(row);
+            autoGrow(row.textarea);
+            if (!row.invalidWords?.length) row.textarea.dataset.persistedText = row.textarea.value;
+            if (row.validationOverlay && !row.validationOverlay.hidden) row.validationOverlay.style.height = `${row.textarea.offsetHeight}px`;
+        });
+    };
+
+    const focusInvalidRow = (invalidRows) => {
+        const row = invalidRows[0];
+        if (!row) return;
+        row.textarea.focus();
+        const first = row.invalidWords?.[0];
+        if (!first) return;
+        const index = row.textarea.value.toLowerCase().indexOf(first.toLowerCase());
+        if (index >= 0) row.textarea.setSelectionRange(index, index + first.length);
+    };
+
+    const showInvalidLanguageNavigationDialog = (invalidRows) => new Promise((resolve) => {
+        const locale = config.locale === 'en' ? 'en' : 'pt';
+        const backdrop = document.createElement('div');
+        backdrop.className = 'language-edit-dialog-backdrop';
+        const dialog = document.createElement('div');
+        dialog.className = 'language-edit-dialog';
+        dialog.setAttribute('role', 'alertdialog');
+        dialog.setAttribute('aria-modal', 'true');
+        const message = document.createElement('p');
+        message.textContent = locale === 'en'
+            ? 'There is Portuguese text in an English field. Do you want to correct it or cancel the edit?'
+            : 'Tem texto em inglês num campo em português. Quer corrigir ou anular a edição?';
+        const actions = document.createElement('div');
+        actions.className = 'language-edit-dialog-actions';
+        const correct = document.createElement('button');
+        correct.type = 'button';
+        correct.textContent = locale === 'en' ? 'Correct' : 'Corrigir';
+        const cancelEdit = document.createElement('button');
+        cancelEdit.type = 'button';
+        cancelEdit.className = 'secondary';
+        cancelEdit.textContent = locale === 'en' ? 'Cancel edit' : 'Anular edição';
+        actions.append(correct, cancelEdit);
+        dialog.append(message, actions);
+        backdrop.append(dialog);
+        document.body.append(backdrop);
+        const finish = (choice) => {
+            backdrop.remove();
+            resolve(choice);
+        };
+        correct.addEventListener('click', () => finish('correct'));
+        cancelEdit.addEventListener('click', () => finish('revert'));
+        window.setTimeout(() => correct.focus(), 0);
+    });
+
+    const validateDirtyTextRows = async (dirtyRows) => {
+        const response = await fetch('api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+                action: 'validate_bilingual_texts',
+                csrfToken: config.csrfToken,
+                fields: dirtyRows.map((row) => ({ fieldKey: row.name, text: row.textarea.value })),
+            }),
+        });
+        const result = await response.json();
+        if (response.ok && result.ok) return { valid: true, invalidRows: [] };
+        if (result.validation === true) {
+            const invalidRows = [];
+            (result.invalidFields || []).forEach((field) => {
+                const row = rows.find((candidate) => candidate.name === field.fieldKey);
+                if (!row) return;
+                renderLanguageValidation(row, field.invalidWords || []);
+                invalidRows.push(row);
+            });
+            return { valid: false, invalidRows };
+        }
+        throw new Error(result.error || 'Language validation failed.');
+    };
+
+    const flushDirtyTextRows = async (dirtyRows) => {
+        if (checklist.classList.contains('assignment-view-mode')) {
+            const changes = dirtyRows
+                .filter((row) => row.assignmentCheckbox?.checked && !row.assignmentCheckbox.disabled)
+                .map((row) => ({ itemName: row.name, selected: true, instructions: row.textarea.value.trim() }));
+            if (changes.length === 0) return true;
+            return (await queueAssignmentSave(changes)) === true;
+        }
+        return (await saveChecklist(checklistSnapshot())) === true;
+    };
+
+    const resolveDirtyTextBeforeContextChange = async () => {
+        const dirtyRows = dirtyTextRows();
+        if (dirtyRows.length === 0) return true;
+        let invalidRows = dirtyRows.filter((row) => row.invalidWords?.length);
+        if (invalidRows.length === 0) {
+            try {
+                const validation = await validateDirtyTextRows(dirtyRows);
+                if (!validation.valid) invalidRows = validation.invalidRows;
+            } catch (error) {
+                setStatus(error.message, 'error');
+                return false;
+            }
+        }
+        if (invalidRows.length > 0) {
+            const choice = await showInvalidLanguageNavigationDialog(invalidRows);
+            if (choice === 'correct') {
+                focusInvalidRow(invalidRows);
+                return false;
+            }
+            revertDirtyTextRows(dirtyRows);
+            return true;
+        }
+        return flushDirtyTextRows(dirtyRows);
+    };
+
+    const guardedContextControls = () => [
+        propertySelect, listSelect, roomSelect, intervalSelect, employeeSelect, assignmentDate,
+    ].filter(Boolean);
+
+    const rememberContextControlValues = () => {
+        guardedContextControls().forEach((control) => contextControlValues.set(control, control.value));
     };
 
     const renderRooms = (preferredRoom = 1) => {
@@ -259,6 +446,14 @@
         textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
         textarea.addEventListener('input', (event) => {
             autoGrow(textarea);
+            const rowState = rows.find((candidate) => candidate.element === row);
+            if (rowState) {
+                if (instructionInvalidValues.has(item.name)
+                    && instructionInvalidValues.get(item.name) !== textarea.value.trim()) {
+                    instructionInvalidValues.delete(item.name);
+                }
+                refreshLanguageValidation(rowState);
+            }
             if (row.classList.contains('assignment-mode')) {
                 if (!assignmentCheckbox || assignmentCheckbox.disabled || !assignmentCheckbox.checked) return;
                 window.clearTimeout(instructionSaveTimers.get(item.name));
@@ -283,6 +478,7 @@
             }
         });
         textarea.dataset.problem = item.problem || '';
+        textarea.dataset.persistedText = item.problem || '';
         textarea.dataset.defaultInstructions = item.defaultInstructions || '';
         const problemField = document.createElement('div');
         problemField.className = 'problem-field';
@@ -290,11 +486,15 @@
         assignmentHint.className = 'assignment-hint';
         assignmentHint.textContent = 'A verificar';
         assignmentHint.hidden = true;
+        const validationOverlay = document.createElement('div');
+        validationOverlay.className = 'text-validation-overlay';
+        validationOverlay.hidden = true;
+        validationOverlay.setAttribute('aria-hidden', 'true');
         const instructionSaved = document.createElement('span');
         instructionSaved.className = 'row-save-feedback';
         instructionSaved.textContent = 'Guardado';
         instructionSaved.setAttribute('aria-live', 'polite');
-        problemField.append(textarea, instructionSaved);
+        problemField.append(textarea, validationOverlay, instructionSaved);
 
         const assignmentSaved = document.createElement('span');
         assignmentSaved.className = 'row-save-feedback assignment-save-feedback';
@@ -363,7 +563,7 @@
             row.append(itemHeading, problemField, status);
         }
 
-        return { element: row, name: item.name, textarea, assignmentHint, assignmentSaved, instructionSaved, status, assignmentCheckbox, assignmentLabel, itemHeading };
+        return { element: row, name: item.name, textarea, validationOverlay, invalidWords: [], assignmentHint, assignmentSaved, instructionSaved, status, assignmentCheckbox, assignmentLabel, itemHeading };
     };
 
     function updateSelectAllState() {
@@ -532,6 +732,7 @@
             renderChecklist(result.items);
             updateAssignmentMode();
             lastSavedChecklistFingerprint = checklistSnapshot().fingerprint;
+            rememberContextControlValues();
             setStatus(canEdit ? 'Dados carregados' : 'Apenas consulta', 'success');
         } catch (error) {
             if (version === requestVersion) {
@@ -586,7 +787,13 @@
                 }),
             });
             const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar automaticamente.');
+            if (!response.ok || !result.ok) {
+                const error = new Error(result.error || 'Erro ao guardar automaticamente.');
+                error.validation = result.validation === true;
+                error.invalidWords = result.invalidWords || [];
+                error.fieldKey = result.fieldKey || null;
+                throw error;
+            }
             const interval = config.intervals.find((candidate) => candidate.id === intervalId);
             if (interval && result.intervalBounds) {
                 interval.firstDueDate = result.intervalBounds.firstDueDate;
@@ -606,6 +813,11 @@
                     }
                 });
                 roomAssignmentCounts[String(current.room)] = Number(result.roomAssignedItems || 0);
+                changes.forEach((change) => {
+                    instructionInvalidValues.delete(change.itemName);
+                    instructionLastAttemptedValues.delete(change.itemName);
+                    clearLanguageValidation(rows.find((candidate) => candidate.name === change.itemName));
+                });
                 applyRoomAssignmentStates();
                 updateAssignmentMode();
                 changes.forEach((change) => {
@@ -616,7 +828,18 @@
             setStatus('Guardado automaticamente', 'success');
             return true;
         }).catch((error) => {
-            if (contextMatches()) updateAssignmentMode();
+            if (contextMatches()) {
+                if (error.validation === true) {
+                    const fieldKey = error.fieldKey || changes[0]?.itemName || '';
+                    const row = rows.find((candidate) => candidate.name === fieldKey);
+                    if (row) {
+                        renderLanguageValidation(row, error.invalidWords || []);
+                        instructionInvalidValues.set(fieldKey, row.textarea.value.trim());
+                    }
+                } else {
+                    updateAssignmentMode();
+                }
+            }
             setStatus(error.message, 'error');
             return false;
         });
@@ -673,13 +896,22 @@
             const result = await response.json();
 
             if (!response.ok || !result.ok) {
-                throw new Error(result.error || 'Erro ao guardar.');
+                const error = new Error(result.error || 'Erro ao guardar.');
+                error.validation = result.validation === true;
+                error.invalidWords = result.invalidWords || [];
+                error.fieldKey = result.fieldKey || null;
+                throw error;
             }
             if (version === requestVersion) {
                 lastSavedChecklistFingerprint = snapshot.fingerprint;
                 const persistedByName = new Map(snapshot.items.map((item) => [item.name, item.problem]));
                 rows.forEach((row) => {
-                    if (persistedByName.has(row.name)) row.textarea.dataset.problem = persistedByName.get(row.name);
+                    if (persistedByName.has(row.name)) {
+                        const persisted = persistedByName.get(row.name);
+                        row.textarea.dataset.problem = persisted;
+                        row.textarea.dataset.persistedText = persisted;
+                        clearLanguageValidation(row);
+                    }
                 });
                 if (checklistSnapshot().fingerprint === snapshot.fingerprint) {
                     setStatus('Guardado', 'success');
@@ -690,6 +922,10 @@
             return true;
         } catch (error) {
             if (version === requestVersion) {
+                if (error.validation === true) {
+                    const row = rows.find((candidate) => candidate.name === error.fieldKey);
+                    if (row) renderLanguageValidation(row, error.invalidWords || []);
+                }
                 setStatus(error.message, 'error');
             }
             return false;
@@ -833,6 +1069,33 @@
         }
     };
 
+    document.addEventListener('change', (event) => {
+        const control = event.target;
+        if (!guardedContextControls().includes(control) || navigationBypass) {
+            if (guardedContextControls().includes(control)) contextControlValues.set(control, control.value);
+            return;
+        }
+        const previousValue = contextControlValues.get(control);
+        const nextValue = control.value;
+        if (previousValue === undefined || previousValue === nextValue || dirtyTextRows().length === 0) {
+            contextControlValues.set(control, nextValue);
+            return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        control.value = previousValue;
+        if (navigationGuardBusy) return;
+        navigationGuardBusy = true;
+        resolveDirtyTextBeforeContextChange().then((proceed) => {
+            if (!proceed) return;
+            navigationBypass = true;
+            control.value = nextValue;
+            control.dispatchEvent(new Event('change', { bubbles: true }));
+            navigationBypass = false;
+            contextControlValues.set(control, nextValue);
+        }).finally(() => { navigationGuardBusy = false; });
+    }, true);
+
     propertySelect.addEventListener('change', () => {
         clearInstructionSaveTimers();
         roomAssignmentCounts = {};
@@ -959,6 +1222,7 @@
     }
     renderRooms(Number(config.initialRoom) || 1);
     if (assignmentDate && !assignmentDate.value) assignmentDate.value = config.today;
+    rememberContextControlValues();
     renderChecklist(config.items.map((name) => ({
         name, problem: '', status: null,
         defaultInstructions: config.itemDefaults?.[name] || '',

@@ -95,6 +95,7 @@ try {
             'area' => $navigationArea,
             'canEdit' => $canEdit,
             'canAssign' => $canAssign,
+            'locale' => Translator::locale(),
             'employees' => $employees,
             'intervals' => array_map(static fn(array $interval): array => [
                 'id' => (int) $interval['id'],

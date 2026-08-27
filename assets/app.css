@@ -171,3 +171,17 @@ noscript { display: block; margin-top: 18px; color: var(--wrong); }
 @media (max-width: 440px) {
     .selectors { grid-template-columns: 1fr; }
 }
+
+
+/* Language validation: keep unsaved text visible; overlay only offending words. */
+.problem-field { position: relative; }
+.text-validation-overlay { position: absolute; z-index: 3; top: 0; left: 0; width: 100%; min-height: 46px; padding: 11px 13px; overflow: hidden; border: 1px solid transparent; border-radius: 11px; color: transparent; background: transparent; font: inherit; line-height: 1.45; white-space: pre-wrap; overflow-wrap: break-word; pointer-events: none; }
+.text-validation-overlay[hidden] { display: none; }
+.invalid-language-word { color: var(--wrong); }
+.check-row.has-language-error textarea { border-color: #dc6b62; background: #fffafa; }
+.language-edit-dialog-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(16, 42, 67, .38); }
+.language-edit-dialog { width: min(520px, 100%); padding: 22px; border-radius: 16px; background: #fff; box-shadow: 0 24px 60px rgba(16, 42, 67, .25); }
+.language-edit-dialog p { margin: 0 0 18px; color: var(--ink); font-weight: 700; line-height: 1.45; }
+.language-edit-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.language-edit-dialog-actions button { min-height: 42px; padding: 0 18px; border: 0; border-radius: 11px; color: #fff; background: var(--brand); font-weight: 800; cursor: pointer; }
+.language-edit-dialog-actions button.secondary { color: var(--ink); border: 1px solid #cbd9d7; background: #fff; }
