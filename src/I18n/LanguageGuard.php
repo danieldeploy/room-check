@@ -169,11 +169,54 @@ final class LanguageGuard
     private static function embeddedOppositeParts(string $token, string $expectedLanguage): array
     {
         $length = mb_strlen($token, 'UTF-8');
-        if ($length < 6 || in_array($token, self::NEUTRAL, true)) {
+        if ($length < 4 || in_array($token, self::NEUTRAL, true)) {
             return [];
         }
 
         $invalid = [];
+
+        // Repeated edge characters are a common typing error (for example
+        // "ccasa" or "rroad"). Remove only a duplicated leading/trailing
+        // character and test the remaining word. We deliberately do not strip
+        // arbitrary short prefixes/suffixes because that can split valid words
+        // such as "quarto" into misleading fragments.
+        if (mb_substr($token, 0, 1, 'UTF-8') === mb_substr($token, 1, 1, 'UTF-8')) {
+            $candidate = mb_substr($token, 1, null, 'UTF-8');
+            if (self::isNaturalLanguageToken($candidate)
+                && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                $invalid[$candidate] = true;
+            }
+
+            if ($length >= 5
+                && mb_substr($token, 1, 1, 'UTF-8') === mb_substr($token, 2, 1, 'UTF-8')) {
+                $candidate = mb_substr($token, 2, null, 'UTF-8');
+                if (self::isNaturalLanguageToken($candidate)
+                    && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                    $invalid[$candidate] = true;
+                }
+            }
+        }
+
+        if (mb_substr($token, -1, 1, 'UTF-8') === mb_substr($token, -2, 1, 'UTF-8')) {
+            $candidate = mb_substr($token, 0, $length - 1, 'UTF-8');
+            if (self::isNaturalLanguageToken($candidate)
+                && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                $invalid[$candidate] = true;
+            }
+
+            if ($length >= 5
+                && mb_substr($token, -2, 1, 'UTF-8') === mb_substr($token, -3, 1, 'UTF-8')) {
+                $candidate = mb_substr($token, 0, $length - 2, 'UTF-8');
+                if (self::isNaturalLanguageToken($candidate)
+                    && self::isConfidentOppositeComponent($candidate, $expectedLanguage)) {
+                    $invalid[$candidate] = true;
+                }
+            }
+        }
+
+        // For genuine joined words, require both sides to be independently
+        // strong language evidence before treating the internal boundary as a
+        // mixed-language join.
         for ($split = 3; $split <= ($length - 3); $split++) {
             $left = mb_substr($token, 0, $split, 'UTF-8');
             $right = mb_substr($token, $split, null, 'UTF-8');
