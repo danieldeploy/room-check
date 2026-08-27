@@ -22,6 +22,9 @@ usort($portugueseKeys, static fn(string $a, string $b): int => mb_strlen($b) <=>
 
 $excludedPaths = [
     '/migrations/', '/tests/', '/deploy/', '/docs/', '/.github/',
+    // Vendored libraries/models are not application UI. Application code that
+    // calls them remains audited; this exclusion is restricted to ThirdParty.
+    '/src/ThirdParty/',
     '/src/I18n/', '/database.sql', '/lib.php', '/config.php', '/config.local.example.php',
 ];
 
