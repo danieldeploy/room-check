@@ -5,7 +5,6 @@
 
     const nativeFetch = window.fetch.bind(window);
     const config = window.ROOM_CHECK || {};
-    const isEnglish = String(config.locale || '').toLowerCase() === 'en';
     let lastEditedRow = null;
     const feedbackTimers = new WeakMap();
     const bypassNavigation = new WeakSet();
@@ -146,17 +145,15 @@
         panel.setAttribute('role', 'dialog');
         panel.setAttribute('aria-modal', 'true');
         const message = document.createElement('p');
-        message.textContent = isEnglish
-            ? 'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?'
-            : 'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?';
+        message.textContent = String(config.languageDecisionMessage || 'Invalid language text. Correct it or cancel the edit?');
         const actions = document.createElement('div');
         actions.className = 'language-decision-actions';
         const correct = document.createElement('button');
         correct.type = 'button';
-        correct.textContent = isEnglish ? 'Correct' : 'Corrigir';
+        correct.textContent = String(config.languageDecisionCorrect || 'Correct');
         const cancel = document.createElement('button');
         cancel.type = 'button';
-        cancel.textContent = isEnglish ? 'Cancel edit' : 'Anular edição';
+        cancel.textContent = String(config.languageDecisionCancel || 'Cancel edit');
         actions.append(correct, cancel);
         panel.append(message, actions);
         overlay.append(panel);
