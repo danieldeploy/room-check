@@ -18,6 +18,7 @@ $api = file_get_contents(dirname(__DIR__).'/api.php');
 $app = file_get_contents(dirname(__DIR__).'/assets/app.js');
 $css = file_get_contents(dirname(__DIR__).'/assets/app.css');
 $rooms = file_get_contents(dirname(__DIR__).'/rooms.php');
+$catalog = file_get_contents(dirname(__DIR__).'/src/I18n/SiteTranslations.php');
 okp(str_contains($api, 'validate_bilingual_texts'), 'server exposes validation-only endpoint');
 okp(str_contains($api, "'invalidWords' => \$exception->invalidWords"), '422 includes offending words');
 okp(str_contains($app, 'text-validation-overlay'), 'client overlays wrong-language word without replacing textarea');
@@ -27,4 +28,6 @@ okp(str_contains($app, 'if (!(await resolveDirtyTextBeforeContextChange()))'), '
 okp(str_contains($app, 'deletingActiveInterval && !(await resolveDirtyTextBeforeContextChange())'), 'deleting the active interval guards pending text before changing context');
 okp(str_contains($css, '.invalid-language-word'), 'wrong-language word has separate red style');
 okp(str_contains($rooms, "'locale' => Translator::locale()"), 'client receives active locale');
+okp(str_contains($catalog, 'Tem texto em inglês num campo em português. Quer corrigir ou anular a edição?'), 'PT correction dialog text is in the static bilingual catalogue');
+okp(str_contains($catalog, "'Anular edição' => 'Cancel edit'"), 'cancel-edit action has an explicit PT/EN catalogue entry');
 echo "Invalid-language edit preservation contract passed.\n";
