@@ -67,7 +67,7 @@ return [
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
     ],
     'translation' => [
-        // MyMemory is used only to translate already-validated source text.
+        // MyMemory is translation-only. Language verification is local.
         'enabled' => (bool) ($localConfig['translation']['enabled'] ?? true),
         'endpoint' => $localConfig['translation']['endpoint']
             ?? getenv('MYMEMORY_TRANSLATION_ENDPOINT')
@@ -76,17 +76,13 @@ return [
             ?? getenv('MYMEMORY_CONTACT_EMAIL')
             ?: '',
         'timeout_seconds' => (int) ($localConfig['translation']['timeout_seconds'] ?? 12),
-
-        // Lexical verification is independent from MyMemory. English
-        // Wiktionary exposes explicit English/Portuguese language sections and
-        // requires no API key; results are cached by LexicalLanguageChecker.
         'lexical' => [
-            'enabled' => (bool) ($localConfig['translation']['lexical']['enabled'] ?? true),
-            'endpoint' => $localConfig['translation']['lexical']['endpoint']
-                ?? getenv('ROOM_CHECK_LEXICAL_ENDPOINT')
-                ?: 'https://en.wiktionary.org/w/api.php',
-            'timeout_seconds' => (int) ($localConfig['translation']['lexical']['timeout_seconds'] ?? 6),
-            'batch_size' => (int) ($localConfig['translation']['lexical']['batch_size'] ?? 40),
+            'pt_path' => $localConfig['translation']['lexical']['pt_path']
+                ?? __DIR__ . '/resources/lexicon/pt_PT_core.txt',
+            'en_path' => $localConfig['translation']['lexical']['en_path']
+                ?? __DIR__ . '/resources/lexicon/en_GB_core.txt',
+            'technical_path' => $localConfig['translation']['lexical']['technical_path']
+                ?? __DIR__ . '/resources/lexicon/technical_neutral.txt',
         ],
     ],
 ];
