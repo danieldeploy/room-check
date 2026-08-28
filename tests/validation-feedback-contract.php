@@ -25,6 +25,15 @@ assertValidationFeedback(
     'translation feedback sources are readable'
 );
 assertValidationFeedback(str_contains($sessionBar, 'assets/validation-feedback.js'), 'authenticated pages load shared save feedback');
+assertValidationFeedback(
+    str_contains($sessionBar, 'validation-feedback.js?v=') && str_contains($sessionBar, 'filemtime'),
+    'shared validation feedback asset is cache-busted after deployment'
+);
+assertValidationFeedback(
+    str_contains($feedbackJs, "feedback.style.opacity = '1'")
+        && str_contains($feedbackJs, "feedback.style.opacity = ''"),
+    'translation feedback owns its visible lifetime even when generic save feedback removes the shared CSS class'
+);
 
 // Persistable room/assignment text is no longer sent to a separate validator.
 assertValidationFeedback(!str_contains($feedbackJs, 'translation-validate.php'), 'room text save has no separate validation endpoint');

@@ -68,6 +68,7 @@
         feedback.style.height = '';
         feedback.style.minHeight = '';
         feedback.style.lineHeight = '';
+        feedback.style.opacity = '';
         feedback.classList.remove('is-visible');
     };
 
@@ -80,9 +81,15 @@
         feedback.style.height = 'auto';
         feedback.style.minHeight = '18px';
         feedback.style.lineHeight = '1.3';
+        // Keep translation feedback visible independently from app.js's short
+        // generic "Guardado" timer. app.js may remove the shared is-visible
+        // class after two seconds; the inline opacity keeps this exact server
+        // conclusion visible until our own six-second timer expires.
+        feedback.style.opacity = '1';
         feedback.classList.add('is-visible');
         if (kind === 'success') {
             feedbackTimers.set(feedback, window.setTimeout(() => {
+                feedback.style.opacity = '';
                 feedback.classList.remove('is-visible');
                 feedbackTimers.delete(feedback);
             }, 6000));
