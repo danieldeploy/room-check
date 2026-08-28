@@ -62,7 +62,7 @@ function translationRegressionLexicon(): array
         'all', 'and', 'are', 'check', 'clean', 'common', 'curtains', 'domestic', 'fire',
         'gauge', 'home', 'house', 'in', 'inside', 'is', 'it', 'kitchen', 'new', 'news',
         'pressure', 'room', 'securely', 'smoke', 'status', 'that', 'the', 'thermostat',
-        'undamaged', 'windows', 'extinguisher', 'inspect', 'fitted',
+        'undamaged', 'well', 'windows', 'extinguisher', 'inspect', 'fitted',
     ];
     $shared = ['detector', 'visible', 'yahoo'];
 
