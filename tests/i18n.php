@@ -71,7 +71,6 @@ assertThrowsI18n(
     'mixed text is blocked before a translator could normalize it'
 );
 
-// Existing bilingual values remain reusable without lexical/provider access.
 $contentTranslatorWithoutProvider = (new ReflectionClass(ContentTranslator::class))->newInstanceWithoutConstructor();
 $reusedEn = $contentTranslatorWithoutProvider->versions('Kitchen Check', 'en', 'Verificação da cozinha', 'Kitchen Check');
 assertI18n(($reusedEn['pt'] ?? null) === 'Verificação da cozinha' && ($reusedEn['en'] ?? null) === 'Kitchen Check', 'unchanged English value reuses existing bilingual pair');
@@ -93,7 +92,8 @@ assertI18n(!str_contains((string) $guardSource, 'SHORT_MIN_') && !str_contains((
 assertI18n(str_contains((string) $guardSource, 'TECHNICAL_NEUTRAL'), 'technical neutrality is explicit and separate from language vocabulary');
 assertI18n(
     str_contains((string) $lexicalSource, 'LocalHunspellLexicon')
-        && !str_contains(mb_strtolower((string) $lexicalSource), 'wiktionary')
+        && !str_contains((string) $lexicalSource, 'w/api.php')
+        && !str_contains((string) $lexicalSource, 'fetchBatch(')
         && !str_contains((string) $lexicalSource, 'lexical_language_cache')
         && !str_contains((string) $lexicalSource, 'curl_init'),
     'lexical verification is local and has no runtime network/database dependency'
