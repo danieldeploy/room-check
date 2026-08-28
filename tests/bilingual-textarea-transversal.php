@@ -33,7 +33,9 @@ assertBilingualTextarea(str_contains((string) $client, "textarea[data-bilingual-
 assertBilingualTextarea(str_contains((string) $client, "textarea.addEventListener('blur'"), 'translation/save starts only on blur');
 assertBilingualTextarea(str_contains((string) $client, 'translation-validate.php'), 'validation-only textarea path uses contextual translation endpoint');
 assertBilingualTextarea(str_contains((string) $validator, 'ContentTranslator') && str_contains((string) $validator, '->versions('), 'validation-only endpoint invokes translation/cache logic');
-assertBilingualTextarea(str_contains((string) $client, 'Saved: translation correct or ambiguous'), 'success feedback reports correct-or-ambiguous conclusion');
+assertBilingualTextarea(str_contains((string) $client, 'const validation = await validateTextarea(textarea)'), 'autosave validates/translates before persistence');
+assertBilingualTextarea(str_contains((string) $client, 'autosaveTextarea(textarea, validation.message)'), 'real green conclusion is carried into successful autosave');
+assertBilingualTextarea(str_contains((string) $client, 'result.message'), 'success feedback uses the server-returned conclusion message');
 assertBilingualTextarea(str_contains((string) $client, 'bilingualLastValidValue'), 'last saved value is retained for Cancel edit');
 assertBilingualTextarea(str_contains((string) $client, 'askDecision') && str_contains((string) $client, 'restorePending'), 'Correct/Cancel edit protection remains');
 assertBilingualTextarea(!str_contains((string) $client, 'bilingual-highlight-layer'), 'duplicate text overlay is removed');

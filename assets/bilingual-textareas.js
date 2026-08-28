@@ -52,7 +52,6 @@
         feedback.classList.remove('is-error', 'is-saved');
         feedback.classList.add('is-visible', kind === 'saved' ? 'is-saved' : 'is-error');
     };
-    const savedMessage = () => translationFeedback.saved || 'Saved: translation correct or ambiguous';
 
     const validateTextarea = async (textarea) => {
         const response = await fetch(validationUrl, {
@@ -67,14 +66,20 @@
         try { payload = await response.json(); } catch (_) { payload = null; }
         if (response.ok && payload?.ok) {
             clearInvalid(textarea);
-            return { valid: true, conclusion: payload.fields?.[0]?.conclusion || 'ambiguous' };
+            const result = payload.fields?.[0] || {};
+            return {
+                valid: true,
+                sourceConclusion: result.sourceConclusion || 'ambiguous',
+                translationConclusion: result.translationConclusion || 'ambiguous',
+                message: result.message || translationFeedback.saved || 'Saved: translation accepted.'
+            };
         }
         markInvalid(textarea);
         showFeedback(textarea, payload?.error || translationFeedback.validationError || 'Error: could not validate the translation.', 'error');
         return { valid: false };
     };
 
-    const autosaveTextarea = async (textarea) => {
+    const autosaveTextarea = async (textarea, validationMessage) => {
         const action = textarea.dataset.bilingualAutosaveAction || '';
         if (!action) return true;
         const response = await fetch(apiUrl, {
@@ -98,7 +103,7 @@
         textarea.dataset.bilingualLastValidValue = textarea.value;
         delete textarea.dataset.bilingualPending;
         clearInvalid(textarea);
-        showFeedback(textarea, savedMessage(), 'saved');
+        showFeedback(textarea, validationMessage || translationFeedback.saved || 'Saved: translation accepted.', 'saved');
         return true;
     };
 
@@ -111,13 +116,19 @@
                 clearInvalid(textarea);
                 return true;
             }
-            if (autosave && textarea.dataset.bilingualAutosaveAction) {
-                return autosaveTextarea(textarea);
-            }
+
+            // Validate/translate first. The result is cached server-side, so the
+            // following persistence call does not cause a second provider call.
             const validation = await validateTextarea(textarea);
             if (!validation.valid) return false;
+
+            if (autosave && textarea.dataset.bilingualAutosaveAction) {
+                return autosaveTextarea(textarea, validation.message);
+            }
+
             delete textarea.dataset.bilingualPending;
             textarea.dataset.bilingualValidatedValue = textarea.value;
+            showFeedback(textarea, validation.message, 'saved');
             return true;
         })().finally(() => savePromises.delete(textarea));
         savePromises.set(textarea, promise);

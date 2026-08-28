@@ -19,29 +19,31 @@ $validator = file_get_contents($root . '/translation-validate.php');
 
 assertValidationFeedback(is_string($feedbackJs) && is_string($sessionBar) && is_string($feedbackI18n) && is_string($validator), 'contextual validation sources are readable');
 assertValidationFeedback(str_contains($sessionBar, 'assets/validation-feedback.js'), 'authenticated pages load shared save feedback');
-assertValidationFeedback(str_contains($feedbackJs, 'payload?.error'), 'server translation errors are rendered inline');
-assertValidationFeedback(str_contains($feedbackJs, 'Saved: translation correct or ambiguous'), 'English fallback explains the algorithm conclusion');
-assertValidationFeedback(str_contains($feedbackI18n, 'Guardado: tradução correta ou ambígua') && str_contains($feedbackI18n, 'Saved: translation correct or ambiguous'), 'success conclusion is declared bilingually in i18n layer');
-assertValidationFeedback(str_contains($sessionBar, 'TranslationFeedback::messages()'), 'session shell exposes localized translation messages to the browser');
-assertValidationFeedback(str_contains($feedbackJs, 'ROOM_TRANSLATION_FEEDBACK'), 'browser consumes centrally localized translation messages');
+assertValidationFeedback(str_contains($feedbackJs, 'validateTextSave'), 'real text save is prevalidated before persistence');
+assertValidationFeedback(str_contains($feedbackJs, "const validationUrl = 'translation-validate.php'"), 'room text saves use translation-backed validation endpoint');
+assertValidationFeedback(str_contains($feedbackJs, 'nativeFetch(validationUrl'), 'prevalidation bypasses the wrapped save fetch and cannot recurse');
+assertValidationFeedback(str_contains($feedbackJs, 'translationValidationMessage'), 'real server conclusion is retained until the save succeeds');
+assertValidationFeedback(str_contains($feedbackJs, 'result?.message'), 'green row message comes from the server algorithm result');
+assertValidationFeedback(str_contains($feedbackJs, 'sourceConclusion') === false, 'browser does not reinterpret source-language conclusions itself');
+assertValidationFeedback(str_contains($feedbackJs, 'translationConclusion') === false, 'browser does not reinterpret translation conclusions itself');
 assertValidationFeedback(str_contains($feedbackJs, 'flushPendingSaves'), 'navigation flushes the real blur save before leaving');
 assertValidationFeedback(str_contains($feedbackJs, "dispatchEvent(new Event('blur'))"), 'navigation uses the same blur/save translation path');
-assertValidationFeedback(!str_contains($feedbackJs, 'language-highlight-layer'), 'duplicate text overlay is removed');
+assertValidationFeedback(!str_contains($feedbackJs, 'language-highlight-layer'), 'duplicate text overlay remains removed');
 assertValidationFeedback(!str_contains($feedbackJs, 'invalidWords'), 'browser no longer performs word-level validation/highlighting');
 assertValidationFeedback(!str_contains($feedbackJs, 'confidentLanguage(') && !str_contains($feedbackJs, 'assertExpectedLanguage('), 'browser does not duplicate server language detection');
-assertValidationFeedback(str_contains($validator, 'ContentTranslator') && str_contains($validator, '->versions('), 'validation-only endpoint uses the translation/cache algorithm');
+assertValidationFeedback(str_contains($validator, 'sourceConclusion') && str_contains($validator, 'translationConclusion') && str_contains($validator, "'message'"), 'validation endpoint returns explicit source, target and green message metadata');
 
 try {
-    LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha e das janelas.', 'en');
-    throw new RuntimeException('FAIL: Portuguese sentence was accepted in EN mode');
+    LanguageGuard::assertExpectedLanguage('new house', 'pt');
+    throw new RuntimeException('FAIL: short English phrase was accepted in PT mode');
 } catch (LanguageValidationException $exception) {
-    assertValidationFeedback($exception->getMessage() === 'Error: text is clearly PT.', 'English UI reports clearly detected PT');
+    assertValidationFeedback($exception->getMessage() === 'Erro: texto claramente EN.', 'short wrong-language source reports a clear red error');
 }
 try {
-    LanguageGuard::assertExpectedLanguage('Check the kitchen, windows and curtains.', 'pt');
-    throw new RuntimeException('FAIL: English sentence was accepted in PT mode');
+    LanguageGuard::assertExpectedLanguage('new house na nossa rua', 'pt');
+    throw new RuntimeException('FAIL: mixed text was accepted in PT mode');
 } catch (LanguageValidationException $exception) {
-    assertValidationFeedback($exception->getMessage() === 'Erro: texto claramente EN.', 'Portuguese UI reports clearly detected EN');
+    assertValidationFeedback($exception->getMessage() === 'Erro: o texto mistura PT e EN.', 'mixed source reports a clear red error');
 }
 
 LanguageGuard::assertExpectedLanguage('Check the fire extinguisher detector and HVAC thermostat.', 'en');
