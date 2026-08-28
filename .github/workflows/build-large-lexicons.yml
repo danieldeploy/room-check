@@ -32,7 +32,7 @@ jobs:
 
       - name: Commit generated lexical resources
         run: |
-          if git diff --quiet -- resources/lexicon/full; then
+          if [ -z "$(git status --porcelain -- resources/lexicon/full)" ]; then
             echo "No generated lexicon changes."
             exit 0
           fi
