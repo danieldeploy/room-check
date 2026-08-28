@@ -10,6 +10,14 @@ interface LexicalLanguageClassifier
     public function classifyTokens(array $tokens): array;
 }
 
+interface LexicalNearMatchClassifier
+{
+    /**
+     * @return array{candidate:string,distance:int,classification:string}|null
+     */
+    public function likelyMisspelling(string $token): ?array;
+}
+
 final class LexicalLookupException extends RuntimeException
 {
 }
@@ -24,7 +32,7 @@ final class LexicalLookupException extends RuntimeException
  * resolved by LanguageGuard using sentence context or rejected when they look
  * like typos/gibberish.
  */
-final class LexicalLanguageChecker implements LexicalLanguageClassifier
+final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier
 {
     private const MAX_TOKEN_LENGTH = 190;
 
@@ -67,6 +75,67 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier
             };
         }
         return $results;
+    }
+
+    /**
+     * Unknown words that are only one or two edits away from a known PT, EN or
+     * technical token are almost always typing corruptions, not rare technical
+     * vocabulary. This catches cases such as danosht -> danos and YAHOOX -> yahoo
+     * without making the general unknown-word heuristic more aggressive.
+     *
+     * @return array{candidate:string,distance:int,classification:string}|null
+     */
+    public function likelyMisspelling(string $token): ?array
+    {
+        self::loadLexicons($this->config);
+        $token = self::normalizeToken($token);
+        $length = mb_strlen($token, 'UTF-8');
+        if ($token === '' || $length < 4 || $length > self::MAX_TOKEN_LENGTH) {
+            return null;
+        }
+
+        if (isset(self::$technicalWords[$token]) || isset(self::$ptWords[$token]) || isset(self::$enWords[$token])) {
+            return null;
+        }
+
+        // One edit is already strong evidence on short words. From five letters
+        // onward, allow two edits so one/two accidental suffix letters are caught.
+        $maxDistance = $length >= 5 ? 2 : 1;
+        $best = null;
+
+        $known = self::$ptWords + self::$enWords + self::$technicalWords;
+        foreach (array_keys($known) as $candidate) {
+            $candidateLength = mb_strlen($candidate, 'UTF-8');
+            if ($candidateLength < 3 || abs($candidateLength - $length) > $maxDistance) {
+                continue;
+            }
+
+            $distance = self::unicodeEditDistance($token, $candidate, $maxDistance);
+            if ($distance < 1 || $distance > $maxDistance) {
+                continue;
+            }
+            if ($best !== null && $distance >= $best['distance']) {
+                continue;
+            }
+
+            $classification = isset(self::$technicalWords[$candidate])
+                ? 'technical'
+                : (isset(self::$ptWords[$candidate]) && isset(self::$enWords[$candidate])
+                    ? 'shared'
+                    : (isset(self::$ptWords[$candidate]) ? 'pt_only' : 'en_only'));
+            $best = [
+                'candidate' => $candidate,
+                'distance' => $distance,
+                'classification' => $classification,
+            ];
+
+            if ($distance === 1) {
+                // Distance 1 is the strongest possible non-exact match.
+                break;
+            }
+        }
+
+        return $best;
     }
 
     public static function isTechnicalNeutral(string $token): bool
@@ -124,5 +193,40 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier
             }
         }
         return $words;
+    }
+
+    /**
+     * UTF-8 aware Levenshtein distance with an early length cutoff. The local
+     * lexicons are small, so this remains deterministic and fast on each new word.
+     */
+    private static function unicodeEditDistance(string $left, string $right, int $cutoff): int
+    {
+        $a = preg_split('//u', $left, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $b = preg_split('//u', $right, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $aCount = count($a);
+        $bCount = count($b);
+        if (abs($aCount - $bCount) > $cutoff) {
+            return $cutoff + 1;
+        }
+
+        $previous = range(0, $bCount);
+        for ($i = 1; $i <= $aCount; $i++) {
+            $current = [$i];
+            $rowMin = $i;
+            for ($j = 1; $j <= $bCount; $j++) {
+                $cost = $a[$i - 1] === $b[$j - 1] ? 0 : 1;
+                $current[$j] = min(
+                    $current[$j - 1] + 1,
+                    $previous[$j] + 1,
+                    $previous[$j - 1] + $cost
+                );
+                $rowMin = min($rowMin, $current[$j]);
+            }
+            if ($rowMin > $cutoff) {
+                return $cutoff + 1;
+            }
+            $previous = $current;
+        }
+        return $previous[$bCount] ?? ($cutoff + 1);
     }
 }
