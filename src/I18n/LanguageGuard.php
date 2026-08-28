@@ -29,11 +29,12 @@ final class LanguageValidationException extends InvalidArgumentException
 /**
  * PT/EN validation coordinator.
  *
- * Decisive word-level evidence comes from the large local lexicons. The
- * statistical detector is used only as sentence context for the small remainder
- * of genuinely unknown words. MyMemory is never used to decide source language.
- * This deliberately restores the tolerant behaviour of the last nearly-good
- * version instead of making every dictionary miss a hard error.
+ * Decisive word-level evidence comes from local lexicons. With the generated
+ * full PT-PT + EN-GB resources available, an ordinary token absent from both is
+ * rejected deterministically. If those full resources are temporarily missing
+ * during a partial deployment, the guard falls back to the tolerant behaviour
+ * of the last nearly-good version instead of applying strict rules to the small
+ * core lists. MyMemory never decides the source language.
  */
 final class LanguageGuard
 {
@@ -72,8 +73,6 @@ final class LanguageGuard
             return $base;
         }
 
-        // Compatibility fallback for legacy callers. Production ContentTranslator
-        // supplies the local lexical checker.
         if ($lexicalChecker === null) {
             if ($sentenceLanguage === $expectedLanguage) {
                 $base['conclusion'] = 'correct';
@@ -82,6 +81,9 @@ final class LanguageGuard
             }
             return $base;
         }
+
+        $hasFullCoverage = $lexicalChecker instanceof LexicalCoverageClassifier
+            && $lexicalChecker->hasFullCoverage();
 
         $lexicalTokens = [];
         foreach ($tokens as $token) {
@@ -127,7 +129,7 @@ final class LanguageGuard
             $base[$key] = self::uniqueWords($base[$key]);
         }
 
-        // A decisive opposite-language word always wins over sentence context.
+        // Decisive opposite-language lexical evidence always wins.
         if ($base['expectedWords'] !== [] && $base['oppositeWords'] !== []) {
             $base['conclusion'] = 'mixed';
             return $base;
@@ -137,7 +139,7 @@ final class LanguageGuard
             return $base;
         }
 
-        // Keep the useful one/two-edit typo guard from the nearly-good version.
+        // Preserve the useful one/two-edit corruption guard: danosht, YAHOOX…
         if ($base['likelyMisspellings'] !== []) {
             $base['unknownWords'] = $base['likelyMisspellings'];
             $base['conclusion'] = 'unknown';
@@ -145,10 +147,17 @@ final class LanguageGuard
         }
 
         if ($base['unknownWords'] !== []) {
-            // A one/two-letter fragment that is absent from both complete
-            // dictionaries is not promoted to a technical word by context. This
-            // specifically closes the HAR cases "danos.s" and "danos.sr"
-            // without making all ordinary unknown words hard errors again.
+            // Once both complete dictionaries are present, a normal token absent
+            // from PT, EN and the explicit technical list is genuinely unresolved
+            // and must not inherit the language of the surrounding sentence.
+            if ($hasFullCoverage) {
+                $base['conclusion'] = 'unknown';
+                return $base;
+            }
+
+            // Safe recovery fallback for a partial deployment / missing full
+            // resources. Short fragments are still blocked because they caused
+            // explicit HAR failures such as "danos.s" and "danos.sr".
             $shortUnknown = array_values(array_filter(
                 $base['unknownWords'],
                 static fn(string $word): bool => mb_strlen($word, 'UTF-8') <= 2
@@ -178,8 +187,6 @@ final class LanguageGuard
                 return $base;
             }
             if ($sentenceLanguage === $expectedLanguage || $base['expectedWords'] !== []) {
-                // Last-resort tolerance only. With the large dictionaries this is
-                // now reached far less often than with the old compact core lists.
                 $base['technicalWords'] = self::uniqueWords(array_merge(
                     $base['technicalWords'],
                     $base['unknownWords']
@@ -306,8 +313,8 @@ final class LanguageGuard
         if (preg_match('/\d/u', $token) === 1) {
             return true;
         }
-        // Mixed-case brands/identifiers remain a narrow fallback. ALL-CAPS and
-        // arbitrary one/two-letter fragments are not accepted implicitly.
+        // Narrow brand/identifier fallback. ALL-CAPS and arbitrary short
+        // fragments are intentionally not accepted implicitly.
         return preg_match('/^(?=.*\p{Ll})(?=.*\p{Lu})[\p{L}\p{N}_-]+$/u', $token) === 1;
     }
 
