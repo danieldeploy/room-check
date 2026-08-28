@@ -44,8 +44,6 @@ assertHardening(
 );
 assertHardeningRejects('new house', 'pt', $lexicon, 'claramente EN', 'new house cannot be saved in PT mode');
 
-// The original failure that started this work: extinguisher is no longer judged
-// by a sentence n-gram model. The lexical checker explicitly identifies it EN.
 assertHardening(
     LanguageGuard::sourceAnalysis('extinguisher', 'en', $lexicon)['conclusion'] === 'correct',
     'extinguisher is recognised as English'
@@ -53,8 +51,6 @@ assertHardening(
 LanguageGuard::assertExpectedLanguage('extinguisher', 'en', $lexicon);
 assertHardeningRejects('extinguisher', 'pt', $lexicon, 'claramente EN', 'extinguisher is rejected in PT mode');
 
-// Shared words and explicit technical identifiers remain neutral rather than
-// becoming false language errors.
 assertHardening(
     LanguageGuard::sourceAnalysis('detector', 'pt', $lexicon)['conclusion'] === 'ambiguous',
     'detector is shared PT/EN'
@@ -68,8 +64,6 @@ assertHardening(
     'WiFi remains a neutral technical identifier'
 );
 
-// HAR #7: one English word inside a Portuguese phrase is enough lexical evidence
-// for mixed text. No two-word opposite-language segment is required anymore.
 foreach (['house', 'news', 'common'] as $englishWord) {
     $text = 'Verificar se está limpo e sem danos ' . $englishWord;
     $analysis = LanguageGuard::sourceAnalysis($text, 'pt', $lexicon);
@@ -91,8 +85,6 @@ assertHardeningRejects(
     'mixed PT/EN phrase cannot be normalized by translation'
 );
 
-// Unknown lowercase ordinary text is a separate spelling/lexical failure and is
-// not silently assigned to the surrounding sentence language.
 assertHardening(
     LanguageGuard::sourceAnalysis('Verificar se está limpo qdsffasdfaasdf', 'pt', $lexicon)['conclusion'] === 'unknown',
     'unknown ordinary word remains unknown inside a PT sentence'
@@ -128,25 +120,18 @@ assertHardening(str_contains($guardSource, 'LexicalLanguageClassifier'), 'source
 assertHardening(!str_contains($guardSource, 'SHORT_MIN_'), 'obsolete short-phrase statistical thresholds are removed');
 assertHardening(!str_contains($guardSource, 'MIXED_MIN_'), 'obsolete mixed-segment statistical thresholds are removed');
 assertHardening(!str_contains($guardSource, 'hasMixedLanguageEvidence'), 'obsolete multi-word segment scanner is removed');
-assertHardening(!str_contains($guardSource, 'private const NEUTRAL'), 'manual technical vocabulary whitelist remains removed');
-assertHardening(str_contains($lexicalSource, '==\\s*English') && str_contains($lexicalSource, '==\\s*Portuguese'), 'lexical checker uses explicit EN/PT dictionary sections');
-assertHardening(str_contains($lexicalSource, 'lexical_language_cache'), 'lexical results are cached persistently');
+assertHardening(str_contains($guardSource, 'TECHNICAL_NEUTRAL'), 'neutral technical terms are explicitly separated from language vocabulary');
+assertHardening(str_contains($lexicalSource, 'LocalHunspellLexicon'), 'local Hunspell lexicon engine is used');
+assertHardening(str_contains($lexicalSource, "'en_GB'") && str_contains($lexicalSource, "'pt_PT'"), 'local en-GB and pt-PT spell dictionaries are selected explicitly');
+assertHardening(!str_contains($lexicalSource, 'lexical_language_cache'), 'obsolete persistent lexical cache is removed');
+assertHardening(!str_contains($lexicalSource, 'curl_init'), 'lexical verification makes no HTTP request');
+assertHardening(!str_contains($lexicalSource, 'classifyWikitext'), 'obsolete Wiktionary parser is removed');
 
-assertHardening(
-    LexicalLanguageChecker::classifyWikitext("==English==\n===Noun===\n") === 'en_only',
-    'English dictionary section is parsed deterministically'
-);
-assertHardening(
-    LexicalLanguageChecker::classifyWikitext("==Portuguese==\n===Noun===\n") === 'pt_only',
-    'Portuguese dictionary section is parsed deterministically'
-);
-assertHardening(
-    LexicalLanguageChecker::classifyWikitext("==English==\n===Noun===\n==Portuguese==\n===Noun===\n") === 'shared',
-    'shared PT/EN dictionary entry is detected'
-);
-assertHardening(
-    LexicalLanguageChecker::classifyWikitext("==French==\n===Noun===\n") === 'unknown',
-    'non-PT/EN dictionary entry stays unknown'
-);
+foreach (['en_GB.dic', 'en_GB.aff', 'pt_PT.dic', 'pt_PT.aff'] as $lexiconFile) {
+    assertHardening(
+        file_exists(dirname(__DIR__) . '/src/I18n/Lexicons/' . $lexiconFile),
+        "vendored {$lexiconFile} exists"
+    );
+}
 
-echo "Lexical PT/EN language guard regression passed.\n";
+echo "Local lexical PT/EN language guard regression passed.\n";
