@@ -29,8 +29,11 @@ curl --fail --silent --show-error --location \
   -o "$LICENSES/pt_PT-LICENSE.txt"
 
 npm install --global --silent hunspell-reader@10.0.1
+# The reader applies the .aff prefix/suffix rules by default. Sorting,
+# lower-casing and deduplication are intentionally done in the Python stage so
+# this remains compatible across hunspell-reader CLI option changes.
 hunspell-reader words "$TMP/Portuguese-European.dic" \
-  -o "$TMP/pt-expanded.txt" -s -u -i -l
+  -o "$TMP/pt-expanded.txt"
 
 python3 - "$ROOT" "$TMP" "$OUT" <<'PY'
 from __future__ import annotations
