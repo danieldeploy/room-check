@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/Auth/Auth.php';
 require_once dirname(__DIR__) . '/Security/Csrf.php';
 require_once dirname(__DIR__) . '/I18n/SiteTranslations.php';
+require_once dirname(__DIR__) . '/I18n/TranslationFeedback.php';
 
 final class SessionBar
 {
@@ -21,21 +22,7 @@ final class SessionBar
         $displayName = (string) ($user['display_name'] ?? $user['username'] ?? 'Utilizador');
         $role = (string) ($user['role'] ?? '');
         $roleLabel = Auth::ROLES[$role] ?? $role;
-        $translationFeedback = [
-            'saved' => SiteTranslations::text(
-                'Guardado: tradução correta ou ambígua',
-                'Saved: translation correct or ambiguous'
-            ),
-            'timeout' => SiteTranslations::text(
-                'Erro: a validação da tradução excedeu o tempo limite.',
-                'Error: translation validation timed out.'
-            ),
-            'saveError' => SiteTranslations::text('Erro ao guardar.', 'Error: could not save.'),
-            'validationError' => SiteTranslations::text(
-                'Erro: não foi possível validar a tradução.',
-                'Error: could not validate the translation.'
-            ),
-        ];
+        $translationFeedback = TranslationFeedback::messages();
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
             <div class="session-navigation">
