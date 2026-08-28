@@ -5,6 +5,7 @@
 
     const nativeFetch = window.fetch.bind(window);
     const config = window.ROOM_CHECK || {};
+    const translationFeedback = window.ROOM_TRANSLATION_FEEDBACK || {};
     let lastEditedRow = null;
     const feedbackTimers = new WeakMap();
     const bypassNavigation = new WeakSet();
@@ -14,9 +15,7 @@
     const feedbackForRow = (row) => row?.querySelector('.problem-field .row-save-feedback') || null;
     const textareaForRow = (row) => row?.querySelector('.problem-field textarea') || null;
     const allRows = () => Array.from(document.querySelectorAll('.check-row'));
-    const successMessage = () => config.locale === 'en'
-        ? 'Saved: translation correct or ambiguous'
-        : 'Guardado: tradução correta ou ambígua';
+    const successMessage = () => translationFeedback.saved || 'Saved: translation correct or ambiguous';
 
     const keepValidationTextareaEditable = (textarea) => {
         if (!textarea || config.canEdit === false) return;
@@ -139,9 +138,10 @@
             if (textareas.some((textarea) => textarea.dataset.languageSaveFailed === '1')) return false;
             await new Promise((resolve) => window.setTimeout(resolve, 80));
         }
-        showErrorFeedback(textareas[0]?.closest('.check-row'), config.locale === 'en'
-            ? 'Error: translation validation timed out.'
-            : 'Erro: a validação da tradução excedeu o tempo limite.');
+        showErrorFeedback(
+            textareas[0]?.closest('.check-row'),
+            translationFeedback.timeout || 'Error: translation validation timed out.'
+        );
         return false;
     };
 
@@ -268,7 +268,7 @@
         const isTextSave = action === 'set_assignments_atomic' || action === '';
         if (!isTextSave) return response;
         if (!response.ok || payload?.ok === false) {
-            showErrorFeedback(lastEditedRow, payload?.error || (config.locale === 'en' ? 'Error: could not save.' : 'Erro ao guardar.'));
+            showErrorFeedback(lastEditedRow, payload?.error || translationFeedback.saveError || 'Error: could not save.');
             return response;
         }
         markSavedRequest(requestBody);
