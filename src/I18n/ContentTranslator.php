@@ -19,58 +19,62 @@ final class ContentTranslator
         $existingEn = trim($existingEn);
 
         if ($text === '') {
-            return ['pt' => '', 'en' => ''];
+            return ['pt' => '', 'en' => '', 'validationConclusion' => 'ambiguous'];
         }
 
-        // A value already stored for the active language is not new user input.
-        // Reuse the existing bilingual pair before language validation so an
-        // unrelated edit cannot be blocked by legacy/ambiguous unchanged text.
+        // Unchanged values reuse the already persisted bilingual pair. This
+        // prevents revisiting a page from triggering another provider request.
         if ($sourceLanguage === 'en'
             && $existingEn === $text
             && $existingPt !== ''
             && $existingPt !== $existingEn
             && self::isPlausibleTargetText($existingPt, 'pt')) {
-            return ['pt' => $existingPt, 'en' => $text];
+            return [
+                'pt' => $existingPt,
+                'en' => $text,
+                'validationConclusion' => self::targetConclusion($existingPt, 'pt'),
+            ];
         }
         if ($sourceLanguage === 'pt'
             && $existingPt === $text
             && $existingEn !== ''
             && $existingEn !== $existingPt
             && self::isPlausibleTargetText($existingEn, 'en')) {
-            return ['pt' => $text, 'en' => $existingEn];
+            return [
+                'pt' => $text,
+                'en' => $existingEn,
+                'validationConclusion' => self::targetConclusion($existingEn, 'en'),
+            ];
         }
 
-        // Single project-wide server boundary for newly entered/changed
-        // user-authored bilingual text. If the text is clearly in the opposite
-        // language, stop here: do not call the provider or persist anything.
+        // Only strong sentence-level evidence of the opposite source language
+        // blocks the operation. Technical/ambiguous wording continues to the
+        // contextual translation provider.
         LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);
 
         if ($sourceLanguage === 'en') {
             $translatedPt = $this->translate($text, 'en', 'pt');
             if ($translatedPt === null || trim($translatedPt) === '') {
-                throw new InvalidArgumentException(
-                    'Automatic translation to Portuguese failed. Please try again.'
-                );
+                throw new InvalidArgumentException('Automatic translation to Portuguese failed. Please try again.');
             }
-            return ['pt' => trim($translatedPt), 'en' => $text];
+            return [
+                'pt' => trim($translatedPt),
+                'en' => $text,
+                'validationConclusion' => self::targetConclusion($translatedPt, 'pt'),
+            ];
         }
 
         $translatedEn = $this->translate($text, 'pt', 'en');
         if ($translatedEn === null || trim($translatedEn) === '') {
-            throw new InvalidArgumentException(
-                'Não foi possível traduzir automaticamente o conteúdo para inglês. Tente novamente.'
-            );
+            throw new InvalidArgumentException('Não foi possível traduzir automaticamente o conteúdo para inglês. Tente novamente.');
         }
-        return ['pt' => $text, 'en' => trim($translatedEn)];
+        return [
+            'pt' => $text,
+            'en' => trim($translatedEn),
+            'validationConclusion' => self::targetConclusion($translatedEn, 'en'),
+        ];
     }
 
-    /**
-     * Translate without falling back to the source text.
-     *
-     * This is used by legacy-content backfills: a failed provider request must
-     * leave the target column empty so it can be retried later instead of
-     * incorrectly persisting Portuguese as if it were an English translation.
-     */
     public function translateStrict(string $text, string $sourceLanguage, string $targetLanguage): ?string
     {
         $text = trim($text);
@@ -84,83 +88,33 @@ final class ContentTranslator
             return $text;
         }
 
+        LanguageGuard::assertExpectedLanguage($text, $source);
         return $this->translate($text, $source, $target);
     }
 
     /**
-     * Conservative language-quality guard for provider/cache output.
-     *
-     * It deliberately rejects only strong signs that the target text is still
-     * written in the opposite language. Neutral terms and brands (WiFi, SIP,
-     * My2N, TV, Café, etc.) remain valid. This is not intended to be a general
-     * language detector; it prevents the concrete hybrid failure mode observed
-     * in production such as "Confirm que estão limpas e bem fixas.".
+     * A provider/cache result is plausible unless the complete translated phrase
+     * is confidently in the opposite language. Ambiguous output is accepted.
      */
     public static function isPlausibleTargetText(string $text, string $targetLanguage): bool
     {
+        return self::targetConclusion($text, $targetLanguage) !== 'wrong';
+    }
+
+    /** Returns correct, ambiguous or wrong for the complete translated phrase. */
+    public static function targetConclusion(string $text, string $targetLanguage): string
+    {
         $text = trim($text);
         if ($text === '') {
-            return false;
+            return 'wrong';
         }
 
         $targetLanguage = $targetLanguage === 'pt' ? 'pt' : 'en';
-        $lower = mb_strtolower($text, 'UTF-8');
-        $tokens = preg_split('/[^\p{L}\p{N}_]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        if ($tokens === []) {
-            return true;
+        $detected = LanguageGuard::confidentSentenceLanguage($text);
+        if ($detected === null) {
+            return 'ambiguous';
         }
-        $tokenSet = array_fill_keys($tokens, true);
-
-        if ($targetLanguage === 'en') {
-            $strongPortuguese = [
-                'verificar', 'confirmar', 'limpeza', 'funcionamento', 'lâmpada', 'lâmpadas',
-                'acendem', 'fechadura', 'fechaduras', 'disponível', 'disponíveis', 'fissuras',
-                'moldura', 'danificada', 'danificado', 'cabides', 'quarto', 'quartos',
-                'corredor', 'corredores', 'portas', 'janelas', 'chaves', 'cortinas', 'camas',
-                'vidros', 'manchas', 'ventoinhas', 'armários', 'armarios', 'cabeceiras',
-            ];
-            foreach ($strongPortuguese as $token) {
-                if (isset($tokenSet[$token])) {
-                    return false;
-                }
-            }
-
-            $commonPortuguese = [
-                'que', 'está', 'estão', 'todas', 'todos', 'limpa', 'limpo', 'limpas', 'limpos',
-                'bem', 'fixa', 'fixas', 'fixo', 'fixos', 'funcionam', 'sem', 'danos',
-                'visível', 'visíveis', 'estado', 'quantidade', 'abrem', 'fecham', 'corretamente',
-            ];
-            $matches = 0;
-            foreach ($commonPortuguese as $token) {
-                if (isset($tokenSet[$token]) && ++$matches >= 2) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        $strongEnglish = [
-            'undamaged', 'wardrobes', 'headboards', 'curtains', 'sockets', 'securely', 'fitted',
-            'hangers', 'cracks', 'damaged', 'september', 'corridors', 'doors', 'windows', 'keys',
-            'lights', 'beds', 'fans', 'locks', 'walls', 'mirror',
-        ];
-        foreach ($strongEnglish as $token) {
-            if (isset($tokenSet[$token])) {
-                return false;
-            }
-        }
-
-        $commonEnglish = [
-            'check', 'confirm', 'clean', 'turn', 'available', 'working', 'damage', 'visible',
-            'stains', 'condition', 'number', 'open', 'close', 'correctly',
-        ];
-        $matches = 0;
-        foreach ($commonEnglish as $token) {
-            if (isset($tokenSet[$token]) && ++$matches >= 2) {
-                return false;
-            }
-        }
-        return true;
+        return $detected === $targetLanguage ? 'correct' : 'wrong';
     }
 
     private function translate(string $text, string $source, string $target): ?string
@@ -181,20 +135,47 @@ final class ContentTranslator
         $translatedChunks = [];
         foreach ($this->chunks($text) as $chunk) {
             $translation = $this->translateChunk($chunk, $source, $target);
-            if ($translation === null || $translation === ''
-                || !self::isPlausibleTargetText($translation, $target)) {
+            if ($translation === null || trim($translation) === '') {
                 return null;
             }
-            $translatedChunks[] = $translation;
+            $translatedChunks[] = trim($translation);
         }
 
         $translated = trim(implode("\n", $translatedChunks));
-        if ($translated === '' || !self::isPlausibleTargetText($translated, $target)) {
+        if ($translated === '') {
             return null;
+        }
+        if (!self::hasPlausibleLength($text, $translated)) {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: automatic translation appears incomplete.'
+                    : 'Erro: a tradução automática parece incompleta.'
+            );
+        }
+
+        $conclusion = self::targetConclusion($translated, $target);
+        if ($conclusion === 'wrong') {
+            $detected = strtoupper($target === 'pt' ? 'en' : 'pt');
+            throw new LanguageValidationException(
+                $source === 'en'
+                    ? "Error: translation is clearly {$detected}."
+                    : "Erro: tradução claramente {$detected}."
+            );
         }
 
         $this->storeTranslation($text, $translated, $source, $target);
         return $translated;
+    }
+
+    private static function hasPlausibleLength(string $source, string $translated): bool
+    {
+        $sourceLength = mb_strlen(trim($source), 'UTF-8');
+        $targetLength = mb_strlen(trim($translated), 'UTF-8');
+        if ($sourceLength <= 20 || $targetLength <= 20) {
+            return $targetLength > 0;
+        }
+        $ratio = $targetLength / max(1, $sourceLength);
+        return $ratio >= 0.20 && $ratio <= 5.0;
     }
 
     private function cachedTranslation(string $text, string $source, string $target): ?string
@@ -219,11 +200,11 @@ final class ContentTranslator
             $translated = $statement->fetchColumn();
             if (is_string($translated) && trim($translated) !== '') {
                 $translated = trim($translated);
-                if (self::isPlausibleTargetText($translated, $target)) {
+                if (self::isPlausibleTargetText($translated, $target)
+                    && self::hasPlausibleLength($text, $translated)) {
                     return $translated;
                 }
 
-                // An invalid legacy cache entry must not keep poisoning future saves.
                 try {
                     $delete = $this->pdo->prepare(
                         'DELETE FROM translation_cache
@@ -234,11 +215,11 @@ final class ContentTranslator
                     );
                     $delete->execute($parameters);
                 } catch (Throwable) {
-                    // A cache cleanup failure must not block a fresh provider request.
+                    // Cache cleanup failure must not block a fresh provider request.
                 }
             }
         } catch (Throwable) {
-            // The migration may not have been applied yet. Translation still works without cache.
+            // Translation still works when the cache migration is unavailable.
         }
 
         return null;
@@ -246,7 +227,8 @@ final class ContentTranslator
 
     private function storeTranslation(string $text, string $translated, string $source, string $target): void
     {
-        if (!self::isPlausibleTargetText($translated, $target)) {
+        if (!self::isPlausibleTargetText($translated, $target)
+            || !self::hasPlausibleLength($text, $translated)) {
             return;
         }
 
