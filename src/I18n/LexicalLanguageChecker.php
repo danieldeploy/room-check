@@ -18,7 +18,7 @@ interface LexicalNearMatchClassifier
 
 interface LexicalCoverageClassifier
 {
-    /** True only when both generated full-language resources are available. */
+    /** True only when all generated full-language resources are available. */
     public function hasFullCoverage(): bool;
 }
 
@@ -31,10 +31,8 @@ final class LexicalLookupException extends RuntimeException
  *
  * The full PT-PT and EN-GB dictionaries are sorted text files with small
  * two-character byte-range indexes. Only the relevant slices are read for each
- * request, so cPanel/PHP never needs to materialize hundreds of thousands of
- * dictionary entries in memory. The compact core lists remain only for bounded
- * typo-near-match checks and as a fail-safe if a generated full resource is
- * temporarily missing during deployment.
+ * request. A separately generated proper-name lexicon marks people, countries
+ * and places as language-neutral rather than as PT/EN evidence.
  */
 final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier
 {
@@ -46,8 +44,12 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     private static ?array $enCore = null;
     /** @var array<string, bool>|null */
     private static ?array $technicalWords = null;
+    /** @var array<string, bool>|null */
+    private static ?array $properWords = null;
     /** @var array<string, array<string, array{0:int,1:int}>> */
     private static array $indexCache = [];
+    /** @var array<string, array<string, bool>> */
+    private static array $membershipCache = [];
 
     public function __construct(PDO $pdo, private array $config = [])
     {
@@ -63,7 +65,8 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         return self::usableFile($ptWord)
             && self::usableFile($ptIndex)
             && self::usableFile($enWord)
-            && self::usableFile($enIndex);
+            && self::usableFile($enIndex)
+            && self::usableFile($this->properPath());
     }
 
     public function classifyTokens(array $tokens): array
@@ -86,10 +89,13 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         $results = [];
 
         foreach ($tokens as $token) {
-            if (isset(self::$technicalWords[$token])) {
+            // Explicit technology/brand identifiers and generated proper names
+            // are deliberately neutral. They must not decide sentence language.
+            if (isset(self::$technicalWords[$token]) || isset(self::$properWords[$token])) {
                 $results[$token] = 'shared';
                 continue;
             }
+
             $hasPt = isset($ptMembership[$token]);
             $hasEn = isset($enMembership[$token]);
             $results[$token] = match (true) {
@@ -103,11 +109,9 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     }
 
     /**
-     * Near-match checks deliberately use only the compact project vocabulary and
-     * exact technical list. Scanning a complete language dictionary for every
-     * typo would be wasteful and would also create many accidental near-matches.
-     * This keeps the useful HAR regressions such as danosht -> danos and
-     * YAHOOX -> yahoo without changing ordinary dictionary coverage.
+     * Near-match checks deliberately use only compact project vocabulary and
+     * the exact technical list. Scanning full dictionaries/proper names on every
+     * typo would be slower and would create many accidental near-matches.
      *
      * @return array{candidate:string,distance:int,classification:string}|null
      */
@@ -117,6 +121,11 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         $token = self::normalizeToken($token);
         $length = mb_strlen($token, 'UTF-8');
         if ($token === '' || $length < 4 || $length > self::MAX_TOKEN_LENGTH) {
+            return null;
+        }
+
+        // Exact proper names are valid neutral tokens, never typo candidates.
+        if (isset(self::$properWords[$token])) {
             return null;
         }
 
@@ -172,20 +181,50 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     private function languageMembership(array $tokens, string $language): array
     {
         [$fullPath, $indexPath] = $this->fullPaths($language);
-        if (self::usableFile($fullPath) && self::usableFile($indexPath)) {
-            return self::indexedMembership($tokens, $fullPath, $indexPath);
+        $cacheKey = $language . '|' . $fullPath . '|' . $indexPath;
+        $cache = self::$membershipCache[$cacheKey] ?? [];
+        $found = [];
+        $unresolved = [];
+
+        foreach ($tokens as $token) {
+            if (array_key_exists($token, $cache)) {
+                if ($cache[$token]) {
+                    $found[$token] = true;
+                }
+            } else {
+                $unresolved[] = $token;
+            }
         }
 
-        // Deployment fail-safe: the last nearly-good compact behavior remains
-        // available during a partial deploy. Once resources/lexicon/full exists,
-        // production automatically uses the large dictionaries instead.
+        if ($unresolved === []) {
+            return $found;
+        }
+
+        if (self::usableFile($fullPath) && self::usableFile($indexPath)) {
+            $fresh = self::indexedMembership($unresolved, $fullPath, $indexPath);
+            foreach ($unresolved as $token) {
+                $present = isset($fresh[$token]);
+                $cache[$token] = $present;
+                if ($present) {
+                    $found[$token] = true;
+                }
+            }
+            self::$membershipCache[$cacheKey] = $cache;
+            return $found;
+        }
+
+        // Deployment fail-safe: compact behavior remains available during a
+        // partial deploy. Once all generated resources exist, the full
+        // dictionaries and neutral proper-name list are used automatically.
         $core = $language === 'pt' ? self::$ptCore : self::$enCore;
-        $found = [];
-        foreach ($tokens as $token) {
-            if (isset($core[$token])) {
+        foreach ($unresolved as $token) {
+            $present = isset($core[$token]);
+            $cache[$token] = $present;
+            if ($present) {
                 $found[$token] = true;
             }
         }
+        self::$membershipCache[$cacheKey] = $cache;
         return $found;
     }
 
@@ -199,6 +238,13 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         $index = (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
             ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json'));
         return [$word, $index];
+    }
+
+    private function properPath(): string
+    {
+        $root = dirname(__DIR__, 2);
+        return (string) ($this->config['proper_path']
+            ?? $root . '/resources/lexicon/full/proper_neutral.txt');
     }
 
     private static function usableFile(string $path): bool
@@ -276,17 +322,22 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
 
     private static function loadSmallLexicons(array $config): void
     {
-        if (self::$ptCore !== null && self::$enCore !== null && self::$technicalWords !== null) {
+        if (self::$ptCore !== null
+            && self::$enCore !== null
+            && self::$technicalWords !== null
+            && self::$properWords !== null) {
             return;
         }
         $root = dirname(__DIR__, 2);
         $ptPath = (string) ($config['pt_path'] ?? $root . '/resources/lexicon/pt_PT_core.txt');
         $enPath = (string) ($config['en_path'] ?? $root . '/resources/lexicon/en_GB_core.txt');
         $technicalPath = (string) ($config['technical_path'] ?? $root . '/resources/lexicon/technical_neutral.txt');
+        $properPath = (string) ($config['proper_path'] ?? $root . '/resources/lexicon/full/proper_neutral.txt');
 
         self::$ptCore = self::readSmallWordFile($ptPath);
         self::$enCore = self::readSmallWordFile($enPath);
         self::$technicalWords = self::readSmallWordFile($technicalPath);
+        self::$properWords = self::readSmallWordFile($properPath);
         if (self::$ptCore === [] || self::$enCore === []) {
             throw new LexicalLookupException('Local PT/EN lexical core files are unavailable.');
         }
