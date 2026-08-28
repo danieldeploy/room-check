@@ -29,9 +29,10 @@ final class LanguageValidationException extends InvalidArgumentException
 /**
  * PT/EN validation coordinator.
  *
- * Decisive word-level evidence comes from local lexicons. The statistical
- * detector is used only as sentence context for genuinely unknown words.
- * MyMemory is never used to decide the source language.
+ * Decisive word-level evidence comes from the bundled local lexicons. The
+ * statistical detector remains sentence-level context/diagnostics only and can
+ * never turn an unrecognized lexical token into a valid word. MyMemory is never
+ * used to decide the source language.
  */
 final class LanguageGuard
 {
@@ -70,6 +71,8 @@ final class LanguageGuard
             return $base;
         }
 
+        // Compatibility fallback for legacy callers that do not provide the
+        // local lexical checker. Production ContentTranslator always does.
         if ($lexicalChecker === null) {
             if ($sentenceLanguage === $expectedLanguage) {
                 $base['conclusion'] = 'correct';
@@ -99,6 +102,8 @@ final class LanguageGuard
                     ? $lexicalChecker->likelyMisspelling($display)
                     : null;
                 if ($nearMatch !== null) {
+                    // A token close to a known PT/EN/technical term is a typo,
+                    // even if its casing resembles a brand/identifier.
                     $base['unknownWords'][] = $display;
                     $base['likelyMisspellings'][] = $display;
                     continue;
@@ -123,7 +128,7 @@ final class LanguageGuard
             $base[$key] = self::uniqueWords($base[$key]);
         }
 
-        // A decisive opposite-language word wins over statistical context.
+        // A decisive opposite-language word wins over sentence context.
         if ($base['expectedWords'] !== [] && $base['oppositeWords'] !== []) {
             $base['conclusion'] = 'mixed';
             return $base;
@@ -133,47 +138,12 @@ final class LanguageGuard
             return $base;
         }
 
-        // A near-match of a known PT/EN/technical word is a likely typing error,
-        // not a rare technical term. Reject it before sentence context can hide it.
-        if ($base['likelyMisspellings'] !== []) {
-            $base['unknownWords'] = $base['likelyMisspellings'];
+        // Unknown ordinary words are never promoted to technical vocabulary by
+        // sentence context. This prevents arbitrary suffixes or gibberish from
+        // being accepted merely because the surrounding sentence is valid PT/EN.
+        if ($base['unknownWords'] !== []) {
             $base['conclusion'] = 'unknown';
             return $base;
-        }
-
-        // Other unknown words are not automatically errors because the bundled
-        // local lexicons are intentionally compact. Reject obvious gibberish and
-        // isolated unknown words; otherwise clear sentence context may carry a
-        // legitimate rare word without another network dependency.
-        if ($base['unknownWords'] !== []) {
-            $suspicious = array_values(array_filter(
-                $base['unknownWords'],
-                static fn(string $word): bool => self::looksGibberishToken($word)
-            ));
-            if ($suspicious !== []) {
-                $base['unknownWords'] = $suspicious;
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-            if (count($tokens) === 1) {
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-            if ($sentenceLanguage === $oppositeLanguage) {
-                $base['conclusion'] = 'wrong';
-                $base['oppositeWords'] = $base['unknownWords'];
-                return $base;
-            }
-            if ($sentenceLanguage === $expectedLanguage || $base['expectedWords'] !== []) {
-                $base['technicalWords'] = self::uniqueWords(array_merge(
-                    $base['technicalWords'],
-                    $base['unknownWords']
-                ));
-                $base['unknownWords'] = [];
-            } else {
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
         }
 
         if ($base['expectedWords'] !== []) {
@@ -181,6 +151,7 @@ final class LanguageGuard
             return $base;
         }
 
+        // Only shared words and explicitly technical identifiers remain.
         $base['conclusion'] = 'ambiguous';
         return $base;
     }
@@ -288,30 +259,12 @@ final class LanguageGuard
         if (LexicalLanguageChecker::isTechnicalNeutral($token)) {
             return true;
         }
-        $length = mb_strlen($token, 'UTF-8');
-        if ($length <= 2 || preg_match('/\d/u', $token) === 1) {
+        if (preg_match('/\d/u', $token) === 1) {
             return true;
         }
-        // Mixed-case brands/identifiers remain acceptable only after an unknown
-        // token has first passed the near-known typo check above.
-        return preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1;
-    }
-
-    private static function looksGibberishToken(string $token): bool
-    {
-        $word = mb_strtolower($token, 'UTF-8');
-        if (mb_strlen($word, 'UTF-8') < 4) {
-            return false;
-        }
-        if (preg_match('/[^aeiouáàâãéêíóôõúü]{5,}/u', $word) === 1) {
-            return true;
-        }
-        if (preg_match('/(.)\1{3,}/u', $word) === 1) {
-            return true;
-        }
-        $vowels = preg_match_all('/[aeiouáàâãéêíóôõúü]/u', $word);
-        $letters = preg_match_all('/\p{L}/u', $word);
-        return $letters >= 7 && $vowels <= 1;
+        // Mixed-case brands/identifiers require at least one lower-case and one
+        // upper-case letter. ALL-CAPS fragments are not accepted implicitly.
+        return preg_match('/^(?=.*\p{Ll})(?=.*\p{Lu})[\p{L}\p{N}_-]+$/u', $token) === 1;
     }
 
     /** @param string[] $words @return string[] */
