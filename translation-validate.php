@@ -35,16 +35,14 @@ try {
         if (mb_strlen($text) > 5000) {
             throw new InvalidArgumentException('Text is too long.');
         }
-        if ($text === '') {
-            $results[] = ['fieldKey' => $fieldKey, 'conclusion' => 'ambiguous'];
-            continue;
-        }
 
         try {
             $versions = $translator->versions($text, $sourceLanguage);
             $results[] = [
                 'fieldKey' => $fieldKey,
-                'conclusion' => (string) ($versions['validationConclusion'] ?? 'ambiguous'),
+                'sourceConclusion' => (string) ($versions['sourceConclusion'] ?? 'ambiguous'),
+                'translationConclusion' => (string) ($versions['translationConclusion'] ?? 'ambiguous'),
+                'message' => (string) ($versions['validationMessage'] ?? ''),
             ];
         } catch (LanguageValidationException $exception) {
             throw $exception->withField($fieldKey);
