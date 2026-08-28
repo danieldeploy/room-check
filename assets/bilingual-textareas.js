@@ -3,6 +3,7 @@
 
     const script = document.currentScript;
     const apiUrl = script?.dataset.bilingualApi || 'api.php';
+    const validationUrl = apiUrl.replace(/api\.php(?:[?#].*)?$/, 'translation-validate.php');
     const selector = 'textarea[data-bilingual-textarea]';
     const savePromises = new WeakMap();
     const bypassForms = new WeakSet();
@@ -29,12 +30,15 @@
         }
         return feedback;
     };
-    const removeHighlight = (textarea) => {
+    const clearInvalid = (textarea) => {
         textarea.classList.remove('bilingual-language-invalid');
         textarea.removeAttribute('aria-invalid');
-        fieldFor(textarea).querySelector('.bilingual-highlight-layer')?.remove();
         delete textarea.dataset.bilingualInvalid;
-        delete textarea.dataset.bilingualInvalidWords;
+    };
+    const markInvalid = (textarea) => {
+        textarea.classList.add('bilingual-language-invalid');
+        textarea.dataset.bilingualInvalid = '1';
+        textarea.setAttribute('aria-invalid', 'true');
     };
     const clearFeedback = (textarea) => {
         const feedback = feedbackFor(textarea);
@@ -47,51 +51,18 @@
         feedback.classList.remove('is-error', 'is-saved');
         feedback.classList.add('is-visible', kind === 'saved' ? 'is-saved' : 'is-error');
     };
-    const renderHighlight = (textarea, invalidWords = []) => {
-        removeHighlight(textarea);
-        const field = fieldFor(textarea);
-        const computed = getComputedStyle(textarea);
-        const layer = document.createElement('div');
-        layer.className = 'bilingual-highlight-layer';
-        layer.setAttribute('aria-hidden', 'true');
-        Object.assign(layer.style, {
-            position: 'absolute', left: '0', top: '0', width: '100%', height: `${textarea.offsetHeight}px`,
-            padding: computed.padding, borderWidth: computed.borderWidth, borderStyle: 'solid',
-            borderColor: 'transparent', borderRadius: computed.borderRadius, boxSizing: computed.boxSizing,
-            font: computed.font, lineHeight: computed.lineHeight, letterSpacing: computed.letterSpacing,
-            textAlign: computed.textAlign, textIndent: computed.textIndent, wordSpacing: computed.wordSpacing,
-            color: 'transparent', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
-            pointerEvents: 'none', zIndex: '3'
-        });
-        const words = (Array.isArray(invalidWords) ? invalidWords : []).map((word) => String(word).trim()).filter(Boolean).sort((a, b) => b.length - a.length);
-        const escaped = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-        const pattern = escaped.length ? new RegExp(`(${escaped.join('|')})`, 'giu') : null;
-        const parts = pattern ? textarea.value.split(pattern) : [textarea.value];
-        parts.forEach((part) => {
-            const wrong = words.some((word) => part.localeCompare(word, undefined, { sensitivity: 'accent' }) === 0);
-            if (!wrong) {
-                layer.append(document.createTextNode(part));
-                return;
-            }
-            const span = document.createElement('span');
-            span.className = 'bilingual-wrong-segment';
-            span.textContent = part;
-            span.style.backgroundColor = computed.backgroundColor || '#fbfdfd';
-            layer.append(span);
-        });
-        field.insertBefore(layer, textarea);
-        textarea.classList.add('bilingual-language-invalid');
-        textarea.dataset.bilingualInvalid = '1';
-        textarea.dataset.bilingualInvalidWords = JSON.stringify(words);
-        textarea.setAttribute('aria-invalid', 'true');
+    const savedMessage = () => {
+        const saved = document.body?.dataset.bilingualSaved || 'Saved';
+        return saved.toLowerCase().startsWith('saved')
+            ? 'Saved: translation correct or ambiguous'
+            : 'Guardado: tradução correta ou ambígua';
     };
 
     const validateTextarea = async (textarea) => {
-        const response = await fetch(apiUrl, {
+        const response = await fetch(validationUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({
-                action: 'validate_bilingual_texts',
                 csrfToken: csrfToken(textarea),
                 fields: [{ fieldKey: 'field', text: textarea.value }]
             })
@@ -99,16 +70,11 @@
         let payload = null;
         try { payload = await response.json(); } catch (_) { payload = null; }
         if (response.ok && payload?.ok) {
-            removeHighlight(textarea);
-            return { valid: true };
+            clearInvalid(textarea);
+            return { valid: true, conclusion: payload.fields?.[0]?.conclusion || 'ambiguous' };
         }
-        if (payload?.validation === true) {
-            const field = payload.invalidFields?.[0] || {};
-            renderHighlight(textarea, field.invalidWords || []);
-            showFeedback(textarea, field.error || payload.error || 'Invalid text.', 'error');
-            return { valid: false };
-        }
-        showFeedback(textarea, payload?.error || 'Could not validate the text.', 'error');
+        markInvalid(textarea);
+        showFeedback(textarea, payload?.error || 'Could not validate the translation.', 'error');
         return { valid: false };
     };
 
@@ -129,17 +95,14 @@
         let payload = null;
         try { payload = await response.json(); } catch (_) { payload = null; }
         if (!response.ok || payload?.ok === false) {
-            if (payload?.validation === true) {
-                renderHighlight(textarea, payload.invalidWords || []);
-            }
+            markInvalid(textarea);
             showFeedback(textarea, payload?.error || 'Could not save.', 'error');
             return false;
         }
         textarea.dataset.bilingualLastValidValue = textarea.value;
         delete textarea.dataset.bilingualPending;
-        removeHighlight(textarea);
-        const saved = document.body?.dataset.bilingualSaved || 'Saved';
-        showFeedback(textarea, saved, 'saved');
+        clearInvalid(textarea);
+        showFeedback(textarea, savedMessage(), 'saved');
         return true;
     };
 
@@ -149,12 +112,14 @@
         const promise = (async () => {
             if (textarea.value === (textarea.dataset.bilingualLastValidValue ?? textarea.value)) {
                 delete textarea.dataset.bilingualPending;
-                removeHighlight(textarea);
+                clearInvalid(textarea);
                 return true;
+            }
+            if (autosave && textarea.dataset.bilingualAutosaveAction) {
+                return autosaveTextarea(textarea);
             }
             const validation = await validateTextarea(textarea);
             if (!validation.valid) return false;
-            if (autosave && textarea.dataset.bilingualAutosaveAction) return autosaveTextarea(textarea);
             delete textarea.dataset.bilingualPending;
             textarea.dataset.bilingualValidatedValue = textarea.value;
             return true;
@@ -168,7 +133,7 @@
         pending().forEach((textarea) => {
             textarea.value = textarea.dataset.bilingualLastValidValue ?? '';
             delete textarea.dataset.bilingualPending;
-            removeHighlight(textarea);
+            clearInvalid(textarea);
             clearFeedback(textarea);
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
             delete textarea.dataset.bilingualPending;
@@ -182,7 +147,7 @@
         dialog.setAttribute('role', 'alertdialog');
         dialog.setAttribute('aria-modal', 'true');
         const message = document.createElement('p');
-        message.textContent = document.body?.dataset.bilingualDecisionMessage || 'This text contains errors. Correct it or cancel the edit?';
+        message.textContent = document.body?.dataset.bilingualDecisionMessage || 'The text could not be saved. Correct it or cancel the edit?';
         const actions = document.createElement('div');
         actions.className = 'bilingual-decision-actions';
         const correct = document.createElement('button');
@@ -218,7 +183,7 @@
         fieldFor(textarea);
         textarea.dataset.bilingualLastValidValue = textarea.value;
         textarea.addEventListener('input', () => {
-            removeHighlight(textarea);
+            clearInvalid(textarea);
             clearFeedback(textarea);
             if (textarea.value === (textarea.dataset.bilingualLastValidValue ?? '')) delete textarea.dataset.bilingualPending;
             else textarea.dataset.bilingualPending = '1';
