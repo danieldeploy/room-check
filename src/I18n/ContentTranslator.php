@@ -45,13 +45,7 @@ final class ContentTranslator
         $existingEn = trim($existingEn);
 
         if ($text === '') {
-            return $this->result(
-                '',
-                '',
-                'empty',
-                'empty',
-                $sourceLanguage
-            );
+            return $this->result('', '', 'empty', 'empty', $sourceLanguage);
         }
 
         // Persisted bilingual pairs are authoritative when the active-language
@@ -61,25 +55,13 @@ final class ContentTranslator
             && $existingEn === $text
             && $existingPt !== ''
             && $existingPt !== $existingEn) {
-            return $this->result(
-                $existingPt,
-                $text,
-                'reused',
-                'reused',
-                $sourceLanguage
-            );
+            return $this->result($existingPt, $text, 'reused', 'reused', $sourceLanguage);
         }
         if ($sourceLanguage === 'pt'
             && $existingPt === $text
             && $existingEn !== ''
             && $existingEn !== $existingPt) {
-            return $this->result(
-                $text,
-                $existingEn,
-                'reused',
-                'reused',
-                $sourceLanguage
-            );
+            return $this->result($text, $existingEn, 'reused', 'reused', $sourceLanguage);
         }
 
         // The original text is verified before MyMemory is called. MyMemory is
@@ -202,9 +184,7 @@ final class ContentTranslator
             : "Guardado: termo técnico/partilhado aceite; tradução {$targetLabel} ambígua/técnica aceite.";
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     private function validateSource(string $text, string $sourceLanguage): array
     {
         try {
@@ -506,6 +486,7 @@ final class ContentTranslator
             'translationConclusion' => $translationConclusion,
             'message' => $message,
         ];
+        self::publishResponseMetadataHeader();
         return [
             'pt' => $pt,
             'en' => $en,
@@ -513,6 +494,20 @@ final class ContentTranslator
             'translationConclusion' => $translationConclusion,
             'validationMessage' => $message,
         ];
+    }
+
+    private static function publishResponseMetadataHeader(): void
+    {
+        if (headers_sent() || self::$responseMetadata === []) {
+            return;
+        }
+        $json = json_encode(self::$responseMetadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json)) {
+            return;
+        }
+        $encoded = rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
+        // Metadata contains conclusions/messages only, never source text.
+        header('X-Room-Translation-Results: ' . $encoded, true);
     }
 
     /** @param string[] $words */
