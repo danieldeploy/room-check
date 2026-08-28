@@ -53,7 +53,7 @@ final class FakeLexicalLanguageClassifier implements LexicalLanguageClassifier, 
 function translationRegressionLexicon(): array
 {
     $ptOnly = [
-        'a', 'abertura', 'as', 'bem', 'casa', 'cozinha', 'cozinha', 'cortinas', 'danos',
+        'a', 'abertura', 'as', 'bem', 'casa', 'cozinha', 'cozinha', 'cortinas', 'da', 'danos',
         'das', 'de', 'dos', 'e', 'em', 'está', 'estão', 'fecho', 'fixas', 'grande',
         'janelas', 'limpas', 'limpeza', 'limpo', 'na', 'no', 'nossa', 'o', 'quarto',
         'rua', 'se', 'sem', 'verificação', 'verificar', 'vidros',
