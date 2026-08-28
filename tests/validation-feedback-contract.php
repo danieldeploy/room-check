@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/I18n/LanguageGuard.php';
+require_once __DIR__ . '/support/FakeLexicalLanguageClassifier.php';
 
 function assertValidationFeedback(bool $condition, string $message): void
 {
@@ -15,38 +16,75 @@ $root = dirname(__DIR__);
 $feedbackJs = file_get_contents($root . '/assets/validation-feedback.js');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
 $feedbackI18n = file_get_contents($root . '/src/I18n/TranslationFeedback.php');
+$translator = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 $validator = file_get_contents($root . '/translation-validate.php');
 
-assertValidationFeedback(is_string($feedbackJs) && is_string($sessionBar) && is_string($feedbackI18n) && is_string($validator), 'contextual validation sources are readable');
+assertValidationFeedback(
+    is_string($feedbackJs) && is_string($sessionBar) && is_string($feedbackI18n)
+        && is_string($translator) && is_string($validator),
+    'translation feedback sources are readable'
+);
 assertValidationFeedback(str_contains($sessionBar, 'assets/validation-feedback.js'), 'authenticated pages load shared save feedback');
-assertValidationFeedback(str_contains($feedbackJs, 'validateTextSave'), 'real text save is prevalidated before persistence');
-assertValidationFeedback(str_contains($feedbackJs, "const validationUrl = 'translation-validate.php'"), 'room text saves use translation-backed validation endpoint');
-assertValidationFeedback(str_contains($feedbackJs, 'nativeFetch(validationUrl'), 'prevalidation bypasses the wrapped save fetch and cannot recurse');
-assertValidationFeedback(str_contains($feedbackJs, 'translationValidationMessage'), 'real server conclusion is retained until the save succeeds');
-assertValidationFeedback(str_contains($feedbackJs, 'result?.message'), 'green row message comes from the server algorithm result');
-assertValidationFeedback(str_contains($feedbackJs, 'sourceConclusion') === false, 'browser does not reinterpret source-language conclusions itself');
-assertValidationFeedback(str_contains($feedbackJs, 'translationConclusion') === false, 'browser does not reinterpret translation conclusions itself');
-assertValidationFeedback(str_contains($feedbackJs, 'flushPendingSaves'), 'navigation flushes the real blur save before leaving');
-assertValidationFeedback(str_contains($feedbackJs, "dispatchEvent(new Event('blur'))"), 'navigation uses the same blur/save translation path');
-assertValidationFeedback(!str_contains($feedbackJs, 'language-highlight-layer'), 'duplicate text overlay remains removed');
-assertValidationFeedback(!str_contains($feedbackJs, 'invalidWords'), 'browser no longer performs word-level validation/highlighting');
-assertValidationFeedback(!str_contains($feedbackJs, 'confidentLanguage(') && !str_contains($feedbackJs, 'assertExpectedLanguage('), 'browser does not duplicate server language detection');
-assertValidationFeedback(str_contains($validator, 'sourceConclusion') && str_contains($validator, 'translationConclusion') && str_contains($validator, "'message'"), 'validation endpoint returns explicit source, target and green message metadata');
 
+// Persistable room/assignment text is no longer sent to a separate validator.
+assertValidationFeedback(!str_contains($feedbackJs, 'translation-validate.php'), 'room text save has no separate validation endpoint');
+assertValidationFeedback(!str_contains($feedbackJs, 'validateTextSave'), 'obsolete prevalidation fetch is removed');
+assertValidationFeedback(!str_contains($feedbackJs, 'textFieldsForRequest'), 'obsolete prevalidation request mapper is removed');
+assertValidationFeedback(str_contains($feedbackJs, 'const response = await nativeFetch(input, init);'), 'persistent text follows one real API save request');
+
+// Exact server conclusions travel back on the successful save response.
+assertValidationFeedback(str_contains($translator, 'X-Room-Translation-Results'), 'server publishes exact save conclusions');
+assertValidationFeedback(str_contains($feedbackJs, 'X-Room-Translation-Results'), 'browser reads exact save conclusions');
+assertValidationFeedback(str_contains($feedbackJs, 'ROOM_TRANSLATION_RESULT_READER'), 'translation result reader is shared across persistent textarea UIs');
+assertValidationFeedback(str_contains($feedbackJs, 'translationResultsFromResponse'), 'green feedback is decoded from the real save response');
+assertValidationFeedback(str_contains($feedbackJs, 'markSavedRequest(requestBody, translationResultsFromResponse(response))'), 'green feedback is applied only after persistence succeeds');
+assertValidationFeedback(!str_contains($feedbackJs, 'sourceConclusion'), 'browser does not reclassify source language');
+assertValidationFeedback(!str_contains($feedbackJs, 'translationConclusion'), 'browser does not reclassify translated language');
+
+assertValidationFeedback(str_contains($feedbackJs, 'flushPendingSaves'), 'navigation flushes the real blur save before leaving');
+assertValidationFeedback(str_contains($feedbackJs, "dispatchEvent(new Event('blur'))"), 'navigation uses the same real save path');
+assertValidationFeedback(!str_contains($feedbackJs, 'language-highlight-layer'), 'duplicate text overlay remains removed');
+assertValidationFeedback(!str_contains($feedbackJs, 'invalidWords'), 'browser performs no lexical or word-level validation itself');
+assertValidationFeedback(!str_contains($feedbackJs, 'confidentLanguage(') && !str_contains($feedbackJs, 'assertExpectedLanguage('), 'browser contains no server language logic');
+
+// Validation-only endpoint remains for content that cannot yet be persisted.
+assertValidationFeedback(
+    str_contains($validator, 'ContentTranslator')
+        && str_contains($validator, 'sourceConclusion')
+        && str_contains($validator, 'translationConclusion')
+        && str_contains($validator, "'message'"),
+    'validation-only endpoint still exposes exact server conclusions'
+);
+
+$lexicon = translationRegressionClassifier();
 try {
-    LanguageGuard::assertExpectedLanguage('new house', 'pt');
-    throw new RuntimeException('FAIL: short English phrase was accepted in PT mode');
+    LanguageGuard::assertExpectedLanguage('house', 'pt', $lexicon);
+    throw new RuntimeException('FAIL: house was accepted in PT mode');
 } catch (LanguageValidationException $exception) {
-    assertValidationFeedback($exception->getMessage() === 'Erro: texto claramente EN.', 'short wrong-language source reports a clear red error');
+    assertValidationFeedback(
+        str_contains($exception->getMessage(), 'claramente EN') && str_contains($exception->getMessage(), 'house'),
+        'wrong-language single word receives a clear red error'
+    );
 }
 try {
-    LanguageGuard::assertExpectedLanguage('new house na nossa rua', 'pt');
+    LanguageGuard::assertExpectedLanguage('Verificar se está limpo house', 'pt', $lexicon);
     throw new RuntimeException('FAIL: mixed text was accepted in PT mode');
 } catch (LanguageValidationException $exception) {
-    assertValidationFeedback($exception->getMessage() === 'Erro: o texto mistura PT e EN.', 'mixed source reports a clear red error');
+    assertValidationFeedback(
+        str_contains($exception->getMessage(), 'mistura PT e EN') && str_contains($exception->getMessage(), 'house'),
+        'mixed source identifies the offending EN word'
+    );
 }
+try {
+    LanguageGuard::assertExpectedLanguage('Verificar se está limpo qdsffasdfaasdf', 'pt', $lexicon);
+    throw new RuntimeException('FAIL: unknown text was accepted in PT mode');
+} catch (LanguageValidationException $exception) {
+    assertValidationFeedback(
+        str_contains($exception->getMessage(), 'palavra não reconhecida') && str_contains($exception->getMessage(), 'qdsffasdfaasdf'),
+        'unknown ordinary word receives a clear red error'
+    );
+}
+LanguageGuard::assertExpectedLanguage('extinguisher', 'en', $lexicon);
+assertValidationFeedback(true, 'extinguisher is accepted as a real English word');
 
-LanguageGuard::assertExpectedLanguage('Check the fire extinguisher detector and HVAC thermostat.', 'en');
-assertValidationFeedback(true, 'technical English no longer creates false inline errors');
-
-echo "Contextual translation feedback contract passed.\n";
+echo "Single-save translation feedback contract passed.\n";
