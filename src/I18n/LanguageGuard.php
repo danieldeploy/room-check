@@ -29,31 +29,24 @@ final class LanguageGuard
 {
     private const MODEL = 'large_2_1niz1ni';
 
-    // General complete-text confidence thresholds.
     private const COMPONENT_MIN_SCORE = 0.18;
     private const COMPONENT_MIN_GAP = 0.08;
     private const COMPONENT_MIN_RATIO = 1.35;
 
-    // Short phrases need stronger evidence than normal sentences. This allows
-    // genuinely clear two-word input such as "new house" or "casa grande" to
-    // be classified while keeping shared/technical short phrases conservative.
     private const SHORT_MIN_SCORE = 0.24;
     private const SHORT_MIN_GAP = 0.12;
     private const SHORT_MIN_RATIO = 1.65;
 
-    // Mixed-language detection only uses multi-word segments and intentionally
-    // avoids single-token voting. That prevents a technical word such as
-    // "extinguisher", "detector" or "HVAC" from becoming a false language error.
+    private const TOKEN_MIN_SCORE = 0.18;
+    private const TOKEN_MIN_GAP = 0.08;
+    private const TOKEN_MIN_RATIO = 1.35;
+
     private const MIXED_MIN_SCORE = 0.26;
     private const MIXED_MIN_GAP = 0.13;
     private const MIXED_MIN_RATIO = 1.75;
 
     private static ?LanguageDetector $detector = null;
 
-    /**
-     * Returns correct, ambiguous, wrong or mixed for text entered in the active
-     * interface language. Empty text is treated as ambiguous/neutral.
-     */
     public static function sourceConclusion(string $text, string $expectedLanguage): string
     {
         $text = trim($text);
@@ -69,8 +62,6 @@ final class LanguageGuard
             return 'mixed';
         }
 
-        // A single isolated token remains deliberately ambiguous. This is the
-        // key protection for technical vocabulary and shared words.
         if (count($tokens) < 2) {
             return 'ambiguous';
         }
@@ -91,10 +82,6 @@ final class LanguageGuard
         return 'ambiguous';
     }
 
-    /**
-     * Reject only when the complete source is clearly in the opposite language
-     * or when distinct multi-word sections provide strong EN and PT evidence.
-     */
     public static function assertExpectedLanguage(string $text, string $expectedLanguage): void
     {
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
@@ -119,10 +106,6 @@ final class LanguageGuard
         throw new LanguageValidationException("Erro: texto claramente {$label}.");
     }
 
-    /**
-     * Returns pt/en only when the complete text is sufficiently strong.
-     * null means ambiguous/neutral and must not be treated as an error.
-     */
     public static function confidentLanguage(string $text): ?string
     {
         $text = trim($text);
@@ -139,10 +122,6 @@ final class LanguageGuard
         );
     }
 
-    /**
-     * Sentence helper retained for translation-output checks. Single-token text
-     * remains ambiguous, but a clear two-word phrase can now be classified.
-     */
     public static function confidentSentenceLanguage(string $text): ?string
     {
         $tokens = self::tokens($text);
@@ -155,22 +134,47 @@ final class LanguageGuard
         return self::confidentLanguage($text);
     }
 
+    /**
+     * A two-word phrase is classified only when the phrase itself is strong and
+     * both component tokens independently support the same language. This keeps
+     * clear phrases such as "new house" / "casa grande" useful while shared or
+     * technical combinations such as "WiFi Café" / "fire extinguisher" stay
+     * ambiguous instead of becoming false errors.
+     */
     private static function confidentShortLanguage(string $text): ?string
     {
-        $result = self::detect($text);
-        return self::resultLanguage(
-            $result,
+        $tokens = self::tokens($text);
+        if (count($tokens) !== 2) {
+            return null;
+        }
+
+        $phraseLanguage = self::resultLanguage(
+            self::detect($text),
             self::SHORT_MIN_SCORE,
             self::SHORT_MIN_GAP,
             self::SHORT_MIN_RATIO,
             false
         );
+        if ($phraseLanguage === null) {
+            return null;
+        }
+
+        foreach ($tokens as $token) {
+            $tokenLanguage = self::resultLanguage(
+                self::detect($token),
+                self::TOKEN_MIN_SCORE,
+                self::TOKEN_MIN_GAP,
+                self::TOKEN_MIN_RATIO,
+                false
+            );
+            if ($tokenLanguage !== $phraseLanguage) {
+                return null;
+            }
+        }
+
+        return $phraseLanguage;
     }
 
-    /**
-     * A mixed value needs strong evidence for both languages in separate,
-     * non-overlapping multi-word segments. No single word can trigger this.
-     */
     private static function hasMixedLanguageEvidence(array $tokens): bool
     {
         $count = count($tokens);
@@ -183,9 +187,8 @@ final class LanguageGuard
         for ($length = 2; $length <= $maxLength; $length++) {
             for ($start = 0; $start + $length <= $count; $start++) {
                 $text = implode(' ', array_slice($tokens, $start, $length));
-                $result = self::detect($text);
                 $language = self::resultLanguage(
-                    $result,
+                    self::detect($text),
                     self::MIXED_MIN_SCORE,
                     self::MIXED_MIN_GAP,
                     self::MIXED_MIN_RATIO,
