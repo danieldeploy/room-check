@@ -38,7 +38,13 @@ assertInvalidEditUx(!str_contains($feedback, 'validateTextSave'), 'obsolete vali
 assertInvalidEditUx(!str_contains($feedback, 'translation-validate.php'), 'room/assignment persistent save does not call validation-only endpoint');
 assertInvalidEditUx(str_contains($feedback, 'X-Room-Translation-Results'), 'successful real save exposes exact server conclusion to UI');
 assertInvalidEditUx(str_contains($translator, 'X-Room-Translation-Results'), 'server emits translation result metadata on the same save response');
-assertInvalidEditUx(str_contains($feedback, 'markSavedRequest(requestBody, translationResultsFromResponse(response))'), 'green conclusion appears only after real persistence success');
+assertInvalidEditUx(
+    str_contains($feedback, 'markSavedRequest(')
+        && str_contains($feedback, 'translationResultsFromResponse(response)')
+        && str_contains($feedback, 'editedRowAtRequest')
+        && str_contains($feedback, 'requestRows'),
+    'green conclusion appears only after real persistence success on the request-bound row'
+);
 assertInvalidEditUx(str_contains($validator, 'ContentTranslator') && str_contains($validator, '->versions('), 'validation-only flow remains for non-persistable text');
 
 assertInvalidEditUx(
