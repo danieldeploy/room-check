@@ -16,6 +16,12 @@ interface LexicalNearMatchClassifier
     public function likelyMisspelling(string $token): ?array;
 }
 
+interface LexicalCoverageClassifier
+{
+    /** True only when both generated full-language resources are available. */
+    public function hasFullCoverage(): bool;
+}
+
 final class LexicalLookupException extends RuntimeException
 {
 }
@@ -30,7 +36,7 @@ final class LexicalLookupException extends RuntimeException
  * typo-near-match checks and as a fail-safe if a generated full resource is
  * temporarily missing during deployment.
  */
-final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier
+final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier
 {
     private const MAX_TOKEN_LENGTH = 190;
 
@@ -43,11 +49,21 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     /** @var array<string, array<string, array{0:int,1:int}>> */
     private static array $indexCache = [];
 
-    public function __construct(private PDO $pdo, private array $config = [])
+    public function __construct(PDO $pdo, private array $config = [])
     {
-        // PDO remains in the signature for compatibility with ContentTranslator.
-        // Lexical validation itself is file-only and makes no DB/network request.
+        // PDO stays in the public signature for compatibility with
+        // ContentTranslator. Lexical validation itself is file-only.
         self::loadSmallLexicons($config);
+    }
+
+    public function hasFullCoverage(): bool
+    {
+        [$ptWord, $ptIndex] = $this->fullPaths('pt');
+        [$enWord, $enIndex] = $this->fullPaths('en');
+        return self::usableFile($ptWord)
+            && self::usableFile($ptIndex)
+            && self::usableFile($enWord)
+            && self::usableFile($enIndex);
     }
 
     public function classifyTokens(array $tokens): array
@@ -155,21 +171,15 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     /** @param string[] $tokens @return array<string, bool> */
     private function languageMembership(array $tokens, string $language): array
     {
-        $root = dirname(__DIR__, 2);
-        $isPt = $language === 'pt';
-        $fullPath = (string) ($this->config[$isPt ? 'pt_full_path' : 'en_full_path']
-            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.txt' : 'en_GB.txt'));
-        $indexPath = (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
-            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json'));
-
-        if (is_file($fullPath) && is_readable($fullPath) && is_file($indexPath) && is_readable($indexPath)) {
+        [$fullPath, $indexPath] = $this->fullPaths($language);
+        if (self::usableFile($fullPath) && self::usableFile($indexPath)) {
             return self::indexedMembership($tokens, $fullPath, $indexPath);
         }
 
-        // Deployment fail-safe: the old compact lists still work if a partial
-        // deploy temporarily lacks the generated large files. This is never the
-        // intended steady-state path after cPanel deploys resources/.
-        $core = $isPt ? self::$ptCore : self::$enCore;
+        // Deployment fail-safe: the last nearly-good compact behavior remains
+        // available during a partial deploy. Once resources/lexicon/full exists,
+        // production automatically uses the large dictionaries instead.
+        $core = $language === 'pt' ? self::$ptCore : self::$enCore;
         $found = [];
         foreach ($tokens as $token) {
             if (isset($core[$token])) {
@@ -177,6 +187,23 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             }
         }
         return $found;
+    }
+
+    /** @return array{0:string,1:string} */
+    private function fullPaths(string $language): array
+    {
+        $root = dirname(__DIR__, 2);
+        $isPt = $language === 'pt';
+        $word = (string) ($this->config[$isPt ? 'pt_full_path' : 'en_full_path']
+            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.txt' : 'en_GB.txt'));
+        $index = (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
+            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json'));
+        return [$word, $index];
+    }
+
+    private static function usableFile(string $path): bool
+    {
+        return $path !== '' && is_file($path) && is_readable($path) && filesize($path) > 0;
     }
 
     /** @param string[] $tokens @return array<string, bool> */
