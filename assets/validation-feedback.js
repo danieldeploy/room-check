@@ -5,6 +5,7 @@
 
     const nativeFetch = window.fetch.bind(window);
     const config = window.ROOM_CHECK || {};
+    const translationFeedback = window.ROOM_TRANSLATION_FEEDBACK || {};
     let lastEditedRow = null;
     const feedbackTimers = new WeakMap();
     const bypassNavigation = new WeakSet();
@@ -14,7 +15,7 @@
     const feedbackForRow = (row) => row?.querySelector('.problem-field .row-save-feedback') || null;
     const textareaForRow = (row) => row?.querySelector('.problem-field textarea') || null;
     const allRows = () => Array.from(document.querySelectorAll('.check-row'));
-
+    const successMessage = () => translationFeedback.saved || 'Saved: translation correct or ambiguous';
 
     const keepValidationTextareaEditable = (textarea) => {
         if (!textarea || config.canEdit === false) return;
@@ -28,174 +29,74 @@
         if (checkbox && checkbox.checked && !checkbox.disabled) textarea.readOnly = false;
     };
 
-    const resetFeedback = (feedback, visible = false) => {
+    const clearInvalidState = (textarea) => {
+        if (!textarea) return;
+        textarea.classList.remove('language-invalid');
+        textarea.removeAttribute('aria-invalid');
+        delete textarea.dataset.languageSaveFailed;
+    };
+
+    const resetFeedback = (feedback) => {
         if (!feedback) return;
         window.clearTimeout(feedbackTimers.get(feedback));
         feedbackTimers.delete(feedback);
-        feedback.textContent = 'Guardado';
+        feedback.textContent = '';
         feedback.style.color = '';
         feedback.style.height = '';
         feedback.style.minHeight = '';
         feedback.style.lineHeight = '';
-        feedback.classList.toggle('is-visible', visible);
+        feedback.classList.remove('is-visible');
     };
 
-    const changedRange = (before, after) => {
-        before = String(before ?? '');
-        after = String(after ?? '');
-        let start = 0;
-        while (start < before.length && start < after.length && before[start] === after[start]) start += 1;
-        let beforeEnd = before.length;
-        let afterEnd = after.length;
-        while (beforeEnd > start && afterEnd > start && before[beforeEnd - 1] === after[afterEnd - 1]) {
-            beforeEnd -= 1;
-            afterEnd -= 1;
-        }
-        while (start > 0 && /[\p{L}\p{N}_-]/u.test(after[start - 1] || '')) start -= 1;
-        while (afterEnd < after.length && /[\p{L}\p{N}_-]/u.test(after[afterEnd] || '')) afterEnd += 1;
-        return { start, end: Math.max(start, afterEnd) };
-    };
-
-    const removeHighlight = (textarea) => {
-        if (!textarea) return;
-        textarea.classList.remove('language-invalid');
-        textarea.removeAttribute('aria-invalid');
-        textarea.parentElement?.querySelector('.language-highlight-layer')?.remove();
-        if (textarea.dataset.languageOriginalColor !== undefined) {
-            textarea.style.color = textarea.dataset.languageOriginalColor;
-            delete textarea.dataset.languageOriginalColor;
-        }
-        if (textarea.dataset.languageOriginalBackground !== undefined) {
-            textarea.style.backgroundColor = textarea.dataset.languageOriginalBackground;
-            delete textarea.dataset.languageOriginalBackground;
-        }
-        textarea.style.caretColor = '';
-        delete textarea.dataset.languageInvalidWords;
-    };
-
-    const highlightBackground = (layer) => layer.dataset.textareaBackground || '#fbfdfd';
-
-    const appendHighlightedText = (layer, value, invalidWords) => {
-        const words = (Array.isArray(invalidWords) ? invalidWords : [])
-            .map((word) => String(word).trim())
-            .filter(Boolean)
-            .sort((a, b) => b.length - a.length);
-        if (words.length === 0) return false;
-
-        const escaped = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-        const pattern = new RegExp(`(${escaped.join('|')})`, 'giu');
-        let matched = false;
-
-        value.split(pattern).forEach((part) => {
-            const isWrong = words.some((word) => part.localeCompare(word, undefined, { sensitivity: 'accent' }) === 0);
-            if (isWrong) {
-                const wrong = document.createElement('span');
-                wrong.className = 'language-wrong-segment';
-                wrong.textContent = part;
-                wrong.style.backgroundColor = highlightBackground(layer);
-                layer.append(wrong);
-                matched = true;
-            } else {
-                layer.append(document.createTextNode(part));
-            }
-        });
-        return matched;
-    };
-
-    const renderHighlight = (textarea, invalidWords = []) => {
-        if (!textarea) return;
-        keepValidationTextareaEditable(textarea);
-        removeHighlight(textarea);
-        const value = textarea.value;
-        const baseline = textarea.dataset.lastValidValue ?? '';
-        const computed = window.getComputedStyle(textarea);
-        const layer = document.createElement('div');
-        layer.className = 'language-highlight-layer';
-        layer.setAttribute('aria-hidden', 'true');
-        layer.dataset.textareaBackground = computed.backgroundColor || '#fbfdfd';
-
-        if (!appendHighlightedText(layer, value, invalidWords)) {
-            const range = changedRange(baseline, value);
-            const normal = document.createElement('span');
-            normal.textContent = value.slice(0, range.start);
-            const wrong = document.createElement('span');
-            wrong.className = 'language-wrong-segment';
-            wrong.textContent = value.slice(range.start, range.end) || value;
-            wrong.style.backgroundColor = highlightBackground(layer);
-            const tail = document.createElement('span');
-            tail.textContent = value.slice(range.end);
-            layer.append(normal, wrong, tail);
-        } else {
-            textarea.dataset.languageInvalidWords = JSON.stringify(invalidWords);
-        }
-
-        Object.assign(layer.style, {
-            position: 'absolute', left: '0', top: '0',
-            width: '100%', height: `${textarea.offsetHeight}px`,
-            padding: computed.padding, borderWidth: computed.borderWidth, borderStyle: 'solid',
-            borderColor: 'transparent', borderRadius: computed.borderRadius,
-            boxSizing: computed.boxSizing, font: computed.font,
-            lineHeight: computed.lineHeight, letterSpacing: computed.letterSpacing,
-            textAlign: computed.textAlign, textIndent: computed.textIndent, wordSpacing: computed.wordSpacing,
-            color: 'transparent', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
-            pointerEvents: 'none', zIndex: '3',
-        });
-        textarea.classList.add('language-invalid');
-        textarea.dataset.languageNeedsValidation = '1';
-        textarea.setAttribute('aria-invalid', 'true');
-        textarea.parentElement.insertBefore(layer, textarea);
-    };
-
-    const showErrorFeedback = (row, message) => {
+    const showFeedback = (row, message, kind = 'error') => {
         const feedback = feedbackForRow(row);
         if (!feedback || !message) return;
         window.clearTimeout(feedbackTimers.get(feedback));
         feedback.textContent = String(message);
-        feedback.style.color = 'var(--wrong)';
+        feedback.style.color = kind === 'success' ? 'var(--ok)' : 'var(--wrong)';
         feedback.style.height = 'auto';
         feedback.style.minHeight = '18px';
         feedback.style.lineHeight = '1.3';
         feedback.classList.add('is-visible');
+        if (kind === 'success') {
+            feedbackTimers.set(feedback, window.setTimeout(() => {
+                feedback.classList.remove('is-visible');
+                feedbackTimers.delete(feedback);
+            }, 3500));
+        }
     };
 
-    const showValidationFeedback = (row, message, invalidWords = []) => {
+    const showErrorFeedback = (row, message) => {
         const textarea = textareaForRow(row);
-        if (textarea) renderHighlight(textarea, invalidWords);
-        showErrorFeedback(row, message);
+        if (textarea) {
+            keepValidationTextareaEditable(textarea);
+            textarea.classList.add('language-invalid');
+            textarea.dataset.languageSaveFailed = '1';
+            textarea.setAttribute('aria-invalid', 'true');
+        }
+        showFeedback(row, message, 'error');
     };
 
-    const markTextareaSaved = (textarea, showFeedback = true) => {
+    const markTextareaSaved = (textarea, showMessage = true) => {
         if (!textarea) return;
         textarea.dataset.lastValidValue = textarea.value;
         delete textarea.dataset.languageNeedsValidation;
-        removeHighlight(textarea);
-        const row = textarea.closest('.check-row');
-        const feedback = feedbackForRow(row);
-        if (!feedback || !showFeedback) return;
-        resetFeedback(feedback, true);
-        feedbackTimers.set(feedback, window.setTimeout(() => {
-            feedback.classList.remove('is-visible');
-            feedbackTimers.delete(feedback);
-        }, 2000));
+        clearInvalidState(textarea);
+        if (showMessage) showFeedback(textarea.closest('.check-row'), successMessage(), 'success');
     };
-
-    const showSavedFeedback = (row) => markTextareaSaved(textareaForRow(row), true);
 
     const pendingTextareas = () => Array.from(document.querySelectorAll(
         '.check-row textarea[data-language-needs-validation="1"]'
     )).filter((textarea) => textarea.value !== (textarea.dataset.lastValidValue ?? textarea.value));
 
-    const invalidTextareas = () => Array.from(document.querySelectorAll(
-        '.check-row textarea.language-invalid'
-    ));
-
     const restorePendingEdits = () => {
         pendingTextareas().forEach((textarea) => {
             textarea.value = textarea.dataset.lastValidValue ?? '';
             delete textarea.dataset.languageNeedsValidation;
-            removeHighlight(textarea);
+            clearInvalidState(textarea);
             resetFeedback(feedbackForRow(textarea.closest('.check-row')));
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            delete textarea.dataset.languageNeedsValidation;
         });
     };
 
@@ -209,7 +110,7 @@
         panel.setAttribute('role', 'alertdialog');
         panel.setAttribute('aria-modal', 'true');
         const message = document.createElement('p');
-        message.textContent = String(config.languageDecisionMessage || 'Invalid language text. Correct it or cancel the edit?');
+        message.textContent = String(config.languageDecisionMessage || 'The text could not be saved. Correct it or cancel the edit?');
         const actions = document.createElement('div');
         actions.className = 'language-decision-actions';
         const correct = document.createElement('button');
@@ -218,81 +119,43 @@
         const cancel = document.createElement('button');
         cancel.type = 'button';
         cancel.textContent = String(config.languageDecisionCancel || 'Cancel edit');
+        const finish = (value) => { overlay.remove(); decisionDialog = null; resolve(value); };
+        correct.addEventListener('click', () => finish('correct'));
+        cancel.addEventListener('click', () => finish('cancel'));
         actions.append(correct, cancel);
         panel.append(message, actions);
         overlay.append(panel);
         document.body.append(overlay);
         decisionDialog = overlay;
-        const finish = (value) => { overlay.remove(); decisionDialog = null; resolve(value); };
-        correct.addEventListener('click', () => finish('correct'));
-        cancel.addEventListener('click', () => finish('cancel'));
         correct.focus();
     });
 
-    const validatePendingTextareas = async (textareas) => {
-        if (textareas.length === 0) return { valid: true, invalid: [] };
-        const response = await nativeFetch('api.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-                action: 'validate_bilingual_texts',
-                csrfToken: config.csrfToken,
-                fields: textareas.map((textarea, index) => ({ fieldKey: String(index), text: textarea.value })),
-            }),
-        });
-        let result = null;
-        try { result = await response.json(); } catch (_) { result = null; }
-        if (response.ok && result?.ok) {
-            textareas.forEach((textarea) => removeHighlight(textarea));
-            return { valid: true, invalid: [] };
-        }
-        if (result?.validation === true) {
-            const invalid = [];
-            (result.invalidFields || []).forEach((field) => {
-                const index = Number(field.fieldKey);
-                const textarea = Number.isInteger(index) ? textareas[index] : null;
-                if (!textarea) return;
-                renderHighlight(textarea, field.invalidWords || []);
-                showErrorFeedback(textarea.closest('.check-row'), field.error || result.error || 'Invalid language text.');
-                invalid.push(textarea);
-            });
-            return { valid: false, invalid };
-        }
-        throw new Error(result?.error || 'Could not validate the text.');
-    };
-
-    const waitForPendingSave = async (textareas) => {
+    const flushPendingSaves = async (textareas) => {
         textareas.forEach((textarea) => textarea.dispatchEvent(new Event('blur')));
-        const deadline = Date.now() + 4500;
+        const deadline = Date.now() + 16000;
         while (Date.now() < deadline) {
             if (textareas.every((textarea) => textarea.dataset.languageNeedsValidation !== '1')) return true;
-            if (textareas.some((textarea) => textarea.classList.contains('language-invalid'))) return false;
-            await new Promise((resolve) => window.setTimeout(resolve, 60));
+            if (textareas.some((textarea) => textarea.dataset.languageSaveFailed === '1')) return false;
+            await new Promise((resolve) => window.setTimeout(resolve, 80));
         }
+        showErrorFeedback(
+            textareas[0]?.closest('.check-row'),
+            translationFeedback.timeout || 'Error: translation validation timed out.'
+        );
         return false;
     };
 
     const resolvePendingBeforeNavigation = async () => {
         const pending = pendingTextareas();
         if (pending.length === 0) return true;
-        let validation;
-        try {
-            validation = await validatePendingTextareas(pending);
-        } catch (error) {
-            showErrorFeedback(pending[0]?.closest('.check-row'), error.message);
-            pending[0]?.focus();
+        if (await flushPendingSaves(pending)) return true;
+        const decision = await askInvalidEditDecision();
+        if (decision === 'correct') {
+            (pendingTextareas()[0] || pending[0])?.focus();
             return false;
         }
-        if (!validation.valid) {
-            const decision = await askInvalidEditDecision();
-            if (decision === 'correct') {
-                (validation.invalid[0] || invalidTextareas()[0])?.focus();
-                return false;
-            }
-            restorePendingEdits();
-            return true;
-        }
-        return waitForPendingSave(pending);
+        restorePendingEdits();
+        return true;
     };
 
     const contextControl = (target) => target?.matches?.('#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate');
@@ -306,6 +169,7 @@
         }
         if (contextControl(event.target)) previousControlValues.set(event.target, event.target.value);
     }, true);
+
     document.addEventListener('pointerdown', (event) => {
         if (contextControl(event.target)) previousControlValues.set(event.target, event.target.value);
     }, true);
@@ -315,7 +179,7 @@
         if (!textarea) return;
         lastEditedRow = textarea.closest('.check-row');
         if (textarea.dataset.lastValidValue === undefined) textarea.dataset.lastValidValue = textarea.value;
-        if (textarea.classList.contains('language-invalid')) removeHighlight(textarea);
+        clearInvalidState(textarea);
         if (textarea.value !== textarea.dataset.lastValidValue) textarea.dataset.languageNeedsValidation = '1';
         else delete textarea.dataset.languageNeedsValidation;
         resetFeedback(feedbackForRow(lastEditedRow));
@@ -375,7 +239,9 @@
             const rows = allRows();
             requestBody.items.forEach((item, index) => {
                 const textarea = textareaForRow(rows[index]);
-                if (textarea && textarea.value === String(item.problem ?? '')) markTextareaSaved(textarea, index === requestBody.items.length - 1);
+                if (textarea && textarea.value === String(item.problem ?? '')) {
+                    markTextareaSaved(textarea, rows[index] === lastEditedRow);
+                }
             });
             return;
         }
@@ -402,15 +268,10 @@
         const isTextSave = action === 'set_assignments_atomic' || action === '';
         if (!isTextSave) return response;
         if (!response.ok || payload?.ok === false) {
-            if (payload?.validation === true) {
-                showValidationFeedback(lastEditedRow, payload?.error || 'Invalid language text.', payload?.invalidWords || []);
-            } else {
-                showErrorFeedback(lastEditedRow, payload?.error || 'Erro ao guardar.');
-            }
+            showErrorFeedback(lastEditedRow, payload?.error || translationFeedback.saveError || 'Error: could not save.');
             return response;
         }
         markSavedRequest(requestBody);
-        if (lastEditedRow?.isConnected && !requestBody?.items) showSavedFeedback(lastEditedRow);
         return response;
     };
 })();

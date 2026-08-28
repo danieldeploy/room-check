@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/Auth/Auth.php';
 require_once dirname(__DIR__) . '/Security/Csrf.php';
 require_once dirname(__DIR__) . '/I18n/SiteTranslations.php';
+require_once dirname(__DIR__) . '/I18n/TranslationFeedback.php';
 
 final class SessionBar
 {
@@ -21,6 +22,7 @@ final class SessionBar
         $displayName = (string) ($user['display_name'] ?? $user['username'] ?? 'Utilizador');
         $role = (string) ($user['role'] ?? '');
         $roleLabel = Auth::ROLES[$role] ?? $role;
+        $translationFeedback = TranslationFeedback::messages();
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
             <div class="session-navigation">
@@ -45,6 +47,7 @@ final class SessionBar
         </nav>
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/readonly-textarea.css') ?>">
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/bilingual-textareas.css') ?>">
+        <script>window.ROOM_TRANSLATION_FEEDBACK = <?= json_encode($translationFeedback, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js') ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/bilingual-textareas.js') ?>" data-bilingual-api="<?= self::escape($prefix . 'api.php') ?>"></script>
         <?php

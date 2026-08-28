@@ -11,62 +11,40 @@ function assertValidationFeedback(bool $condition, string $message): void
     echo 'PASS: ' . $message . PHP_EOL;
 }
 
-function captureLanguageGuardMessage(string $text, string $locale): string
-{
-    try {
-        LanguageGuard::assertExpectedLanguage($text, $locale);
-    } catch (InvalidArgumentException $exception) {
-        return $exception->getMessage();
-    }
-    throw new RuntimeException('FAIL: expected LanguageGuard to reject mixed-language text');
-}
-
 $root = dirname(__DIR__);
 $feedbackJs = file_get_contents($root . '/assets/validation-feedback.js');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
+$feedbackI18n = file_get_contents($root . '/src/I18n/TranslationFeedback.php');
+$validator = file_get_contents($root . '/translation-validate.php');
 
-assertValidationFeedback(is_string($feedbackJs), 'shared validation feedback JavaScript is readable');
-assertValidationFeedback(is_string($sessionBar), 'SessionBar source is readable');
-assertValidationFeedback(
-    str_contains($sessionBar, "assets/validation-feedback.js"),
-    'authenticated pages load the shared validation feedback layer'
-);
-assertValidationFeedback(
-    str_contains($feedbackJs, "payload?.error"),
-    'the inline message comes from the server validation response'
-);
-assertValidationFeedback(
-    str_contains($feedbackJs, "feedback.textContent = String(message)"),
-    'server validation text is rendered in the same row feedback element used for save feedback'
-);
-assertValidationFeedback(
-    str_contains($feedbackJs, "feedback.classList.add('is-visible')"),
-    'validation feedback becomes visibly announced beside the edited item'
-);
-assertValidationFeedback(
-    str_contains($feedbackJs, "feedback.textContent = 'Guardado'"),
-    'successful correction restores the normal Saved/Guardado feedback'
-);
-assertValidationFeedback(
-    !str_contains($feedbackJs, 'confidentLanguage(')
-        && !str_contains($feedbackJs, 'assertExpectedLanguage('),
-    'browser feedback does not duplicate the server-side language detector'
-);
+assertValidationFeedback(is_string($feedbackJs) && is_string($sessionBar) && is_string($feedbackI18n) && is_string($validator), 'contextual validation sources are readable');
+assertValidationFeedback(str_contains($sessionBar, 'assets/validation-feedback.js'), 'authenticated pages load shared save feedback');
+assertValidationFeedback(str_contains($feedbackJs, 'payload?.error'), 'server translation errors are rendered inline');
+assertValidationFeedback(str_contains($feedbackJs, 'Saved: translation correct or ambiguous'), 'English fallback explains the algorithm conclusion');
+assertValidationFeedback(str_contains($feedbackI18n, 'Guardado: tradução correta ou ambígua') && str_contains($feedbackI18n, 'Saved: translation correct or ambiguous'), 'success conclusion is declared bilingually in i18n layer');
+assertValidationFeedback(str_contains($sessionBar, 'TranslationFeedback::messages()'), 'session shell exposes localized translation messages to the browser');
+assertValidationFeedback(str_contains($feedbackJs, 'ROOM_TRANSLATION_FEEDBACK'), 'browser consumes centrally localized translation messages');
+assertValidationFeedback(str_contains($feedbackJs, 'flushPendingSaves'), 'navigation flushes the real blur save before leaving');
+assertValidationFeedback(str_contains($feedbackJs, "dispatchEvent(new Event('blur'))"), 'navigation uses the same blur/save translation path');
+assertValidationFeedback(!str_contains($feedbackJs, 'language-highlight-layer'), 'duplicate text overlay is removed');
+assertValidationFeedback(!str_contains($feedbackJs, 'invalidWords'), 'browser no longer performs word-level validation/highlighting');
+assertValidationFeedback(!str_contains($feedbackJs, 'confidentLanguage(') && !str_contains($feedbackJs, 'assertExpectedLanguage('), 'browser does not duplicate server language detection');
+assertValidationFeedback(str_contains($validator, 'ContentTranslator') && str_contains($validator, '->versions('), 'validation-only endpoint uses the translation/cache algorithm');
 
-$englishMessage = captureLanguageGuardMessage('Check the room quarto', 'en');
-$portugueseMessage = captureLanguageGuardMessage('Verificar o quarto room', 'pt');
-assertValidationFeedback(
-    $englishMessage === 'This text contains errors. Please write it in English only.',
-    'English login receives the concise validation message in English'
-);
-assertValidationFeedback(
-    $portugueseMessage === 'Este texto contém erros. Escreva-o apenas em português.',
-    'Portuguese login receives the concise validation message in Portuguese'
-);
-assertValidationFeedback(
-    !str_contains($englishMessage, 'mixes Portuguese and English')
-        && !str_contains($portugueseMessage, 'mistura português e inglês'),
-    'obsolete mixed-language wording cannot return'
-);
+try {
+    LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha e das janelas.', 'en');
+    throw new RuntimeException('FAIL: Portuguese sentence was accepted in EN mode');
+} catch (LanguageValidationException $exception) {
+    assertValidationFeedback($exception->getMessage() === 'Error: text is clearly PT.', 'English UI reports clearly detected PT');
+}
+try {
+    LanguageGuard::assertExpectedLanguage('Check the kitchen, windows and curtains.', 'pt');
+    throw new RuntimeException('FAIL: English sentence was accepted in PT mode');
+} catch (LanguageValidationException $exception) {
+    assertValidationFeedback($exception->getMessage() === 'Erro: texto claramente EN.', 'Portuguese UI reports clearly detected EN');
+}
 
-echo "Inline bilingual validation feedback contract passed.\n";
+LanguageGuard::assertExpectedLanguage('Check the fire extinguisher detector and HVAC thermostat.', 'en');
+assertValidationFeedback(true, 'technical English no longer creates false inline errors');
+
+echo "Contextual translation feedback contract passed.\n";

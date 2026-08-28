@@ -11,102 +11,57 @@ function assertHardening(bool $condition, string $message): void
     echo 'PASS: ' . $message . PHP_EOL;
 }
 
-function assertHardeningRejects(string $text, string $expectedLanguage, string $message): void
+function assertHardeningRejects(string $text, string $expectedLanguage, string $fragment, string $message): void
 {
     try {
         LanguageGuard::assertExpectedLanguage($text, $expectedLanguage);
-    } catch (InvalidArgumentException $exception) {
-        $expectedFragment = $expectedLanguage === 'en'
-            ? 'Please write it in English only.'
-            : 'Escreva-o apenas em português.';
-        assertHardening(str_contains($exception->getMessage(), $expectedFragment), $message);
-        return;
-    }
-
-    throw new RuntimeException('FAIL: ' . $message . ' — text was accepted');
-}
-
-function assertHardeningInvalidWord(
-    string $text,
-    string $expectedLanguage,
-    string $invalidWord,
-    string $message
-): void {
-    try {
-        LanguageGuard::assertExpectedLanguage($text, $expectedLanguage);
     } catch (LanguageValidationException $exception) {
-        assertHardening(in_array($invalidWord, $exception->invalidWords, true), $message);
+        assertHardening(str_contains($exception->getMessage(), $fragment), $message);
         return;
     }
-
     throw new RuntimeException('FAIL: ' . $message . ' — text was accepted');
 }
 
-// Clean matching-language values remain valid in both directions.
 LanguageGuard::assertExpectedLanguage('Check that it is clean and undamaged in the room.', 'en');
 LanguageGuard::assertExpectedLanguage('Verificar se está limpo e sem danos no quarto.', 'pt');
-LanguageGuard::assertExpectedLanguage('road house room stairs', 'en');
-LanguageGuard::assertExpectedLanguage('casa quarto escada cama', 'pt');
-assertHardening(true, 'clean EN and PT words remain accepted');
+assertHardening(true, 'clear EN and PT sentences remain accepted');
 
-// Every complete natural-language word is checked independently.
-foreach (['bloco', 'terreno', 'barco', 'nuvem', 'escada', 'quarto', 'cama', 'casa'] as $word) {
-    assertHardeningInvalidWord(
-        'Check that it is clean and undamaged. ' . $word,
-        'en',
-        $word,
-        'EN input rejects complete non-EN word: ' . $word
-    );
+// Technical vocabulary is no longer validated word by word.
+foreach ([
+    'Check the fire extinguisher detector and HVAC thermostat.',
+    'Inspect the smoke detector and extinguisher pressure gauge.',
+    'Check the WiFi detector status and My2N intercom.',
+] as $technicalEnglish) {
+    LanguageGuard::assertExpectedLanguage($technicalEnglish, 'en');
 }
+assertHardening(true, 'technical English vocabulary is accepted from sentence context');
 
-foreach (['block', 'land', 'boat', 'cloud', 'stairs', 'room', 'bed', 'curtain', 'house', 'road'] as $word) {
-    assertHardeningInvalidWord(
-        'Verificar se está limpo e sem danos. ' . $word,
-        'pt',
-        $word,
-        'PT input rejects complete non-PT word: ' . $word
-    );
-}
+// Short/technical text is intentionally ambiguous instead of being rejected.
+assertHardening(LanguageGuard::confidentSentenceLanguage('fire extinguisher') === null, 'two-token technical text is ambiguous');
+assertHardening(LanguageGuard::confidentSentenceLanguage('HVAC') === null, 'single technical token is ambiguous');
+LanguageGuard::assertExpectedLanguage('fire extinguisher', 'en');
+LanguageGuard::assertExpectedLanguage('fire extinguisher', 'pt');
+assertHardening(true, 'ambiguous technical text does not cause a false language error');
 
-// Nonsense/joined/typo tokens are validated as the complete word. No prefix,
-// suffix or duplicated-character exceptions are required or allowed.
-foreach (['ccasa', 'casaa', 'roadcasa', 'casaroad'] as $word) {
-    assertHardeningInvalidWord(
-        'Check the room carefully. ' . $word,
-        'en',
-        $word,
-        'EN strict word validation rejects: ' . $word
-    );
-}
-foreach (['hhouse', 'housee', 'casahouse', 'housecasa'] as $word) {
-    assertHardeningInvalidWord(
-        'Verificar o quarto cuidadosamente. ' . $word,
-        'pt',
-        $word,
-        'PT strict word validation rejects: ' . $word
-    );
-}
-
-// Whole-field opposite language remains blocked.
-assertHardeningRejects('Verificar a limpeza da cozinha e das janelas.', 'en', 'whole Portuguese text is rejected in EN mode');
-assertHardeningRejects('Check the kitchen, windows and curtains.', 'pt', 'whole English text is rejected in PT mode');
-
-// Deliberately neutral technical/brand/loan terms remain usable in either mode.
-foreach (['WiFi', 'My2N', 'Café', 'Hotel', 'Hostel', 'Airbnb', 'Booking', 'Netflix', 'Welcome'] as $neutral) {
-    LanguageGuard::assertExpectedLanguage($neutral, 'en');
-    LanguageGuard::assertExpectedLanguage($neutral, 'pt');
-    assertHardening(LanguageGuard::confidentLanguage($neutral) === null, 'neutral term remains unclassified: ' . $neutral);
-}
-assertHardening(true, 'neutral technical, brand and loan terms remain accepted in both modes');
+assertHardeningRejects(
+    'Verificar a limpeza da cozinha e das janelas.',
+    'en',
+    'clearly PT',
+    'whole Portuguese sentence is rejected in EN mode'
+);
+assertHardeningRejects(
+    'Check the kitchen, windows and curtains.',
+    'pt',
+    'claramente EN',
+    'whole English sentence is rejected in PT mode'
+);
 
 $guardSource = file_get_contents(dirname(__DIR__) . '/src/I18n/LanguageGuard.php');
 assertHardening(is_string($guardSource), 'LanguageGuard source is readable');
-assertHardening(str_contains($guardSource, "private const MODEL = 'large_2_1niz1ni';"), 'large EN/PT model is the production detector');
-assertHardening(str_contains($guardSource, 'wordMatchesExpectedLanguage'), 'strict whole-word validator is present');
-assertHardening(!str_contains($guardSource, 'embeddedOppositeParts'), 'prefix/suffix/duplicate-character special-case detector is removed');
-assertHardening(!str_contains($guardSource, 'isConfidentOppositeComponent'), 'opposite-language subword helper is removed');
-assertHardening(!str_contains($guardSource, 'isConfidentExpectedComponent'), 'expected-language subword helper is removed');
+assertHardening(str_contains($guardSource, "private const MODEL = 'large_2_1niz1ni';"), 'large EN/PT model remains the production detector');
+assertHardening(str_contains($guardSource, 'confidentSentenceLanguage'), 'phrase-level confidence helper is present');
+assertHardening(!str_contains($guardSource, 'wordMatchesExpectedLanguage'), 'word-by-word language gate is removed');
+assertHardening(!str_contains($guardSource, 'private const NEUTRAL'), 'manual technical vocabulary whitelist is removed');
 assertHardening(file_exists(dirname(__DIR__) . '/src/ThirdParty/efficient-language-detector/resources/ngrams/subset/large_2_1niz1ni.php'), 'large EN/PT detector data is vendored');
-assertHardening(!file_exists(dirname(__DIR__) . '/src/ThirdParty/efficient-language-detector/resources/ngrams/subset/small_2_1niz1ni.php'), 'obsolete small detector data is removed');
 
-echo "Language guard hardening regression passed.\n";
+echo "Phrase-level language guard regression passed.\n";
