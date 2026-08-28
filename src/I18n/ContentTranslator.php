@@ -214,7 +214,12 @@ final class ContentTranslator
             );
         }
 
-        $translated = $this->translateFresh($text, $source, $target);
+        // Quotes and confirmed person/proper names are protected before the
+        // provider is called. Country names are deliberately not protected: they
+        // must be translated normally. Punctuation is normalized only in this
+        // provider copy, so the user's original text remains unchanged.
+        $prepared = $this->prepareTranslationInput($text);
+        $translated = $this->translatePrepared($prepared, $source, $target);
         if ($translated === null || trim($translated) === '') {
             throw new InvalidArgumentException(
                 $source === 'en'
@@ -235,7 +240,7 @@ final class ContentTranslator
             // Retry only when the provider really returned the wrong/mixed language.
             // Unknown proper nouns or lexical edge cases must not double the network
             // wait; network/timeout exceptions are never retried here.
-            $retry = $this->translateFresh($text, $source, $target);
+            $retry = $this->translatePrepared($prepared, $source, $target);
             if ($retry !== null && trim($retry) !== '' && self::hasPlausibleLength($text, $retry)) {
                 $retryAnalysis = $this->targetAnalysis($retry, $target, $source);
                 if (in_array($retryAnalysis['conclusion'], ['correct', 'ambiguous'], true)) {
@@ -325,7 +330,8 @@ final class ContentTranslator
             $translated = $statement->fetchColumn();
             if (is_string($translated) && trim($translated) !== '') {
                 $translated = trim($translated);
-                if (self::hasPlausibleLength($text, $translated)) {
+                if (self::hasPlausibleLength($text, $translated)
+                    && $this->preservesProtectedSource($text, $translated)) {
                     $analysis = $this->targetAnalysis($translated, $target, $source);
                     if (in_array($analysis['conclusion'], ['correct', 'ambiguous'], true)) {
                         return [
@@ -379,6 +385,133 @@ final class ContentTranslator
         } catch (Throwable) {
             // A cache failure must never prevent a valid save operation.
         }
+    }
+
+    /**
+     * @return array{text:string,protected:array<string,string>}
+     */
+    private function prepareTranslationInput(string $text): array
+    {
+        $protected = [];
+        $counter = 0;
+        $placeholder = static function (string $value) use (&$protected, &$counter): string {
+            $token = 'RoomCheckKeep' . $counter++ . 'Token';
+            $protected[$token] = $value;
+            return $token;
+        };
+
+        // Explicit double quotes are a user escape hatch: preserve the complete
+        // span exactly and keep it out of both language validation and translation.
+        $working = preg_replace_callback(
+            '/"[^"\r\n]*"|“[^”\r\n]*”/u',
+            static fn(array $match): string => $placeholder((string) $match[0]),
+            $text
+        );
+        if (!is_string($working)) {
+            $working = $text;
+        }
+
+        // Protect explicitly classified people and non-country proper names.
+        // Capitalization alone never creates an entity. Countries are left in
+        // the provider text so Alemanha/Spain/etc. translate normally.
+        if ($this->lexicalChecker instanceof LexicalEntityClassifier) {
+            preg_match_all("/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u", $working, $matches);
+            $normalized = [];
+            foreach (($matches[0] ?? []) as $raw) {
+                $token = LexicalLanguageChecker::normalizeToken((string) $raw);
+                if ($token !== '') {
+                    $normalized[$token] = true;
+                }
+            }
+            $entities = $this->lexicalChecker->classifyEntityTokens(array_keys($normalized));
+            if ($entities !== []) {
+                $working = preg_replace_callback(
+                    "/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u",
+                    static function (array $match) use ($entities, $placeholder): string {
+                        $raw = (string) $match[0];
+                        $token = LexicalLanguageChecker::normalizeToken($raw);
+                        $type = $entities[$token] ?? null;
+                        return in_array($type, ['person', 'proper'], true) ? $placeholder($raw) : $raw;
+                    },
+                    $working
+                );
+                if (!is_string($working)) {
+                    $working = $text;
+                    $protected = [];
+                }
+            }
+        }
+
+        // MyMemory can split the first letter after punctuation when there is no
+        // separating space (HAR regression: "danos.supra" -> "upra"). Normalize
+        // only the provider copy, never the source text persisted by Room Check.
+        $normalized = preg_replace('/([.!?;:])(?=\\p{L})/u', '$1 ', $working);
+        if (is_string($normalized)) {
+            $working = $normalized;
+        }
+
+        return ['text' => $working, 'protected' => $protected];
+    }
+
+    /**
+     * @param array{text:string,protected:array<string,string>} $prepared
+     */
+    private function translatePrepared(array $prepared, string $source, string $target): ?string
+    {
+        $translated = $this->translateFresh($prepared['text'], $source, $target);
+        if ($translated === null) {
+            return null;
+        }
+
+        foreach ($prepared['protected'] as $token => $original) {
+            $count = 0;
+            $translated = str_ireplace($token, $original, $translated, $count);
+            if ($count < 1) {
+                // Do not save a provider response that lost a quoted span/name.
+                return null;
+            }
+        }
+        return trim($translated);
+    }
+
+    private function preservesProtectedSource(string $source, string $translated): bool
+    {
+        // Old cache entries created before quote/name protection are reused only
+        // when they already preserved every protected source segment.
+        preg_match_all('/"[^"\r\n]*"|“[^”\r\n]*”/u', $source, $quoted);
+        foreach (($quoted[0] ?? []) as $span) {
+            if (!str_contains($translated, (string) $span)) {
+                return false;
+            }
+        }
+
+        if (!($this->lexicalChecker instanceof LexicalEntityClassifier)) {
+            return true;
+        }
+
+        $sourceWithoutQuotes = preg_replace('/"[^"\r\n]*"|“[^”\r\n]*”/u', ' ', $source);
+        if (!is_string($sourceWithoutQuotes)) {
+            $sourceWithoutQuotes = $source;
+        }
+        preg_match_all("/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u", $sourceWithoutQuotes, $matches);
+        $tokens = [];
+        foreach (($matches[0] ?? []) as $raw) {
+            $normalized = LexicalLanguageChecker::normalizeToken((string) $raw);
+            if ($normalized !== '') {
+                $tokens[$normalized] = (string) $raw;
+            }
+        }
+        $entities = $this->lexicalChecker->classifyEntityTokens(array_keys($tokens));
+        foreach ($entities as $normalized => $type) {
+            if (!in_array($type, ['person', 'proper'], true)) {
+                continue;
+            }
+            $raw = $tokens[$normalized] ?? $normalized;
+            if (mb_stripos($translated, $raw, 0, 'UTF-8') === false) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private function translateFresh(string $text, string $source, string $target): ?string

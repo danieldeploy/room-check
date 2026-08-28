@@ -54,8 +54,12 @@ final class LanguageGuard
         $text = trim($text);
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
         $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
-        $tokens = self::tokenDetails($text);
-        $sentenceLanguage = count($tokens) >= 3 ? self::confidentLanguage($text) : null;
+
+        // Text explicitly enclosed in double quotes is user-protected content:
+        // it is neither PT/EN evidence nor an unknown-word candidate.
+        $analysisText = self::withoutProtectedQuotedSpans($text);
+        $tokens = self::tokenDetails($analysisText);
+        $sentenceLanguage = count($tokens) >= 3 ? self::confidentLanguage($analysisText) : null;
 
         $base = [
             'conclusion' => 'ambiguous',
@@ -69,7 +73,9 @@ final class LanguageGuard
             'likelyMisspellings' => [],
         ];
         if ($tokens === []) {
-            $base['conclusion'] = 'empty';
+            // A field containing only protected quoted content is valid neutral
+            // content, not an empty field.
+            $base['conclusion'] = $text === '' ? 'empty' : 'ambiguous';
             return $base;
         }
 
@@ -285,6 +291,18 @@ final class LanguageGuard
     public static function confidentSentenceLanguage(string $text): ?string
     {
         return count(self::tokenDetails($text)) >= 3 ? self::confidentLanguage($text) : null;
+    }
+
+    private static function withoutProtectedQuotedSpans(string $text): string
+    {
+        if ($text === '') {
+            return '';
+        }
+
+        // Only complete double-quoted spans are protected. An unmatched quote
+        // keeps its text in normal validation.
+        $stripped = preg_replace('/"[^"\r\n]*"|“[^”\r\n]*”/u', ' ', $text);
+        return is_string($stripped) ? trim($stripped) : $text;
     }
 
     /** @return array<int, array{raw:string, normalized:string}> */
