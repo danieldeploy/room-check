@@ -91,15 +91,27 @@ final class LanguageGuard
             return $base;
         }
 
-        $normalizedTokens = array_values(array_unique(array_map(
-            static fn(array $token): string => $token['normalized'],
-            $tokens
-        )));
-        $classifications = $lexicalChecker->classifyTokens($normalizedTokens);
+        // Identifiers such as HVAC, WiFi, My2N and ZKTeco are neutral technical
+        // vocabulary regardless of whether a dictionary happens to list them
+        // under one language. Ordinary Titlecase words (House) are not included.
+        $lexicalTokens = [];
+        foreach ($tokens as $token) {
+            if (self::looksTechnicalIdentifier($token['raw'])) {
+                $base['technicalWords'][] = $token['raw'];
+                continue;
+            }
+            $lexicalTokens[$token['normalized']] = true;
+        }
+        $classifications = $lexicalTokens === []
+            ? []
+            : $lexicalChecker->classifyTokens(array_keys($lexicalTokens));
 
         foreach ($tokens as $token) {
             $normalized = $token['normalized'];
             $display = $token['raw'];
+            if (self::looksTechnicalIdentifier($display)) {
+                continue;
+            }
             $classification = $classifications[$normalized] ?? 'unknown';
 
             if ($classification === 'shared') {
@@ -107,11 +119,7 @@ final class LanguageGuard
                 continue;
             }
             if ($classification === 'unknown') {
-                if (self::looksTechnicalIdentifier($display)) {
-                    $base['technicalWords'][] = $display;
-                } else {
-                    $base['unknownWords'][] = $display;
-                }
+                $base['unknownWords'][] = $display;
                 continue;
             }
 
@@ -144,9 +152,9 @@ final class LanguageGuard
             return $base;
         }
 
-        // Only shared words, technical identifiers or genuinely neutral tokens
-        // remain. They are accepted as ambiguous instead of being invented into
-        // either language by the statistical detector.
+        // Only shared words or technical identifiers remain. They are accepted
+        // as ambiguous instead of being invented into either language by the
+        // statistical detector.
         $base['conclusion'] = 'ambiguous';
         return $base;
     }
