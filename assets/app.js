@@ -403,10 +403,9 @@
             );
             row.element.classList.toggle('assignment-locked', viewingAssignments && locked);
             if (viewingAssignments && hasAssignment) {
-                row.textarea.value = String(assignment.instructions || '').trim()
-                    || row.textarea.dataset.problem
-                    || row.textarea.dataset.defaultInstructions
-                    || '';
+                // An explicitly saved empty instruction is a real value. Do not
+                // replace it with the problem/default instruction on rerender.
+                row.textarea.value = String(assignment.instructions ?? '');
             } else if (viewingAssignments) {
                 row.textarea.value = row.textarea.dataset.problem
                     || row.textarea.dataset.defaultInstructions

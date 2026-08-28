@@ -52,7 +52,14 @@
         feedback.classList.remove('is-error', 'is-saved');
         feedback.classList.add('is-visible', kind === 'saved' ? 'is-saved' : 'is-error');
     };
+    const responseMessage = (response) => {
+        const reader = window.ROOM_TRANSLATION_RESULT_READER;
+        const results = reader?.fromResponse?.(response);
+        return String(results?.[0]?.message || '');
+    };
 
+    // Validation-only is kept only for text that cannot yet be persisted, such
+    // as instructions for a new item before that item has an ID.
     const validateTextarea = async (textarea) => {
         const response = await fetch(validationUrl, {
             method: 'POST',
@@ -69,17 +76,18 @@
             const result = payload.fields?.[0] || {};
             return {
                 valid: true,
-                sourceConclusion: result.sourceConclusion || 'ambiguous',
-                translationConclusion: result.translationConclusion || 'ambiguous',
-                message: result.message || translationFeedback.saved || 'Saved: translation accepted.'
+                message: result.message || translationFeedback.saved || 'Saved.'
             };
         }
         markInvalid(textarea);
-        showFeedback(textarea, payload?.error || translationFeedback.validationError || 'Error: could not validate the translation.', 'error');
+        showFeedback(textarea, payload?.error || translationFeedback.validationError || 'Not saved: could not verify the text.', 'error');
         return { valid: false };
     };
 
-    const autosaveTextarea = async (textarea, validationMessage) => {
+    // Existing/persistable instructions go straight through their real save.
+    // The same server operation validates source, translates, validates target,
+    // persists both languages and returns the exact green conclusion.
+    const autosaveTextarea = async (textarea) => {
         const action = textarea.dataset.bilingualAutosaveAction || '';
         if (!action) return true;
         const response = await fetch(apiUrl, {
@@ -103,11 +111,15 @@
         textarea.dataset.bilingualLastValidValue = textarea.value;
         delete textarea.dataset.bilingualPending;
         clearInvalid(textarea);
-        showFeedback(textarea, validationMessage || translationFeedback.saved || 'Saved: translation accepted.', 'saved');
+        showFeedback(
+            textarea,
+            responseMessage(response) || translationFeedback.saved || 'Saved.',
+            'saved'
+        );
         return true;
     };
 
-    const processTextarea = (textarea, autosave = true) => {
+    const processTextarea = (textarea, persistWhenPossible = true) => {
         const existing = savePromises.get(textarea);
         if (existing) return existing;
         const promise = (async () => {
@@ -117,15 +129,12 @@
                 return true;
             }
 
-            // Validate/translate first. The result is cached server-side, so the
-            // following persistence call does not cause a second provider call.
-            const validation = await validateTextarea(textarea);
-            if (!validation.valid) return false;
-
-            if (autosave && textarea.dataset.bilingualAutosaveAction) {
-                return autosaveTextarea(textarea, validation.message);
+            if (persistWhenPossible && textarea.dataset.bilingualAutosaveAction) {
+                return autosaveTextarea(textarea);
             }
 
+            const validation = await validateTextarea(textarea);
+            if (!validation.valid) return false;
             delete textarea.dataset.bilingualPending;
             textarea.dataset.bilingualValidatedValue = textarea.value;
             showFeedback(textarea, validation.message, 'saved');
@@ -211,7 +220,9 @@
             if (ownFields.length > 0) {
                 event.preventDefault();
                 event.stopImmediatePropagation();
-                const results = await Promise.all(ownFields.map((textarea) => processTextarea(textarea, false)));
+                const results = await Promise.all(ownFields.map((textarea) =>
+                    processTextarea(textarea, Boolean(textarea.dataset.bilingualAutosaveAction))
+                ));
                 if (!results.every(Boolean)) return;
                 bypassForms.add(form);
                 form.requestSubmit(event.submitter || undefined);

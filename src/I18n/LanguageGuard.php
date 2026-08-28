@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/ThirdParty/efficient-language-detector/manual_loader.php';
+require_once __DIR__ . '/LexicalLanguageChecker.php';
 
 use Nitotm\Eld\EldMode;
 use Nitotm\Eld\EldScheme;
@@ -25,208 +26,292 @@ final class LanguageValidationException extends InvalidArgumentException
     }
 }
 
+/**
+ * Language validation coordinator.
+ *
+ * Lexical evidence decides individual PT/EN words. The statistical detector is
+ * retained only as sentence-level context/diagnostics; it is no longer asked to
+ * behave like a dictionary for words such as "extinguisher".
+ */
 final class LanguageGuard
 {
     private const MODEL = 'large_2_1niz1ni';
-
     private const COMPONENT_MIN_SCORE = 0.18;
     private const COMPONENT_MIN_GAP = 0.08;
     private const COMPONENT_MIN_RATIO = 1.35;
 
-    private const SHORT_MIN_SCORE = 0.24;
-    private const SHORT_MIN_GAP = 0.12;
-    private const SHORT_MIN_RATIO = 1.65;
-
-    private const TOKEN_MIN_SCORE = 0.18;
-    private const TOKEN_MIN_GAP = 0.08;
-    private const TOKEN_MIN_RATIO = 1.35;
-
-    private const MIXED_MIN_SCORE = 0.26;
-    private const MIXED_MIN_GAP = 0.13;
-    private const MIXED_MIN_RATIO = 1.75;
-
     private static ?LanguageDetector $detector = null;
 
-    public static function sourceConclusion(string $text, string $expectedLanguage): string
-    {
+    /**
+     * @return array{
+     *   conclusion:string,
+     *   expectedLanguage:string,
+     *   sentenceLanguage:?string,
+     *   expectedWords:array<int,string>,
+     *   oppositeWords:array<int,string>,
+     *   sharedWords:array<int,string>,
+     *   technicalWords:array<int,string>,
+     *   unknownWords:array<int,string>
+     * }
+     */
+    public static function sourceAnalysis(
+        string $text,
+        string $expectedLanguage,
+        ?LexicalLanguageClassifier $lexicalChecker = null
+    ): array {
         $text = trim($text);
-        if ($text === '') {
-            return 'ambiguous';
-        }
-
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
         $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
-        $tokens = self::tokens($text);
+        $tokens = self::tokenDetails($text);
+        $sentenceLanguage = count($tokens) >= 3 ? self::confidentLanguage($text) : null;
 
-        if (self::hasMixedLanguageEvidence($tokens)) {
-            return 'mixed';
+        $base = [
+            'conclusion' => 'ambiguous',
+            'expectedLanguage' => $expectedLanguage,
+            'sentenceLanguage' => $sentenceLanguage,
+            'expectedWords' => [],
+            'oppositeWords' => [],
+            'sharedWords' => [],
+            'technicalWords' => [],
+            'unknownWords' => [],
+        ];
+        if ($tokens === []) {
+            $base['conclusion'] = 'empty';
+            return $base;
         }
 
-        if (count($tokens) < 2) {
-            return 'ambiguous';
-        }
-
-        $detected = count($tokens) === 2
-            ? self::confidentShortLanguage($text)
-            : self::confidentLanguage($text);
-
-        if ($detected === null) {
-            return 'ambiguous';
-        }
-        if ($detected === $expectedLanguage) {
-            return 'correct';
-        }
-        if ($detected === $oppositeLanguage) {
-            return 'wrong';
-        }
-        return 'ambiguous';
-    }
-
-    public static function assertExpectedLanguage(string $text, string $expectedLanguage): void
-    {
-        $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
-        $conclusion = self::sourceConclusion($text, $expectedLanguage);
-
-        if ($conclusion === 'mixed') {
-            if ($expectedLanguage === 'en') {
-                throw new LanguageValidationException('Error: text mixes EN and PT.');
+        // Compatibility fallback for non-persistent legacy callers. Production
+        // ContentTranslator always supplies the lexical checker.
+        if ($lexicalChecker === null) {
+            if ($sentenceLanguage === $expectedLanguage) {
+                $base['conclusion'] = 'correct';
+            } elseif ($sentenceLanguage === $oppositeLanguage) {
+                $base['conclusion'] = 'wrong';
             }
-            throw new LanguageValidationException('Erro: o texto mistura PT e EN.');
+            return $base;
         }
 
-        if ($conclusion !== 'wrong') {
-            return;
+        // Identifiers such as HVAC, WiFi, My2N and ZKTeco are neutral technical
+        // vocabulary regardless of whether a dictionary happens to list them
+        // under one language. Ordinary Titlecase words (House) are not included.
+        $lexicalTokens = [];
+        foreach ($tokens as $token) {
+            if (self::looksTechnicalIdentifier($token['raw'])) {
+                $base['technicalWords'][] = $token['raw'];
+                continue;
+            }
+            $lexicalTokens[$token['normalized']] = true;
+        }
+        $classifications = $lexicalTokens === []
+            ? []
+            : $lexicalChecker->classifyTokens(array_keys($lexicalTokens));
+
+        foreach ($tokens as $token) {
+            $normalized = $token['normalized'];
+            $display = $token['raw'];
+            if (self::looksTechnicalIdentifier($display)) {
+                continue;
+            }
+            $classification = $classifications[$normalized] ?? 'unknown';
+
+            if ($classification === 'shared') {
+                $base['sharedWords'][] = $display;
+                continue;
+            }
+            if ($classification === 'unknown') {
+                $base['unknownWords'][] = $display;
+                continue;
+            }
+
+            $tokenLanguage = $classification === 'pt_only' ? 'pt' : 'en';
+            if ($tokenLanguage === $expectedLanguage) {
+                $base['expectedWords'][] = $display;
+            } else {
+                $base['oppositeWords'][] = $display;
+            }
         }
 
-        $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
-        $label = strtoupper($oppositeLanguage);
-        if ($expectedLanguage === 'en') {
-            throw new LanguageValidationException("Error: text is clearly {$label}.");
+        foreach (['expectedWords', 'oppositeWords', 'sharedWords', 'technicalWords', 'unknownWords'] as $key) {
+            $base[$key] = self::uniqueWords($base[$key]);
         }
-        throw new LanguageValidationException("Erro: texto claramente {$label}.");
+
+        if ($base['unknownWords'] !== []) {
+            $base['conclusion'] = 'unknown';
+            return $base;
+        }
+        if ($base['expectedWords'] !== [] && $base['oppositeWords'] !== []) {
+            $base['conclusion'] = 'mixed';
+            return $base;
+        }
+        if ($base['oppositeWords'] !== []) {
+            $base['conclusion'] = 'wrong';
+            return $base;
+        }
+        if ($base['expectedWords'] !== []) {
+            $base['conclusion'] = 'correct';
+            return $base;
+        }
+
+        // Only shared words or technical identifiers remain. They are accepted
+        // as ambiguous instead of being invented into either language by the
+        // statistical detector.
+        $base['conclusion'] = 'ambiguous';
+        return $base;
     }
 
+    /**
+     * Returns the analysis when valid and throws a clear user-facing exception
+     * for wrong-language, mixed-language or unrecognized ordinary words.
+     */
+    public static function validateSource(
+        string $text,
+        string $expectedLanguage,
+        ?LexicalLanguageClassifier $lexicalChecker = null
+    ): array {
+        $analysis = self::sourceAnalysis($text, $expectedLanguage, $lexicalChecker);
+        $expectedLanguage = $analysis['expectedLanguage'];
+        $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
+
+        if ($analysis['conclusion'] === 'unknown') {
+            $words = $analysis['unknownWords'];
+            $quoted = self::quotedWords($words);
+            $message = count($words) === 1
+                ? ($expectedLanguage === 'en'
+                    ? "Not saved: unrecognized word — {$quoted}."
+                    : "Não guardado: palavra não reconhecida — {$quoted}.")
+                : ($expectedLanguage === 'en'
+                    ? "Not saved: unrecognized words — {$quoted}."
+                    : "Não guardado: palavras não reconhecidas — {$quoted}.");
+            throw new LanguageValidationException($message, $words);
+        }
+
+        if ($analysis['conclusion'] === 'mixed') {
+            $words = $analysis['oppositeWords'];
+            $quoted = self::quotedWords($words);
+            $message = $expectedLanguage === 'en'
+                ? "Not saved: text mixes EN and PT — PT word(s): {$quoted}."
+                : "Não guardado: o texto mistura PT e EN — palavra(s) EN: {$quoted}.";
+            throw new LanguageValidationException($message, $words);
+        }
+
+        if ($analysis['conclusion'] === 'wrong') {
+            $words = $analysis['oppositeWords'];
+            $quoted = self::quotedWords($words);
+            $label = strtoupper($oppositeLanguage);
+            $message = $expectedLanguage === 'en'
+                ? "Not saved: text is clearly {$label}" . ($quoted !== '' ? " — {$quoted}." : '.')
+                : "Não guardado: texto claramente {$label}" . ($quoted !== '' ? " — {$quoted}." : '.');
+            throw new LanguageValidationException($message, $words);
+        }
+
+        return $analysis;
+    }
+
+    public static function assertExpectedLanguage(
+        string $text,
+        string $expectedLanguage,
+        ?LexicalLanguageClassifier $lexicalChecker = null
+    ): void {
+        self::validateSource($text, $expectedLanguage, $lexicalChecker);
+    }
+
+    /**
+     * Sentence-level statistical context only. It is intentionally not used as
+     * a per-word dictionary.
+     */
     public static function confidentLanguage(string $text): ?string
     {
         $text = trim($text);
         if ($text === '') {
             return null;
         }
-        $result = self::detect($text);
-        return self::resultLanguage(
-            $result,
-            self::COMPONENT_MIN_SCORE,
-            self::COMPONENT_MIN_GAP,
-            self::COMPONENT_MIN_RATIO,
-            true
-        );
-    }
 
-    public static function confidentSentenceLanguage(string $text): ?string
-    {
-        $tokens = self::tokens($text);
-        if (count($tokens) < 2) {
-            return null;
+        $result = self::detect($text);
+        if (($result->language === 'pt' || $result->language === 'en') && $result->isReliable()) {
+            return $result->language;
         }
-        if (count($tokens) === 2) {
-            return self::confidentShortLanguage($text);
+
+        $scores = $result->scores();
+        foreach (['pt', 'en'] as $language) {
+            $other = $language === 'pt' ? 'en' : 'pt';
+            if (self::scoreDominates($scores, $language, $other)) {
+                return $language;
+            }
         }
-        return self::confidentLanguage($text);
+        return null;
     }
 
     /**
-     * A two-word phrase is classified only when the phrase itself is strong and
-     * both component tokens independently support the same language. This keeps
-     * clear phrases such as "new house" / "casa grande" useful while shared or
-     * technical combinations such as "WiFi Café" / "fire extinguisher" stay
-     * ambiguous instead of becoming false errors.
+     * Legacy helper kept for callers that only need sentence context. Short
+     * phrases are not classified statistically anymore; lexical checking owns
+     * that job.
      */
-    private static function confidentShortLanguage(string $text): ?string
+    public static function confidentSentenceLanguage(string $text): ?string
     {
-        $tokens = self::tokens($text);
-        if (count($tokens) !== 2) {
-            return null;
-        }
-
-        $phraseLanguage = self::resultLanguage(
-            self::detect($text),
-            self::SHORT_MIN_SCORE,
-            self::SHORT_MIN_GAP,
-            self::SHORT_MIN_RATIO,
-            false
-        );
-        if ($phraseLanguage === null) {
-            return null;
-        }
-
-        foreach ($tokens as $token) {
-            $tokenLanguage = self::resultLanguage(
-                self::detect($token),
-                self::TOKEN_MIN_SCORE,
-                self::TOKEN_MIN_GAP,
-                self::TOKEN_MIN_RATIO,
-                false
-            );
-            if ($tokenLanguage !== $phraseLanguage) {
-                return null;
-            }
-        }
-
-        return $phraseLanguage;
+        return count(self::tokenDetails($text)) >= 3 ? self::confidentLanguage($text) : null;
     }
 
-    private static function hasMixedLanguageEvidence(array $tokens): bool
+    /** @return array<int, array{raw:string, normalized:string}> */
+    private static function tokenDetails(string $text): array
     {
-        $count = count($tokens);
-        if ($count < 4) {
-            return false;
+        if ($text === '') {
+            return [];
         }
-
-        $segments = [];
-        $maxLength = min(5, $count - 1);
-        for ($length = 2; $length <= $maxLength; $length++) {
-            for ($start = 0; $start + $length <= $count; $start++) {
-                $text = implode(' ', array_slice($tokens, $start, $length));
-                $language = self::resultLanguage(
-                    self::detect($text),
-                    self::MIXED_MIN_SCORE,
-                    self::MIXED_MIN_GAP,
-                    self::MIXED_MIN_RATIO,
-                    false
-                );
-                if ($language === null) {
-                    continue;
-                }
-                $segments[] = [
-                    'language' => $language,
-                    'start' => $start,
-                    'end' => $start + $length - 1,
-                ];
+        preg_match_all("/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u", $text, $matches);
+        $tokens = [];
+        foreach (($matches[0] ?? []) as $raw) {
+            $raw = (string) $raw;
+            $normalized = LexicalLanguageChecker::normalizeToken($raw);
+            if ($normalized === '') {
+                continue;
             }
+            $tokens[] = ['raw' => $raw, 'normalized' => $normalized];
         }
+        return $tokens;
+    }
 
-        foreach ($segments as $first) {
-            foreach ($segments as $second) {
-                if ($first['language'] === $second['language']) {
-                    continue;
-                }
-                if ($first['end'] < $second['start'] || $second['end'] < $first['start']) {
-                    return true;
-                }
-            }
+    private static function looksTechnicalIdentifier(string $token): bool
+    {
+        $length = mb_strlen($token, 'UTF-8');
+        if ($length <= 2) {
+            return true;
+        }
+        if (preg_match('/\d/u', $token) === 1) {
+            return true;
+        }
+        if (preg_match('/^[\p{Lu}]{2,}$/u', $token) === 1) {
+            return true;
+        }
+        // Camel/mixed case brands and identifiers: WiFi, ZKTeco, CloudBeds.
+        if (preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1) {
+            return true;
         }
         return false;
     }
 
-    /** @return string[] */
-    private static function tokens(string $text): array
+    /** @param string[] $words @return string[] */
+    private static function uniqueWords(array $words): array
     {
-        return preg_split(
-            '/[^\p{L}\p{N}_-]+/u',
-            mb_strtolower(trim($text), 'UTF-8'),
-            -1,
-            PREG_SPLIT_NO_EMPTY
-        ) ?: [];
+        $seen = [];
+        $unique = [];
+        foreach ($words as $word) {
+            $key = mb_strtolower((string) $word, 'UTF-8');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = (string) $word;
+        }
+        return $unique;
+    }
+
+    /** @param string[] $words */
+    private static function quotedWords(array $words): string
+    {
+        return implode(', ', array_map(
+            static fn(string $word): string => '“' . $word . '”',
+            $words
+        ));
     }
 
     private static function detector(): LanguageDetector
@@ -246,47 +331,18 @@ final class LanguageGuard
         return self::detector()->detect($text);
     }
 
-    private static function resultLanguage(
-        LanguageResult $result,
-        float $minScore,
-        float $minGap,
-        float $minRatio,
-        bool $allowReliableShortcut
-    ): ?string {
-        if ($allowReliableShortcut
-            && ($result->language === 'pt' || $result->language === 'en')
-            && $result->isReliable()) {
-            return $result->language;
-        }
-
-        $scores = $result->scores();
-        foreach (['pt', 'en'] as $language) {
-            $other = $language === 'pt' ? 'en' : 'pt';
-            if (self::scoreDominates($scores, $language, $other, $minScore, $minGap, $minRatio)) {
-                return $language;
-            }
-        }
-        return null;
-    }
-
     /** @param array<string, float> $scores */
-    private static function scoreDominates(
-        array $scores,
-        string $language,
-        string $otherLanguage,
-        float $minScore,
-        float $minGap,
-        float $minRatio
-    ): bool {
+    private static function scoreDominates(array $scores, string $language, string $otherLanguage): bool
+    {
         $score = (float) ($scores[$language] ?? 0.0);
         $otherScore = (float) ($scores[$otherLanguage] ?? 0.0);
-        if ($score < $minScore) {
+        if ($score < self::COMPONENT_MIN_SCORE) {
             return false;
         }
-        if (($score - $otherScore) < $minGap) {
+        if (($score - $otherScore) < self::COMPONENT_MIN_GAP) {
             return false;
         }
-        if ($otherScore > 0.0 && ($score / $otherScore) < $minRatio) {
+        if ($otherScore > 0.0 && ($score / $otherScore) < self::COMPONENT_MIN_RATIO) {
             return false;
         }
         return true;
