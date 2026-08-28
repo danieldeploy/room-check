@@ -102,7 +102,11 @@ final class LanguageGuard
                     ? $lexicalChecker->likelyMisspelling($display)
                     : null;
                 if ($nearMatch !== null) {
+                    // A token close to a known PT/EN/technical term is a typo,
+                    // even if its casing resembles a brand/identifier.
+                    $base['unknownWords'][] = $display;
                     $base['likelyMisspellings'][] = $display;
+                    continue;
                 }
                 if (self::looksTechnicalIdentifier($display)) {
                     $base['technicalWords'][] = $display;
@@ -258,10 +262,9 @@ final class LanguageGuard
         if (preg_match('/\d/u', $token) === 1) {
             return true;
         }
-        // Mixed-case brands/identifiers remain acceptable only after an unknown
-        // token has first passed the near-known typo check above. Plain one/two
-        // letter fragments are no longer technical by default.
-        return preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1;
+        // Mixed-case brands/identifiers require at least one lower-case and one
+        // upper-case letter. ALL-CAPS fragments are not accepted implicitly.
+        return preg_match('/^(?=.*\p{Ll})(?=.*\p{Lu})[\p{L}\p{N}_-]+$/u', $token) === 1;
     }
 
     /** @param string[] $words @return string[] */
