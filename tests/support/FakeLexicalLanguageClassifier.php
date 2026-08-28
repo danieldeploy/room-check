@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/src/I18n/LexicalLanguageChecker.php';
 
-final class FakeLexicalLanguageClassifier implements LexicalLanguageClassifier
+final class FakeLexicalLanguageClassifier implements LexicalLanguageClassifier, LexicalNearMatchClassifier
 {
     /** @param array<string, string> $map */
     public function __construct(private array $map)
@@ -18,6 +18,34 @@ final class FakeLexicalLanguageClassifier implements LexicalLanguageClassifier
             $results[$normalized] = $this->map[$normalized] ?? 'unknown';
         }
         return $results;
+    }
+
+    public function likelyMisspelling(string $token): ?array
+    {
+        $token = LexicalLanguageChecker::normalizeToken($token);
+        $length = mb_strlen($token, 'UTF-8');
+        if ($token === '' || $length < 4 || isset($this->map[$token])) {
+            return null;
+        }
+        $maxDistance = $length >= 5 ? 2 : 1;
+        $best = null;
+        foreach ($this->map as $candidate => $classification) {
+            if (abs(mb_strlen($candidate, 'UTF-8') - $length) > $maxDistance) {
+                continue;
+            }
+            $distance = levenshtein($token, $candidate);
+            if ($distance < 1 || $distance > $maxDistance) {
+                continue;
+            }
+            if ($best === null || $distance < $best['distance']) {
+                $best = [
+                    'candidate' => $candidate,
+                    'distance' => $distance,
+                    'classification' => $classification,
+                ];
+            }
+        }
+        return $best;
     }
 }
 
@@ -36,7 +64,7 @@ function translationRegressionLexicon(): array
         'pressure', 'room', 'securely', 'smoke', 'status', 'that', 'the', 'thermostat',
         'undamaged', 'windows', 'extinguisher', 'inspect', 'fitted',
     ];
-    $shared = ['detector', 'visible'];
+    $shared = ['detector', 'visible', 'yahoo'];
 
     $map = [];
     foreach ($ptOnly as $word) {

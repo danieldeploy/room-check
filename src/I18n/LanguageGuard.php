@@ -30,8 +30,8 @@ final class LanguageValidationException extends InvalidArgumentException
  * PT/EN validation coordinator.
  *
  * Decisive word-level evidence comes from local lexicons. The statistical
- * detector is used only as sentence context for words that are absent from the
- * compact local lists. MyMemory is never used to decide the source language.
+ * detector is used only as sentence context for genuinely unknown words.
+ * MyMemory is never used to decide the source language.
  */
 final class LanguageGuard
 {
@@ -63,6 +63,7 @@ final class LanguageGuard
             'sharedWords' => [],
             'technicalWords' => [],
             'unknownWords' => [],
+            'likelyMisspellings' => [],
         ];
         if ($tokens === []) {
             $base['conclusion'] = 'empty';
@@ -80,22 +81,13 @@ final class LanguageGuard
 
         $lexicalTokens = [];
         foreach ($tokens as $token) {
-            if (self::looksTechnicalIdentifier($token['raw'])) {
-                $base['technicalWords'][] = $token['raw'];
-                continue;
-            }
             $lexicalTokens[$token['normalized']] = true;
         }
-        $classifications = $lexicalTokens === []
-            ? []
-            : $lexicalChecker->classifyTokens(array_keys($lexicalTokens));
+        $classifications = $lexicalChecker->classifyTokens(array_keys($lexicalTokens));
 
         foreach ($tokens as $token) {
             $normalized = $token['normalized'];
             $display = $token['raw'];
-            if (self::looksTechnicalIdentifier($display)) {
-                continue;
-            }
             $classification = $classifications[$normalized] ?? 'unknown';
 
             if ($classification === 'shared') {
@@ -103,6 +95,18 @@ final class LanguageGuard
                 continue;
             }
             if ($classification === 'unknown') {
+                $nearMatch = $lexicalChecker instanceof LexicalNearMatchClassifier
+                    ? $lexicalChecker->likelyMisspelling($display)
+                    : null;
+                if ($nearMatch !== null) {
+                    $base['unknownWords'][] = $display;
+                    $base['likelyMisspellings'][] = $display;
+                    continue;
+                }
+                if (self::looksTechnicalIdentifier($display)) {
+                    $base['technicalWords'][] = $display;
+                    continue;
+                }
                 $base['unknownWords'][] = $display;
                 continue;
             }
@@ -115,7 +119,7 @@ final class LanguageGuard
             }
         }
 
-        foreach (['expectedWords', 'oppositeWords', 'sharedWords', 'technicalWords', 'unknownWords'] as $key) {
+        foreach (['expectedWords', 'oppositeWords', 'sharedWords', 'technicalWords', 'unknownWords', 'likelyMisspellings'] as $key) {
             $base[$key] = self::uniqueWords($base[$key]);
         }
 
@@ -129,9 +133,17 @@ final class LanguageGuard
             return $base;
         }
 
-        // Unknown words are not automatically errors because the bundled local
-        // lexicons are deliberately compact. Reject obvious typo/gibberish and
-        // isolated unknown words; otherwise let clear sentence context carry a
+        // A near-match of a known PT/EN/technical word is a likely typing error,
+        // not a rare technical term. Reject it before sentence context can hide it.
+        if ($base['likelyMisspellings'] !== []) {
+            $base['unknownWords'] = $base['likelyMisspellings'];
+            $base['conclusion'] = 'unknown';
+            return $base;
+        }
+
+        // Other unknown words are not automatically errors because the bundled
+        // local lexicons are intentionally compact. Reject obvious gibberish and
+        // isolated unknown words; otherwise clear sentence context may carry a
         // legitimate rare word without another network dependency.
         if ($base['unknownWords'] !== []) {
             $suspicious = array_values(array_filter(
@@ -280,9 +292,8 @@ final class LanguageGuard
         if ($length <= 2 || preg_match('/\d/u', $token) === 1) {
             return true;
         }
-        if (preg_match('/^[\p{Lu}]{2,}$/u', $token) === 1) {
-            return true;
-        }
+        // Mixed-case brands/identifiers remain acceptable only after an unknown
+        // token has first passed the near-known typo check above.
         return preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1;
     }
 

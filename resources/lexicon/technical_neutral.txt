@@ -8,4 +8,5 @@ sip
 usb
 wifi
 wi-fi
+yahoo
 zkteco
