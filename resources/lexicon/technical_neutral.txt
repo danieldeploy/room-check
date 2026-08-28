@@ -1,0 +1,11 @@
+bluetooth
+cloudbeds
+hvac
+my2n
+qr
+rfid
+sip
+usb
+wifi
+wi-fi
+zkteco
