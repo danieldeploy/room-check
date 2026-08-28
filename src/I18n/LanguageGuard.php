@@ -29,9 +29,9 @@ final class LanguageValidationException extends InvalidArgumentException
 /**
  * Language validation coordinator.
  *
- * Lexical evidence decides individual PT/EN words. The statistical detector is
- * retained only as sentence-level context/diagnostics; it is no longer asked to
- * behave like a dictionary for words such as "extinguisher".
+ * Local spell lexicons decide ordinary PT/EN words. The statistical detector is
+ * retained only as sentence-level context/diagnostics; it is never used as a
+ * dictionary for isolated words.
  */
 final class LanguageGuard
 {
@@ -39,6 +39,40 @@ final class LanguageGuard
     private const COMPONENT_MIN_SCORE = 0.18;
     private const COMPONENT_MIN_GAP = 0.08;
     private const COMPONENT_MIN_RATIO = 1.35;
+
+    /**
+     * Product/technology identifiers that are intentionally language-neutral.
+     * This is not a vocabulary whitelist: ordinary PT/EN words must come from
+     * the local spell lexicons. Keep this set limited to brands, protocols,
+     * acronyms and established technical identifiers.
+     */
+    private const TECHNICAL_NEUTRAL = [
+        'wifi' => true,
+        'wi-fi' => true,
+        'hvac' => true,
+        'bluetooth' => true,
+        'usb' => true,
+        'my2n' => true,
+        'zkteco' => true,
+        'cloudbeds' => true,
+        'api' => true,
+        'qr' => true,
+        'pin' => true,
+        'sip' => true,
+        'http' => true,
+        'https' => true,
+        'url' => true,
+        'led' => true,
+        'tv' => true,
+        'yahoo' => true,
+        'airbnb' => true,
+        'booking' => true,
+        'expedia' => true,
+        'whatsapp' => true,
+        'cpanel' => true,
+        'detector' => true,
+        'detetor' => true,
+    ];
 
     private static ?LanguageDetector $detector = null;
 
@@ -80,8 +114,8 @@ final class LanguageGuard
             return $base;
         }
 
-        // Compatibility fallback for non-persistent legacy callers. Production
-        // ContentTranslator always supplies the lexical checker.
+        // Compatibility fallback for old callers that only ask for sentence
+        // context. Production ContentTranslator always supplies the lexicon.
         if ($lexicalChecker === null) {
             if ($sentenceLanguage === $expectedLanguage) {
                 $base['conclusion'] = 'correct';
@@ -91,9 +125,8 @@ final class LanguageGuard
             return $base;
         }
 
-        // Identifiers such as HVAC, WiFi, My2N and ZKTeco are neutral technical
-        // vocabulary regardless of whether a dictionary happens to list them
-        // under one language. Ordinary Titlecase words (House) are not included.
+        // Technical identifiers are neutral regardless of case. Exclude them
+        // from the lexical lookup entirely so `wifi` and `WiFi` behave alike.
         $lexicalTokens = [];
         foreach ($tokens as $token) {
             if (self::looksTechnicalIdentifier($token['raw'])) {
@@ -153,8 +186,7 @@ final class LanguageGuard
         }
 
         // Only shared words or technical identifiers remain. They are accepted
-        // as ambiguous instead of being invented into either language by the
-        // statistical detector.
+        // as ambiguous rather than being assigned a language statistically.
         $base['conclusion'] = 'ambiguous';
         return $base;
     }
@@ -243,8 +275,7 @@ final class LanguageGuard
 
     /**
      * Legacy helper kept for callers that only need sentence context. Short
-     * phrases are not classified statistically anymore; lexical checking owns
-     * that job.
+     * phrases are not classified statistically; lexical checking owns that job.
      */
     public static function confidentSentenceLanguage(string $text): ?string
     {
@@ -272,6 +303,11 @@ final class LanguageGuard
 
     private static function looksTechnicalIdentifier(string $token): bool
     {
+        $normalized = LexicalLanguageChecker::normalizeToken($token);
+        if (isset(self::TECHNICAL_NEUTRAL[$normalized])) {
+            return true;
+        }
+
         $length = mb_strlen($token, 'UTF-8');
         if ($length <= 2) {
             return true;
@@ -282,7 +318,7 @@ final class LanguageGuard
         if (preg_match('/^[\p{Lu}]{2,}$/u', $token) === 1) {
             return true;
         }
-        // Camel/mixed case brands and identifiers: WiFi, ZKTeco, CloudBeds.
+        // Camel/mixed-case brands and identifiers: WiFi, ZKTeco, CloudBeds.
         if (preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1) {
             return true;
         }
