@@ -1,0 +1,8 @@
+# Explicit person-name overrides observed/required by Room Check.
+# The broader proper_neutral.txt remains the fallback for other proper names.
+romi
+daniel
+miguel
+michael
+joao
+joão
