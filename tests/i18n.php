@@ -40,7 +40,7 @@ assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') ==
 
 $itemListsSource = file_get_contents(dirname(__DIR__) . '/item-lists.php');
 assertI18n(is_string($itemListsSource), 'item-list editor source is readable');
-assertI18n(str_contains((string) $itemListsSource, "\$selectedList['displayName'] = Translator::localized("), 'list editor derives editable list name from both saved languages');
+assertI18n(str_contains((string) $itemListsSource, "$selectedList['displayName'] = Translator::localized("), 'list editor derives editable list name from both saved languages');
 
 $lexicon = translationRegressionClassifier();
 $ptAnalysis = LanguageGuard::sourceAnalysis('Verificar a limpeza da cozinha e das janelas', 'pt', $lexicon);
@@ -86,12 +86,18 @@ assertI18n(is_string($contentTranslatorSource) && is_string($guardSource) && is_
 $sourceValidationPosition = strpos((string) $contentTranslatorSource, '$sourceAnalysis = $this->validateSource');
 $translationPosition = strpos((string) $contentTranslatorSource, '$translated = $this->translateValidated');
 $reusePosition = strpos((string) $contentTranslatorSource, '$existingEn === $text');
-assertI18n($reusePosition !== false && $sourceValidationPosition !== false && $reusePosition < $sourceValidationPosition, 'unchanged pair reuse happens before external verification');
+assertI18n($reusePosition !== false && $sourceValidationPosition !== false && $reusePosition < $sourceValidationPosition, 'unchanged pair reuse happens before lexical verification');
 assertI18n($sourceValidationPosition !== false && $translationPosition !== false && $sourceValidationPosition < $translationPosition, 'source is verified before MyMemory translation');
-assertI18n(str_contains((string) $contentTranslatorSource, "'langpair' => \$source . '|' . \$target"), 'MyMemory receives explicit source/target only after source verification');
+assertI18n(str_contains((string) $contentTranslatorSource, "'langpair' => $source . '|' . $target"), 'MyMemory receives explicit source/target only after source verification');
 assertI18n(!str_contains((string) $guardSource, 'SHORT_MIN_') && !str_contains((string) $guardSource, 'MIXED_MIN_'), 'obsolete short/mixed statistical thresholds are removed');
-assertI18n(!str_contains((string) $guardSource, 'private const NEUTRAL'), 'manual technical vocabulary whitelist is removed');
-assertI18n(str_contains((string) $lexicalSource, 'lexical_language_cache'), 'lexical dictionary results are cached');
+assertI18n(str_contains((string) $guardSource, 'TECHNICAL_NEUTRAL'), 'technical neutrality is explicit and separate from language vocabulary');
+assertI18n(
+    str_contains((string) $lexicalSource, 'LocalHunspellLexicon')
+        && !str_contains(mb_strtolower((string) $lexicalSource), 'wiktionary')
+        && !str_contains((string) $lexicalSource, 'lexical_language_cache')
+        && !str_contains((string) $lexicalSource, 'curl_init'),
+    'lexical verification is local and has no runtime network/database dependency'
+);
 
 assertI18n(ContentTranslator::targetConclusion('Check the kitchen windows and curtains', 'en', $lexicon) === 'correct', 'clear English translation is correct for EN target');
 assertI18n(ContentTranslator::targetConclusion('Verificar a limpeza da cozinha e das janelas', 'pt', $lexicon) === 'correct', 'clear Portuguese translation is correct for PT target');
