@@ -67,7 +67,7 @@ return [
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
     ],
     'translation' => [
-        // Free MyMemory REST translation; no API key is required.
+        // MyMemory is used only to translate already-validated source text.
         'enabled' => (bool) ($localConfig['translation']['enabled'] ?? true),
         'endpoint' => $localConfig['translation']['endpoint']
             ?? getenv('MYMEMORY_TRANSLATION_ENDPOINT')
@@ -76,5 +76,17 @@ return [
             ?? getenv('MYMEMORY_CONTACT_EMAIL')
             ?: '',
         'timeout_seconds' => (int) ($localConfig['translation']['timeout_seconds'] ?? 12),
+
+        // Lexical verification is independent from MyMemory. English
+        // Wiktionary exposes explicit English/Portuguese language sections and
+        // requires no API key; results are cached by LexicalLanguageChecker.
+        'lexical' => [
+            'enabled' => (bool) ($localConfig['translation']['lexical']['enabled'] ?? true),
+            'endpoint' => $localConfig['translation']['lexical']['endpoint']
+                ?? getenv('ROOM_CHECK_LEXICAL_ENDPOINT')
+                ?: 'https://en.wiktionary.org/w/api.php',
+            'timeout_seconds' => (int) ($localConfig['translation']['lexical']['timeout_seconds'] ?? 6),
+            'batch_size' => (int) ($localConfig['translation']['lexical']['batch_size'] ?? 40),
+        ],
     ],
 ];
