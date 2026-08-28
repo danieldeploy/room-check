@@ -15,11 +15,18 @@ final class ContentTranslator
     {
         $text = trim($text);
         $sourceLanguage = $sourceLanguage === 'en' ? 'en' : 'pt';
+        $targetLanguage = $sourceLanguage === 'en' ? 'pt' : 'en';
         $existingPt = trim($existingPt);
         $existingEn = trim($existingEn);
 
         if ($text === '') {
-            return ['pt' => '', 'en' => '', 'validationConclusion' => 'ambiguous'];
+            return [
+                'pt' => '',
+                'en' => '',
+                'sourceConclusion' => 'empty',
+                'translationConclusion' => 'empty',
+                'validationMessage' => self::successMessage('empty', 'empty', $sourceLanguage),
+            ];
         }
 
         // Unchanged values reuse the already persisted bilingual pair. This
@@ -29,10 +36,13 @@ final class ContentTranslator
             && $existingPt !== ''
             && $existingPt !== $existingEn
             && self::isPlausibleTargetText($existingPt, 'pt')) {
+            $translationConclusion = self::targetConclusion($existingPt, 'pt');
             return [
                 'pt' => $existingPt,
                 'en' => $text,
-                'validationConclusion' => self::targetConclusion($existingPt, 'pt'),
+                'sourceConclusion' => 'reused',
+                'translationConclusion' => $translationConclusion,
+                'validationMessage' => self::successMessage('reused', $translationConclusion, $sourceLanguage),
             ];
         }
         if ($sourceLanguage === 'pt'
@@ -40,38 +50,48 @@ final class ContentTranslator
             && $existingEn !== ''
             && $existingEn !== $existingPt
             && self::isPlausibleTargetText($existingEn, 'en')) {
+            $translationConclusion = self::targetConclusion($existingEn, 'en');
             return [
                 'pt' => $text,
                 'en' => $existingEn,
-                'validationConclusion' => self::targetConclusion($existingEn, 'en'),
+                'sourceConclusion' => 'reused',
+                'translationConclusion' => $translationConclusion,
+                'validationMessage' => self::successMessage('reused', $translationConclusion, $sourceLanguage),
             ];
         }
 
-        // Only strong sentence-level evidence of the opposite source language
-        // blocks the operation. Technical/ambiguous wording continues to the
-        // contextual translation provider.
+        // Source validation is independent from translation quality. A provider
+        // being able to normalize mixed input must never prove that the original
+        // text was written in the selected interface language.
+        $sourceConclusion = LanguageGuard::sourceConclusion($text, $sourceLanguage);
         LanguageGuard::assertExpectedLanguage($text, $sourceLanguage);
 
         if ($sourceLanguage === 'en') {
             $translatedPt = $this->translate($text, 'en', 'pt');
             if ($translatedPt === null || trim($translatedPt) === '') {
-                throw new InvalidArgumentException('Automatic translation to Portuguese failed. Please try again.');
+                throw new InvalidArgumentException('Error: automatic translation to Portuguese failed.');
             }
+            $translationConclusion = self::targetConclusion($translatedPt, 'pt');
             return [
                 'pt' => trim($translatedPt),
                 'en' => $text,
-                'validationConclusion' => self::targetConclusion($translatedPt, 'pt'),
+                'sourceConclusion' => $sourceConclusion,
+                'translationConclusion' => $translationConclusion,
+                'validationMessage' => self::successMessage($sourceConclusion, $translationConclusion, 'en'),
             ];
         }
 
         $translatedEn = $this->translate($text, 'pt', 'en');
         if ($translatedEn === null || trim($translatedEn) === '') {
-            throw new InvalidArgumentException('Não foi possível traduzir automaticamente o conteúdo para inglês. Tente novamente.');
+            throw new InvalidArgumentException('Erro: não foi possível traduzir automaticamente o conteúdo para inglês.');
         }
+        $translationConclusion = self::targetConclusion($translatedEn, 'en');
         return [
             'pt' => $text,
             'en' => trim($translatedEn),
-            'validationConclusion' => self::targetConclusion($translatedEn, 'en'),
+            'sourceConclusion' => $sourceConclusion,
+            'translationConclusion' => $translationConclusion,
+            'validationMessage' => self::successMessage($sourceConclusion, $translationConclusion, 'pt'),
         ];
     }
 
@@ -117,6 +137,40 @@ final class ContentTranslator
         return $detected === $targetLanguage ? 'correct' : 'wrong';
     }
 
+    /**
+     * Human-readable green success message. It reports the real conclusions
+     * returned by the algorithm instead of a generic success label.
+     */
+    public static function successMessage(
+        string $sourceConclusion,
+        string $translationConclusion,
+        string $sourceLanguage
+    ): string {
+        $sourceLanguage = $sourceLanguage === 'en' ? 'en' : 'pt';
+        $sourceLabel = strtoupper($sourceLanguage);
+        $targetLabel = strtoupper($sourceLanguage === 'en' ? 'pt' : 'en');
+
+        if ($sourceConclusion === 'empty') {
+            return $sourceLanguage === 'en' ? 'Saved: empty text.' : 'Guardado: texto vazio.';
+        }
+        if ($sourceConclusion === 'reused') {
+            return $sourceLanguage === 'en'
+                ? 'Saved: existing bilingual translation reused.'
+                : 'Guardado: tradução bilingue existente reutilizada.';
+        }
+
+        $sourcePart = $sourceConclusion === 'correct'
+            ? ($sourceLanguage === 'en' ? "{$sourceLabel} text confirmed" : "texto {$sourceLabel} confirmado")
+            : ($sourceLanguage === 'en' ? "{$sourceLabel} text ambiguous/technical" : "texto {$sourceLabel} ambíguo/técnico");
+        $translationPart = $translationConclusion === 'correct'
+            ? ($sourceLanguage === 'en' ? "{$targetLabel} translation confirmed" : "tradução {$targetLabel} confirmada")
+            : ($sourceLanguage === 'en' ? "{$targetLabel} translation ambiguous/technical" : "tradução {$targetLabel} ambígua/técnica");
+
+        return $sourceLanguage === 'en'
+            ? "Saved: {$sourcePart}; {$translationPart}."
+            : "Guardado: {$sourcePart}; {$translationPart}.";
+    }
+
     private function translate(string $text, string $source, string $target): ?string
     {
         if ($text === '') {
@@ -129,22 +183,18 @@ final class ContentTranslator
         }
 
         if (($this->config['enabled'] ?? true) !== true || !function_exists('curl_init')) {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: translation API is unavailable.'
+                    : 'Erro: API de tradução indisponível.'
+            );
+        }
+
+        $translated = $this->translateFresh($text, $source, $target);
+        if ($translated === null || trim($translated) === '') {
             return null;
         }
 
-        $translatedChunks = [];
-        foreach ($this->chunks($text) as $chunk) {
-            $translation = $this->translateChunk($chunk, $source, $target);
-            if ($translation === null || trim($translation) === '') {
-                return null;
-            }
-            $translatedChunks[] = trim($translation);
-        }
-
-        $translated = trim(implode("\n", $translatedChunks));
-        if ($translated === '') {
-            return null;
-        }
         if (!self::hasPlausibleLength($text, $translated)) {
             throw new InvalidArgumentException(
                 $source === 'en'
@@ -154,6 +204,19 @@ final class ContentTranslator
         }
 
         $conclusion = self::targetConclusion($translated, $target);
+        if ($conclusion === 'wrong') {
+            // MyMemory can occasionally return the source language unchanged.
+            // Retry once, but never retry network timeouts because that could
+            // double a 12-second wait.
+            $retry = $this->translateFresh($text, $source, $target);
+            if ($retry !== null && trim($retry) !== ''
+                && self::hasPlausibleLength($text, $retry)
+                && self::targetConclusion($retry, $target) !== 'wrong') {
+                $translated = trim($retry);
+                $conclusion = self::targetConclusion($translated, $target);
+            }
+        }
+
         if ($conclusion === 'wrong') {
             $detected = strtoupper($target === 'pt' ? 'en' : 'pt');
             throw new LanguageValidationException(
@@ -165,6 +228,20 @@ final class ContentTranslator
 
         $this->storeTranslation($text, $translated, $source, $target);
         return $translated;
+    }
+
+    private function translateFresh(string $text, string $source, string $target): ?string
+    {
+        $translatedChunks = [];
+        foreach ($this->chunks($text) as $chunk) {
+            $translation = $this->translateChunk($chunk, $source, $target);
+            if ($translation === null || trim($translation) === '') {
+                return null;
+            }
+            $translatedChunks[] = trim($translation);
+        }
+        $translated = trim(implode("\n", $translatedChunks));
+        return $translated !== '' ? $translated : null;
     }
 
     private static function hasPlausibleLength(string $source, string $translated): bool
@@ -273,22 +350,48 @@ final class ContentTranslator
             CURLOPT_USERAGENT => 'RoomCheck/1.0 translation',
         ]);
         $response = curl_exec($curl);
+        $errno = curl_errno($curl);
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         curl_close($curl);
-        if (!is_string($response) || $status < 200 || $status >= 300) {
-            return null;
+
+        if ($errno === CURLE_OPERATION_TIMEDOUT) {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: translation API timed out.'
+                    : 'Erro: API de tradução excedeu o tempo limite.'
+            );
         }
+        if (!is_string($response) || $errno !== 0 || $status < 200 || $status >= 300) {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: translation API is temporarily unavailable.'
+                    : 'Erro: API de tradução temporariamente indisponível.'
+            );
+        }
+
         $data = json_decode($response, true);
         if (!is_array($data)) {
-            return null;
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: translation API returned an invalid response.'
+                    : 'Erro: API de tradução devolveu uma resposta inválida.'
+            );
         }
         $responseStatus = (int) ($data['responseStatus'] ?? 200);
         if ($responseStatus < 200 || $responseStatus >= 300) {
-            return null;
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: translation API rejected the request.'
+                    : 'Erro: API de tradução rejeitou o pedido.'
+            );
         }
         $translated = $data['responseData']['translatedText'] ?? null;
         if (!is_string($translated)) {
-            return null;
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Error: translation API returned no translated text.'
+                    : 'Erro: API de tradução não devolveu texto traduzido.'
+            );
         }
         $translated = html_entity_decode(trim($translated), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         return $translated !== '' ? $translated : null;
