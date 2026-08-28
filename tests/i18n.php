@@ -71,7 +71,6 @@ assertThrowsI18n(
     'mixed text is blocked before a translator could normalize it'
 );
 
-// Existing bilingual values remain reusable without lexical/provider access.
 $contentTranslatorWithoutProvider = (new ReflectionClass(ContentTranslator::class))->newInstanceWithoutConstructor();
 $reusedEn = $contentTranslatorWithoutProvider->versions('Kitchen Check', 'en', 'Verificação da cozinha', 'Kitchen Check');
 assertI18n(($reusedEn['pt'] ?? null) === 'Verificação da cozinha' && ($reusedEn['en'] ?? null) === 'Kitchen Check', 'unchanged English value reuses existing bilingual pair');
@@ -91,7 +90,8 @@ assertI18n($sourceValidationPosition !== false && $translationPosition !== false
 assertI18n(str_contains((string) $contentTranslatorSource, "'langpair' => \$source . '|' . \$target"), 'MyMemory receives explicit source/target only after source verification');
 assertI18n(!str_contains((string) $guardSource, 'SHORT_MIN_') && !str_contains((string) $guardSource, 'MIXED_MIN_'), 'obsolete short/mixed statistical thresholds are removed');
 assertI18n(!str_contains((string) $guardSource, 'private const NEUTRAL'), 'manual technical vocabulary whitelist is removed');
-assertI18n(str_contains((string) $lexicalSource, 'lexical_language_cache'), 'lexical dictionary results are cached');
+assertI18n(!str_contains((string) $lexicalSource, 'curl_init') && !str_contains(mb_strtolower((string) $lexicalSource), 'wiktionary'), 'lexical verification has no runtime network dependency');
+assertI18n(file_exists(dirname(__DIR__) . '/resources/lexicon/pt_PT_core.txt') && file_exists(dirname(__DIR__) . '/resources/lexicon/en_GB_core.txt'), 'local PT/EN lexicons are bundled');
 
 assertI18n(ContentTranslator::targetConclusion('Check the kitchen windows and curtains', 'en', $lexicon) === 'correct', 'clear English translation is correct for EN target');
 assertI18n(ContentTranslator::targetConclusion('Verificar a limpeza da cozinha e das janelas', 'pt', $lexicon) === 'correct', 'clear Portuguese translation is correct for PT target');

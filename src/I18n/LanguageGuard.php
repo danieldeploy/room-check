@@ -27,11 +27,11 @@ final class LanguageValidationException extends InvalidArgumentException
 }
 
 /**
- * Language validation coordinator.
+ * PT/EN validation coordinator.
  *
- * Lexical evidence decides individual PT/EN words. The statistical detector is
- * retained only as sentence-level context/diagnostics; it is no longer asked to
- * behave like a dictionary for words such as "extinguisher".
+ * Decisive word-level evidence comes from local lexicons. The statistical
+ * detector is used only as sentence context for words that are absent from the
+ * compact local lists. MyMemory is never used to decide the source language.
  */
 final class LanguageGuard
 {
@@ -42,18 +42,7 @@ final class LanguageGuard
 
     private static ?LanguageDetector $detector = null;
 
-    /**
-     * @return array{
-     *   conclusion:string,
-     *   expectedLanguage:string,
-     *   sentenceLanguage:?string,
-     *   expectedWords:array<int,string>,
-     *   oppositeWords:array<int,string>,
-     *   sharedWords:array<int,string>,
-     *   technicalWords:array<int,string>,
-     *   unknownWords:array<int,string>
-     * }
-     */
+    /** @return array<string, mixed> */
     public static function sourceAnalysis(
         string $text,
         string $expectedLanguage,
@@ -80,8 +69,6 @@ final class LanguageGuard
             return $base;
         }
 
-        // Compatibility fallback for non-persistent legacy callers. Production
-        // ContentTranslator always supplies the lexical checker.
         if ($lexicalChecker === null) {
             if ($sentenceLanguage === $expectedLanguage) {
                 $base['conclusion'] = 'correct';
@@ -91,9 +78,6 @@ final class LanguageGuard
             return $base;
         }
 
-        // Identifiers such as HVAC, WiFi, My2N and ZKTeco are neutral technical
-        // vocabulary regardless of whether a dictionary happens to list them
-        // under one language. Ordinary Titlecase words (House) are not included.
         $lexicalTokens = [];
         foreach ($tokens as $token) {
             if (self::looksTechnicalIdentifier($token['raw'])) {
@@ -135,10 +119,7 @@ final class LanguageGuard
             $base[$key] = self::uniqueWords($base[$key]);
         }
 
-        if ($base['unknownWords'] !== []) {
-            $base['conclusion'] = 'unknown';
-            return $base;
-        }
+        // A decisive opposite-language word wins over statistical context.
         if ($base['expectedWords'] !== [] && $base['oppositeWords'] !== []) {
             $base['conclusion'] = 'mixed';
             return $base;
@@ -147,22 +128,52 @@ final class LanguageGuard
             $base['conclusion'] = 'wrong';
             return $base;
         }
+
+        // Unknown words are not automatically errors because the bundled local
+        // lexicons are deliberately compact. Reject obvious typo/gibberish and
+        // isolated unknown words; otherwise let clear sentence context carry a
+        // legitimate rare word without another network dependency.
+        if ($base['unknownWords'] !== []) {
+            $suspicious = array_values(array_filter(
+                $base['unknownWords'],
+                static fn(string $word): bool => self::looksGibberishToken($word)
+            ));
+            if ($suspicious !== []) {
+                $base['unknownWords'] = $suspicious;
+                $base['conclusion'] = 'unknown';
+                return $base;
+            }
+            if (count($tokens) === 1) {
+                $base['conclusion'] = 'unknown';
+                return $base;
+            }
+            if ($sentenceLanguage === $oppositeLanguage) {
+                $base['conclusion'] = 'wrong';
+                $base['oppositeWords'] = $base['unknownWords'];
+                return $base;
+            }
+            if ($sentenceLanguage === $expectedLanguage || $base['expectedWords'] !== []) {
+                $base['technicalWords'] = self::uniqueWords(array_merge(
+                    $base['technicalWords'],
+                    $base['unknownWords']
+                ));
+                $base['unknownWords'] = [];
+            } else {
+                $base['conclusion'] = 'unknown';
+                return $base;
+            }
+        }
+
         if ($base['expectedWords'] !== []) {
             $base['conclusion'] = 'correct';
             return $base;
         }
 
-        // Only shared words or technical identifiers remain. They are accepted
-        // as ambiguous instead of being invented into either language by the
-        // statistical detector.
         $base['conclusion'] = 'ambiguous';
         return $base;
     }
 
-    /**
-     * Returns the analysis when valid and throws a clear user-facing exception
-     * for wrong-language, mixed-language or unrecognized ordinary words.
-     */
+    /** @return array<string, mixed> */
     public static function validateSource(
         string $text,
         string $expectedLanguage,
@@ -215,10 +226,6 @@ final class LanguageGuard
         self::validateSource($text, $expectedLanguage, $lexicalChecker);
     }
 
-    /**
-     * Sentence-level statistical context only. It is intentionally not used as
-     * a per-word dictionary.
-     */
     public static function confidentLanguage(string $text): ?string
     {
         $text = trim($text);
@@ -241,11 +248,6 @@ final class LanguageGuard
         return null;
     }
 
-    /**
-     * Legacy helper kept for callers that only need sentence context. Short
-     * phrases are not classified statistically anymore; lexical checking owns
-     * that job.
-     */
     public static function confidentSentenceLanguage(string $text): ?string
     {
         return count(self::tokenDetails($text)) >= 3 ? self::confidentLanguage($text) : null;
@@ -262,31 +264,43 @@ final class LanguageGuard
         foreach (($matches[0] ?? []) as $raw) {
             $raw = (string) $raw;
             $normalized = LexicalLanguageChecker::normalizeToken($raw);
-            if ($normalized === '') {
-                continue;
+            if ($normalized !== '') {
+                $tokens[] = ['raw' => $raw, 'normalized' => $normalized];
             }
-            $tokens[] = ['raw' => $raw, 'normalized' => $normalized];
         }
         return $tokens;
     }
 
     private static function looksTechnicalIdentifier(string $token): bool
     {
-        $length = mb_strlen($token, 'UTF-8');
-        if ($length <= 2) {
+        if (LexicalLanguageChecker::isTechnicalNeutral($token)) {
             return true;
         }
-        if (preg_match('/\d/u', $token) === 1) {
+        $length = mb_strlen($token, 'UTF-8');
+        if ($length <= 2 || preg_match('/\d/u', $token) === 1) {
             return true;
         }
         if (preg_match('/^[\p{Lu}]{2,}$/u', $token) === 1) {
             return true;
         }
-        // Camel/mixed case brands and identifiers: WiFi, ZKTeco, CloudBeds.
-        if (preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1) {
+        return preg_match('/\p{Ll}.*\p{Lu}|\p{Lu}.*\p{Lu}/u', $token) === 1;
+    }
+
+    private static function looksGibberishToken(string $token): bool
+    {
+        $word = mb_strtolower($token, 'UTF-8');
+        if (mb_strlen($word, 'UTF-8') < 4) {
+            return false;
+        }
+        if (preg_match('/[^aeiouáàâãéêíóôõúü]{5,}/u', $word) === 1) {
             return true;
         }
-        return false;
+        if (preg_match('/(.)\1{3,}/u', $word) === 1) {
+            return true;
+        }
+        $vowels = preg_match_all('/[aeiouáàâãéêíóôõúü]/u', $word);
+        $letters = preg_match_all('/\p{L}/u', $word);
+        return $letters >= 7 && $vowels <= 1;
     }
 
     /** @param string[] $words @return string[] */
@@ -336,15 +350,9 @@ final class LanguageGuard
     {
         $score = (float) ($scores[$language] ?? 0.0);
         $otherScore = (float) ($scores[$otherLanguage] ?? 0.0);
-        if ($score < self::COMPONENT_MIN_SCORE) {
-            return false;
-        }
-        if (($score - $otherScore) < self::COMPONENT_MIN_GAP) {
-            return false;
-        }
-        if ($otherScore > 0.0 && ($score / $otherScore) < self::COMPONENT_MIN_RATIO) {
-            return false;
-        }
+        if ($score < self::COMPONENT_MIN_SCORE) return false;
+        if (($score - $otherScore) < self::COMPONENT_MIN_GAP) return false;
+        if ($otherScore > 0.0 && ($score / $otherScore) < self::COMPONENT_MIN_RATIO) return false;
         return true;
     }
 }
