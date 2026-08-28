@@ -45,6 +45,7 @@ jobs:
           php tests/assignment-textarea-lock.php
           php tests/validation-feedback-contract.php
           php tests/language-guard-hardening.php
+          php tests/proper-noun-latency.php
           php tests/autosave-hardening.php
           php tests/invalid-edit-ux.php
           php tests/bilingual-textarea-transversal.php

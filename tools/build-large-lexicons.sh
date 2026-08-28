@@ -49,6 +49,10 @@ out = Path(sys.argv[3])
 
 ALLOWED_PUNCT = {"'", "-"}
 MAX_LEN = 190
+HAR_PROPER_EXTRAS = {
+    "daniel", "miguel", "michael", "joao", "joão",
+    "spain", "germany", "romania",
+}
 
 
 def normalize(value: str) -> str:
@@ -74,23 +78,59 @@ def read_core(path: Path) -> set[str]:
     return result
 
 
-def build_en() -> set[str]:
-    words = read_core(root / "resources/lexicon/en_GB_core.txt")
+def is_titlecase_candidate(raw: str) -> bool:
+    if not raw or any(ch.isspace() for ch in raw):
+        return False
+    letters = [ch for ch in raw if ch.isalpha()]
+    if len(letters) < 3:
+        return False
+    return letters[0].isupper() and any(ch.islower() for ch in letters[1:])
+
+
+def english_source_sets() -> tuple[set[str], set[str]]:
+    ordinary = read_core(root / "resources/lexicon/en_GB_core.txt")
+    lowercase_source: set[str] = set()
+    titlecase_source: set[str] = set()
     for raw in (tmp / "en_GB-base.txt").read_text(encoding="utf-8").splitlines():
         raw = raw.strip()
         if not raw or raw.startswith("#"):
             continue
-        # The source contains many proper names/acronyms. They must not become
-        # lexical EN evidence in a PT sentence merely because they are names.
-        # Keep ordinary lowercase dictionary entries only; project technical
-        # names are handled explicitly by technical_neutral.txt.
-        first_alpha = next((ch for ch in raw if ch.isalpha()), "")
-        if not first_alpha or not first_alpha.islower():
-            continue
         token = normalize(raw)
-        if valid_token(token):
-            words.add(token)
-    return words
+        if not valid_token(token):
+            continue
+        first_alpha = next((ch for ch in raw if ch.isalpha()), "")
+        if first_alpha and first_alpha.islower():
+            lowercase_source.add(token)
+            ordinary.add(token)
+        elif is_titlecase_candidate(raw):
+            titlecase_source.add(token)
+
+    # A word that also exists as an ordinary lowercase English entry (Will,
+    # Rose, May...) remains lexical English rather than becoming a neutral name.
+    proper = titlecase_source - lowercase_source
+    return ordinary, proper
+
+
+def portuguese_source_proper() -> set[str]:
+    lowercase_source: set[str] = set()
+    titlecase_source: set[str] = set()
+    lines = (tmp / "Portuguese-European.dic").read_text(encoding="utf-8").splitlines()
+    for index, raw in enumerate(lines):
+        if index == 0 and raw.strip().isdigit():
+            continue
+        raw = raw.strip()
+        if not raw:
+            continue
+        lemma = raw.split("/", 1)[0].strip()
+        token = normalize(lemma)
+        if not valid_token(token):
+            continue
+        first_alpha = next((ch for ch in lemma if ch.isalpha()), "")
+        if first_alpha and first_alpha.islower():
+            lowercase_source.add(token)
+        elif is_titlecase_candidate(lemma):
+            titlecase_source.add(token)
+    return titlecase_source - lowercase_source
 
 
 def build_pt() -> set[str]:
@@ -132,8 +172,20 @@ def write_indexed(words: set[str], stem: str) -> None:
     print(f"{stem}: {len(ordered)} words, {offset} bytes")
 
 
-write_indexed(build_en(), "en_GB")
-write_indexed(build_pt(), "pt_PT")
+def write_plain(words: set[str], name: str) -> None:
+    ordered = sorted(words)
+    path = out / name
+    path.write_text("".join(word + "\n" for word in ordered), encoding="utf-8")
+    print(f"{name}: {len(ordered)} neutral proper names")
+
+
+en_words, en_proper = english_source_sets()
+pt_words = build_pt()
+proper_words = en_proper | portuguese_source_proper() | HAR_PROPER_EXTRAS
+
+write_indexed(en_words, "en_GB")
+write_indexed(pt_words, "pt_PT")
+write_plain(proper_words, "proper_neutral.txt")
 PY
 
 cat > "$OUT/README.md" <<EOF
@@ -144,18 +196,22 @@ verification. They introduce no runtime network dependency.
 
 Sources are pinned to cspell-dicts commit ${CSPELL_REF}:
 
-- English: dictionaries/en_GB-MIT/src/generated/base.txt (MIT). During the
-  build, proper-name/acronym style entries are excluded and the existing Room
-  Check EN core vocabulary is merged in.
+- English: dictionaries/en_GB-MIT/src/generated/base.txt (MIT). Ordinary
+  lowercase entries form the EN lexicon. Title-case entries that do not also
+  exist as ordinary lowercase words form a separate neutral proper-name list.
 - Portuguese (Portugal): dictionaries/pt_PT/src/hunspell/Portuguese-European.dic
   plus Portuguese-European.aff. The Hunspell rules are expanded with
-  hunspell-reader 10.0.1, then normalized to a one-word-per-line lexicon. The
-  existing Room Check PT core vocabulary is merged in.
+  hunspell-reader 10.0.1, then normalized to a one-word-per-line lexicon.
+  Unambiguous title-case lemmas also contribute to the neutral proper-name list.
 
-The corresponding upstream licenses are kept in ./licenses. The generated word
-files are sorted UTF-8 text. Each .index.json stores byte ranges by the first two
-Unicode characters so PHP can look up only the relevant slices without loading
-hundreds of thousands of words into memory.
+The proper-name list is deliberately language-neutral: names of people,
+countries and places must not by themselves decide whether a sentence is PT or
+EN. Ordinary words that are also names remain in their normal language lexicon.
+
+The corresponding upstream licenses are kept in ./licenses. The generated PT/EN
+word files are sorted UTF-8 text. Each .index.json stores byte ranges by the
+first two Unicode characters so PHP can look up only the relevant slices without
+loading hundreds of thousands of words into memory.
 
 Rebuild with:
 
@@ -170,5 +226,8 @@ grep -Fxq "necessary" "$OUT/en_GB.txt"
 grep -Fxq "cadeira" "$OUT/pt_PT.txt"
 grep -Fxq "coração" "$OUT/pt_PT.txt"
 grep -Fxq "toalha" "$OUT/pt_PT.txt"
+for proper in daniel miguel michael joao joão spain germany romania; do
+  grep -Fxq "$proper" "$OUT/proper_neutral.txt"
+done
 
 printf 'Large lexicons built successfully.\n'
