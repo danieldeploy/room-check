@@ -6,7 +6,6 @@
     const nativeFetch = window.fetch.bind(window);
     const config = window.ROOM_CHECK || {};
     const translationFeedback = window.ROOM_TRANSLATION_FEEDBACK || {};
-    const validationUrl = 'translation-validate.php';
     let lastEditedRow = null;
     const feedbackTimers = new WeakMap();
     const bypassNavigation = new WeakSet();
@@ -16,6 +15,30 @@
     const feedbackForRow = (row) => row?.querySelector('.problem-field .row-save-feedback') || null;
     const textareaForRow = (row) => row?.querySelector('.problem-field textarea') || null;
     const allRows = () => Array.from(document.querySelectorAll('.check-row'));
+    const rowForFieldKey = (fieldKey) => allRows().find(
+        (row) => row.querySelector('h2')?.textContent === String(fieldKey || '')
+    ) || null;
+
+    const translationResultsFromResponse = (response) => {
+        const encoded = response?.headers?.get?.('X-Room-Translation-Results') || '';
+        if (!encoded) return [];
+        try {
+            const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+            const bytes = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+            const json = new TextDecoder('utf-8').decode(bytes);
+            const parsed = JSON.parse(json);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    };
+
+    // Reused by the transversal bilingual textarea script so every persistent
+    // save reads the same server conclusion without a second validation request.
+    window.ROOM_TRANSLATION_RESULT_READER = Object.freeze({
+        fromResponse: translationResultsFromResponse,
+    });
 
     const keepValidationTextareaEditable = (textarea) => {
         if (!textarea || config.canEdit === false) return;
@@ -62,7 +85,7 @@
             feedbackTimers.set(feedback, window.setTimeout(() => {
                 feedback.classList.remove('is-visible');
                 feedbackTimers.delete(feedback);
-            }, 5000));
+            }, 6000));
         }
     };
 
@@ -73,21 +96,22 @@
             textarea.classList.add('language-invalid');
             textarea.dataset.languageSaveFailed = '1';
             textarea.setAttribute('aria-invalid', 'true');
-            delete textarea.dataset.translationValidationMessage;
         }
         showFeedback(row, message, 'error');
     };
 
-    const markTextareaSaved = (textarea, showMessage = true) => {
+    const markTextareaSaved = (textarea, message = '', showMessage = true) => {
         if (!textarea) return;
         textarea.dataset.lastValidValue = textarea.value;
         delete textarea.dataset.languageNeedsValidation;
         clearInvalidState(textarea);
-        const message = textarea.dataset.translationValidationMessage
-            || translationFeedback.saved
-            || 'Saved: translation accepted.';
-        delete textarea.dataset.translationValidationMessage;
-        if (showMessage) showFeedback(textarea.closest('.check-row'), message, 'success');
+        if (showMessage) {
+            showFeedback(
+                textarea.closest('.check-row'),
+                message || translationFeedback.saved || 'Saved.',
+                'success'
+            );
+        }
     };
 
     const pendingTextareas = () => Array.from(document.querySelectorAll(
@@ -98,7 +122,6 @@
         pendingTextareas().forEach((textarea) => {
             textarea.value = textarea.dataset.lastValidValue ?? '';
             delete textarea.dataset.languageNeedsValidation;
-            delete textarea.dataset.translationValidationMessage;
             clearInvalidState(textarea);
             resetFeedback(feedbackForRow(textarea.closest('.check-row')));
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -136,85 +159,9 @@
         correct.focus();
     });
 
-    const textFieldsForRequest = (requestBody) => {
-        const fields = [];
-        const action = requestBody?.action || '';
-
-        if (action === 'set_assignments_atomic' && Array.isArray(requestBody?.changes)) {
-            requestBody.changes.forEach((change) => {
-                const row = allRows().find((candidate) => candidate.querySelector('h2')?.textContent === String(change?.itemName || ''));
-                const textarea = textareaForRow(row);
-                if (!textarea || textarea.dataset.languageNeedsValidation !== '1') return;
-                fields.push({
-                    fieldKey: String(change?.itemName || ''),
-                    text: String(change?.instructions ?? ''),
-                    textarea,
-                    row,
-                });
-            });
-            return fields;
-        }
-
-        if (action === '' && Array.isArray(requestBody?.items)) {
-            requestBody.items.forEach((item) => {
-                const row = allRows().find((candidate) => candidate.querySelector('h2')?.textContent === String(item?.name || ''));
-                const textarea = textareaForRow(row);
-                if (!textarea || textarea.dataset.languageNeedsValidation !== '1') return;
-                fields.push({
-                    fieldKey: String(item?.name || ''),
-                    text: String(item?.problem ?? ''),
-                    textarea,
-                    row,
-                });
-            });
-        }
-        return fields;
-    };
-
-    const validateTextSave = async (requestBody) => {
-        const fields = textFieldsForRequest(requestBody);
-        if (fields.length === 0) return { valid: true };
-
-        let response;
-        try {
-            response = await nativeFetch(validationUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({
-                    csrfToken: config.csrfToken,
-                    fields: fields.map(({ fieldKey, text }) => ({ fieldKey, text })),
-                }),
-            });
-        } catch (_) {
-            const message = translationFeedback.validationError || 'Error: could not validate the translation.';
-            showErrorFeedback(fields[0]?.row || lastEditedRow, message);
-            return { valid: false, status: 503, payload: { ok: false, error: message } };
-        }
-
-        let payload = null;
-        try { payload = await response.json(); } catch (_) { payload = null; }
-        if (!response.ok || payload?.ok === false) {
-            const fieldKey = String(payload?.fieldKey || '');
-            const field = fields.find((candidate) => candidate.fieldKey === fieldKey) || fields[0];
-            const message = payload?.error || translationFeedback.validationError || 'Error: could not validate the translation.';
-            showErrorFeedback(field?.row || lastEditedRow, message);
-            return { valid: false, status: response.status || 422, payload: payload || { ok: false, error: message } };
-        }
-
-        (payload.fields || []).forEach((result) => {
-            const field = fields.find((candidate) => candidate.fieldKey === String(result?.fieldKey || ''));
-            if (!field?.textarea) return;
-            field.textarea.dataset.translationValidationMessage = String(
-                result?.message || translationFeedback.saved || 'Saved: translation accepted.'
-            );
-            clearInvalidState(field.textarea);
-        });
-        return { valid: true };
-    };
-
     const flushPendingSaves = async (textareas) => {
         textareas.forEach((textarea) => textarea.dispatchEvent(new Event('blur')));
-        const deadline = Date.now() + 16000;
+        const deadline = Date.now() + 30000;
         while (Date.now() < deadline) {
             if (textareas.every((textarea) => textarea.dataset.languageNeedsValidation !== '1')) return true;
             if (textareas.some((textarea) => textarea.dataset.languageSaveFailed === '1')) return false;
@@ -222,7 +169,7 @@
         }
         showErrorFeedback(
             textareas[0]?.closest('.check-row'),
-            translationFeedback.timeout || 'Error: translation validation timed out.'
+            translationFeedback.timeout || 'Error: validation/translation timed out.'
         );
         return false;
     };
@@ -241,7 +188,6 @@
     };
 
     const contextControl = (target) => target?.matches?.('#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate');
-    const contextAction = (target) => target?.matches?.('#createInterval, #deleteInterval');
 
     document.addEventListener('focusin', (event) => {
         const textarea = event.target.closest?.('.check-row textarea');
@@ -262,7 +208,6 @@
         lastEditedRow = textarea.closest('.check-row');
         if (textarea.dataset.lastValidValue === undefined) textarea.dataset.lastValidValue = textarea.value;
         clearInvalidState(textarea);
-        delete textarea.dataset.translationValidationMessage;
         if (textarea.value !== textarea.dataset.lastValidValue) textarea.dataset.languageNeedsValidation = '1';
         else delete textarea.dataset.languageNeedsValidation;
         resetFeedback(feedbackForRow(lastEditedRow));
@@ -316,26 +261,34 @@
         return method === 'POST' && /(?:^|\/)api\.php(?:$|[?#])/.test(url);
     };
 
-    const markSavedRequest = (requestBody) => {
+    const markSavedRequest = (requestBody, translationResults) => {
         const action = requestBody?.action || '';
         if (action === '' && Array.isArray(requestBody?.items)) {
             const rows = allRows();
-            requestBody.items.forEach((item) => {
+            requestBody.items.forEach((item, index) => {
                 const row = rows.find((candidate) => candidate.querySelector('h2')?.textContent === String(item?.name || ''));
                 const textarea = textareaForRow(row);
                 if (textarea && textarea.value === String(item?.problem ?? '')) {
-                    markTextareaSaved(textarea, row === lastEditedRow);
+                    markTextareaSaved(
+                        textarea,
+                        String(translationResults[index]?.message || ''),
+                        row === lastEditedRow
+                    );
                 }
             });
             return;
         }
         if (action === 'set_assignments_atomic' && Array.isArray(requestBody?.changes)) {
-            requestBody.changes.forEach((change) => {
-                const row = allRows().find((candidate) => candidate.querySelector('h2')?.textContent === String(change?.itemName || ''));
+            requestBody.changes.forEach((change, index) => {
+                const row = rowForFieldKey(change?.itemName);
                 const textarea = textareaForRow(row);
                 const instructions = String(change?.instructions ?? '').trim();
                 if (textarea && textarea.value.trim() === instructions) {
-                    markTextareaSaved(textarea, row === lastEditedRow);
+                    markTextareaSaved(
+                        textarea,
+                        String(translationResults[index]?.message || ''),
+                        row === lastEditedRow
+                    );
                 }
             });
         }
@@ -348,28 +301,23 @@
             try { requestBody = JSON.parse(init.body); } catch (_) { requestBody = null; }
         }
 
-        const action = requestBody?.action || '';
-        const isTextSave = track && (action === 'set_assignments_atomic' || (action === '' && Array.isArray(requestBody?.items)));
-        if (isTextSave) {
-            const validation = await validateTextSave(requestBody);
-            if (!validation.valid) {
-                return new Response(JSON.stringify(validation.payload || { ok: false, error: 'Validation failed.' }), {
-                    status: validation.status || 422,
-                    headers: { 'Content-Type': 'application/json' },
-                });
-            }
-        }
-
         const response = await nativeFetch(input, init);
         if (!track) return response;
+
+        const action = requestBody?.action || '';
+        const isTextSave = action === 'set_assignments_atomic'
+            || (action === '' && Array.isArray(requestBody?.items));
+        if (!isTextSave) return response;
+
         let payload = null;
         try { payload = await response.clone().json(); } catch (_) { payload = null; }
-        if (!isTextSave) return response;
         if (!response.ok || payload?.ok === false) {
-            showErrorFeedback(lastEditedRow, payload?.error || translationFeedback.saveError || 'Error: could not save.');
+            const errorRow = rowForFieldKey(payload?.fieldKey) || lastEditedRow;
+            showErrorFeedback(errorRow, payload?.error || translationFeedback.saveError || 'Error: could not save.');
             return response;
         }
-        markSavedRequest(requestBody);
+
+        markSavedRequest(requestBody, translationResultsFromResponse(response));
         return response;
     };
 })();
