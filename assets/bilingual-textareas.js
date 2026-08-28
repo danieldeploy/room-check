@@ -5,6 +5,7 @@
     const apiUrl = script?.dataset.bilingualApi || 'api.php';
     const validationUrl = apiUrl.replace(/api\.php(?:[?#].*)?$/, 'translation-validate.php');
     const selector = 'textarea[data-bilingual-textarea]';
+    const translationFeedback = window.ROOM_TRANSLATION_FEEDBACK || {};
     const savePromises = new WeakMap();
     const bypassForms = new WeakSet();
     const bypassLinks = new WeakSet();
@@ -51,12 +52,7 @@
         feedback.classList.remove('is-error', 'is-saved');
         feedback.classList.add('is-visible', kind === 'saved' ? 'is-saved' : 'is-error');
     };
-    const savedMessage = () => {
-        const saved = document.body?.dataset.bilingualSaved || 'Saved';
-        return saved.toLowerCase().startsWith('saved')
-            ? 'Saved: translation correct or ambiguous'
-            : 'Guardado: tradução correta ou ambígua';
-    };
+    const savedMessage = () => translationFeedback.saved || 'Saved: translation correct or ambiguous';
 
     const validateTextarea = async (textarea) => {
         const response = await fetch(validationUrl, {
@@ -74,7 +70,7 @@
             return { valid: true, conclusion: payload.fields?.[0]?.conclusion || 'ambiguous' };
         }
         markInvalid(textarea);
-        showFeedback(textarea, payload?.error || 'Could not validate the translation.', 'error');
+        showFeedback(textarea, payload?.error || translationFeedback.validationError || 'Error: could not validate the translation.', 'error');
         return { valid: false };
     };
 
@@ -96,7 +92,7 @@
         try { payload = await response.json(); } catch (_) { payload = null; }
         if (!response.ok || payload?.ok === false) {
             markInvalid(textarea);
-            showFeedback(textarea, payload?.error || 'Could not save.', 'error');
+            showFeedback(textarea, payload?.error || translationFeedback.saveError || 'Error: could not save.', 'error');
             return false;
         }
         textarea.dataset.bilingualLastValidValue = textarea.value;
