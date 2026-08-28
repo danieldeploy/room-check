@@ -22,6 +22,17 @@ interface LexicalCoverageClassifier
     public function hasFullCoverage(): bool;
 }
 
+interface LexicalEntityClassifier
+{
+    /**
+     * Explicit entity candidates used by the translator.
+     *
+     * @param string[] $tokens Normalized lowercase lexical tokens.
+     * @return array<string, string> Map token => person|country|proper.
+     */
+    public function classifyEntityTokens(array $tokens): array;
+}
+
 final class LexicalLookupException extends RuntimeException
 {
 }
@@ -31,10 +42,11 @@ final class LexicalLookupException extends RuntimeException
  *
  * The full PT-PT and EN-GB dictionaries are sorted text files with small
  * two-character byte-range indexes. Only the relevant slices are read for each
- * request. A separately generated proper-name lexicon marks people, countries
- * and places as language-neutral rather than as PT/EN evidence.
+ * request. Explicit person and country resources take precedence over the
+ * broader proper-name fallback: people are neutral/preserved, while country
+ * names remain lexical PT/EN evidence and are translated normally.
  */
-final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier
+final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier, LexicalEntityClassifier
 {
     private const MAX_TOKEN_LENGTH = 190;
 
@@ -46,6 +58,12 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     private static ?array $technicalWords = null;
     /** @var array<string, bool>|null */
     private static ?array $properWords = null;
+    /** @var array<string, bool>|null */
+    private static ?array $personWords = null;
+    /** @var array<string, bool>|null */
+    private static ?array $countryPtWords = null;
+    /** @var array<string, bool>|null */
+    private static ?array $countryEnWords = null;
     /** @var array<string, array<string, array{0:int,1:int}>> */
     private static array $indexCache = [];
     /** @var array<string, array<string, bool>> */
@@ -89,8 +107,30 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         $results = [];
 
         foreach ($tokens as $token) {
-            // Explicit technology/brand identifiers and generated proper names
-            // are deliberately neutral. They must not decide sentence language.
+            // A confirmed person name is deliberately neutral. If a token is
+            // both a person and a country name, preserving the person's name is
+            // safer than translating it without sentence-level certainty.
+            if (isset(self::$personWords[$token])) {
+                $results[$token] = 'shared';
+                continue;
+            }
+
+            // Countries are explicit language-bearing entities. This override
+            // must run before the broad proper-name fallback so Spain/Germany/
+            // Romania are not silently treated as neutral names.
+            $countryPt = isset(self::$countryPtWords[$token]);
+            $countryEn = isset(self::$countryEnWords[$token]);
+            if ($countryPt || $countryEn) {
+                $results[$token] = match (true) {
+                    $countryPt && $countryEn => 'shared',
+                    $countryPt => 'pt_only',
+                    default => 'en_only',
+                };
+                continue;
+            }
+
+            // Explicit technology/brand identifiers and remaining generated
+            // proper names are neutral for compatibility with existing data.
             if (isset(self::$technicalWords[$token]) || isset(self::$properWords[$token])) {
                 $results[$token] = 'shared';
                 continue;
@@ -106,6 +146,30 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             };
         }
         return $results;
+    }
+
+    public function classifyEntityTokens(array $tokens): array
+    {
+        self::loadSmallLexicons($this->config);
+        $entities = [];
+        foreach ($tokens as $rawToken) {
+            $token = self::normalizeToken((string) $rawToken);
+            if ($token === '' || mb_strlen($token, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
+                continue;
+            }
+            if (isset(self::$personWords[$token])) {
+                $entities[$token] = 'person';
+                continue;
+            }
+            if (isset(self::$countryPtWords[$token]) || isset(self::$countryEnWords[$token])) {
+                $entities[$token] = 'country';
+                continue;
+            }
+            if (isset(self::$properWords[$token])) {
+                $entities[$token] = 'proper';
+            }
+        }
+        return $entities;
     }
 
     /**
@@ -124,8 +188,11 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             return null;
         }
 
-        // Exact proper names are valid neutral tokens, never typo candidates.
-        if (isset(self::$properWords[$token])) {
+        // Exact explicit entities/proper names are valid tokens, never typo candidates.
+        if (isset(self::$personWords[$token])
+            || isset(self::$countryPtWords[$token])
+            || isset(self::$countryEnWords[$token])
+            || isset(self::$properWords[$token])) {
             return null;
         }
 
@@ -325,7 +392,10 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         if (self::$ptCore !== null
             && self::$enCore !== null
             && self::$technicalWords !== null
-            && self::$properWords !== null) {
+            && self::$properWords !== null
+            && self::$personWords !== null
+            && self::$countryPtWords !== null
+            && self::$countryEnWords !== null) {
             return;
         }
         $root = dirname(__DIR__, 2);
@@ -333,11 +403,17 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         $enPath = (string) ($config['en_path'] ?? $root . '/resources/lexicon/en_GB_core.txt');
         $technicalPath = (string) ($config['technical_path'] ?? $root . '/resources/lexicon/technical_neutral.txt');
         $properPath = (string) ($config['proper_path'] ?? $root . '/resources/lexicon/full/proper_neutral.txt');
+        $personPath = (string) ($config['person_path'] ?? $root . '/resources/lexicon/full/person_neutral.txt');
+        $countryPtPath = (string) ($config['country_pt_path'] ?? $root . '/resources/lexicon/country_pt.txt');
+        $countryEnPath = (string) ($config['country_en_path'] ?? $root . '/resources/lexicon/country_en.txt');
 
         self::$ptCore = self::readSmallWordFile($ptPath);
         self::$enCore = self::readSmallWordFile($enPath);
         self::$technicalWords = self::readSmallWordFile($technicalPath);
         self::$properWords = self::readSmallWordFile($properPath);
+        self::$personWords = self::readSmallWordFile($personPath);
+        self::$countryPtWords = self::readSmallWordFile($countryPtPath);
+        self::$countryEnWords = self::readSmallWordFile($countryEnPath);
         if (self::$ptCore === [] || self::$enCore === []) {
             throw new LexicalLookupException('Local PT/EN lexical core files are unavailable.');
         }
