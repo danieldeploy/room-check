@@ -32,7 +32,13 @@ assertInvalidEditUx(!str_contains($feedback, 'language-highlight-layer'), 'dupli
 assertInvalidEditUx(!str_contains($feedback, 'appendHighlightedText'), 'word-overlay renderer is removed');
 assertInvalidEditUx(!str_contains($feedback, 'invalidWords'), 'word-level validation payload is no longer used by the UI');
 assertInvalidEditUx(!str_contains($feedback, "position: 'absolute', left: '0', top: '0'"), 'textarea feedback never paints a second text copy over the original');
-assertInvalidEditUx(str_contains($feedback, 'Saved: translation correct or ambiguous'), 'successful save explains contextual translation conclusion');
+assertInvalidEditUx(
+    str_contains($feedback, 'translationValidationMessage')
+        && str_contains($feedback, 'result?.message')
+        && str_contains($validator, "'message' =>"),
+    'successful save displays the exact server-generated source/translation conclusion'
+);
+assertInvalidEditUx(str_contains($feedback, 'validateTextSave') && str_contains($feedback, 'nativeFetch(validationUrl'), 'save is contextual-translation validated before persistence');
 assertInvalidEditUx(str_contains($validator, 'ContentTranslator') && str_contains($validator, '->versions('), 'validation-only flow uses the contextual translation algorithm');
 assertInvalidEditUx(
     str_contains($feedback, 'keepValidationTextareaEditable')
