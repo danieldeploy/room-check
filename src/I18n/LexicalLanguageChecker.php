@@ -12,9 +12,7 @@ interface LexicalLanguageClassifier
 
 interface LexicalNearMatchClassifier
 {
-    /**
-     * @return array{candidate:string,distance:int,classification:string}|null
-     */
+    /** @return array{candidate:string,distance:int,classification:string}|null */
     public function likelyMisspelling(string $token): ?array;
 }
 
@@ -25,48 +23,59 @@ final class LexicalLookupException extends RuntimeException
 /**
  * Deterministic PT/EN lexical lookup backed only by local files.
  *
- * No network request, external API, runtime dictionary cache or database table
- * is involved. MyMemory remains translation-only. The local word lists are
- * intentionally conservative: decisive everyday/hospitality vocabulary is
- * classified lexically; terms absent from both lists remain unknown and are
- * resolved by LanguageGuard using sentence context or rejected when they look
- * like typos/gibberish.
+ * The full PT-PT and EN-GB dictionaries are sorted text files with small
+ * two-character byte-range indexes. Only the relevant slices are read for each
+ * request, so cPanel/PHP never needs to materialize hundreds of thousands of
+ * dictionary entries in memory. The compact core lists remain only for bounded
+ * typo-near-match checks and as a fail-safe if a generated full resource is
+ * temporarily missing during deployment.
  */
 final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier
 {
     private const MAX_TOKEN_LENGTH = 190;
 
     /** @var array<string, bool>|null */
-    private static ?array $ptWords = null;
+    private static ?array $ptCore = null;
     /** @var array<string, bool>|null */
-    private static ?array $enWords = null;
+    private static ?array $enCore = null;
     /** @var array<string, bool>|null */
     private static ?array $technicalWords = null;
+    /** @var array<string, array<string, array{0:int,1:int}>> */
+    private static array $indexCache = [];
 
     public function __construct(private PDO $pdo, private array $config = [])
     {
-        // PDO is kept in the signature for backwards compatibility with the
-        // application constructor. Local lexical verification does not use DB.
-        self::loadLexicons($config);
+        // PDO remains in the signature for compatibility with ContentTranslator.
+        // Lexical validation itself is file-only and makes no DB/network request.
+        self::loadSmallLexicons($config);
     }
 
     public function classifyTokens(array $tokens): array
     {
-        self::loadLexicons($this->config);
-        $results = [];
+        self::loadSmallLexicons($this->config);
+        $normalized = [];
         foreach ($tokens as $rawToken) {
             $token = self::normalizeToken((string) $rawToken);
-            if ($token === '' || mb_strlen($token, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
-                continue;
+            if ($token !== '' && mb_strlen($token, 'UTF-8') <= self::MAX_TOKEN_LENGTH) {
+                $normalized[$token] = true;
             }
+        }
+        $tokens = array_keys($normalized);
+        if ($tokens === []) {
+            return [];
+        }
 
+        $ptMembership = $this->languageMembership($tokens, 'pt');
+        $enMembership = $this->languageMembership($tokens, 'en');
+        $results = [];
+
+        foreach ($tokens as $token) {
             if (isset(self::$technicalWords[$token])) {
                 $results[$token] = 'shared';
                 continue;
             }
-
-            $hasPt = isset(self::$ptWords[$token]);
-            $hasEn = isset(self::$enWords[$token]);
+            $hasPt = isset($ptMembership[$token]);
+            $hasEn = isset($enMembership[$token]);
             $results[$token] = match (true) {
                 $hasPt && $hasEn => 'shared',
                 $hasPt => 'pt_only',
@@ -78,38 +87,35 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     }
 
     /**
-     * Unknown words that are only one or two edits away from a known PT, EN or
-     * technical token are almost always typing corruptions, not rare technical
-     * vocabulary. This catches cases such as danosht -> danos and YAHOOX -> yahoo
-     * without making the general unknown-word heuristic more aggressive.
+     * Near-match checks deliberately use only the compact project vocabulary and
+     * exact technical list. Scanning a complete language dictionary for every
+     * typo would be wasteful and would also create many accidental near-matches.
+     * This keeps the useful HAR regressions such as danosht -> danos and
+     * YAHOOX -> yahoo without changing ordinary dictionary coverage.
      *
      * @return array{candidate:string,distance:int,classification:string}|null
      */
     public function likelyMisspelling(string $token): ?array
     {
-        self::loadLexicons($this->config);
+        self::loadSmallLexicons($this->config);
         $token = self::normalizeToken($token);
         $length = mb_strlen($token, 'UTF-8');
         if ($token === '' || $length < 4 || $length > self::MAX_TOKEN_LENGTH) {
             return null;
         }
 
-        if (isset(self::$technicalWords[$token]) || isset(self::$ptWords[$token]) || isset(self::$enWords[$token])) {
+        $known = self::$ptCore + self::$enCore + self::$technicalWords;
+        if (isset($known[$token])) {
             return null;
         }
 
-        // One edit is already strong evidence on short words. From five letters
-        // onward, allow two edits so one/two accidental suffix letters are caught.
         $maxDistance = $length >= 5 ? 2 : 1;
         $best = null;
-
-        $known = self::$ptWords + self::$enWords + self::$technicalWords;
         foreach (array_keys($known) as $candidate) {
             $candidateLength = mb_strlen($candidate, 'UTF-8');
             if ($candidateLength < 3 || abs($candidateLength - $length) > $maxDistance) {
                 continue;
             }
-
             $distance = self::unicodeEditDistance($token, $candidate, $maxDistance);
             if ($distance < 1 || $distance > $maxDistance) {
                 continue;
@@ -117,30 +123,26 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             if ($best !== null && $distance >= $best['distance']) {
                 continue;
             }
-
             $classification = isset(self::$technicalWords[$candidate])
                 ? 'technical'
-                : (isset(self::$ptWords[$candidate]) && isset(self::$enWords[$candidate])
+                : (isset(self::$ptCore[$candidate]) && isset(self::$enCore[$candidate])
                     ? 'shared'
-                    : (isset(self::$ptWords[$candidate]) ? 'pt_only' : 'en_only'));
+                    : (isset(self::$ptCore[$candidate]) ? 'pt_only' : 'en_only'));
             $best = [
                 'candidate' => $candidate,
                 'distance' => $distance,
                 'classification' => $classification,
             ];
-
             if ($distance === 1) {
-                // Distance 1 is the strongest possible non-exact match.
                 break;
             }
         }
-
         return $best;
     }
 
     public static function isTechnicalNeutral(string $token): bool
     {
-        self::loadLexicons([]);
+        self::loadSmallLexicons([]);
         return isset(self::$technicalWords[self::normalizeToken($token)]);
     }
 
@@ -150,28 +152,121 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         return mb_strtolower($token, 'UTF-8');
     }
 
-    private static function loadLexicons(array $config): void
+    /** @param string[] $tokens @return array<string, bool> */
+    private function languageMembership(array $tokens, string $language): array
     {
-        if (self::$ptWords !== null && self::$enWords !== null && self::$technicalWords !== null) {
-            return;
+        $root = dirname(__DIR__, 2);
+        $isPt = $language === 'pt';
+        $fullPath = (string) ($this->config[$isPt ? 'pt_full_path' : 'en_full_path']
+            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.txt' : 'en_GB.txt'));
+        $indexPath = (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
+            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json'));
+
+        if (is_file($fullPath) && is_readable($fullPath) && is_file($indexPath) && is_readable($indexPath)) {
+            return self::indexedMembership($tokens, $fullPath, $indexPath);
         }
 
+        // Deployment fail-safe: the old compact lists still work if a partial
+        // deploy temporarily lacks the generated large files. This is never the
+        // intended steady-state path after cPanel deploys resources/.
+        $core = $isPt ? self::$ptCore : self::$enCore;
+        $found = [];
+        foreach ($tokens as $token) {
+            if (isset($core[$token])) {
+                $found[$token] = true;
+            }
+        }
+        return $found;
+    }
+
+    /** @param string[] $tokens @return array<string, bool> */
+    private static function indexedMembership(array $tokens, string $wordPath, string $indexPath): array
+    {
+        $index = self::readIndex($indexPath);
+        $groups = [];
+        foreach ($tokens as $token) {
+            $prefix = mb_substr($token, 0, 2, 'UTF-8');
+            $groups[$prefix][$token] = true;
+        }
+
+        $handle = @fopen($wordPath, 'rb');
+        if ($handle === false) {
+            throw new LexicalLookupException('Large local lexical resource is unreadable.');
+        }
+
+        $found = [];
+        try {
+            foreach ($groups as $prefix => $wanted) {
+                $range = $index[$prefix] ?? null;
+                if (!is_array($range) || count($range) !== 2) {
+                    continue;
+                }
+                $start = (int) $range[0];
+                $end = (int) $range[1];
+                if ($start < 0 || $end < $start || fseek($handle, $start) !== 0) {
+                    throw new LexicalLookupException('Large local lexical index is invalid.');
+                }
+
+                while (ftell($handle) < $end && ($line = fgets($handle)) !== false) {
+                    $word = rtrim($line, "\r\n");
+                    if (isset($wanted[$word])) {
+                        $found[$word] = true;
+                        unset($wanted[$word]);
+                        if ($wanted === []) {
+                            break;
+                        }
+                    }
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+        return $found;
+    }
+
+    /** @return array<string, array{0:int,1:int}> */
+    private static function readIndex(string $path): array
+    {
+        if (isset(self::$indexCache[$path])) {
+            return self::$indexCache[$path];
+        }
+        $json = file_get_contents($path);
+        $decoded = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($decoded)) {
+            throw new LexicalLookupException('Large local lexical index is unavailable.');
+        }
+
+        $index = [];
+        foreach ($decoded as $prefix => $range) {
+            if (!is_string($prefix) || !is_array($range) || count($range) !== 2) {
+                continue;
+            }
+            $index[$prefix] = [(int) $range[0], (int) $range[1]];
+        }
+        self::$indexCache[$path] = $index;
+        return $index;
+    }
+
+    private static function loadSmallLexicons(array $config): void
+    {
+        if (self::$ptCore !== null && self::$enCore !== null && self::$technicalWords !== null) {
+            return;
+        }
         $root = dirname(__DIR__, 2);
         $ptPath = (string) ($config['pt_path'] ?? $root . '/resources/lexicon/pt_PT_core.txt');
         $enPath = (string) ($config['en_path'] ?? $root . '/resources/lexicon/en_GB_core.txt');
         $technicalPath = (string) ($config['technical_path'] ?? $root . '/resources/lexicon/technical_neutral.txt');
 
-        self::$ptWords = self::readWordFile($ptPath);
-        self::$enWords = self::readWordFile($enPath);
-        self::$technicalWords = self::readWordFile($technicalPath);
-
-        if (self::$ptWords === [] || self::$enWords === []) {
-            throw new LexicalLookupException('Local PT/EN lexicon files are unavailable.');
+        self::$ptCore = self::readSmallWordFile($ptPath);
+        self::$enCore = self::readSmallWordFile($enPath);
+        self::$technicalWords = self::readSmallWordFile($technicalPath);
+        if (self::$ptCore === [] || self::$enCore === []) {
+            throw new LexicalLookupException('Local PT/EN lexical core files are unavailable.');
         }
     }
 
     /** @return array<string, bool> */
-    private static function readWordFile(string $path): array
+    private static function readSmallWordFile(string $path): array
     {
         if ($path === '' || !is_file($path) || !is_readable($path)) {
             return [];
@@ -180,7 +275,6 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         if (!is_string($contents)) {
             return [];
         }
-
         $words = [];
         foreach (preg_split('/\R/u', $contents) ?: [] as $line) {
             $line = trim($line);
@@ -195,10 +289,6 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         return $words;
     }
 
-    /**
-     * UTF-8 aware Levenshtein distance with an early length cutoff. The local
-     * lexicons are small, so this remains deterministic and fast on each new word.
-     */
     private static function unicodeEditDistance(string $left, string $right, int $cutoff): int
     {
         $a = preg_split('//u', $left, -1, PREG_SPLIT_NO_EMPTY) ?: [];
