@@ -22,12 +22,18 @@ $config->setValue($checker, []);
 assertProperLatency($checker->hasFullCoverage(), 'full dictionaries plus proper-name resource are installed');
 
 $classified = $checker->classifyTokens([
-    'daniel', 'miguel', 'michael', 'joao', 'joão',
-    'spain', 'germany', 'romania',
+    'daniel', 'miguel', 'michael', 'joao', 'joão', 'romi',
+    'spain', 'germany', 'romania', 'espanha', 'alemanha', 'roménia',
     'house', 'well', 'danos', 'yahoosads',
 ]);
-foreach (['daniel', 'miguel', 'michael', 'joao', 'joão', 'spain', 'germany', 'romania'] as $proper) {
-    assertProperLatency(($classified[$proper] ?? null) === 'shared', "{$proper} is language-neutral proper-name evidence");
+foreach (['daniel', 'miguel', 'michael', 'joao', 'joão', 'romi'] as $person) {
+    assertProperLatency(($classified[$person] ?? null) === 'shared', "{$person} is language-neutral person-name evidence");
+}
+foreach (['spain', 'germany', 'romania'] as $country) {
+    assertProperLatency(($classified[$country] ?? null) === 'en_only', "{$country} remains English country evidence");
+}
+foreach (['espanha', 'alemanha', 'roménia'] as $country) {
+    assertProperLatency(($classified[$country] ?? null) === 'pt_only', "{$country} remains Portuguese country evidence");
 }
 assertProperLatency(($classified['house'] ?? null) === 'en_only', 'ordinary English word remains English, not proper-neutral');
 assertProperLatency(($classified['well'] ?? null) === 'en_only', 'ordinary English coverage remains intact');
@@ -43,12 +49,16 @@ assertProperLatency(
     'English sentence with a person name is accepted'
 );
 assertProperLatency(
-    LanguageGuard::sourceAnalysis('Verificar o quarto Spain', 'pt', $checker)['conclusion'] === 'correct',
-    'country name does not make a Portuguese sentence mixed'
+    LanguageGuard::sourceAnalysis('Verificar o quarto Espanha', 'pt', $checker)['conclusion'] === 'correct',
+    'Portuguese country name is accepted as Portuguese evidence'
+);
+assertProperLatency(
+    LanguageGuard::sourceAnalysis('Verificar o quarto Spain', 'pt', $checker)['conclusion'] === 'mixed',
+    'English country name is no longer hidden as a neutral proper name in Portuguese text'
 );
 assertProperLatency(
     LanguageGuard::sourceAnalysis('Check the room in Germany', 'en', $checker)['conclusion'] === 'correct',
-    'country name does not make an English sentence mixed'
+    'English country name is accepted as English evidence'
 );
 assertProperLatency(
     LanguageGuard::sourceAnalysis('Verificar cadeira house', 'pt', $checker)['conclusion'] === 'mixed',
@@ -61,13 +71,20 @@ assertProperLatency(
 
 $root = dirname(__DIR__);
 $properPath = $root . '/resources/lexicon/full/proper_neutral.txt';
+$personPath = $root . '/resources/lexicon/full/person_neutral.txt';
+$countryPtPath = $root . '/resources/lexicon/country_pt.txt';
+$countryEnPath = $root . '/resources/lexicon/country_en.txt';
 assertProperLatency(is_file($properPath) && filesize($properPath) > 10000, 'generated proper-name lexicon is bundled');
+assertProperLatency(is_file($personPath) && filesize($personPath) > 0, 'explicit person-name overrides are bundled');
+assertProperLatency(is_file($countryPtPath) && filesize($countryPtPath) > 0, 'Portuguese country lexicon is bundled');
+assertProperLatency(is_file($countryEnPath) && filesize($countryEnPath) > 0, 'English country lexicon is bundled');
 
 $lexicalSource = file_get_contents($root . '/src/I18n/LexicalLanguageChecker.php');
 $translatorSource = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 assertProperLatency(is_string($lexicalSource) && is_string($translatorSource), 'runtime translation sources are readable');
 assertProperLatency(str_contains($lexicalSource, 'membershipCache'), 'lexical membership results are cached within the request');
-assertProperLatency(str_contains($lexicalSource, 'proper_neutral.txt'), 'runtime checker uses the generated proper-name resource');
+assertProperLatency(str_contains($lexicalSource, 'proper_neutral.txt'), 'runtime checker keeps the generated proper-name fallback');
+assertProperLatency(str_contains($lexicalSource, 'classifyEntityTokens'), 'runtime checker exposes explicit entity classification');
 assertProperLatency(
     str_contains($translatorSource, "in_array(\$analysis['conclusion'], ['wrong', 'mixed'], true)"),
     'MyMemory retry is restricted to actual wrong/mixed-language output'
@@ -77,4 +94,4 @@ assertProperLatency(
     'unknown/proper lexical edge cases no longer trigger a second translation request'
 );
 
-echo "Proper-name and save-latency regression passed.\n";
+echo "Proper-name, country-entity and save-latency regression passed.\n";
