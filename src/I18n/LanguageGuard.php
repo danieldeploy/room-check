@@ -36,7 +36,7 @@ final class LanguageGuard
 
     // Short phrases need stronger evidence than normal sentences. This allows
     // genuinely clear two-word input such as "new house" or "casa grande" to
-    // be classified while keeping isolated technical vocabulary ambiguous.
+    // be classified while keeping shared/technical short phrases conservative.
     private const SHORT_MIN_SCORE = 0.24;
     private const SHORT_MIN_GAP = 0.12;
     private const SHORT_MIN_RATIO = 1.65;
@@ -134,7 +134,8 @@ final class LanguageGuard
             $result,
             self::COMPONENT_MIN_SCORE,
             self::COMPONENT_MIN_GAP,
-            self::COMPONENT_MIN_RATIO
+            self::COMPONENT_MIN_RATIO,
+            true
         );
     }
 
@@ -161,7 +162,8 @@ final class LanguageGuard
             $result,
             self::SHORT_MIN_SCORE,
             self::SHORT_MIN_GAP,
-            self::SHORT_MIN_RATIO
+            self::SHORT_MIN_RATIO,
+            false
         );
     }
 
@@ -186,7 +188,8 @@ final class LanguageGuard
                     $result,
                     self::MIXED_MIN_SCORE,
                     self::MIXED_MIN_GAP,
-                    self::MIXED_MIN_RATIO
+                    self::MIXED_MIN_RATIO,
+                    false
                 );
                 if ($language === null) {
                     continue;
@@ -244,9 +247,12 @@ final class LanguageGuard
         LanguageResult $result,
         float $minScore,
         float $minGap,
-        float $minRatio
+        float $minRatio,
+        bool $allowReliableShortcut
     ): ?string {
-        if (($result->language === 'pt' || $result->language === 'en') && $result->isReliable()) {
+        if ($allowReliableShortcut
+            && ($result->language === 'pt' || $result->language === 'en')
+            && $result->isReliable()) {
             return $result->language;
         }
 
