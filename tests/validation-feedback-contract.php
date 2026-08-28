@@ -14,13 +14,15 @@ function assertValidationFeedback(bool $condition, string $message): void
 $root = dirname(__DIR__);
 $feedbackJs = file_get_contents($root . '/assets/validation-feedback.js');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
+$feedbackI18n = file_get_contents($root . '/src/I18n/TranslationFeedback.php');
 $validator = file_get_contents($root . '/translation-validate.php');
 
-assertValidationFeedback(is_string($feedbackJs) && is_string($sessionBar) && is_string($validator), 'contextual validation sources are readable');
+assertValidationFeedback(is_string($feedbackJs) && is_string($sessionBar) && is_string($feedbackI18n) && is_string($validator), 'contextual validation sources are readable');
 assertValidationFeedback(str_contains($sessionBar, 'assets/validation-feedback.js'), 'authenticated pages load shared save feedback');
 assertValidationFeedback(str_contains($feedbackJs, 'payload?.error'), 'server translation errors are rendered inline');
 assertValidationFeedback(str_contains($feedbackJs, 'Saved: translation correct or ambiguous'), 'English fallback explains the algorithm conclusion');
-assertValidationFeedback(str_contains($sessionBar, 'Guardado: tradução correta ou ambígua') && str_contains($sessionBar, 'Saved: translation correct or ambiguous'), 'success conclusion is declared bilingually server-side');
+assertValidationFeedback(str_contains($feedbackI18n, 'Guardado: tradução correta ou ambígua') && str_contains($feedbackI18n, 'Saved: translation correct or ambiguous'), 'success conclusion is declared bilingually in i18n layer');
+assertValidationFeedback(str_contains($sessionBar, 'TranslationFeedback::messages()'), 'session shell exposes localized translation messages to the browser');
 assertValidationFeedback(str_contains($feedbackJs, 'ROOM_TRANSLATION_FEEDBACK'), 'browser consumes centrally localized translation messages');
 assertValidationFeedback(str_contains($feedbackJs, 'flushPendingSaves'), 'navigation flushes the real blur save before leaving');
 assertValidationFeedback(str_contains($feedbackJs, "dispatchEvent(new Event('blur'))"), 'navigation uses the same blur/save translation path');
