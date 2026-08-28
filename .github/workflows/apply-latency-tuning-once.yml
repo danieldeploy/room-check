@@ -1,0 +1,40 @@
+name: Apply latency tuning once
+
+on:
+  push:
+    branches:
+      - agent/proper-nouns-save-latency
+    paths:
+      - .github/workflows/apply-latency-tuning-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/proper-nouns-save-latency
+          fetch-depth: 0
+      - name: Restrict provider retry to real language failures
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/I18n/ContentTranslator.php')
+          text = path.read_text(encoding='utf-8')
+          old = """        if (!in_array($analysis['conclusion'], ['correct', 'ambiguous'], true)) {\n            // Provider language/content errors get one fresh retry. Network and\n            // timeout exceptions are thrown by translateChunk and are not retried.\n"""
+          new = """        if (in_array($analysis['conclusion'], ['wrong', 'mixed'], true)) {\n            // Retry only when the provider really returned the wrong/mixed language.\n            // Unknown proper nouns or lexical edge cases must not double the network\n            // wait; network/timeout exceptions are never retried here.\n"""
+          if old not in text:
+              raise SystemExit('Expected retry block not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/I18n/ContentTranslator.php
+          git commit -m "Avoid duplicate translation waits for lexical edge cases"
+          git push origin HEAD:agent/proper-nouns-save-latency
