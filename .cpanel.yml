@@ -8,5 +8,5 @@ deployment:
     - /bin/cp -R assets $DEPLOYPATH
     - /bin/cp -R admin src $DEPLOYPATH
     - /bin/cp -R cron $PRIVATEPATH
-    - /bin/cp api.php config.php index.php rooms.php item-lists.php tasks.php lib.php login.php logout.php setup.php database.sql config.local.example.php .htaccess $DEPLOYPATH
+    - /bin/cp api.php translation-validate.php config.php index.php rooms.php item-lists.php tasks.php lib.php login.php logout.php setup.php database.sql config.local.example.php .htaccess $DEPLOYPATH
     - /bin/cp -R migrations $PRIVATEPATH
