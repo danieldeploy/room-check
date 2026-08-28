@@ -15,9 +15,55 @@
     const feedbackForRow = (row) => row?.querySelector('.problem-field .row-save-feedback') || null;
     const textareaForRow = (row) => row?.querySelector('.problem-field textarea') || null;
     const allRows = () => Array.from(document.querySelectorAll('.check-row'));
-    const rowForFieldKey = (fieldKey) => allRows().find(
-        (row) => row.querySelector('h2')?.textContent === String(fieldKey || '')
-    ) || null;
+    const rowForFieldKey = (fieldKey) => {
+        const key = String(fieldKey || '');
+        if (!key) return null;
+        return allRows().find((row) => row.dataset.fieldKey === key)
+            || allRows().find((row) => row.querySelector('h2')?.textContent === key)
+            || null;
+    };
+
+    // Bind the canonical server-side item key to the actual DOM row before the
+    // request leaves the browser. Visible headings can be translated (Espelho ->
+    // Mirror), so they are not a stable identifier. Capturing the edited row here
+    // also prevents a later tap/blur from stealing feedback from an in-flight save.
+    const bindRequestRows = (requestBody, editedRowAtRequest) => {
+        const bound = new Map();
+        const bind = (fieldKey, row) => {
+            const key = String(fieldKey || '');
+            if (!key || !row) return;
+            row.dataset.fieldKey = key;
+            bound.set(key, row);
+        };
+
+        const action = requestBody?.action || '';
+        if (action === '' && Array.isArray(requestBody?.items)) {
+            const rows = allRows();
+            requestBody.items.forEach((item, index) => bind(item?.name, rows[index] || null));
+            return bound;
+        }
+
+        if (action === 'set_assignments_atomic' && Array.isArray(requestBody?.changes)) {
+            if (requestBody.changes.length === 1 && editedRowAtRequest) {
+                bind(requestBody.changes[0]?.itemName, editedRowAtRequest);
+            }
+            requestBody.changes.forEach((change) => {
+                const key = String(change?.itemName || '');
+                if (!key || bound.has(key)) return;
+                const alreadyBound = rowForFieldKey(key);
+                if (alreadyBound) {
+                    bind(key, alreadyBound);
+                    return;
+                }
+                const instructions = String(change?.instructions ?? '').trim();
+                const matchingRows = allRows().filter(
+                    (row) => textareaForRow(row)?.value.trim() === instructions
+                );
+                if (matchingRows.length === 1) bind(key, matchingRows[0]);
+            });
+        }
+        return bound;
+    };
 
     const translationResultsFromResponse = (response) => {
         const encoded = response?.headers?.get?.('X-Room-Translation-Results') || '';
@@ -268,18 +314,18 @@
         return method === 'POST' && /(?:^|\/)api\.php(?:$|[?#])/.test(url);
     };
 
-    const markSavedRequest = (requestBody, translationResults) => {
+    const markSavedRequest = (requestBody, translationResults, editedRowAtRequest, requestRows) => {
         const action = requestBody?.action || '';
         if (action === '' && Array.isArray(requestBody?.items)) {
-            const rows = allRows();
             requestBody.items.forEach((item, index) => {
-                const row = rows.find((candidate) => candidate.querySelector('h2')?.textContent === String(item?.name || ''));
+                const key = String(item?.name || '');
+                const row = requestRows.get(key) || rowForFieldKey(key);
                 const textarea = textareaForRow(row);
                 if (textarea && textarea.value === String(item?.problem ?? '')) {
                     markTextareaSaved(
                         textarea,
                         String(translationResults[index]?.message || ''),
-                        row === lastEditedRow
+                        row === editedRowAtRequest
                     );
                 }
             });
@@ -287,14 +333,15 @@
         }
         if (action === 'set_assignments_atomic' && Array.isArray(requestBody?.changes)) {
             requestBody.changes.forEach((change, index) => {
-                const row = rowForFieldKey(change?.itemName);
+                const key = String(change?.itemName || '');
+                const row = requestRows.get(key) || rowForFieldKey(key);
                 const textarea = textareaForRow(row);
                 const instructions = String(change?.instructions ?? '').trim();
                 if (textarea && textarea.value.trim() === instructions) {
                     markTextareaSaved(
                         textarea,
                         String(translationResults[index]?.message || ''),
-                        row === lastEditedRow
+                        row === editedRowAtRequest
                     );
                 }
             });
@@ -308,6 +355,10 @@
             try { requestBody = JSON.parse(init.body); } catch (_) { requestBody = null; }
         }
 
+        const editedRowAtRequest = lastEditedRow;
+        const requestRows = track && requestBody
+            ? bindRequestRows(requestBody, editedRowAtRequest)
+            : new Map();
         const response = await nativeFetch(input, init);
         if (!track) return response;
 
@@ -319,12 +370,20 @@
         let payload = null;
         try { payload = await response.clone().json(); } catch (_) { payload = null; }
         if (!response.ok || payload?.ok === false) {
-            const errorRow = rowForFieldKey(payload?.fieldKey) || lastEditedRow;
+            const fieldKey = String(payload?.fieldKey || '');
+            const errorRow = requestRows.get(fieldKey)
+                || rowForFieldKey(fieldKey)
+                || editedRowAtRequest;
             showErrorFeedback(errorRow, payload?.error || translationFeedback.saveError || 'Error: could not save.');
             return response;
         }
 
-        markSavedRequest(requestBody, translationResultsFromResponse(response));
+        markSavedRequest(
+            requestBody,
+            translationResultsFromResponse(response),
+            editedRowAtRequest,
+            requestRows
+        );
         return response;
     };
 })();
