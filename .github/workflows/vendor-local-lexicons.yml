@@ -1,0 +1,60 @@
+name: Vendor local lexicons
+
+on:
+  push:
+    branches:
+      - agent/translation-local-lexicons
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/translation-local-lexicons
+          fetch-depth: 0
+
+      - name: Vendor pinned LibreOffice Hunspell dictionaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src/I18n/Lexicons
+          BASE='https://raw.githubusercontent.com/LibreOffice/dictionaries/32b006a2c22a4ac7e8ed3f03346f7b3d85a970a4'
+          curl --fail --location --retry 3 --silent --show-error "$BASE/en/en_GB.aff" -o src/I18n/Lexicons/en_GB.aff
+          curl --fail --location --retry 3 --silent --show-error "$BASE/en/en_GB.dic" -o src/I18n/Lexicons/en_GB.dic
+          curl --fail --location --retry 3 --silent --show-error "$BASE/en/license.txt" -o src/I18n/Lexicons/LICENSE_en_GB.txt
+          curl --fail --location --retry 3 --silent --show-error "$BASE/en/README_en_GB.txt" -o src/I18n/Lexicons/README_en_GB.txt
+          curl --fail --location --retry 3 --silent --show-error "$BASE/pt_PT/pt_PT.aff" -o src/I18n/Lexicons/pt_PT.aff
+          curl --fail --location --retry 3 --silent --show-error "$BASE/pt_PT/pt_PT.dic" -o src/I18n/Lexicons/pt_PT.dic
+          curl --fail --location --retry 3 --silent --show-error "$BASE/pt_PT/LICENSES.txt" -o src/I18n/Lexicons/LICENSES_pt_PT.txt
+          curl --fail --location --retry 3 --silent --show-error "$BASE/pt_PT/README_pt_PT.txt" -o src/I18n/Lexicons/README_pt_PT.txt
+          printf '%s\n' \
+            '# Local spell lexicons' \
+            '' \
+            'These Hunspell files are vendored from LibreOffice/dictionaries commit' \
+            '`32b006a2c22a4ac7e8ed3f03346f7b3d85a970a4`.' \
+            '' \
+            '- `en_GB.aff` / `en_GB.dic`: British English spell dictionary.' \
+            '- `pt_PT.aff` / `pt_PT.dic`: European Portuguese spell dictionary.' \
+            '- Original licence/readme files are preserved alongside the dictionaries.' \
+            '' \
+            'They are used locally by Room Check for lexical language verification.' \
+            'No runtime request to Wiktionary or another lexical web API is required.' \
+            > src/I18n/Lexicons/SOURCE.md
+
+      - name: Commit lexicons
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/I18n/Lexicons
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Vendor local pt-PT and en-GB spell lexicons'
+          git push origin HEAD:agent/translation-local-lexicons
