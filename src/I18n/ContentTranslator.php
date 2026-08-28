@@ -231,9 +231,10 @@ final class ContentTranslator
         }
 
         $analysis = $this->targetAnalysis($translated, $target, $source);
-        if (!in_array($analysis['conclusion'], ['correct', 'ambiguous'], true)) {
-            // Provider language/content errors get one fresh retry. Network and
-            // timeout exceptions are thrown by translateChunk and are not retried.
+        if (in_array($analysis['conclusion'], ['wrong', 'mixed'], true)) {
+            // Retry only when the provider really returned the wrong/mixed language.
+            // Unknown proper nouns or lexical edge cases must not double the network
+            // wait; network/timeout exceptions are never retried here.
             $retry = $this->translateFresh($text, $source, $target);
             if ($retry !== null && trim($retry) !== '' && self::hasPlausibleLength($text, $retry)) {
                 $retryAnalysis = $this->targetAnalysis($retry, $target, $source);
