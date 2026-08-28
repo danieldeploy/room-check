@@ -35,6 +35,24 @@ assertValidationFeedback(
     'translation feedback owns its visible lifetime even when generic save feedback removes the shared CSS class'
 );
 
+// Persistent feedback is attached to the canonical server field key before the
+// request leaves the browser. This remains stable even when the visible heading
+// is translated (Espelho -> Mirror) or the user edits another row meanwhile.
+assertValidationFeedback(
+    str_contains($feedbackJs, 'row.dataset.fieldKey = key')
+        && str_contains($feedbackJs, 'requestRows.get(fieldKey)'),
+    'server field keys are bound to the originating DOM row'
+);
+assertValidationFeedback(
+    str_contains($feedbackJs, 'const editedRowAtRequest = lastEditedRow;')
+        && str_contains($feedbackJs, 'row === editedRowAtRequest'),
+    'success feedback uses the row captured when the request started instead of the latest edited row'
+);
+assertValidationFeedback(
+    !str_contains($feedbackJs, 'row === lastEditedRow'),
+    'in-flight success feedback cannot be stolen by a later edit'
+);
+
 // Persistable room/assignment text is no longer sent to a separate validator.
 assertValidationFeedback(!str_contains($feedbackJs, 'translation-validate.php'), 'room text save has no separate validation endpoint');
 assertValidationFeedback(!str_contains($feedbackJs, 'validateTextSave'), 'obsolete prevalidation fetch is removed');
@@ -46,7 +64,13 @@ assertValidationFeedback(str_contains($translator, 'X-Room-Translation-Results')
 assertValidationFeedback(str_contains($feedbackJs, 'X-Room-Translation-Results'), 'browser reads exact save conclusions');
 assertValidationFeedback(str_contains($feedbackJs, 'ROOM_TRANSLATION_RESULT_READER'), 'translation result reader is shared across persistent textarea UIs');
 assertValidationFeedback(str_contains($feedbackJs, 'translationResultsFromResponse'), 'green feedback is decoded from the real save response');
-assertValidationFeedback(str_contains($feedbackJs, 'markSavedRequest(requestBody, translationResultsFromResponse(response))'), 'green feedback is applied only after persistence succeeds');
+assertValidationFeedback(
+    str_contains($feedbackJs, 'markSavedRequest(')
+        && str_contains($feedbackJs, 'translationResultsFromResponse(response)')
+        && str_contains($feedbackJs, 'editedRowAtRequest')
+        && str_contains($feedbackJs, 'requestRows'),
+    'green feedback is applied to the request-bound row only after persistence succeeds'
+);
 assertValidationFeedback(!str_contains($feedbackJs, 'sourceConclusion'), 'browser does not reclassify source language');
 assertValidationFeedback(!str_contains($feedbackJs, 'translationConclusion'), 'browser does not reclassify translated language');
 
