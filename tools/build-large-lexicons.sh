@@ -67,10 +67,7 @@ def valid_token(value: str) -> bool:
 
 
 def is_titlecase_candidate(raw: str) -> bool:
-    # Proper-name fallback is deliberately conservative. Apostrophe/hyphen
-    # forms remain available through the exact-case CSpell resource instead of
-    # being flattened into a case-insensitive proper-name token.
-    if not raw or any(ch.isspace() for ch in raw) or any(ch in ALLOWED_PUNCT for ch in raw):
+    if not raw or any(ch.isspace() for ch in raw):
         return False
     letters = [ch for ch in raw if ch.isalpha()]
     if len(letters) < 3:
@@ -210,7 +207,8 @@ Sources are pinned to cspell-dicts commit ${CSPELL_REF}:
   entries form the normal EN lexicon. The upstream file is explicitly
   case-sensitive (`keep-case`), so valid exact-case entries are preserved in
   en_GB_case_sensitive.txt instead of being flattened or recreated manually.
-  Conservative title-case entries also form the neutral proper-name fallback.
+  The existing title-case extraction continues to form the neutral proper-name
+  fallback.
 - Portuguese (Portugal): dictionaries/pt_PT/src/hunspell/Portuguese-European.dic
   plus Portuguese-European.aff. The Hunspell rules are expanded with
   hunspell-reader 10.0.1, then normalized to a one-word-per-line lexicon.
