@@ -6,6 +6,7 @@ on:
       - agent/validated-language-engine
     paths:
       - tools/build-large-lexicons.sh
+      - .github/workflows/rebuild-validated-lexicons.yml
 
 permissions:
   contents: write
