@@ -1,0 +1,32 @@
+name: Rebuild validated lexicons
+
+on:
+  push:
+    branches:
+      - agent/validated-language-engine
+    paths:
+      - tools/build-large-lexicons.sh
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/validated-language-engine
+      - name: Rebuild pinned lexical resources
+        run: bash tools/build-large-lexicons.sh
+      - name: Commit generated resources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add resources/lexicon/full
+          if git diff --cached --quiet; then
+            echo "Generated lexical resources already match the pinned sources."
+            exit 0
+          fi
+          git commit -m "Rebuild validated lexical resources"
+          git push origin HEAD:agent/validated-language-engine
