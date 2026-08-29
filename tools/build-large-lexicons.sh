@@ -76,7 +76,7 @@ def is_titlecase_candidate(raw: str) -> bool:
 
 
 def english_source_sets() -> tuple[set[str], set[str], set[str]]:
-    # The CSpell source declares `keep-case`. Lowercase source entries form the
+    # The CSpell source declares keep-case. Lowercase source entries form the
     # normal case-insensitive English lexicon. Other exact-case entries are
     # preserved separately so valid forms such as I / I'm / I'd are not lost.
     ordinary: set[str] = set()
@@ -205,7 +205,7 @@ Sources are pinned to cspell-dicts commit ${CSPELL_REF}:
 
 - English: dictionaries/en_GB-MIT/src/generated/base.txt (MIT). Lowercase
   entries form the normal EN lexicon. The upstream file is explicitly
-  case-sensitive (`keep-case`), so valid exact-case entries are preserved in
+  case-sensitive (keep-case), so valid exact-case entries are preserved in
   en_GB_case_sensitive.txt instead of being flattened or recreated manually.
   The existing title-case extraction continues to form the neutral proper-name
   fallback.
