@@ -29,12 +29,14 @@ final class LanguageValidationException extends InvalidArgumentException
 /**
  * PT/EN validation coordinator.
  *
- * Decisive word-level evidence comes from local lexicons. With the generated
- * full PT-PT + EN-GB resources available, an ordinary token absent from both is
- * rejected deterministically. If those full resources are temporarily missing
- * during a partial deployment, the guard falls back to the tolerant behaviour
- * of the last nearly-good version instead of applying strict rules to the small
- * core lists. MyMemory never decides the source language.
+ * Sentence-level evidence comes from the bundled ELD model and decisive normal
+ * word evidence comes from the validated local PT-PT + EN-GB resources. The
+ * upstream English dictionary is `keep-case`; exact-case entries are recognized
+ * as real neutral tokens so capitalization-sensitive grammar, names and acronyms
+ * are not lost by lowercase lookup and do not by themselves decide the sentence
+ * language. With all generated resources available, an ordinary token absent
+ * from every validated source is still rejected deterministically. MyMemory
+ * never decides the source language.
  */
 final class LanguageGuard
 {
@@ -97,6 +99,22 @@ final class LanguageGuard
         }
         $classifications = $lexicalChecker->classifyTokens(array_keys($lexicalTokens));
 
+        // CSpell's EN-GB source explicitly uses keep-case. Ask for exact source
+        // membership with the original token spelling before declaring an
+        // otherwise unknown token invalid. These matches are neutral evidence:
+        // they prove the spelling exists but names/acronyms do not force EN.
+        $caseSensitiveClassifications = [];
+        if ($lexicalChecker instanceof LexicalCaseSensitiveClassifier) {
+            $rawTokens = [];
+            foreach ($tokens as $token) {
+                $raw = LexicalLanguageChecker::normalizeCaseSensitiveToken($token['raw']);
+                if ($raw !== '') {
+                    $rawTokens[$raw] = true;
+                }
+            }
+            $caseSensitiveClassifications = $lexicalChecker->classifyCaseSensitiveTokens(array_keys($rawTokens));
+        }
+
         foreach ($tokens as $token) {
             $normalized = $token['normalized'];
             $display = $token['raw'];
@@ -107,6 +125,11 @@ final class LanguageGuard
                 continue;
             }
             if ($classification === 'unknown') {
+                $exact = LexicalLanguageChecker::normalizeCaseSensitiveToken($display);
+                if (isset($caseSensitiveClassifications[$exact])) {
+                    $base['sharedWords'][] = $display;
+                    continue;
+                }
                 $nearMatch = $lexicalChecker instanceof LexicalNearMatchClassifier
                     ? $lexicalChecker->likelyMisspelling($display)
                     : null;
@@ -153,9 +176,9 @@ final class LanguageGuard
         }
 
         if ($base['unknownWords'] !== []) {
-            // Once both complete dictionaries are present, a normal token absent
-            // from PT, EN and the explicit technical list is genuinely unresolved
-            // and must not inherit the language of the surrounding sentence.
+            // Once every validated resource is present, a normal token absent
+            // from PT, EN, exact-case EN and the explicit technical list is
+            // genuinely unresolved and must not inherit surrounding context.
             if ($hasFullCoverage) {
                 $base['conclusion'] = 'unknown';
                 return $base;
@@ -206,6 +229,15 @@ final class LanguageGuard
 
         if ($base['expectedWords'] !== []) {
             $base['conclusion'] = 'correct';
+            return $base;
+        }
+
+        if ($sentenceLanguage === $expectedLanguage) {
+            $base['conclusion'] = 'correct';
+            return $base;
+        }
+        if ($sentenceLanguage === $oppositeLanguage) {
+            $base['conclusion'] = 'wrong';
             return $base;
         }
 

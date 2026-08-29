@@ -39,8 +39,9 @@ function realLargeLexicon(): LexicalLanguageChecker
     return $checker;
 }
 
-// Core regression classifier keeps the historical language decisions isolated
-// from the size/content of the generated dictionaries.
+// Core regression classifier keeps historical language decisions isolated from
+// the size/content of generated dictionaries. Production full-coverage tests
+// below use only the validated generated sources for ordinary word membership.
 $lexicon = translationRegressionClassifier();
 assertHardening(LanguageGuard::sourceAnalysis('casa grande', 'pt', $lexicon)['conclusion'] === 'correct', 'casa grande is lexically Portuguese');
 assertHardening(LanguageGuard::sourceAnalysis('new house', 'pt', $lexicon)['conclusion'] === 'wrong', 'new house is lexically English in PT mode');
@@ -95,10 +96,9 @@ foreach (['danosx', 'danosht', 'danosab', 'DANOSHT'] as $corruptedDanos) {
     assertHardening(in_array($corruptedDanos, $analysis['likelyMisspellings'], true), "{$corruptedDanos} is marked as a likely misspelling");
 }
 
-// The important new safety net: test the REAL generated large resources, not
-// only a hand-sized fake dictionary. This is what PR #47 was missing.
+// Test the REAL generated resources, not only a hand-sized fake dictionary.
 $full = realLargeLexicon();
-assertHardening($full->hasFullCoverage(), 'both generated full PT-PT and EN-GB lexical resources are installed');
+assertHardening($full->hasFullCoverage(), 'validated full PT-PT, EN-GB and exact-case EN resources are installed');
 $coverage = $full->classifyTokens([
     'well', 'beautiful', 'necessary',
     'cadeira', 'coração', 'toalha',
@@ -121,6 +121,33 @@ foreach (['sdsdadcsda', 'yahoosads', 'drtiopyewrwerertwedf'] as $garbage) {
         "{$garbage} cannot inherit EN context when full coverage is available"
     );
 }
+
+$caseSensitive = $full->classifyCaseSensitiveTokens([
+    'I', "I'm", "I'd", "I'll", "I've", 'i', "i'm", "i'd",
+]);
+foreach (['I', "I'm", "I'd", "I'll", "I've"] as $validatedCase) {
+    assertHardening(isset($caseSensitive[$validatedCase]), "{$validatedCase} is preserved from CSpell keep-case source");
+}
+foreach (['i', "i'm", "i'd"] as $wrongCase) {
+    assertHardening(!isset($caseSensitive[$wrongCase]), "{$wrongCase} is not silently accepted as the keep-case English form");
+}
+
+assertHardening(
+    LanguageGuard::sourceAnalysis('Check that it is clean and undamaged. I feel good', 'en', $full)['conclusion'] === 'correct',
+    'normal English sentence containing capital I is accepted from validated sources'
+);
+assertHardening(
+    LanguageGuard::sourceAnalysis("I'm happy that the room is clean", 'en', $full)['conclusion'] === 'correct',
+    'normal English contraction from the keep-case source is accepted'
+);
+assertHardeningRejects(
+    'Check that it is clean and undamaged. i feel good',
+    'en',
+    $full,
+    'unrecognized word',
+    'wrong lowercase i is still rejected instead of becoming a manual exception'
+);
+
 assertHardening(LanguageGuard::sourceAnalysis('Verificar uma cadeira limpa e uma toalha limpa', 'pt', $full)['conclusion'] === 'correct', 'normal broader Portuguese sentence is accepted with full coverage');
 assertHardening(LanguageGuard::sourceAnalysis('Check the beautiful room and clean the window well', 'en', $full)['conclusion'] === 'correct', 'normal broader English sentence is accepted with full coverage');
 assertHardening(LanguageGuard::sourceAnalysis('Verificar cadeira house', 'pt', $full)['conclusion'] === 'mixed', 'full dictionaries still reject EN intrusion in PT text');
@@ -132,17 +159,25 @@ $root = dirname(__DIR__);
 $guardSource = file_get_contents($root . '/src/I18n/LanguageGuard.php');
 $lexicalSource = file_get_contents($root . '/src/I18n/LexicalLanguageChecker.php');
 $technicalLexicon = file_get_contents($root . '/resources/lexicon/technical_neutral.txt');
-assertHardening(is_string($guardSource) && is_string($lexicalSource) && is_string($technicalLexicon), 'language verifier sources are readable');
+$builderSource = file_get_contents($root . '/tools/build-large-lexicons.sh');
+assertHardening(is_string($guardSource) && is_string($lexicalSource) && is_string($technicalLexicon) && is_string($builderSource), 'language verifier sources are readable');
 assertHardening(str_contains($guardSource, 'LexicalCoverageClassifier'), 'strict unknown handling is gated on full lexical coverage');
+assertHardening(str_contains($guardSource, 'LexicalCaseSensitiveClassifier'), 'guard consults validated exact-case lexical membership');
 assertHardening(str_contains($guardSource, 'looksGibberishToken'), 'safe compact-dictionary recovery fallback remains available');
 assertHardening(!str_contains($guardSource, '/^[\\p{Lu}]{2,}$/u'), 'ALL-CAPS words are not automatically technical');
 assertHardening(!str_contains($guardSource, '$length <= 2'), 'short fragments are not automatically technical');
 assertHardening(str_contains($lexicalSource, 'indexedMembership') && str_contains($lexicalSource, 'fseek'), 'large lexicons are read through indexed slices instead of huge PHP arrays');
+assertHardening(str_contains($lexicalSource, 'en_GB_case_sensitive.txt'), 'runtime uses generated CSpell keep-case resource');
 assertHardening(!str_contains($lexicalSource, 'curl_init') && !str_contains(mb_strtolower($lexicalSource), 'wiktionary'), 'runtime lexical verification has no network dependency');
+assertHardening(!str_contains($builderSource, 'ordinary = read_core('), 'full English dictionary is no longer seeded from the manual core list');
+assertHardening(!str_contains($builderSource, 'words = read_core('), 'full Portuguese dictionary is no longer seeded from the manual core list');
+assertHardening(str_contains($builderSource, 'en_GB_case_sensitive'), 'builder preserves upstream English keep-case entries automatically');
 assertHardening(file_exists($root . '/resources/lexicon/full/en_GB.txt') && filesize($root . '/resources/lexicon/full/en_GB.txt') > 500000, 'large EN-GB resource is bundled');
+assertHardening(file_exists($root . '/resources/lexicon/full/en_GB_case_sensitive.txt') && filesize($root . '/resources/lexicon/full/en_GB_case_sensitive.txt') > 10000, 'CSpell keep-case EN resource is bundled');
+assertHardening(file_exists($root . '/resources/lexicon/full/en_GB_case_sensitive.index.json'), 'CSpell keep-case EN index is bundled');
 assertHardening(file_exists($root . '/resources/lexicon/full/pt_PT.txt') && filesize($root . '/resources/lexicon/full/pt_PT.txt') > 5000000, 'large PT-PT resource is bundled');
 assertHardening(file_exists($root . '/resources/lexicon/full/licenses/en_GB-MIT-LICENSE.txt'), 'English dictionary license is bundled');
 assertHardening(file_exists($root . '/resources/lexicon/full/licenses/pt_PT-LICENSE.txt'), 'Portuguese dictionary license is bundled');
 assertHardening(str_contains($technicalLexicon, 'wifi') && str_contains($technicalLexicon, 'hvac') && str_contains($technicalLexicon, 'yahoo'), 'exact technical/brand neutral terms remain preserved');
 
-echo "Recovered large-lexicon PT/EN language guard regression passed.\n";
+echo "Validated full-source PT/EN language guard regression passed.\n";
