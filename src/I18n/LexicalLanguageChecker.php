@@ -10,6 +10,18 @@ interface LexicalLanguageClassifier
     public function classifyTokens(array $tokens): array;
 }
 
+interface LexicalCaseSensitiveClassifier
+{
+    /**
+     * Return exact-case tokens that are present in the upstream keep-case
+     * English resource. Keys preserve case; values are always true.
+     *
+     * @param string[] $tokens Original-case lexical tokens.
+     * @return array<string, bool>
+     */
+    public function classifyCaseSensitiveTokens(array $tokens): array;
+}
+
 interface LexicalNearMatchClassifier
 {
     /** @return array{candidate:string,distance:int,classification:string}|null */
@@ -42,11 +54,13 @@ final class LexicalLookupException extends RuntimeException
  *
  * The full PT-PT and EN-GB dictionaries are sorted text files with small
  * two-character byte-range indexes. Only the relevant slices are read for each
- * request. Explicit person and country resources take precedence over the
- * broader proper-name fallback: people are neutral/preserved, while country
- * names remain lexical PT/EN evidence and are translated normally.
+ * request. The English source is `keep-case`, so source entries that must retain
+ * their original capitalization are indexed separately instead of being lost by
+ * lowercase normalization. Explicit person and country resources take precedence
+ * over the broader proper-name fallback: people are neutral/preserved, while
+ * country names remain lexical PT/EN evidence and are translated normally.
  */
-final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier, LexicalEntityClassifier
+final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalCaseSensitiveClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier, LexicalEntityClassifier
 {
     private const MAX_TOKEN_LENGTH = 190;
 
@@ -80,10 +94,13 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     {
         [$ptWord, $ptIndex] = $this->fullPaths('pt');
         [$enWord, $enIndex] = $this->fullPaths('en');
+        [$enCaseWord, $enCaseIndex] = $this->caseSensitiveEnglishPaths();
         return self::usableFile($ptWord)
             && self::usableFile($ptIndex)
             && self::usableFile($enWord)
             && self::usableFile($enIndex)
+            && self::usableFile($enCaseWord)
+            && self::usableFile($enCaseIndex)
             && self::usableFile($this->properPath());
     }
 
@@ -146,6 +163,53 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             };
         }
         return $results;
+    }
+
+    public function classifyCaseSensitiveTokens(array $tokens): array
+    {
+        $exact = [];
+        foreach ($tokens as $rawToken) {
+            $token = self::normalizeCaseSensitiveToken((string) $rawToken);
+            if ($token !== '' && mb_strlen($token, 'UTF-8') <= self::MAX_TOKEN_LENGTH) {
+                $exact[$token] = true;
+            }
+        }
+        $tokens = array_keys($exact);
+        if ($tokens === []) {
+            return [];
+        }
+
+        [$wordPath, $indexPath] = $this->caseSensitiveEnglishPaths();
+        if (!self::usableFile($wordPath) || !self::usableFile($indexPath)) {
+            return [];
+        }
+
+        $cacheKey = 'en-case|' . $wordPath . '|' . $indexPath;
+        $cache = self::$membershipCache[$cacheKey] ?? [];
+        $found = [];
+        $unresolved = [];
+        foreach ($tokens as $token) {
+            if (array_key_exists($token, $cache)) {
+                if ($cache[$token]) {
+                    $found[$token] = true;
+                }
+            } else {
+                $unresolved[] = $token;
+            }
+        }
+
+        if ($unresolved !== []) {
+            $fresh = self::indexedMembership($unresolved, $wordPath, $indexPath);
+            foreach ($unresolved as $token) {
+                $present = isset($fresh[$token]);
+                $cache[$token] = $present;
+                if ($present) {
+                    $found[$token] = true;
+                }
+            }
+            self::$membershipCache[$cacheKey] = $cache;
+        }
+        return $found;
     }
 
     public function classifyEntityTokens(array $tokens): array
@@ -240,8 +304,12 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
 
     public static function normalizeToken(string $token): string
     {
-        $token = str_replace(['’', '‘'], "'", trim($token));
-        return mb_strtolower($token, 'UTF-8');
+        return mb_strtolower(self::normalizeCaseSensitiveToken($token), 'UTF-8');
+    }
+
+    public static function normalizeCaseSensitiveToken(string $token): string
+    {
+        return str_replace(['’', '‘'], "'", trim($token));
     }
 
     /** @param string[] $tokens @return array<string, bool> */
@@ -304,6 +372,17 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.txt' : 'en_GB.txt'));
         $index = (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
             ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json'));
+        return [$word, $index];
+    }
+
+    /** @return array{0:string,1:string} */
+    private function caseSensitiveEnglishPaths(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $word = (string) ($this->config['en_case_full_path']
+            ?? $root . '/resources/lexicon/full/en_GB_case_sensitive.txt');
+        $index = (string) ($this->config['en_case_index_path']
+            ?? $root . '/resources/lexicon/full/en_GB_case_sensitive.index.json');
         return [$word, $index];
     }
 
