@@ -7,9 +7,10 @@ Sources are pinned to cspell-dicts commit 51cd13717e52a6e14b4a36055b7b49a88f2671
 
 - English: dictionaries/en_GB-MIT/src/generated/base.txt (MIT). Lowercase
   entries form the normal EN lexicon. The upstream file is explicitly
-  case-sensitive (), so valid exact-case entries are preserved in
+  case-sensitive (keep-case), so valid exact-case entries are preserved in
   en_GB_case_sensitive.txt instead of being flattened or recreated manually.
-  Conservative title-case entries also form the neutral proper-name fallback.
+  The existing title-case extraction continues to form the neutral proper-name
+  fallback.
 - Portuguese (Portugal): dictionaries/pt_PT/src/hunspell/Portuguese-European.dic
   plus Portuguese-European.aff. The Hunspell rules are expanded with
   hunspell-reader 10.0.1, then normalized to a one-word-per-line lexicon.
