@@ -35,6 +35,13 @@ assertVerificationCategories(
     'migration creates and seeds categories while preserving existing areas'
 );
 assertVerificationCategories(
+    str_contains($lists, 'if ($listId > 0 && !array_filter(')
+        && !str_contains($lists, "\$listId = (int) (\$lists[0]['id'] ?? 0);")
+        && str_contains($lists, '<details class="list-create-panel list-select-panel">')
+        && str_contains($lists, '<option value="" <?= $listId === 0 ? \'selected\' : \'\' ?> disabled>'),
+    'the list editor waits for an explicit list selection before rendering fields'
+);
+assertVerificationCategories(
     str_contains($migration, "('gerente', 'verification_categories.manage')")
         && str_contains($auth, "PERMISSION_VERIFICATION_CATEGORIES_MANAGE = 'verification_categories.manage'")
         && str_contains($auth, 'PERMISSION_VERIFICATION_CATEGORIES_MANAGE => [self::PERMISSION_ROOM_CHECK_VIEW]')

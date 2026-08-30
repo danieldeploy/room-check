@@ -26,6 +26,7 @@ button,input,select,textarea { font:inherit; }
 .list-toolbar,.list-card,.list-create-panel { padding:18px; border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,.9); box-shadow:0 20px 50px rgba(29,68,66,.1); }
 .list-toolbar { margin-bottom:18px; }
 .list-selector { max-width:680px; }
+.list-select-panel .list-selector { margin-top:18px; }
 .list-create-panel { margin-bottom:18px; }
 .list-create-panel summary { color:var(--brand-dark); font-weight:800; cursor:pointer; }
 .list-create-panel[open] summary { margin-bottom:18px; }

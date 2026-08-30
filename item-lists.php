@@ -202,8 +202,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $lists = itemLists($pdo);
-if ($listId === 0 || !array_filter($lists, static fn(array $list): bool => $list['id'] === $listId)) {
-    $listId = (int) ($lists[0]['id'] ?? 0);
+if ($listId > 0 && !array_filter($lists, static fn(array $list): bool => $list['id'] === $listId)) {
+    $listId = 0;
 }
 $selectedList = array_values(array_filter($lists, static fn(array $list): bool => $list['id'] === $listId))[0] ?? null;
 $itemRows = [];
@@ -278,13 +278,15 @@ header('Cache-Control: no-store');
         </form>
     </details>
 
-    <section class="list-toolbar">
+    <details class="list-create-panel list-select-panel">
+        <summary>Selecionar lista para editar</summary>
         <form method="get" class="list-selector">
-            <label><span>Selecionar lista para editar</span><select name="list_id" onchange="this.form.submit()">
+            <label><span>Lista</span><select name="list_id" required onchange="this.form.submit()">
+                <option value="" <?= $listId === 0 ? 'selected' : '' ?> disabled>Escolher lista</option>
                 <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
             </select></label>
         </form>
-    </section>
+    </details>
 
     <?php if ($selectedList): ?>
     <section class="list-card">
