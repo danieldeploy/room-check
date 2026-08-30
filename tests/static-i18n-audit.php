@@ -43,7 +43,7 @@ $technicalLiterals = array_fill_keys([
 // diagnostics or the PT branch of a message that already has an explicit EN branch.
 $technicalExceptions = [
     'cron/whatsapp-reminders.php' => [
-        '. Consulte no ' . PortalBrand::name('pt') . ' os itens e respetivas instruções.',
+        'os itens e respetivas instruções.',
     ],
     'src/Notifications/WhatsAppCloudClient.php' => [
         'A extensão PHP cURL não está disponível.',
