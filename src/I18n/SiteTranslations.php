@@ -221,7 +221,7 @@ final class SiteTranslations
             'A tabela de permissões ainda não existe. Importe a migração 004_portal_permissions.sql.' => 'The permissions table does not exist yet. Import migration 004_portal_permissions.sql.',
             'Importe migrations/004_portal_permissions.sql para ativar a configuração persistente. Até lá, a aplicação usa a matriz padrão abaixo.' => 'Import migrations/004_portal_permissions.sql to enable persistent configuration. Until then, the application uses the default matrix below.',
             'Matriz de acesso' => 'Access matrix',
-            'Permissões de alteração incluem automaticamente a permissão de consulta do mesmo módulo.' => 'Change permissions automatically include view permission of the same module.',
+            'Permissões de alteração incluem automaticamente a permissão de consulta do mesmo módulo.' => 'Change permissions automatically include view permission for the same module.',
             'Permissão' => 'Permission',
             'Obrigatória' => 'Required',
             'Guardar permissões' => 'Save permissions',
