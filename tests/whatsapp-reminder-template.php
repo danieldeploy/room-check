@@ -27,8 +27,8 @@ $v2Values = WhatsAppReminderTemplate::values(
     'unused legacy instruction'
 );
 assertReminderTemplate(
-    $v2Values === ['Ranjana Kumari', 'Management Hub', '30 August 2026', 'City Center Guest House', 'Kasia'],
-    'V2 sends recipient, centralized portal name, English date, property and scheduling user in Meta placeholder order'
+    $v2Values === ['Ranjana Kumari', 'Management Hub', '30 August 2026', 'City Center Guest House', 'Kasia', 'Management Hub'],
+    'V2 sends recipient, centralized portal name, English date, property, scheduling user and repeated portal signature in Meta placeholder order'
 );
 
 $legacyValues = WhatsAppReminderTemplate::values(
