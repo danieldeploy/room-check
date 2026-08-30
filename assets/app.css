@@ -161,7 +161,7 @@ noscript { display: block; margin-top: 18px; color: var(--wrong); }
     .app-shell { width: min(100% - 20px, 680px); padding-top: 24px; }
     .hero { align-items: flex-start; flex-direction: column; gap: 16px; }
     .module-tabs { flex-wrap: wrap; }
-    .module-submenu { position: fixed; top: auto; right: 10px; bottom: 16px; left: 10px; max-width: none; max-height: 60vh; }
+    .module-submenu { position: absolute; top: calc(100% + 6px); right: 0; bottom: auto; left: auto; width: max-content; min-width: 220px; max-width: min(300px, calc(100vw - 20px)); max-height: 60vh; }
     .save-status { max-width: 100%; }
     .selectors, .selectors.has-assignment { grid-template-columns: 1fr 100px; padding: 14px; }
     .interval-fields, .interval-editor .interval-fields { grid-template-columns: 1fr; }
