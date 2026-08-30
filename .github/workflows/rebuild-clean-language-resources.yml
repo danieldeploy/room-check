@@ -1,0 +1,33 @@
+name: Rebuild clean language resources
+
+on:
+  push:
+    branches:
+      - agent/remove-manual-language-heuristics
+    paths:
+      - tools/build-large-lexicons.sh
+      - .github/workflows/rebuild-clean-language-resources.yml
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/remove-manual-language-heuristics
+      - name: Rebuild validated resources
+        run: bash tools/build-large-lexicons.sh
+      - name: Commit generated resources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add resources/lexicon/full
+          if git diff --cached --quiet; then
+            echo "Generated resources already match sources."
+            exit 0
+          fi
+          git commit -m "Rebuild clean language resources"
+          git push origin HEAD:agent/remove-manual-language-heuristics
