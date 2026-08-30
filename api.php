@@ -347,7 +347,7 @@ try {
         $employeeId = (int) ($payload['employeeId'] ?? 0); $dueDate = trim((string) ($payload['dueDate'] ?? ''));
         $property = trim((string) ($payload['property'] ?? ''));
         $listId = (int) ($payload['listId'] ?? 0);
-        if ($listId < 1) throw new InvalidArgumentException('Escolha a lista de itens.');
+        if ($listId < 1) throw new InvalidArgumentException('Escolha a lista.');
         $statement = $pdo->prepare("SELECT TIME_FORMAT(scheduled_at, '%H:%i') AS reminder_time, status FROM whatsapp_assignment_reminders WHERE assigned_to_user_id = :employee_id AND due_date = :due_date AND property_name = :property AND list_id = :list_id");
         $statement->execute(['employee_id' => $employeeId, 'due_date' => $dueDate, 'property' => $property, 'list_id' => $listId]);
         $reminder = $statement->fetch();

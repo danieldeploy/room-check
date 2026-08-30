@@ -386,7 +386,7 @@ function itemList(PDO $pdo, int $listId): array
             return $list;
         }
     }
-    throw new InvalidArgumentException('Escolha uma lista de itens válida.');
+    throw new InvalidArgumentException('Escolha uma lista válida.');
 }
 
 function jsonResponse(array $payload, int $status = 200): never

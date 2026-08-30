@@ -84,7 +84,7 @@ final class VerificationCategoryRepository
         self::requireStorage($pdo);
         $row = self::find($pdo, $categoryId);
         if ($row === null) {
-            throw new InvalidArgumentException('Categoria não encontrada.');
+            throw new InvalidArgumentException('Área não encontrada.');
         }
         return [
             'id' => (int) $row['id'],
@@ -128,7 +128,7 @@ final class VerificationCategoryRepository
             }
         }
 
-        throw new RuntimeException('Não foi possível criar a categoria.');
+        throw new RuntimeException('Não foi possível criar a área.');
     }
 
     public static function rename(
@@ -155,7 +155,7 @@ final class VerificationCategoryRepository
             'id' => $categoryId,
         ]);
         if ($statement->rowCount() < 1 && !self::find($pdo, $categoryId)) {
-            throw new InvalidArgumentException('Categoria não encontrada.');
+            throw new InvalidArgumentException('Área não encontrada.');
         }
     }
 
@@ -166,7 +166,7 @@ final class VerificationCategoryRepository
         try {
             $category = self::find($pdo, $categoryId, true);
             if ($category === null) {
-                throw new InvalidArgumentException('Categoria não encontrada.');
+                throw new InvalidArgumentException('Área não encontrada.');
             }
 
             $lockLists = $pdo->prepare('SELECT id FROM item_lists WHERE area = :slug FOR UPDATE');
@@ -260,7 +260,7 @@ final class VerificationCategoryRepository
     {
         if (!self::storageAvailable($pdo)) {
             throw new RuntimeException(
-                'A tabela de categorias ainda não existe. Importe a migração 022_verification_categories.sql.'
+                'A tabela de áreas ainda não existe. Importe a migração 022_verification_categories.sql.'
             );
         }
     }

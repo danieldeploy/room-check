@@ -36,7 +36,7 @@ final class Auth
         self::PERMISSION_AUDIT_VIEW => ['group' => 'Administração', 'label' => 'Consultar auditoria'],
         self::PERMISSION_TASK_ASSIGN => ['group' => 'Tarefas dos Quartos', 'label' => 'Atribuir itens a verificar'],
         self::PERMISSION_TASK_VIEW_OWN => ['group' => 'Tarefas dos Quartos', 'label' => 'Consultar tarefas próprias'],
-        self::PERMISSION_VERIFICATION_CATEGORIES_MANAGE => ['group' => 'Gestão dos Espaços', 'label' => 'Gerir categorias de listas'],
+        self::PERMISSION_VERIFICATION_CATEGORIES_MANAGE => ['group' => 'Gestão dos Espaços', 'label' => 'Gerir áreas'],
     ];
 
     public const ROLES = [

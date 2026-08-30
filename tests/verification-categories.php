@@ -97,6 +97,16 @@ assertVerificationCategories(
     'category navigation and list category selectors are database-driven'
 );
 assertVerificationCategories(
+    str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")
+        && str_contains($navigation, "SiteTranslations::text('Listas', 'Lists')")
+        && str_contains($page, "SiteTranslations::text('Criar nova área', 'Create new area')")
+        && str_contains($auth, "'label' => 'Gerir áreas'")
+        && str_contains($lists, '<title>Listas —')
+        && !str_contains($navigation, "SiteTranslations::text('Categorias', 'Categories')")
+        && !str_contains($navigation, "SiteTranslations::text('Listas de itens', 'Item lists')"),
+    'visible navigation and management terminology uses areas and lists in both languages'
+);
+assertVerificationCategories(
     str_contains($deployment, 'verification-categories.php'),
     'cPanel deployment includes the new management page'
 );

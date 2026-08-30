@@ -15,7 +15,7 @@ final class VerificationCategoryNavigation
         SiteTranslations::boot();
         $prefix = $prefix === '' ? '' : rtrim($prefix, '/') . '/';
         ?>
-        <nav class="module-tabs" aria-label="<?= self::escape(SiteTranslations::text('Categorias da gestão dos espaços', 'Space management categories')) ?>">
+        <nav class="module-tabs" aria-label="<?= self::escape(SiteTranslations::text('Áreas da gestão dos espaços', 'Space management areas')) ?>">
             <?php foreach ($categories as $category): ?>
                 <?php
                 $slug = (string) ($category['slug'] ?? '');
@@ -25,10 +25,10 @@ final class VerificationCategoryNavigation
                 <a class="<?= $isActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'rooms.php?area=' . rawurlencode($slug)) ?>" title="<?= self::escape($name) ?>" <?= $isActive ? 'aria-current="page"' : '' ?>><?= self::escape($name) ?></a>
             <?php endforeach; ?>
             <?php if ($canManageLists): ?>
-                <a class="<?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Listas de itens', 'Item lists')) ?></a>
+                <a class="<?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Listas', 'Lists')) ?></a>
             <?php endif; ?>
             <?php if ($canManageCategories): ?>
-                <a class="<?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Categorias', 'Categories')) ?></a>
+                <a class="<?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Áreas', 'Areas')) ?></a>
             <?php endif; ?>
         </nav>
         <?php
