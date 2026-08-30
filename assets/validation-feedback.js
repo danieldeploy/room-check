@@ -173,13 +173,29 @@
         }
     };
 
-    const pendingTextareas = () => Array.from(document.querySelectorAll(
-        '.check-row textarea[data-language-needs-validation="1"]'
-    )).filter((textarea) => textarea.value !== (textarea.dataset.lastValidValue ?? textarea.value));
+    const allTextareas = () => Array.from(document.querySelectorAll('.check-row textarea'));
+    const hasUnsavedValue = (textarea) => textarea.value !== (textarea.dataset.lastValidValue ?? textarea.value);
+    const hasFailedValidation = (textarea) => textarea.dataset.languageSaveFailed === '1'
+        || textarea.classList.contains('language-invalid')
+        || textarea.getAttribute('aria-invalid') === 'true';
 
-    const restorePendingEdits = () => {
-        pendingTextareas().forEach((textarea) => {
-            textarea.value = textarea.dataset.lastValidValue ?? '';
+    const pendingTextareas = () => allTextareas().filter(
+        (textarea) => textarea.dataset.languageNeedsValidation === '1' && hasUnsavedValue(textarea)
+    );
+
+    // A list/context change is blocked by either an unsaved edit OR a confirmed
+    // red validation error. The old guard looked only at the pending flag, which
+    // meant an already-rejected edit could sometimes be left behind silently.
+    const blockingTextareas = () => allTextareas().filter((textarea) =>
+        hasUnsavedValue(textarea)
+        || textarea.dataset.languageNeedsValidation === '1'
+        || hasFailedValidation(textarea)
+    );
+    const hasBlockingEdits = () => blockingTextareas().length > 0;
+
+    const restoreBlockingEdits = (textareas = blockingTextareas()) => {
+        textareas.forEach((textarea) => {
+            textarea.value = textarea.dataset.lastValidValue ?? textarea.value;
             delete textarea.dataset.languageNeedsValidation;
             clearInvalidState(textarea);
             resetFeedback(feedbackForRow(textarea.closest('.check-row')));
@@ -219,34 +235,54 @@
     });
 
     const flushPendingSaves = async (textareas) => {
-        textareas.forEach((textarea) => textarea.dispatchEvent(new Event('blur')));
+        const dirty = textareas.filter(
+            (textarea) => hasUnsavedValue(textarea) || textarea.dataset.languageNeedsValidation === '1'
+        );
+        if (textareas.some(hasFailedValidation)) return false;
+        if (dirty.length === 0) return true;
+
+        dirty.forEach((textarea) => textarea.dispatchEvent(new Event('blur')));
         const deadline = Date.now() + 30000;
         while (Date.now() < deadline) {
-            if (textareas.every((textarea) => textarea.dataset.languageNeedsValidation !== '1')) return true;
-            if (textareas.some((textarea) => textarea.dataset.languageSaveFailed === '1')) return false;
+            // Failure must win over the completion check. A rejected request can
+            // clear/change pending state while the red error still needs a decision.
+            if (dirty.some(hasFailedValidation)) return false;
+            if (dirty.every((textarea) =>
+                textarea.dataset.languageNeedsValidation !== '1' && !hasUnsavedValue(textarea)
+            )) return true;
             await new Promise((resolve) => window.setTimeout(resolve, 80));
         }
         showErrorFeedback(
-            textareas[0]?.closest('.check-row'),
+            dirty[0]?.closest('.check-row'),
             translationFeedback.timeout || 'Error: validation/translation timed out.'
         );
         return false;
     };
 
     const resolvePendingBeforeNavigation = async () => {
-        const pending = pendingTextareas();
-        if (pending.length === 0) return true;
-        if (await flushPendingSaves(pending)) return true;
+        const blocked = blockingTextareas();
+        if (blocked.length === 0) return true;
+        if (!blocked.some(hasFailedValidation) && await flushPendingSaves(blocked)) return true;
+
         const decision = await askInvalidEditDecision();
         if (decision === 'correct') {
-            (pendingTextareas()[0] || pending[0])?.focus();
+            (blockingTextareas()[0] || blocked[0])?.focus();
             return false;
         }
-        restorePendingEdits();
+        restoreBlockingEdits(blockingTextareas().length ? blockingTextareas() : blocked);
         return true;
     };
 
-    const contextControl = (target) => target?.matches?.('#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate');
+    const contextSelector = '#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate';
+    const contextControl = (target) => target?.matches?.(contextSelector);
+    const rememberContextValues = () => document.querySelectorAll(contextSelector).forEach((control) => {
+        previousControlValues.set(control, control.value);
+    });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', rememberContextValues, { once: true });
+    } else {
+        rememberContextValues();
+    }
 
     document.addEventListener('focusin', (event) => {
         const textarea = event.target.closest?.('.check-row textarea');
@@ -259,6 +295,12 @@
 
     document.addEventListener('pointerdown', (event) => {
         if (contextControl(event.target)) previousControlValues.set(event.target, event.target.value);
+        // The mobile room picker changes the hidden #roomSelect programmatically
+        // before dispatching change, so remember its old value from the option tap.
+        if (event.target.closest?.('.room-picker-option')) {
+            const roomControl = document.querySelector('#roomSelect');
+            if (roomControl) previousControlValues.set(roomControl, roomControl.value);
+        }
     }, true);
 
     document.addEventListener('input', (event) => {
@@ -280,9 +322,18 @@
             return;
         }
         const control = event.target;
-        if (!contextControl(control) || bypassNavigation.has(control) || pendingTextareas().length === 0) return;
+        if (!contextControl(control)) return;
+        if (bypassNavigation.has(control)) {
+            previousControlValues.set(control, control.value);
+            return;
+        }
+        if (!hasBlockingEdits()) {
+            previousControlValues.set(control, control.value);
+            return;
+        }
+
         const intended = control.value;
-        const previous = previousControlValues.get(control) ?? '';
+        const previous = previousControlValues.get(control) ?? control.value;
         control.value = previous;
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -295,8 +346,10 @@
     }, true);
 
     document.addEventListener('click', async (event) => {
-        const action = event.target.closest?.('#createInterval, #deleteInterval');
-        if (action && !bypassActions.has(action) && pendingTextareas().length > 0) {
+        // These actions can select/rebuild the current interval context or call
+        // updateAssignmentMode(), which can replace visible textarea contents.
+        const action = event.target.closest?.('#createInterval, #saveInterval, #deleteInterval');
+        if (action && !bypassActions.has(action) && hasBlockingEdits()) {
             event.preventDefault();
             event.stopImmediatePropagation();
             if (!(await resolvePendingBeforeNavigation())) return;
@@ -307,12 +360,20 @@
         }
 
         const link = event.target.closest?.('a[href]');
-        if (!link || pendingTextareas().length === 0 || link.target === '_blank') return;
+        if (!link || !hasBlockingEdits() || link.target === '_blank') return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (!(await resolvePendingBeforeNavigation())) return;
         window.location.href = link.href;
     }, true);
+
+    // Back/refresh/close and form-driven navigation cannot await our custom
+    // dialog. Ask the browser to keep the page whenever a red/unsaved edit exists.
+    window.addEventListener('beforeunload', (event) => {
+        if (!hasBlockingEdits()) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
 
     const isApiPost = (input, init) => {
         const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
