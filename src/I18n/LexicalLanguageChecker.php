@@ -3,19 +3,13 @@ declare(strict_types=1);
 
 interface LexicalLanguageClassifier
 {
-    /**
-     * @param string[] $tokens Normalized lowercase lexical tokens.
-     * @return array<string, string> Map token => pt_only|en_only|shared|unknown.
-     */
+    /** @param string[] $tokens @return array<string, string> */
     public function classifyTokens(array $tokens): array;
 }
 
 interface LexicalCaseSensitiveClassifier
 {
-    /**
-     * @param string[] $tokens Original-case lexical tokens.
-     * @return array<string, bool> Exact upstream EN-GB keep-case matches.
-     */
+    /** @param string[] $tokens @return array<string, bool> */
     public function classifyCaseSensitiveTokens(array $tokens): array;
 }
 
@@ -23,9 +17,8 @@ interface LexicalPersonClassifier
 {
     /**
      * A person is accepted only when the original token has normal name
-     * capitalization AND its normalized spelling exists in a generated,
-     * externally sourced person-name corpus. Capitalization alone is never
-     * evidence that a token is a name.
+     * capitalization and its normalized spelling exists in the generated,
+     * externally sourced person-name corpus.
      *
      * @param string[] $tokens Original-case lexical tokens.
      * @return array<string, bool> Exact original-case token => true.
@@ -35,26 +28,17 @@ interface LexicalPersonClassifier
 
 interface LexicalCoverageClassifier
 {
-    /** True only when every generated validation resource is available. */
     public function hasFullCoverage(): bool;
 }
 
 interface LexicalEntityClassifier
 {
-    /**
-     * Compatibility interface used by the translator. Countries are marked as
-     * country; sourced person names that do not collide with ordinary PT/EN
-     * words are marked as person. Source validation itself uses original-case
-     * person classification and is stricter.
-     *
-     * @param string[] $tokens Normalized lowercase lexical tokens.
-     * @return array<string, string> Map token => person|country.
-     */
+    /** @param string[] $tokens @return array<string, string> Map token => person|country. */
     public function classifyEntityTokens(array $tokens): array;
 }
 
-// Kept as a compatibility contract for older test doubles. Production lexical
-// verification no longer uses hand-sized near-match lists.
+// Compatibility contract for older test doubles only. Production no longer
+// uses project-maintained near-match word lists.
 interface LexicalNearMatchClassifier
 {
     /** @return array{candidate:string,distance:int,classification:string}|null */
@@ -66,18 +50,9 @@ final class LexicalLookupException extends RuntimeException
 }
 
 /**
- * Deterministic PT/EN lexical lookup backed only by generated, externally
- * sourced files bundled with Room Check.
- *
- * - ordinary EN: pinned CSpell EN-GB
- * - ordinary PT: pinned PT-PT Hunspell expansion
- * - EN keep-case forms: preserved from CSpell
- * - people: generated global person-name corpus
- * - countries: generated Unicode CLDR labels for EN and PT-PT
- *
- * There is intentionally no project-maintained technical-word list, compact
- * language dictionary, capitalization heuristic or generic proper-name bypass.
- * Unknown custom/technical text must use the explicit double-quote escape.
+ * Deterministic PT/EN lookup backed only by generated external resources:
+ * CSpell EN-GB, PT-PT Hunspell, global person-name data and Unicode CLDR.
+ * Unknown custom/technical text uses the explicit double-quote escape.
  */
 final class LexicalLanguageChecker implements
     LexicalLanguageClassifier,
@@ -95,10 +70,20 @@ final class LexicalLanguageChecker implements
     /** @var array<string, array<string, bool>> */
     private static array $plainWordCache = [];
 
+    /**
+     * Normalized people confirmed with original-case evidence by the most
+     * recent source validation. ContentTranslator validates the source before
+     * preparing its provider copy, so this carries exact person semantics into
+     * that immediate translation step without a manual name exception list.
+     *
+     * @var array<string, bool>
+     */
+    private array $recentSourcePeople = [];
+
     public function __construct(PDO $pdo, private array $config = [])
     {
-        // PDO stays in the public signature for ContentTranslator compatibility.
-        // Validation itself is local and file-only.
+        // PDO remains in the public signature for ContentTranslator compatibility.
+        // Runtime lexical verification itself is local and file-only.
     }
 
     public function hasFullCoverage(): bool
@@ -122,14 +107,7 @@ final class LexicalLanguageChecker implements
 
     public function classifyTokens(array $tokens): array
     {
-        $normalized = [];
-        foreach ($tokens as $rawToken) {
-            $token = self::normalizeToken((string) $rawToken);
-            if ($token !== '' && mb_strlen($token, 'UTF-8') <= self::MAX_TOKEN_LENGTH) {
-                $normalized[$token] = true;
-            }
-        }
-        $tokens = array_keys($normalized);
+        $tokens = $this->normalizedTokens($tokens);
         if ($tokens === []) {
             return [];
         }
@@ -173,19 +151,25 @@ final class LexicalLanguageChecker implements
                 $exact[$token] = true;
             }
         }
-        $tokens = array_keys($exact);
-        if ($tokens === []) {
+        if ($exact === []) {
             return [];
         }
 
         [$wordPath, $indexPath] = $this->caseSensitiveEnglishPaths();
-        return $this->requiredIndexedMembership($tokens, $wordPath, $indexPath, 'English keep-case');
+        return $this->requiredIndexedMembership(
+            array_keys($exact),
+            $wordPath,
+            $indexPath,
+            'English keep-case'
+        );
     }
 
     public function classifyPersonTokens(array $tokens): array
     {
+        $this->recentSourcePeople = [];
         $eligible = [];
         $normalizedWanted = [];
+
         foreach ($tokens as $rawToken) {
             $exact = self::normalizeCaseSensitiveToken((string) $rawToken);
             if (!self::looksLikePersonCase($exact)) {
@@ -212,23 +196,18 @@ final class LexicalLanguageChecker implements
 
         $found = [];
         foreach ($eligible as $exact => $normalized) {
-            if (isset($members[$normalized])) {
-                $found[$exact] = true;
+            if (!isset($members[$normalized])) {
+                continue;
             }
+            $found[$exact] = true;
+            $this->recentSourcePeople[$normalized] = true;
         }
         return $found;
     }
 
     public function classifyEntityTokens(array $tokens): array
     {
-        $normalized = [];
-        foreach ($tokens as $rawToken) {
-            $token = self::normalizeToken((string) $rawToken);
-            if ($token !== '') {
-                $normalized[$token] = true;
-            }
-        }
-        $tokens = array_keys($normalized);
+        $tokens = $this->normalizedTokens($tokens);
         if ($tokens === []) {
             return [];
         }
@@ -242,17 +221,23 @@ final class LexicalLanguageChecker implements
 
         $entities = [];
         foreach ($tokens as $token) {
+            // Country always wins: Spain/Espanha must remain translatable and
+            // language-bearing even if the same spelling can occur as a name.
             if (isset($countryPt[$token]) || isset($countryEn[$token])) {
                 $entities[$token] = 'country';
                 continue;
             }
-            // Translator compatibility: protect sourced names only when they do
-            // not also function as an ordinary PT/EN word. This avoids treating
-            // lowercase lexical words such as may/will as names after case was
-            // discarded by the compatibility interface.
-            if (isset($people[$token])
-                && !isset($ptMembership[$token])
-                && !isset($enMembership[$token])) {
+
+            if (!isset($people[$token])) {
+                continue;
+            }
+
+            // Non-lexical sourced names are safe to protect directly. A name
+            // that also exists as an ordinary word (for example Michael in a
+            // source dictionary, or May/Will) is protected only when the prior
+            // original-case source validation actually confirmed it as PERSON.
+            if ((!isset($ptMembership[$token]) && !isset($enMembership[$token]))
+                || isset($this->recentSourcePeople[$token])) {
                 $entities[$token] = 'person';
             }
         }
@@ -269,11 +254,26 @@ final class LexicalLanguageChecker implements
         return str_replace(['’', '‘'], "'", trim($token));
     }
 
+    /** @param string[] $tokens @return string[] */
+    private function normalizedTokens(array $tokens): array
+    {
+        $normalized = [];
+        foreach ($tokens as $rawToken) {
+            $token = self::normalizeToken((string) $rawToken);
+            if ($token !== '' && mb_strlen($token, 'UTF-8') <= self::MAX_TOKEN_LENGTH) {
+                $normalized[$token] = true;
+            }
+        }
+        return array_keys($normalized);
+    }
+
     private static function looksLikePersonCase(string $token): bool
     {
         if ($token === '' || mb_strlen($token, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
             return false;
         }
+        // Capitalization is only an eligibility check; corpus membership is
+        // still mandatory, so Ggjhrtgu/Pnsjdhd/Hebde remain invalid.
         return preg_match('/^\p{Lu}[\p{L}’\'\-]*$/u', $token) === 1;
     }
 
@@ -334,11 +334,12 @@ final class LexicalLanguageChecker implements
     {
         $root = dirname(__DIR__, 2);
         $isPt = $language === 'pt';
-        $word = (string) ($this->config[$isPt ? 'pt_full_path' : 'en_full_path']
-            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.txt' : 'en_GB.txt'));
-        $index = (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
-            ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json'));
-        return [$word, $index];
+        return [
+            (string) ($this->config[$isPt ? 'pt_full_path' : 'en_full_path']
+                ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.txt' : 'en_GB.txt')),
+            (string) ($this->config[$isPt ? 'pt_index_path' : 'en_index_path']
+                ?? $root . '/resources/lexicon/full/' . ($isPt ? 'pt_PT.index.json' : 'en_GB.index.json')),
+        ];
     }
 
     /** @return array{0:string,1:string} */
