@@ -245,8 +245,8 @@ header('Cache-Control: no-store');
 </head>
 <body
     data-bilingual-decision-message="<?= listEscape(SiteTranslations::text(
-        'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?',
-        'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?'
+        'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?',
+        'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'
     )) ?>"
     data-bilingual-correct="<?= listEscape(SiteTranslations::text('Corrigir', 'Correct')) ?>"
     data-bilingual-cancel="<?= listEscape(SiteTranslations::text('Anular edição', 'Cancel edit')) ?>"

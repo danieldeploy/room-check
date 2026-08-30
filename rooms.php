@@ -107,10 +107,15 @@ try {
             'csrfToken' => Csrf::token(),
             'locale' => Translator::locale(),
             'languageDecisionMessage' => SiteTranslations::text(
-                'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?',
-                'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?'
+                'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?',
+                'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'
+            ),
+            'languageDecisionUnsavedMessage' => SiteTranslations::text(
+                'Tem uma edição não guardada. Quer continuar a editar ou anular a edição?',
+                'There is an unsaved edit. Do you want to continue editing or cancel the edit?'
             ),
             'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct'),
+            'languageDecisionContinue' => SiteTranslations::text('Continuar a editar', 'Continue editing'),
             'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit'),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
