@@ -92,9 +92,13 @@ assertVerificationCategories(
 );
 assertVerificationCategories(
     str_contains($navigation, 'foreach ($categories as $category)')
+        && str_contains($navigation, 'foreach ($lists as $list)')
+        && str_contains($navigation, "SiteTranslations::text('Editar', 'Edit')")
+        && str_contains($navigation, "'item-lists.php?list_id=' . \$listId")
         && str_contains($rooms, 'verificationCategories($pdo)')
+        && str_contains($rooms, '$navigationLists = itemLists($pdo)')
         && str_contains($lists, '$verificationAreas[(string) $category[\'slug\']]'),
-    'category navigation and list category selectors are database-driven'
+    'area navigation, hierarchical list submenu and list selectors are database-driven'
 );
 assertVerificationCategories(
     str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")

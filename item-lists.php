@@ -258,7 +258,8 @@ header('Cache-Control: no-store');
         <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
         <?php VerificationCategoryNavigation::render(
             $verificationCategories,
-            'lists',
+            $lists,
+            $selectedList ? 'list:' . $listId : 'lists',
             true,
             $canManageCategories
         ); ?>

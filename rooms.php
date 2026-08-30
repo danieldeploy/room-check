@@ -30,8 +30,16 @@ $navigationArea = (string) ($_GET['area'] ?? $defaultNavigationArea);
 if (!in_array($navigationArea, $navigationAreas, true)) {
     $navigationArea = $defaultNavigationArea;
 }
+$navigationLists = itemLists($pdo);
+foreach ($navigationLists as &$navigationList) {
+    $navigationList['displayName'] = Translator::localized(
+        (string) ($navigationList['name'] ?? ''),
+        (string) ($navigationList['nameEn'] ?? '')
+    );
+}
+unset($navigationList);
 $lists = array_values(array_filter(
-    itemLists($pdo),
+    $navigationLists,
     static fn(array $list): bool => $list['area'] === $navigationArea
 ));
 foreach ($lists as &$list) {
@@ -144,6 +152,7 @@ try {
                 <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
                 <?php VerificationCategoryNavigation::render(
                     $verificationCategories,
+                    $navigationLists,
                     'category:' . $navigationArea,
                     $canAssign,
                     $canManageCategories

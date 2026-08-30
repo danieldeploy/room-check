@@ -24,6 +24,14 @@ try {
 $message = null;
 $error = null;
 $storageAvailable = VerificationCategoryRepository::storageAvailable($pdo);
+$navigationLists = itemLists($pdo);
+foreach ($navigationLists as &$navigationList) {
+    $navigationList['displayName'] = Translator::localized(
+        (string) ($navigationList['name'] ?? ''),
+        (string) ($navigationList['nameEn'] ?? '')
+    );
+}
+unset($navigationList);
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
@@ -167,7 +175,7 @@ header('Cache-Control: no-store');
     <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
     <header class="module-header">
         <p class="eyebrow"><?= categoryEscape(SiteTranslations::text('Gestão dos espaços', 'Space management')) ?></p>
-        <?php VerificationCategoryNavigation::render($categories, 'categories', Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN), true); ?>
+        <?php VerificationCategoryNavigation::render($categories, $navigationLists, 'categories', Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN), true); ?>
     </header>
 
     <?php if ($message): ?><div class="notice success" role="status"><?= categoryEscape($message) ?></div><?php endif; ?>

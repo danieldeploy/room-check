@@ -7,6 +7,7 @@ final class VerificationCategoryNavigation
 {
     public static function render(
         array $categories,
+        array $lists,
         string $active,
         bool $canManageLists,
         bool $canManageCategories,
@@ -25,7 +26,21 @@ final class VerificationCategoryNavigation
                 <a class="<?= $isActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'rooms.php?area=' . rawurlencode($slug)) ?>" title="<?= self::escape($name) ?>" <?= $isActive ? 'aria-current="page"' : '' ?>><?= self::escape($name) ?></a>
             <?php endforeach; ?>
             <?php if ($canManageLists): ?>
-                <a class="<?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Listas', 'Lists')) ?></a>
+                <?php $listsActive = $active === 'lists' || str_starts_with($active, 'list:'); ?>
+                <details class="module-menu">
+                    <summary class="<?= $listsActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Listas', 'Lists')) ?></summary>
+                    <div class="module-submenu">
+                        <a class="module-submenu-edit <?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Editar', 'Edit')) ?></a>
+                        <?php foreach ($lists as $list): ?>
+                            <?php
+                            $listId = (int) ($list['id'] ?? 0);
+                            $listName = (string) ($list['displayName'] ?? $list['display_name'] ?? $list['name'] ?? '');
+                            $listIsActive = $active === 'list:' . $listId;
+                            ?>
+                            <a class="module-submenu-list <?= $listIsActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php?list_id=' . $listId) ?>" title="<?= self::escape($listName) ?>" <?= $listIsActive ? 'aria-current="page"' : '' ?>><?= self::escape($listName) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
             <?php endif; ?>
             <?php if ($canManageCategories): ?>
                 <a class="<?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Áreas', 'Areas')) ?></a>
