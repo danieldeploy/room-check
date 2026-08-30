@@ -11,18 +11,24 @@ function assertInvalidEditUx(bool $condition, string $message): void
 
 $root = dirname(__DIR__);
 $app = file_get_contents($root . '/assets/app.js');
+$immediateGuard = file_get_contents($root . '/assets/immediate-edit-decision.js');
 $feedback = file_get_contents($root . '/assets/validation-feedback.js');
 $css = file_get_contents($root . '/assets/app.css');
 $rooms = file_get_contents($root . '/rooms.php');
+$sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
 $validator = file_get_contents($root . '/translation-validate.php');
 $translator = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 
-assertInvalidEditUx(is_string($app) && is_string($feedback) && is_string($css) && is_string($rooms) && is_string($validator) && is_string($translator), 'UX sources are readable');
+assertInvalidEditUx(
+    is_string($app) && is_string($immediateGuard) && is_string($feedback) && is_string($css)
+        && is_string($rooms) && is_string($sessionBar) && is_string($validator) && is_string($translator),
+    'UX sources are readable'
+);
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid without changing its contents');
 assertInvalidEditUx(str_contains($feedback, 'textarea.dataset.lastValidValue'), 'last server-confirmed value is retained for cancel edit');
 assertInvalidEditUx(str_contains($feedback, "textarea.dataset.languageNeedsValidation = '1'"), 'changed text is marked pending until blur save finishes');
-assertInvalidEditUx(str_contains($feedback, 'flushPendingSaves'), 'pending text is flushed through real save before context navigation');
-assertInvalidEditUx(str_contains($feedback, "dispatchEvent(new Event('blur'))"), 'context navigation reuses the same real save path');
+assertInvalidEditUx(str_contains($feedback, 'flushPendingSaves'), 'fallback navigation guard can still flush a real save when immediate interception is not involved');
+assertInvalidEditUx(str_contains($feedback, "dispatchEvent(new Event('blur'))"), 'fallback navigation uses the same real save path');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionMessage'), 'Correct/Cancel dialog remains localized');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionCorrect') && str_contains($feedback, 'config.languageDecisionCancel'), 'Correct/Cancel labels remain localized');
 assertInvalidEditUx(str_contains($feedback, "#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate"), 'all checklist context selections remain guarded');
@@ -30,6 +36,44 @@ assertInvalidEditUx(str_contains($feedback, "#createInterval, #saveInterval, #de
 assertInvalidEditUx(str_contains($feedback, "a[href]"), 'page navigation remains guarded');
 assertInvalidEditUx(str_contains($feedback, 'restoreBlockingEdits'), 'Cancel edit restores last server-confirmed content for pending or failed edits');
 assertInvalidEditUx(str_contains($feedback, 'hasFailedValidation') && str_contains($feedback, 'hasBlockingEdits'), 'visible red validation failures remain navigation blockers');
+
+assertInvalidEditUx(
+    str_contains($immediateGuard, "#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate")
+        && str_contains($immediateGuard, "#createInterval, #saveInterval, #deleteInterval"),
+    'immediate guard covers every checklist/list context control and interval action'
+);
+assertInvalidEditUx(
+    str_contains($immediateGuard, "document.addEventListener('pointerdown'")
+        && str_contains($immediateGuard, "document.addEventListener('blur'")
+        && str_contains($immediateGuard, 'event.stopImmediatePropagation()'),
+    'list-change intent is captured before focus leaves the active textarea and suppresses its normal blur autosave'
+);
+assertInvalidEditUx(
+    str_contains($immediateGuard, "document.addEventListener('change', async")
+        && str_contains($immediateGuard, 'const decision = await askDecision();')
+        && str_contains($immediateGuard, "decision === 'correct'"),
+    'a changed context asks the user before the selected list/context is allowed to continue'
+);
+assertInvalidEditUx(
+    str_contains($immediateGuard, 'config.languageDecisionMessage')
+        && str_contains($immediateGuard, 'config.languageDecisionCorrect')
+        && str_contains($immediateGuard, 'config.languageDecisionCancel'),
+    'immediate decision uses the same server-localized PT/EN dialog text'
+);
+assertInvalidEditUx(
+    strpos($sessionBar, 'immediate-edit-decision.js') !== false
+        && strpos($sessionBar, 'validation-feedback.js') !== false
+        && strpos($sessionBar, 'immediate-edit-decision.js') < strpos($sessionBar, 'validation-feedback.js')
+        && str_contains($sessionBar, 'immediate-edit-decision.js?v=')
+        && str_contains($sessionBar, 'filemtime'),
+    'immediate guard is cache-busted and loaded before the fallback validation/navigation guard'
+);
+assertInvalidEditUx(
+    str_contains($immediateGuard, ".room-picker-option")
+        && str_contains($immediateGuard, "document.querySelector('#roomSelect')"),
+    'custom mobile room picker uses the same immediate decision path'
+);
+
 assertInvalidEditUx(!str_contains($feedback, 'language-highlight-layer'), 'duplicate absolute text layer is removed from feedback JavaScript');
 assertInvalidEditUx(!str_contains($feedback, 'appendHighlightedText'), 'word-overlay renderer is removed');
 assertInvalidEditUx(!str_contains($feedback, 'invalidWords'), 'word-level validation payload is not used by the UI');
