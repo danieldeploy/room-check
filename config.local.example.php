@@ -30,7 +30,10 @@ return [
     'whatsapp' => [
         'secrets_file' => '/home/CPANEL_USER/room-check-private/whatsapp-secrets.json',
         'graph_version' => 'v23.0',
+        // Keep V1 active until Meta approves V2. Then change template_name to
+        // space_management_reminder_v2 without changing the reminder code.
         'template_name' => 'space_management_reminder',
+        'template_v2_name' => 'space_management_reminder_v2',
         'template_languages' => [
             'pt' => 'pt_PT',
             'en' => 'en',

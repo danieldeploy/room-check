@@ -5,6 +5,7 @@ $appRoot = getenv('ROOM_CHECK_APP_ROOT') ?: rtrim((string) getenv('HOME'), '/') 
 if (!is_file($appRoot . '/config.php')) { fwrite(STDERR, "Portal config not found.\n"); exit(1); }
 require $appRoot . '/lib.php';
 require $appRoot . '/src/Notifications/WhatsAppCloudClient.php';
+require $appRoot . '/src/Notifications/WhatsAppReminderTemplate.php';
 $config = require $appRoot . '/config.php';
 $configuredTemplate = (string) ($config['whatsapp']['template_name'] ?? '');
 if ($configuredTemplate === '' || $configuredTemplate === 'room_assignment_reminder') {
@@ -20,16 +21,18 @@ try {
         "SELECT r.id, r.attempt_count, r.due_date, r.property_name, r.list_id,
                 l.name AS list_name, l.name_en AS list_name_en,
                 u.display_name, u.mobile, u.preferred_language,
+                creator.display_name AS creator_display_name,
                 COUNT(a.id) AS assignment_count
          FROM whatsapp_assignment_reminders r
          JOIN users u ON u.id = r.assigned_to_user_id
+         JOIN users creator ON creator.id = r.created_by_user_id
          JOIN item_lists l ON l.id = r.list_id
          JOIN room_item_assignments a ON a.assigned_to_user_id = r.assigned_to_user_id
               AND a.due_date = r.due_date AND a.property_name = r.property_name AND a.list_id = r.list_id AND a.completed_at IS NULL
          WHERE r.status IN ('pending','failed') AND r.scheduled_at <= NOW()
            AND (r.next_attempt_at IS NULL OR r.next_attempt_at <= NOW())
          GROUP BY r.id, r.attempt_count, r.due_date, r.property_name, r.list_id, l.name, l.name_en,
-                  u.display_name, u.mobile, u.preferred_language, r.scheduled_at
+                  u.display_name, u.mobile, u.preferred_language, creator.display_name, r.scheduled_at
          ORDER BY r.scheduled_at LIMIT 50"
     );
     foreach ($query->fetchAll() as $row) {
@@ -53,13 +56,16 @@ try {
             $portalInstruction = $preferredLanguage === 'en'
                 ? 'List: ' . $listName . '. Open ' . $portalName . ' to view the assigned items and instructions.'
                 : 'Lista: ' . $listName . '. Consulte no ' . $portalName . ' os itens e respetivas instruções.';
-            $messageId = $client->sendTemplate((string) $row['mobile'], [
-                (string) $row['display_name'],
-                (new DateTimeImmutable((string) $row['due_date']))->format('d/m/Y'),
-                (string) $row['property_name'],
-                (string) $row['assignment_count'],
+            $templateName = (string) $config['whatsapp']['template_name'];
+            $templateValues = WhatsAppReminderTemplate::values(
+                $templateName,
+                $row,
+                $preferredLanguage,
+                $portalName,
                 $portalInstruction,
-            ], $languageCode);
+                (string) ($config['whatsapp']['template_v2_name'] ?? WhatsAppReminderTemplate::V2_NAME)
+            );
+            $messageId = $client->sendTemplate((string) $row['mobile'], $templateValues, $languageCode);
             $pdo->prepare("UPDATE whatsapp_assignment_reminders SET status = 'sent', meta_message_id = :message_id, sent_at = NOW(), last_error = NULL WHERE id = :id")
                 ->execute(['message_id' => $messageId, 'id' => (int) $row['id']]);
         } catch (Throwable $error) {

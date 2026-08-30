@@ -52,3 +52,4 @@ jobs:
           php tests/autosave-hardening.php
           php tests/invalid-edit-ux.php
           php tests/bilingual-textarea-transversal.php
+          php tests/whatsapp-reminder-template.php

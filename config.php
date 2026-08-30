@@ -60,6 +60,7 @@ return [
         'secrets_file' => $localConfig['whatsapp']['secrets_file'] ?? getenv('WHATSAPP_SECRETS_FILE') ?: $defaultWhatsAppSecretsFile,
         'graph_version' => $localConfig['whatsapp']['graph_version'] ?? getenv('WHATSAPP_GRAPH_VERSION') ?: 'v23.0',
         'template_name' => $localConfig['whatsapp']['template_name'] ?? getenv('WHATSAPP_TEMPLATE_NAME') ?: 'space_management_reminder',
+        'template_v2_name' => $localConfig['whatsapp']['template_v2_name'] ?? getenv('WHATSAPP_TEMPLATE_V2_NAME') ?: 'space_management_reminder_v2',
         'template_languages' => $localConfig['whatsapp']['template_languages'] ?? [
             'pt' => 'pt_PT',
             'en' => 'en',
