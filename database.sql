@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(64) NOT NULL,
     display_name VARCHAR(120) NOT NULL,
+    preferred_name VARCHAR(120) NULL,
     email VARCHAR(190) NULL,
     mobile VARCHAR(32) NULL,
     preferred_language ENUM('pt', 'en') NOT NULL DEFAULT 'pt',

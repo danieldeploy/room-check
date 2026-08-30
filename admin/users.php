@@ -39,6 +39,17 @@ function validateUserMobile(string $mobile): string
     }
     return $mobile;
 }
+function validateUserPreferredName(string $preferredName): ?string
+{
+    $preferredName = trim($preferredName);
+    if ($preferredName === '') {
+        return null;
+    }
+    if (mb_strlen($preferredName) > 120) {
+        throw new InvalidArgumentException('Nome preferido inválido.');
+    }
+    return $preferredName;
+}
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
         Csrf::validate($_POST['csrf_token'] ?? null);
@@ -46,6 +57,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($action === 'create') {
             $username = trim((string) ($_POST['username'] ?? ''));
             $displayName = trim((string) ($_POST['display_name'] ?? ''));
+            $preferredName = validateUserPreferredName((string) ($_POST['preferred_name'] ?? ''));
             $email = validateUserEmail((string) ($_POST['email'] ?? ''));
             $mobile = validateUserMobile((string) ($_POST['mobile'] ?? ''));
             $role = Auth::validateRole((string) ($_POST['role'] ?? ''));
@@ -58,12 +70,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
             Auth::validatePassword($password);
             $statement = $pdo->prepare(
-                'INSERT INTO users (username, display_name, email, mobile, password_hash, role, is_active)
-                 VALUES (:username, :name, :email, :mobile, :hash, :role, 1)'
+                'INSERT INTO users (username, display_name, preferred_name, email, mobile, password_hash, role, is_active)
+                 VALUES (:username, :name, :preferred_name, :email, :mobile, :hash, :role, 1)'
             );
             $statement->execute([
                 'username' => $username,
                 'name' => $displayName,
+                'preferred_name' => $preferredName,
                 'email' => $email,
                 'mobile' => $mobile,
                 'hash' => password_hash($password, PASSWORD_DEFAULT),
@@ -78,6 +91,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $targetId = (int) ($_POST['user_id'] ?? 0);
             $username = trim((string) ($_POST['username'] ?? ''));
             $displayName = trim((string) ($_POST['display_name'] ?? ''));
+            $preferredName = validateUserPreferredName((string) ($_POST['preferred_name'] ?? ''));
             $email = validateUserEmail((string) ($_POST['email'] ?? ''));
             $mobile = validateUserMobile((string) ($_POST['mobile'] ?? ''));
             if (!preg_match('/^[a-zA-Z0-9._-]{3,64}$/', $username)) {
@@ -88,18 +102,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
             $parameters = [
                 'id' => $targetId, 'username' => $username, 'name' => $displayName,
-                'email' => $email, 'mobile' => $mobile,
+                'preferred_name' => $preferredName, 'email' => $email, 'mobile' => $mobile,
             ];
             if ($targetId === (int) $currentUser['id']) {
                 $statement = $pdo->prepare(
-                    'UPDATE users SET username = :username, display_name = :name, email = :email, mobile = :mobile
+                    'UPDATE users SET username = :username, display_name = :name, preferred_name = :preferred_name,
+                        email = :email, mobile = :mobile
                      WHERE id = :id'
                 );
             } else {
                 $role = Auth::validateRole((string) ($_POST['role'] ?? ''));
                 $parameters['role'] = $role;
                 $statement = $pdo->prepare(
-                    'UPDATE users SET username = :username, display_name = :name, email = :email,
+                    'UPDATE users SET username = :username, display_name = :name, preferred_name = :preferred_name, email = :email,
                         mobile = :mobile, role = :role WHERE id = :id'
                 );
             }
@@ -139,7 +154,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $users = $pdo->query(
-    'SELECT id, username, display_name, email, mobile, role, is_active, last_login_at, created_at
+    'SELECT id, username, display_name, preferred_name, email, mobile, role, is_active, last_login_at, created_at
      FROM users ORDER BY display_name, username'
 )->fetchAll();
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
@@ -170,6 +185,7 @@ header('Cache-Control: no-store');
                 <input type="hidden" name="action" value="create">
                 <label><span>Utilizador</span><input name="username" required maxlength="64"></label>
                 <label><span>Nome</span><input name="display_name" required maxlength="120"></label>
+                <label><span>Nome preferido</span><input name="preferred_name" maxlength="120" placeholder="Ex.: Kasia"></label>
                 <label><span>Email</span><input type="email" name="email" required maxlength="190" autocomplete="off"></label>
                 <label><span>Telemóvel</span><input type="tel" name="mobile" required maxlength="32" autocomplete="off"></label>
                 <label><span>Perfil</span><select name="role" required><?php foreach (Auth::ROLES as $value => $label): ?><option value="<?= $value ?>"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label>
@@ -189,6 +205,7 @@ header('Cache-Control: no-store');
                             <input type="hidden" name="action" value="save_user"><input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
                             <label><span>Utilizador</span><input name="username" required maxlength="64" value="<?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?>"></label>
                             <label><span>Nome</span><input name="display_name" required maxlength="120" value="<?= htmlspecialchars($user['display_name'], ENT_QUOTES, 'UTF-8') ?>"></label>
+                            <label><span>Nome preferido</span><input name="preferred_name" maxlength="120" placeholder="Ex.: Kasia" value="<?= htmlspecialchars((string) ($user['preferred_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></label>
                             <label><span>Email</span><input type="email" name="email" required maxlength="190" value="<?= htmlspecialchars((string) ($user['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></label>
                             <label><span>Telemóvel</span><input type="tel" name="mobile" required maxlength="32" value="<?= htmlspecialchars((string) ($user['mobile'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></label>
                             <label><span>Perfil</span><select name="role" <?= (int) $user['id'] === (int) $currentUser['id'] ? 'disabled' : '' ?>><?php foreach (Auth::ROLES as $value => $label): ?><option value="<?= $value ?>" <?= $user['role'] === $value ? 'selected' : '' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label>

@@ -20,8 +20,9 @@ try {
     $query = $pdo->query(
         "SELECT r.id, r.attempt_count, r.due_date, r.property_name, r.list_id,
                 l.name AS list_name, l.name_en AS list_name_en,
-                u.display_name, u.mobile, u.preferred_language,
-                creator.display_name AS creator_display_name,
+                COALESCE(NULLIF(TRIM(u.preferred_name), ''), u.display_name) AS display_name,
+                u.mobile, u.preferred_language,
+                COALESCE(NULLIF(TRIM(creator.preferred_name), ''), creator.display_name) AS creator_display_name,
                 COUNT(a.id) AS assignment_count
          FROM whatsapp_assignment_reminders r
          JOIN users u ON u.id = r.assigned_to_user_id
@@ -32,7 +33,8 @@ try {
          WHERE r.status IN ('pending','failed') AND r.scheduled_at <= NOW()
            AND (r.next_attempt_at IS NULL OR r.next_attempt_at <= NOW())
          GROUP BY r.id, r.attempt_count, r.due_date, r.property_name, r.list_id, l.name, l.name_en,
-                  u.display_name, u.mobile, u.preferred_language, creator.display_name, r.scheduled_at
+                  u.display_name, u.preferred_name, u.mobile, u.preferred_language,
+                  creator.display_name, creator.preferred_name, r.scheduled_at
          ORDER BY r.scheduled_at LIMIT 50"
     );
     foreach ($query->fetchAll() as $row) {

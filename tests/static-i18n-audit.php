@@ -51,6 +51,11 @@ $technicalExceptions = [
         'A Meta não devolveu o identificador da mensagem.',
         'Credenciais WhatsApp Cloud API não configuradas.',
     ],
+    'src/Notifications/WhatsAppReminderTemplate.php' => [
+        'Data do lembrete inválida.',
+        'O argumento',
+        'do template WhatsApp está vazio.',
+    ],
 ];
 foreach ($technicalExceptions as $path => $values) {
     $technicalExceptions[$path] = array_fill_keys($values, true);

@@ -211,6 +211,8 @@ final class SiteTranslations
             'Telemóvel inválido.' => 'Invalid mobile number.',
             'Utilizador inválido.' => 'Invalid username.',
             'Nome inválido.' => 'Invalid name.',
+            'Nome preferido' => 'Preferred name',
+            'Nome preferido inválido.' => 'Invalid preferred name.',
             'Utilizador não encontrado.' => 'User not found.',
             'Não pode desativar a própria conta.' => 'You cannot disable your own account.',
             'Esse nome de utilizador ou email já está associado a outra conta.' => 'That username or email is already associated with another account.',
