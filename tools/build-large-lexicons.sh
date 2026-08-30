@@ -16,6 +16,7 @@ ONOMAVERSE_SURNAME_SHA256="426aab8f6e308047576aa08b4f328ec0680b06251a2a1e2344f21
 ONOMAVERSE_EQUIVALENCE_SHA256="5f367f05331bf0a27c1cbb42ad6c5342241287f2b3acb3bc7b9df0508db40f14"
 CLDR_REF="29e2b5461f7347f4e5605fd3396a55a7a7cb7f4e"
 CLDR_BASE_URL="https://raw.githubusercontent.com/unicode-org/cldr-json/${CLDR_REF}"
+SSA_NAMES_URL="https://www.ssa.gov/oact/babynames/names.zip"
 
 mkdir -p "$OUT" "$LICENSES"
 
@@ -50,6 +51,12 @@ curl --fail --silent --show-error --location \
 echo "$ONOMAVERSE_GIVEN_SHA256  $TMP/given-name-frequency.csv" | sha256sum -c -
 echo "$ONOMAVERSE_SURNAME_SHA256  $TMP/surname-frequency.csv" | sha256sum -c -
 echo "$ONOMAVERSE_EQUIVALENCE_SHA256  $TMP/name-equivalence.csv" | sha256sum -c -
+
+curl --fail --silent --show-error --location \
+  "$SSA_NAMES_URL" \
+  -o "$TMP/ssa-names.zip"
+mkdir -p "$TMP/ssa-names"
+unzip -q "$TMP/ssa-names.zip" -d "$TMP/ssa-names"
 
 curl --fail --silent --show-error --location \
   "$CLDR_BASE_URL/cldr-json/cldr-localenames-full/main/en/territories.json" \
@@ -168,6 +175,15 @@ def build_people() -> set[str]:
             add_person_name(names, row.get("name", ""))
             add_person_name(names, row.get("related_name", ""))
 
+    # Official U.S. Social Security national baby-name records provide broad
+    # real-world coverage, including uncommon immigrant names. Each row is
+    # Name,Sex,Count and SSA suppresses names below its privacy threshold.
+    for path in sorted((tmp / "ssa-names").glob("yob*.txt")):
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.reader(handle):
+                if row:
+                    add_person_name(names, row[0])
+
     return names
 
 
@@ -246,16 +262,17 @@ Room Check does not maintain its own language, technical-term, person-name or
 country word lists. Runtime validation uses generated resources from maintained
 external sources and has no network dependency.
 
-Sources are pinned/reproducible:
+Sources:
 
-- English (EN-GB): CSpell dictionaries, commit ${CSPELL_REF}. The upstream
+- English (EN-GB): pinned CSpell dictionaries, commit ${CSPELL_REF}. The upstream
   keep-case information is preserved in en_GB_case_sensitive.* so forms such as
   I / I'm / I'd / I'll / I've are not lost by lowercase lookup.
 - Portuguese (PT-PT): CSpell/Hunspell Portuguese-European dictionary from the
   same pinned CSpell commit, expanded with hunspell-reader 10.0.1.
 - Person names: Onomaverse ${ONOMAVERSE_TAG} frequency and name-equivalence
-  datasets (CC BY 4.0), supplemented by CSpell's maintained people-names source.
-  Names data from Onomaverse (https://onomaverse.com/datasets), licensed CC BY 4.0.
+  datasets (CC BY 4.0), CSpell's maintained people-names source, and U.S. Social
+  Security Administration national given-name data. Names data from Onomaverse
+  (https://onomaverse.com/datasets), licensed CC BY 4.0.
 - Country names: Unicode CLDR JSON commit ${CLDR_REF}, locale data for en and
   pt-PT, under the bundled Unicode License V3.
 
