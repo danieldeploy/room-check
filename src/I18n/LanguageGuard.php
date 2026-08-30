@@ -29,14 +29,11 @@ final class LanguageValidationException extends InvalidArgumentException
 /**
  * PT/EN validation coordinator.
  *
- * Sentence-level evidence comes from the bundled ELD model and decisive normal
- * word evidence comes from the validated local PT-PT + EN-GB resources. The
- * upstream English dictionary is `keep-case`; exact-case entries are recognized
- * as real neutral tokens so capitalization-sensitive grammar, names and acronyms
- * are not lost by lowercase lookup and do not by themselves decide the sentence
- * language. With all generated resources available, an ordinary token absent
- * from every validated source is still rejected deterministically. MyMemory
- * never decides the source language.
+ * ELD supplies sentence-level evidence. Word-level evidence comes only from the
+ * bundled generated PT-PT/EN-GB resources, externally sourced person names and
+ * CLDR country labels. Unknown unquoted tokens are rejected; there is no local
+ * technical-word list or capitalization-based escape. Double quotes are the one
+ * explicit user escape for custom/technical text.
  */
 final class LanguageGuard
 {
@@ -57,8 +54,7 @@ final class LanguageGuard
         $expectedLanguage = $expectedLanguage === 'en' ? 'en' : 'pt';
         $oppositeLanguage = $expectedLanguage === 'en' ? 'pt' : 'en';
 
-        // Text explicitly enclosed in double quotes is user-protected content:
-        // it is neither PT/EN evidence nor an unknown-word candidate.
+        // Quoted content is deliberately outside language validation.
         $analysisText = self::withoutProtectedQuotedSpans($text);
         $tokens = self::tokenDetails($analysisText);
         $sentenceLanguage = count($tokens) >= 3 ? self::confidentLanguage($analysisText) : null;
@@ -70,13 +66,14 @@ final class LanguageGuard
             'expectedWords' => [],
             'oppositeWords' => [],
             'sharedWords' => [],
+            // Kept for response compatibility. Technical text is no longer
+            // inferred; it must be quoted and therefore never reaches this list.
             'technicalWords' => [],
             'unknownWords' => [],
             'likelyMisspellings' => [],
         ];
+
         if ($tokens === []) {
-            // A field containing only protected quoted content is valid neutral
-            // content, not an empty field.
             $base['conclusion'] = $text === '' ? 'empty' : 'ambiguous';
             return $base;
         }
@@ -90,75 +87,81 @@ final class LanguageGuard
             return $base;
         }
 
-        $hasFullCoverage = $lexicalChecker instanceof LexicalCoverageClassifier
-            && $lexicalChecker->hasFullCoverage();
-
-        $lexicalTokens = [];
-        foreach ($tokens as $token) {
-            $lexicalTokens[$token['normalized']] = true;
+        if ($lexicalChecker instanceof LexicalCoverageClassifier
+            && !$lexicalChecker->hasFullCoverage()) {
+            throw new LexicalLookupException('Generated language resources are incomplete.');
         }
-        $classifications = $lexicalChecker->classifyTokens(array_keys($lexicalTokens));
 
-        // CSpell's EN-GB source explicitly uses keep-case. Ask for exact source
-        // membership with the original token spelling before declaring an
-        // otherwise unknown token invalid. These matches are neutral evidence:
-        // they prove the spelling exists but names/acronyms do not force EN.
-        $caseSensitiveClassifications = [];
-        if ($lexicalChecker instanceof LexicalCaseSensitiveClassifier) {
-            $rawTokens = [];
-            foreach ($tokens as $token) {
-                $raw = LexicalLanguageChecker::normalizeCaseSensitiveToken($token['raw']);
-                if ($raw !== '') {
-                    $rawTokens[$raw] = true;
-                }
+        $normalizedTokens = [];
+        $rawTokens = [];
+        foreach ($tokens as $token) {
+            $normalizedTokens[$token['normalized']] = true;
+            $exact = LexicalLanguageChecker::normalizeCaseSensitiveToken($token['raw']);
+            if ($exact !== '') {
+                $rawTokens[$exact] = true;
             }
-            $caseSensitiveClassifications = $lexicalChecker->classifyCaseSensitiveTokens(array_keys($rawTokens));
+        }
+
+        $classifications = $lexicalChecker->classifyTokens(array_keys($normalizedTokens));
+
+        $countryEntities = [];
+        if ($lexicalChecker instanceof LexicalEntityClassifier) {
+            $countryEntities = $lexicalChecker->classifyEntityTokens(array_keys($normalizedTokens));
+        }
+
+        $people = [];
+        if ($lexicalChecker instanceof LexicalPersonClassifier) {
+            $people = $lexicalChecker->classifyPersonTokens(array_keys($rawTokens));
+        }
+
+        $caseSensitiveEnglish = [];
+        if ($lexicalChecker instanceof LexicalCaseSensitiveClassifier) {
+            $caseSensitiveEnglish = $lexicalChecker->classifyCaseSensitiveTokens(array_keys($rawTokens));
         }
 
         foreach ($tokens as $token) {
             $normalized = $token['normalized'];
             $display = $token['raw'];
+            $exact = LexicalLanguageChecker::normalizeCaseSensitiveToken($display);
             $classification = $classifications[$normalized] ?? 'unknown';
+
+            // Country semantics win over person-name ambiguity: countries are
+            // language-bearing and must translate (Spain <-> Espanha).
+            if (($countryEntities[$normalized] ?? null) === 'country') {
+                self::appendLanguageEvidence($base, $display, $classification, $expectedLanguage);
+                continue;
+            }
+
+            // A sourced person name is neutral in both languages and preserved.
+            if (isset($people[$exact])) {
+                $base['sharedWords'][] = $display;
+                continue;
+            }
 
             if ($classification === 'shared') {
                 $base['sharedWords'][] = $display;
                 continue;
             }
-            if ($classification === 'unknown') {
-                $exact = LexicalLanguageChecker::normalizeCaseSensitiveToken($display);
-                if (isset($caseSensitiveClassifications[$exact])) {
-                    $base['sharedWords'][] = $display;
-                    continue;
-                }
-                $nearMatch = $lexicalChecker instanceof LexicalNearMatchClassifier
-                    ? $lexicalChecker->likelyMisspelling($display)
-                    : null;
-                if ($nearMatch !== null) {
-                    $base['unknownWords'][] = $display;
-                    $base['likelyMisspellings'][] = $display;
-                    continue;
-                }
-                if (self::looksTechnicalIdentifier($display)) {
-                    $base['technicalWords'][] = $display;
-                    continue;
-                }
-                $base['unknownWords'][] = $display;
+            if ($classification === 'pt_only' || $classification === 'en_only') {
+                self::appendLanguageEvidence($base, $display, $classification, $expectedLanguage);
                 continue;
             }
 
-            $tokenLanguage = $classification === 'pt_only' ? 'pt' : 'en';
-            if ($tokenLanguage === $expectedLanguage) {
-                $base['expectedWords'][] = $display;
-            } else {
-                $base['oppositeWords'][] = $display;
+            // CSpell's keep-case resource is English lexical evidence, not an
+            // automatic neutral/proper-name escape. This is what makes I valid
+            // while leaving arbitrary capitalized garbage invalid.
+            if (isset($caseSensitiveEnglish[$exact])) {
+                self::appendLanguageEvidence($base, $display, 'en_only', $expectedLanguage);
+                continue;
             }
+
+            $base['unknownWords'][] = $display;
         }
 
-        foreach (['expectedWords', 'oppositeWords', 'sharedWords', 'technicalWords', 'unknownWords', 'likelyMisspellings'] as $key) {
+        foreach (['expectedWords', 'oppositeWords', 'sharedWords', 'unknownWords'] as $key) {
             $base[$key] = self::uniqueWords($base[$key]);
         }
 
-        // Decisive opposite-language lexical evidence always wins.
         if ($base['expectedWords'] !== [] && $base['oppositeWords'] !== []) {
             $base['conclusion'] = 'mixed';
             return $base;
@@ -167,71 +170,14 @@ final class LanguageGuard
             $base['conclusion'] = 'wrong';
             return $base;
         }
-
-        // Preserve the useful one/two-edit corruption guard: danosht, YAHOOX…
-        if ($base['likelyMisspellings'] !== []) {
-            $base['unknownWords'] = $base['likelyMisspellings'];
+        if ($base['unknownWords'] !== []) {
             $base['conclusion'] = 'unknown';
             return $base;
         }
-
-        if ($base['unknownWords'] !== []) {
-            // Once every validated resource is present, a normal token absent
-            // from PT, EN, exact-case EN and the explicit technical list is
-            // genuinely unresolved and must not inherit surrounding context.
-            if ($hasFullCoverage) {
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-
-            // Safe recovery fallback for a partial deployment / missing full
-            // resources. Short fragments are still blocked because they caused
-            // explicit HAR failures such as "danos.s" and "danos.sr".
-            $shortUnknown = array_values(array_filter(
-                $base['unknownWords'],
-                static fn(string $word): bool => mb_strlen($word, 'UTF-8') <= 2
-            ));
-            if ($shortUnknown !== []) {
-                $base['unknownWords'] = $shortUnknown;
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-
-            $suspicious = array_values(array_filter(
-                $base['unknownWords'],
-                static fn(string $word): bool => self::looksGibberishToken($word)
-            ));
-            if ($suspicious !== []) {
-                $base['unknownWords'] = $suspicious;
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-            if (count($tokens) === 1) {
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-            if ($sentenceLanguage === $oppositeLanguage) {
-                $base['conclusion'] = 'wrong';
-                $base['oppositeWords'] = $base['unknownWords'];
-                return $base;
-            }
-            if ($sentenceLanguage === $expectedLanguage || $base['expectedWords'] !== []) {
-                $base['technicalWords'] = self::uniqueWords(array_merge(
-                    $base['technicalWords'],
-                    $base['unknownWords']
-                ));
-                $base['unknownWords'] = [];
-            } else {
-                $base['conclusion'] = 'unknown';
-                return $base;
-            }
-        }
-
         if ($base['expectedWords'] !== []) {
             $base['conclusion'] = 'correct';
             return $base;
         }
-
         if ($sentenceLanguage === $expectedLanguage) {
             $base['conclusion'] = 'correct';
             return $base;
@@ -243,6 +189,23 @@ final class LanguageGuard
 
         $base['conclusion'] = 'ambiguous';
         return $base;
+    }
+
+    /** @param array<string, mixed> $base */
+    private static function appendLanguageEvidence(
+        array &$base,
+        string $display,
+        string $classification,
+        string $expectedLanguage
+    ): void {
+        $tokenLanguage = $classification === 'pt_only' ? 'pt' : 'en';
+        if ($classification === 'shared') {
+            $base['sharedWords'][] = $display;
+        } elseif ($tokenLanguage === $expectedLanguage) {
+            $base['expectedWords'][] = $display;
+        } else {
+            $base['oppositeWords'][] = $display;
+        }
     }
 
     /** @return array<string, mixed> */
@@ -330,9 +293,6 @@ final class LanguageGuard
         if ($text === '') {
             return '';
         }
-
-        // Only complete double-quoted spans are protected. An unmatched quote
-        // keeps its text in normal validation.
         $stripped = preg_replace('/"[^"\r\n]*"|“[^”\r\n]*”/u', ' ', $text);
         return is_string($stripped) ? trim($stripped) : $text;
     }
@@ -353,36 +313,6 @@ final class LanguageGuard
             }
         }
         return $tokens;
-    }
-
-    private static function looksTechnicalIdentifier(string $token): bool
-    {
-        if (LexicalLanguageChecker::isTechnicalNeutral($token)) {
-            return true;
-        }
-        if (preg_match('/\d/u', $token) === 1) {
-            return true;
-        }
-        // Narrow brand/identifier fallback. ALL-CAPS and arbitrary short
-        // fragments are intentionally not accepted implicitly.
-        return preg_match('/^(?=.*\p{Ll})(?=.*\p{Lu})[\p{L}\p{N}_-]+$/u', $token) === 1;
-    }
-
-    private static function looksGibberishToken(string $token): bool
-    {
-        $word = mb_strtolower($token, 'UTF-8');
-        if (mb_strlen($word, 'UTF-8') < 4) {
-            return false;
-        }
-        if (preg_match('/[^aeiouáàâãéêíóôõúü]{5,}/u', $word) === 1) {
-            return true;
-        }
-        if (preg_match('/(.)\1{3,}/u', $word) === 1) {
-            return true;
-        }
-        $vowels = preg_match_all('/[aeiouáàâãéêíóôõúü]/u', $word);
-        $letters = preg_match_all('/\p{L}/u', $word);
-        return $letters >= 7 && $vowels <= 1;
     }
 
     /** @param string[] $words @return string[] */
