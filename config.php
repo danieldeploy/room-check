@@ -67,7 +67,8 @@ return [
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
     ],
     'translation' => [
-        // MyMemory is translation-only. Language verification is local.
+        // MyMemory is translation-only. All language resources are bundled and
+        // generated from pinned external sources; no manual lexical config exists.
         'enabled' => (bool) ($localConfig['translation']['enabled'] ?? true),
         'endpoint' => $localConfig['translation']['endpoint']
             ?? getenv('MYMEMORY_TRANSLATION_ENDPOINT')
@@ -76,13 +77,5 @@ return [
             ?? getenv('MYMEMORY_CONTACT_EMAIL')
             ?: '',
         'timeout_seconds' => (int) ($localConfig['translation']['timeout_seconds'] ?? 12),
-        'lexical' => [
-            'pt_path' => $localConfig['translation']['lexical']['pt_path']
-                ?? __DIR__ . '/resources/lexicon/pt_PT_core.txt',
-            'en_path' => $localConfig['translation']['lexical']['en_path']
-                ?? __DIR__ . '/resources/lexicon/en_GB_core.txt',
-            'technical_path' => $localConfig['translation']['lexical']['technical_path']
-                ?? __DIR__ . '/resources/lexicon/technical_neutral.txt',
-        ],
     ],
 ];
