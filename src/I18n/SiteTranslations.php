@@ -254,6 +254,7 @@ final class SiteTranslations
             'Área' => 'Area',
             'Áreas da gestão dos espaços' => 'Space management areas',
             'Listas' => 'Lists',
+            'Editar' => 'Edit',
             'Escolha a lista.' => 'Choose the list.',
             'Escolha uma lista válida.' => 'Choose a valid list.',
             'Área criada e adicionada ao menu.' => 'Area created and added to the menu.',
