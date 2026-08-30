@@ -15,13 +15,15 @@ $immediateGuard = file_get_contents($root . '/assets/immediate-edit-decision.js'
 $feedback = file_get_contents($root . '/assets/validation-feedback.js');
 $css = file_get_contents($root . '/assets/app.css');
 $rooms = file_get_contents($root . '/rooms.php');
+$itemLists = file_get_contents($root . '/item-lists.php');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
 $validator = file_get_contents($root . '/translation-validate.php');
 $translator = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 
 assertInvalidEditUx(
     is_string($app) && is_string($immediateGuard) && is_string($feedback) && is_string($css)
-        && is_string($rooms) && is_string($sessionBar) && is_string($validator) && is_string($translator),
+        && is_string($rooms) && is_string($itemLists) && is_string($sessionBar)
+        && is_string($validator) && is_string($translator),
     'UX sources are readable'
 );
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid without changing its contents');
@@ -50,15 +52,40 @@ assertInvalidEditUx(
 );
 assertInvalidEditUx(
     str_contains($immediateGuard, "document.addEventListener('change', async")
-        && str_contains($immediateGuard, 'const decision = await askDecision();')
+        && str_contains($immediateGuard, 'const decision = await askDecision(blocked);')
         && str_contains($immediateGuard, "decision === 'correct'"),
     'a changed context asks the user before the selected list/context is allowed to continue'
+);
+assertInvalidEditUx(
+    str_contains($immediateGuard, 'const hasConfirmedError = textareas.some(hasFailedValidation);')
+        && str_contains($immediateGuard, 'config.languageDecisionUnsavedMessage')
+        && str_contains($immediateGuard, 'config.languageDecisionContinue'),
+    'decision copy distinguishes a confirmed red error from an edit that has not yet been validated'
+);
+assertInvalidEditUx(
+    str_contains($rooms, "'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?'")
+        && str_contains($rooms, "'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'")
+        && str_contains($rooms, "'Tem uma edição não guardada. Quer continuar a editar ou anular a edição?'")
+        && str_contains($rooms, "'There is an unsaved edit. Do you want to continue editing or cancel the edit?'")
+        && str_contains($rooms, "'languageDecisionContinue'"),
+    'room decision messages describe the active language for confirmed errors and do not diagnose unvalidated edits'
+);
+assertInvalidEditUx(
+    str_contains($itemLists, "'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?'")
+        && str_contains($itemLists, "'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'")
+        && !str_contains($itemLists, 'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?'),
+    'item-list editor no longer uses the inverted language error message'
+);
+assertInvalidEditUx(
+    !str_contains($rooms, 'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?')
+        && !str_contains($rooms, 'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?'),
+    'obsolete inverted room decision copy is removed'
 );
 assertInvalidEditUx(
     str_contains($immediateGuard, 'config.languageDecisionMessage')
         && str_contains($immediateGuard, 'config.languageDecisionCorrect')
         && str_contains($immediateGuard, 'config.languageDecisionCancel'),
-    'immediate decision uses the same server-localized PT/EN dialog text'
+    'immediate decision uses server-localized PT/EN dialog text'
 );
 assertInvalidEditUx(
     strpos($sessionBar, 'immediate-edit-decision.js') !== false
