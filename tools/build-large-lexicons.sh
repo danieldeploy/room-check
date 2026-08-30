@@ -13,6 +13,7 @@ ONOMAVERSE_TAG="v2026.06"
 ONOMAVERSE_BASE_URL="https://github.com/onomaverse/datasets/releases/download/${ONOMAVERSE_TAG}"
 ONOMAVERSE_GIVEN_SHA256="42d889e8c7eab75907aba9b3c4d3c40074439c5b04e7e4eced301411cb6ea848"
 ONOMAVERSE_SURNAME_SHA256="426aab8f6e308047576aa08b4f328ec0680b06251a2a1e2344f2136578929e60"
+ONOMAVERSE_EQUIVALENCE_SHA256="5f367f05331bf0a27c1cbb42ad6c5342241287f2b3acb3bc7b9df0508db40f14"
 CLDR_REF="29e2b5461f7347f4e5605fd3396a55a7a7cb7f4e"
 CLDR_BASE_URL="https://raw.githubusercontent.com/unicode-org/cldr-json/${CLDR_REF}"
 
@@ -43,8 +44,12 @@ curl --fail --silent --show-error --location \
 curl --fail --silent --show-error --location \
   "$ONOMAVERSE_BASE_URL/surname-frequency.csv" \
   -o "$TMP/surname-frequency.csv"
+curl --fail --silent --show-error --location \
+  "$ONOMAVERSE_BASE_URL/name-equivalence.csv" \
+  -o "$TMP/name-equivalence.csv"
 echo "$ONOMAVERSE_GIVEN_SHA256  $TMP/given-name-frequency.csv" | sha256sum -c -
 echo "$ONOMAVERSE_SURNAME_SHA256  $TMP/surname-frequency.csv" | sha256sum -c -
+echo "$ONOMAVERSE_EQUIVALENCE_SHA256  $TMP/name-equivalence.csv" | sha256sum -c -
 
 curl --fail --silent --show-error --location \
   "$CLDR_BASE_URL/cldr-json/cldr-localenames-full/main/en/territories.json" \
@@ -129,6 +134,14 @@ def build_pt() -> set[str]:
     return words
 
 
+def add_person_name(names: set[str], value: str) -> None:
+    exact = normalize_exact(value)
+    if valid_token(exact):
+        # Stored normalized because runtime requires both sourced membership and
+        # normal person-name capitalization. Capitalization alone is never proof.
+        names.add(normalize(exact))
+
+
 def build_people() -> set[str]:
     names: set[str] = set()
 
@@ -136,9 +149,7 @@ def build_people() -> set[str]:
         raw = raw.strip()
         if not raw or raw.startswith("#"):
             continue
-        exact = normalize_exact(raw)
-        if valid_token(exact):
-            names.add(exact)
+        add_person_name(names, raw)
 
     for csv_name in ("given-name-frequency.csv", "surname-frequency.csv"):
         with (tmp / csv_name).open("r", encoding="utf-8", newline="") as handle:
@@ -146,9 +157,17 @@ def build_people() -> set[str]:
             if "name" not in (reader.fieldnames or []):
                 raise RuntimeError(f"Onomaverse file {csv_name} has no name column")
             for row in reader:
-                exact = normalize_exact(row.get("name", ""))
-                if valid_token(exact):
-                    names.add(exact)
+                add_person_name(names, row.get("name", ""))
+
+    with (tmp / "name-equivalence.csv").open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        required = {"name", "related_name"}
+        if not required.issubset(set(reader.fieldnames or [])):
+            raise RuntimeError("Onomaverse name-equivalence file has unexpected columns")
+        for row in reader:
+            add_person_name(names, row.get("name", ""))
+            add_person_name(names, row.get("related_name", ""))
+
     return names
 
 
@@ -234,7 +253,7 @@ Sources are pinned/reproducible:
   I / I'm / I'd / I'll / I've are not lost by lowercase lookup.
 - Portuguese (PT-PT): CSpell/Hunspell Portuguese-European dictionary from the
   same pinned CSpell commit, expanded with hunspell-reader 10.0.1.
-- Person names: Onomaverse ${ONOMAVERSE_TAG} given-name and surname frequency
+- Person names: Onomaverse ${ONOMAVERSE_TAG} frequency and name-equivalence
   datasets (CC BY 4.0), supplemented by CSpell's maintained people-names source.
   Names data from Onomaverse (https://onomaverse.com/datasets), licensed CC BY 4.0.
 - Country names: Unicode CLDR JSON commit ${CLDR_REF}, locale data for en and
@@ -251,27 +270,36 @@ Rebuild with:
     bash tools/build-large-lexicons.sh
 EOF
 
-grep -Fxq "well" "$OUT/en_GB.txt"
-grep -Fxq "beautiful" "$OUT/en_GB.txt"
-grep -Fxq "necessary" "$OUT/en_GB.txt"
-grep -Fxq "I" "$OUT/en_GB_case_sensitive.txt"
-grep -Fxq "I'm" "$OUT/en_GB_case_sensitive.txt"
-grep -Fxq "I'd" "$OUT/en_GB_case_sensitive.txt"
-grep -Fxq "I'll" "$OUT/en_GB_case_sensitive.txt"
-grep -Fxq "I've" "$OUT/en_GB_case_sensitive.txt"
+require_line() {
+  local expected="$1" file="$2" label="$3"
+  if ! grep -Fxiq "$expected" "$file"; then
+    echo "ERROR: missing validated $label: $expected" >&2
+    exit 1
+  fi
+  echo "OK: validated $label: $expected"
+}
+
+require_line "well" "$OUT/en_GB.txt" "English word"
+require_line "beautiful" "$OUT/en_GB.txt" "English word"
+require_line "necessary" "$OUT/en_GB.txt" "English word"
+require_line "I" "$OUT/en_GB_case_sensitive.txt" "keep-case English form"
+require_line "I'm" "$OUT/en_GB_case_sensitive.txt" "keep-case English form"
+require_line "I'd" "$OUT/en_GB_case_sensitive.txt" "keep-case English form"
+require_line "I'll" "$OUT/en_GB_case_sensitive.txt" "keep-case English form"
+require_line "I've" "$OUT/en_GB_case_sensitive.txt" "keep-case English form"
 if grep -Fxq "i" "$OUT/en_GB.txt"; then
   echo "ERROR: case-sensitive English I was flattened into the ordinary lexicon" >&2
   exit 1
 fi
-grep -Fxq "cadeira" "$OUT/pt_PT.txt"
-grep -Fxq "coração" "$OUT/pt_PT.txt"
-grep -Fxq "toalha" "$OUT/pt_PT.txt"
-grep -Fxq "Michael" "$OUT/person_neutral.txt"
-grep -Fxq "Ranjana" "$OUT/person_neutral.txt"
-grep -Fxq "spain" "$OUT/country_en.txt"
-grep -Fxq "romania" "$OUT/country_en.txt"
-grep -Fxq "espanha" "$OUT/country_pt.txt"
-grep -Fxq "roménia" "$OUT/country_pt.txt"
+require_line "cadeira" "$OUT/pt_PT.txt" "Portuguese word"
+require_line "coração" "$OUT/pt_PT.txt" "Portuguese word"
+require_line "toalha" "$OUT/pt_PT.txt" "Portuguese word"
+require_line "Michael" "$OUT/person_neutral.txt" "person name"
+require_line "Ranjana" "$OUT/person_neutral.txt" "person name"
+require_line "spain" "$OUT/country_en.txt" "English country"
+require_line "romania" "$OUT/country_en.txt" "English country"
+require_line "espanha" "$OUT/country_pt.txt" "Portuguese country"
+require_line "roménia" "$OUT/country_pt.txt" "Portuguese country"
 if grep -Fxiq "Spania" "$OUT/person_neutral.txt" || \
    grep -Fxiq "Spania" "$OUT/country_en.txt" || \
    grep -Fxiq "Spania" "$OUT/country_pt.txt"; then
