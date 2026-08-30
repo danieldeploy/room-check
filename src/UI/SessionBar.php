@@ -23,6 +23,7 @@ final class SessionBar
         $role = (string) ($user['role'] ?? '');
         $roleLabel = Auth::ROLES[$role] ?? $role;
         $translationFeedback = TranslationFeedback::messages();
+        $immediateEditDecisionVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/immediate-edit-decision.js');
         $validationFeedbackVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/validation-feedback.js');
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
@@ -49,6 +50,7 @@ final class SessionBar
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/readonly-textarea.css') ?>">
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/bilingual-textareas.css') ?>">
         <script>window.ROOM_TRANSLATION_FEEDBACK = <?= json_encode($translationFeedback, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+        <script src="<?= self::escape($prefix . 'assets/immediate-edit-decision.js?v=' . $immediateEditDecisionVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js?v=' . $validationFeedbackVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/bilingual-textareas.js') ?>" data-bilingual-api="<?= self::escape($prefix . 'api.php') ?>"></script>
         <?php
