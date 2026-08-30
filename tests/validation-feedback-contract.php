@@ -14,13 +14,14 @@ function assertValidationFeedback(bool $condition, string $message): void
 
 $root = dirname(__DIR__);
 $feedbackJs = file_get_contents($root . '/assets/validation-feedback.js');
+$appJs = file_get_contents($root . '/assets/app.js');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
 $feedbackI18n = file_get_contents($root . '/src/I18n/TranslationFeedback.php');
 $translator = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 $validator = file_get_contents($root . '/translation-validate.php');
 
 assertValidationFeedback(
-    is_string($feedbackJs) && is_string($sessionBar) && is_string($feedbackI18n)
+    is_string($feedbackJs) && is_string($appJs) && is_string($sessionBar) && is_string($feedbackI18n)
         && is_string($translator) && is_string($validator),
     'translation feedback sources are readable'
 );
@@ -79,6 +80,48 @@ assertValidationFeedback(
 );
 assertValidationFeedback(!str_contains($feedbackJs, 'sourceConclusion'), 'browser does not reclassify source language');
 assertValidationFeedback(!str_contains($feedbackJs, 'translationConclusion'), 'browser does not reclassify translated language');
+
+// Every control/action that can replace or re-project the current checklist must
+// use the same invalid-edit decision guard.
+foreach (['#propertySelect', '#roomSelect', '#listSelect', '#intervalSelect', '#employeeSelect', '#assignmentDate'] as $selector) {
+    assertValidationFeedback(
+        str_contains($feedbackJs, $selector),
+        "{$selector} is covered by the list-context navigation guard"
+    );
+}
+foreach (['propertySelect', 'roomSelect', 'listSelect', 'intervalSelect', 'employeeSelect', 'assignmentDate'] as $controlName) {
+    assertValidationFeedback(
+        str_contains($appJs, $controlName . '.addEventListener')
+            || str_contains($appJs, 'if (' . $controlName . ') ' . $controlName . '.addEventListener'),
+        "{$controlName} is a live checklist/context control"
+    );
+}
+assertValidationFeedback(
+    str_contains($feedbackJs, 'const blockingTextareas')
+        && str_contains($feedbackJs, 'hasUnsavedValue(textarea)')
+        && str_contains($feedbackJs, "textarea.dataset.languageSaveFailed === '1'")
+        && str_contains($feedbackJs, "textarea.classList.contains('language-invalid')"),
+    'navigation blocks on unsaved text or an already-visible red validation error'
+);
+assertValidationFeedback(
+    str_contains($feedbackJs, '#createInterval, #saveInterval, #deleteInterval'),
+    'interval actions that can replace visible textarea state use the same guard'
+);
+assertValidationFeedback(
+    str_contains($feedbackJs, "event.target.closest?.('.room-picker-option')")
+        && str_contains($feedbackJs, "document.querySelector('#roomSelect')"),
+    'custom mobile room picker preserves the old room before dispatching its synthetic change'
+);
+assertValidationFeedback(
+    str_contains($feedbackJs, "window.addEventListener('beforeunload'")
+        && str_contains($feedbackJs, "event.returnValue = ''"),
+    'back, refresh, close and form navigation cannot silently discard a blocking edit'
+);
+assertValidationFeedback(
+    strpos($feedbackJs, 'if (dirty.some(hasFailedValidation)) return false;')
+        < strpos($feedbackJs, "textarea.dataset.languageNeedsValidation !== '1' && !hasUnsavedValue(textarea)"),
+    'a red save failure wins over the navigation completion check'
+);
 
 assertValidationFeedback(str_contains($feedbackJs, 'flushPendingSaves'), 'navigation flushes the real blur save before leaving');
 assertValidationFeedback(str_contains($feedbackJs, "dispatchEvent(new Event('blur'))"), 'navigation uses the same real save path');

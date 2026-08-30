@@ -25,10 +25,11 @@ assertInvalidEditUx(str_contains($feedback, 'flushPendingSaves'), 'pending text 
 assertInvalidEditUx(str_contains($feedback, "dispatchEvent(new Event('blur'))"), 'context navigation reuses the same real save path');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionMessage'), 'Correct/Cancel dialog remains localized');
 assertInvalidEditUx(str_contains($feedback, 'config.languageDecisionCorrect') && str_contains($feedback, 'config.languageDecisionCancel'), 'Correct/Cancel labels remain localized');
-assertInvalidEditUx(str_contains($feedback, "#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate"), 'context changes remain guarded');
-assertInvalidEditUx(str_contains($feedback, "#createInterval, #deleteInterval"), 'interval actions remain guarded');
+assertInvalidEditUx(str_contains($feedback, "#propertySelect, #roomSelect, #listSelect, #intervalSelect, #employeeSelect, #assignmentDate"), 'all checklist context selections remain guarded');
+assertInvalidEditUx(str_contains($feedback, "#createInterval, #saveInterval, #deleteInterval"), 'all interval actions that can replace visible checklist state remain guarded');
 assertInvalidEditUx(str_contains($feedback, "a[href]"), 'page navigation remains guarded');
-assertInvalidEditUx(str_contains($feedback, 'restorePendingEdits'), 'Cancel edit restores last server-confirmed content');
+assertInvalidEditUx(str_contains($feedback, 'restoreBlockingEdits'), 'Cancel edit restores last server-confirmed content for pending or failed edits');
+assertInvalidEditUx(str_contains($feedback, 'hasFailedValidation') && str_contains($feedback, 'hasBlockingEdits'), 'visible red validation failures remain navigation blockers');
 assertInvalidEditUx(!str_contains($feedback, 'language-highlight-layer'), 'duplicate absolute text layer is removed from feedback JavaScript');
 assertInvalidEditUx(!str_contains($feedback, 'appendHighlightedText'), 'word-overlay renderer is removed');
 assertInvalidEditUx(!str_contains($feedback, 'invalidWords'), 'word-level validation payload is not used by the UI');
