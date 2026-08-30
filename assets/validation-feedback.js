@@ -110,6 +110,7 @@
         window.clearTimeout(feedbackTimers.get(feedback));
         feedbackTimers.delete(feedback);
         feedback.textContent = '';
+        feedback.removeAttribute('data-i18n-skip');
         feedback.style.color = '';
         feedback.style.height = '';
         feedback.style.minHeight = '';
@@ -122,6 +123,10 @@
         const feedback = feedbackForRow(row);
         if (!feedback || !message) return;
         window.clearTimeout(feedbackTimers.get(feedback));
+        // This text already comes localized from the server. Protect it from the
+        // page-level DOM translator so offending source words remain literal
+        // (for example, EN UI must display “Junho”, not translate it to “June”).
+        feedback.setAttribute('data-i18n-skip', '');
         feedback.textContent = String(message);
         feedback.style.color = kind === 'success' ? 'var(--ok)' : 'var(--wrong)';
         feedback.style.height = 'auto';
@@ -137,6 +142,7 @@
             feedbackTimers.set(feedback, window.setTimeout(() => {
                 feedback.style.opacity = '';
                 feedback.classList.remove('is-visible');
+                feedback.removeAttribute('data-i18n-skip');
                 feedbackTimers.delete(feedback);
             }, 6000));
         }

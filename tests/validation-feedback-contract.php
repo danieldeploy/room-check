@@ -34,6 +34,12 @@ assertValidationFeedback(
         && str_contains($feedbackJs, "feedback.style.opacity = ''"),
     'translation feedback owns its visible lifetime even when generic save feedback removes the shared CSS class'
 );
+assertValidationFeedback(
+    str_contains($feedbackJs, "feedback.setAttribute('data-i18n-skip', '')")
+        && str_contains($feedbackJs, "feedback.removeAttribute('data-i18n-skip')")
+        && strpos($feedbackJs, "feedback.setAttribute('data-i18n-skip', '')") < strpos($feedbackJs, 'feedback.textContent = String(message)'),
+    'server feedback is protected from DOM translation before its literal message is inserted'
+);
 
 // Persistent feedback is attached to the canonical server field key before the
 // request leaves the browser. This remains stable even when the visible heading
