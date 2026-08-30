@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/src/UI/PortalBrand.php';
+require_once __DIR__ . '/src/Checklists/VerificationCategoryRepository.php';
 
 const PROPERTIES = [
     'City Center Guest House' => 6,
@@ -70,6 +71,9 @@ function database(): PDO
         )->fetchAll();
         foreach ($nameRows as $nameRow) {
             Translator::registerDynamic((string) $nameRow['name_pt'], (string) $nameRow['name_en']);
+        }
+        foreach (VerificationCategoryRepository::all($pdo) as $category) {
+            Translator::registerDynamic((string) $category['name'], (string) $category['name_en']);
         }
     }
 
@@ -328,13 +332,20 @@ function validateSelection(string $property, int $room): void
 
 function itemLists(PDO $pdo): array
 {
+    $categoryOrder = VerificationCategoryRepository::storageAvailable($pdo)
+        ? 'COALESCE(category.sort_order, 32767), category.id, '
+        : '';
+    $categoryJoin = VerificationCategoryRepository::storageAvailable($pdo)
+        ? ' LEFT JOIN verification_categories category ON category.slug = list_row.area '
+        : '';
     $rows = $pdo->query(
         'SELECT list_row.id, list_row.name, list_row.name_en, list_row.area, list_row.is_system,
                 item.name AS item_name, item.name_en AS item_name_en,
                 item.default_instructions, item.default_instructions_en
          FROM item_lists list_row
+         ' . $categoryJoin . '
          LEFT JOIN item_list_items item ON item.list_id = list_row.id
-         ORDER BY list_row.is_system DESC, list_row.name, item.sort_order, item.id'
+         ORDER BY ' . $categoryOrder . 'list_row.is_system DESC, list_row.name, item.sort_order, item.id'
     )->fetchAll();
     $lists = [];
     foreach ($rows as $row) {
@@ -361,6 +372,11 @@ function itemLists(PDO $pdo): array
         }
     }
     return array_values($lists);
+}
+
+function verificationCategories(PDO $pdo, bool $withUsage = false): array
+{
+    return VerificationCategoryRepository::all($pdo, $withUsage);
 }
 
 function itemList(PDO $pdo, int $listId): array

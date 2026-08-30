@@ -3,7 +3,7 @@
 Aplicação PHP/MySQL para `check.welcomehostel.pt`. Depois do login, apresenta apenas os módulos autorizados para o utilizador:
 
 1. configuração da automação Cloudbeds → ZKAccess;
-2. gestão dos quartos;
+2. gestão das categorias e listas de verificação dos espaços;
 3. distribuição de itens a verificar pelas Empregadas de Andares;
 4. configuração/estado da campainha My2N.
 
@@ -20,7 +20,7 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 1. Crie a base de dados e um utilizador com os privilégios necessários.
 2. Numa instalação nova, importe `database.sql` no phpMyAdmin.
-3. Numa instalação existente, importe por ordem as migrações que ainda faltarem: `002_my2n.sql`, `003_auth.sql`, `004_portal_permissions.sql`, `005_my2n_credentials_permission.sql`, `006_room_item_assignments.sql`, `007_room_item_assignment_dates.sql`, `008_room_verification_intervals.sql`, `009_user_contacts.sql` e `010_assignment_instructions.sql`.
+3. Numa instalação existente, importe por ordem todas as migrações que ainda faltarem. A gestão dinâmica das categorias requer `022_verification_categories.sql`.
 4. Copie `config.local.example.php` para `config.local.php` em `$HOME/public_html/check` e configure a base de dados.
 5. Confirme que `check.welcomehostel.pt` usa `/public_html/check` como Document Root e Force HTTPS Redirect.
 6. Defina temporariamente `auth.setup_key`, abra `/setup.php`, crie o primeiro Gerente e remova imediatamente a chave.
@@ -49,8 +49,9 @@ O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser
 
 - `/login.php` é a entrada pública da aplicação.
 - `/index.php` é o portal autenticado.
-- `/rooms.php` preserva a gestão de quartos existente.
-- `/rooms.php` permite ao Gerente e à Governanta criar intervalos e distribuir verificações dentro da gestão dos quartos.
+- `/rooms.php` apresenta as categorias e listas de verificação dos espaços.
+- `/rooms.php` permite ao Gerente e à Governanta criar intervalos e distribuir verificações.
+- `/verification-categories.php` permite criar, editar e apagar as categorias que aparecem no menu da gestão dos espaços.
 - `/tasks.php` apresenta a cada Empregada de Andares apenas os seus itens pendentes.
 - `/admin/zkaccess.php` apresenta os parâmetros e o estado da automação ZKAccess.
 - `/admin/my2n.php` configura a ligação e as associações entre todas as campainhas e telemóveis do Site My2N.
@@ -84,12 +85,15 @@ Matriz padrão:
 | Gerir utilizadores | Sim | Não | Não | Não |
 | Gerir permissões | Sim | Não | Não | Não |
 | Consultar auditoria | Sim | Não | Não | Não |
+| Gerir categorias de listas | Sim | Não | Não | Não |
 
 O acesso do Gerente a `users.manage`, `permissions.manage` e `my2n.credentials` é obrigatório, para impedir que todos os administradores fiquem bloqueados. A permissão `my2n.credentials` pode ser atribuída adicionalmente à Governanta ou ao Técnico. Permissões de alteração incluem automaticamente a consulta do respetivo módulo. Se a tabela `role_permissions` ainda não existir, a aplicação usa a matriz padrão em código.
 
 ## Gestão dos quartos
 
 Cada combinação de alojamento/quarto mantém o problema, estado (`Problema`, `OK` ou vazio) e data de atualização de cada item. Internamente, a API preserva os valores `wrong` e `ok` para manter compatibilidade com os dados existentes. O City Center Guest House tem quartos 1–6 e o Welcome Guest House 1–15. A API exige `room_check.view` para leitura e `room_check.edit` para gravação.
+
+As categorias apresentadas no menu — por exemplo, Quartos e Corredores — são persistentes e bilingues. A permissão `verification_categories.manage` permite criá-las e alterar o nome. Uma categoria com listas ou itens sem atribuições pode ser apagada após confirmação; a operação apaga o respetivo conteúdo numa transação. Se existir uma atribuição, concluída ou pendente, ou um lembrete associado, a eliminação é bloqueada no servidor.
 
 ## Atribuição de verificações
 

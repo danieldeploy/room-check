@@ -5,6 +5,7 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/UI/SessionBar.php';
+require_once __DIR__ . '/src/UI/VerificationCategoryNavigation.php';
 try {
     $pdo = database();
     $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_VIEW);
@@ -19,10 +20,15 @@ try {
 }
 $canEdit = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_ROOM_CHECK_EDIT);
 $canAssign = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN);
-$navigationAreas = ['rooms', 'shared_bathrooms', 'corridors', 'kitchens', 'terraces'];
-$navigationArea = (string) ($_GET['area'] ?? 'rooms');
+$canManageCategories = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_VERIFICATION_CATEGORIES_MANAGE);
+$verificationCategories = verificationCategories($pdo);
+$navigationAreas = array_map(static fn(array $category): string => (string) $category['slug'], $verificationCategories);
+$defaultNavigationArea = in_array('rooms', $navigationAreas, true)
+    ? 'rooms'
+    : (string) ($navigationAreas[0] ?? 'rooms');
+$navigationArea = (string) ($_GET['area'] ?? $defaultNavigationArea);
 if (!in_array($navigationArea, $navigationAreas, true)) {
-    $navigationArea = 'rooms';
+    $navigationArea = $defaultNavigationArea;
 }
 $lists = array_values(array_filter(
     itemLists($pdo),
@@ -117,6 +123,12 @@ try {
             'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct'),
             'languageDecisionContinue' => SiteTranslations::text('Continuar a editar', 'Continue editing'),
             'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit'),
+            'deleteIntervalMessage' => SiteTranslations::text(
+                'Apagar o intervalo “{name}”? Todas as atribuições deste intervalo também serão apagadas. Esta ação não pode ser anulada.',
+                'Delete the “{name}” interval? All assignments in this interval will also be deleted. This action cannot be undone.'
+            ),
+            'dialogDeleteLabel' => SiteTranslations::text('Apagar', 'Delete'),
+            'dialogCancelLabel' => SiteTranslations::text('Cancelar', 'Cancel'),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
             'initialRoom' => $initialRoom,
@@ -130,14 +142,12 @@ try {
         <header class="hero compact-page-header">
             <div class="compact-page-heading">
                 <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
-                <nav class="module-tabs" aria-label="Áreas da gestão dos espaços">
-                    <a class="<?= $navigationArea === 'rooms' ? 'active' : '' ?>" href="rooms.php" <?= $navigationArea === 'rooms' ? 'aria-current="page"' : '' ?>>QUARTOS</a>
-                    <a class="<?= $navigationArea === 'shared_bathrooms' ? 'active' : '' ?>" href="rooms.php?area=shared_bathrooms" <?= $navigationArea === 'shared_bathrooms' ? 'aria-current="page"' : '' ?>>CASAS DE BANHO COMUNS</a>
-                    <a class="<?= $navigationArea === 'corridors' ? 'active' : '' ?>" href="rooms.php?area=corridors" <?= $navigationArea === 'corridors' ? 'aria-current="page"' : '' ?>>CORREDORES</a>
-                    <a class="<?= $navigationArea === 'kitchens' ? 'active' : '' ?>" href="rooms.php?area=kitchens" <?= $navigationArea === 'kitchens' ? 'aria-current="page"' : '' ?>>COZINHAS</a>
-                    <a class="<?= $navigationArea === 'terraces' ? 'active' : '' ?>" href="rooms.php?area=terraces" <?= $navigationArea === 'terraces' ? 'aria-current="page"' : '' ?>>TERRAÇOS</a>
-                    <?php if ($canAssign): ?><a href="item-lists.php">LISTAS DE ITENS</a><?php endif; ?>
-                </nav>
+                <?php VerificationCategoryNavigation::render(
+                    $verificationCategories,
+                    'category:' . $navigationArea,
+                    $canAssign,
+                    $canManageCategories
+                ); ?>
             </div>
             <div id="saveStatus" class="status-announcer" role="status" aria-live="polite">A carregar…</div>
         </header>

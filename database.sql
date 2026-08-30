@@ -17,6 +17,30 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS verification_categories (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    slug VARCHAR(32) NOT NULL,
+    name VARCHAR(80) NOT NULL,
+    name_en VARCHAR(80) NULL,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    created_by_user_id BIGINT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_verification_categories_slug (slug),
+    UNIQUE KEY uq_verification_categories_name (name),
+    INDEX idx_verification_categories_order (sort_order, id),
+    CONSTRAINT fk_verification_category_creator
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO verification_categories (slug, name, name_en, sort_order) VALUES
+    ('rooms', 'Quartos', 'Rooms', 10),
+    ('shared_bathrooms', 'Casas de banho comuns', 'Shared bathrooms', 20),
+    ('corridors', 'Corredores', 'Corridors', 30),
+    ('kitchens', 'Cozinhas', 'Kitchens', 40),
+    ('terraces', 'Terraços', 'Terraces', 50);
+
 CREATE TABLE IF NOT EXISTS item_lists (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(120) NOT NULL,
@@ -168,6 +192,7 @@ INSERT IGNORE INTO role_permissions (role, permission) VALUES
     ('gerente', 'permissions.manage'),
     ('gerente', 'audit.view'),
     ('gerente', 'room_tasks.assign'),
+    ('gerente', 'verification_categories.manage'),
     ('governanta', 'room_check.view'),
     ('governanta', 'room_check.edit'),
     ('governanta', 'my2n.view'),

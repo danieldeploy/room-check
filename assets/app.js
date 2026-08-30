@@ -790,9 +790,16 @@
     const deleteVerificationInterval = async () => {
         const interval = selectedEditInterval();
         if (!interval) return;
-        const confirmed = window.confirm(
-            `Apagar o intervalo “${interval.name}”? Todas as atribuições deste intervalo também serão apagadas. Esta ação não pode ser anulada.`
-        );
+        const message = String(config.deleteIntervalMessage
+            || 'Apagar o intervalo “{name}”? Todas as atribuições deste intervalo também serão apagadas. Esta ação não pode ser anulada.')
+            .replace('{name}', interval.name);
+        const confirmed = window.AppDialog?.confirm
+            ? await window.AppDialog.confirm(message, {
+                confirmLabel: config.dialogDeleteLabel || 'Apagar',
+                cancelLabel: config.dialogCancelLabel || 'Cancelar',
+                destructive: true,
+            })
+            : window.confirm(message);
         if (!confirmed) return;
         saveInterval.disabled = true;
         deleteInterval.disabled = true;

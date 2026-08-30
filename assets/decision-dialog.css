@@ -1,3 +1,4 @@
+.app-dialog-overlay,
 .language-decision-overlay {
     position: fixed;
     inset: 0;
@@ -9,6 +10,7 @@
     backdrop-filter: blur(6px);
 }
 
+.app-dialog,
 .language-decision-dialog {
     width: min(460px, 100%);
     overflow: hidden;
@@ -19,6 +21,7 @@
     box-shadow: 0 24px 60px rgba(23, 49, 58, 0.24);
 }
 
+.app-dialog::before,
 .language-decision-dialog::before {
     content: "";
     display: block;
@@ -26,6 +29,7 @@
     background: linear-gradient(135deg, var(--brand-dark, #115e59), var(--brand, #0f766e));
 }
 
+.app-dialog p,
 .language-decision-dialog p {
     margin: 0;
     padding: 24px 24px 20px;
@@ -35,6 +39,7 @@
     line-height: 1.55;
 }
 
+.app-dialog-actions,
 .language-decision-actions {
     display: flex;
     justify-content: flex-end;
@@ -43,6 +48,7 @@
     flex-wrap: wrap;
 }
 
+.app-dialog-actions button,
 .language-decision-actions button {
     min-height: 42px;
     padding: 9px 18px;
@@ -53,6 +59,7 @@
     transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
 }
 
+.app-dialog-actions button:hover,
 .language-decision-actions button:hover {
     transform: translateY(-1px);
 }
@@ -77,21 +84,54 @@
     background: #feeceb;
 }
 
+.app-dialog-action.is-primary {
+    color: #fff;
+    background: var(--brand, #0f766e);
+}
+
+.app-dialog-action.is-primary:hover {
+    background: var(--brand-dark, #115e59);
+}
+
+.app-dialog-action.is-danger {
+    color: #fff;
+    background: var(--wrong, #b42318);
+}
+
+.app-dialog-action.is-danger:hover {
+    background: #912018;
+}
+
+.app-dialog-action.is-secondary {
+    color: var(--ink, #17313a);
+    border-color: var(--line, #dce6e5);
+    background: #f8fbfa;
+}
+
+.app-dialog-action.is-secondary:hover {
+    border-color: #a9bcba;
+    background: #eef5f4;
+}
+
 @media (max-width: 520px) {
+    .app-dialog-overlay,
     .language-decision-overlay {
         padding: 14px;
     }
 
+    .app-dialog p,
     .language-decision-dialog p {
         padding: 22px 20px 18px;
     }
 
+    .app-dialog-actions,
     .language-decision-actions {
         display: grid;
         grid-template-columns: 1fr;
         padding: 0 20px 20px;
     }
 
+    .app-dialog-actions button,
     .language-decision-actions button {
         width: 100%;
         min-height: 46px;

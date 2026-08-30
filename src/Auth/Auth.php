@@ -19,6 +19,7 @@ final class Auth
     public const PERMISSION_AUDIT_VIEW = 'audit.view';
     public const PERMISSION_TASK_ASSIGN = 'room_tasks.assign';
     public const PERMISSION_TASK_VIEW_OWN = 'room_tasks.view_own';
+    public const PERMISSION_VERIFICATION_CATEGORIES_MANAGE = 'verification_categories.manage';
 
     public const PERMISSIONS = [
         self::PERMISSION_ROOM_CHECK_VIEW => ['group' => 'Gestão de Quartos', 'label' => 'Consultar quartos'],
@@ -35,6 +36,7 @@ final class Auth
         self::PERMISSION_AUDIT_VIEW => ['group' => 'Administração', 'label' => 'Consultar auditoria'],
         self::PERMISSION_TASK_ASSIGN => ['group' => 'Tarefas dos Quartos', 'label' => 'Atribuir itens a verificar'],
         self::PERMISSION_TASK_VIEW_OWN => ['group' => 'Tarefas dos Quartos', 'label' => 'Consultar tarefas próprias'],
+        self::PERMISSION_VERIFICATION_CATEGORIES_MANAGE => ['group' => 'Gestão dos Espaços', 'label' => 'Gerir categorias de listas'],
     ];
 
     public const ROLES = [
@@ -59,6 +61,7 @@ final class Auth
             self::PERMISSION_MY2N_ROLLBACK,
             self::PERMISSION_AUDIT_VIEW,
             self::PERMISSION_TASK_ASSIGN,
+            self::PERMISSION_VERIFICATION_CATEGORIES_MANAGE,
         ],
         'governanta' => [
             self::PERMISSION_ROOM_CHECK_VIEW,
@@ -94,6 +97,7 @@ final class Auth
         self::PERMISSION_MY2N_CONTROL => [self::PERMISSION_MY2N_VIEW],
         self::PERMISSION_MY2N_SCHEDULE => [self::PERMISSION_MY2N_VIEW],
         self::PERMISSION_MY2N_ROLLBACK => [self::PERMISSION_MY2N_VIEW],
+        self::PERMISSION_VERIFICATION_CATEGORIES_MANAGE => [self::PERMISSION_ROOM_CHECK_VIEW],
     ];
 
     private static array $permissionCache = [];

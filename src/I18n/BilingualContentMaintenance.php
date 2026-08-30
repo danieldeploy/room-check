@@ -121,6 +121,15 @@ final class BilingualContentMaintenance
         $jobs = [
             [
                 'select' => self::legacyTextSelect(
+                    'verification_categories', 'id, name AS source_text, name_en AS target_text',
+                    'name', 'name_en', 'id'
+                ),
+                'update' => 'UPDATE verification_categories SET name_en = :translated WHERE id = :id',
+                'keys' => ['id' => 'id'],
+                'max_length' => 80,
+            ],
+            [
+                'select' => self::legacyTextSelect(
                     'room_verification_intervals', 'id, name AS source_text, name_en AS target_text',
                     'name', 'name_en', 'id'
                 ),
@@ -285,6 +294,7 @@ final class BilingualContentMaintenance
         }
 
         $queries = [
+            "SELECT name AS pt, name_en AS en FROM verification_categories",
             "SELECT name AS pt, name_en AS en FROM item_lists",
             "SELECT name AS pt, name_en AS en FROM item_list_items",
             "SELECT name AS pt, name_en AS en FROM room_verification_intervals",

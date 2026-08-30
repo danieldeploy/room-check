@@ -23,6 +23,7 @@ final class SessionBar
         $roleLabel = Auth::ROLES[$role] ?? $role;
         $translationFeedback = TranslationFeedback::messages();
         $decisionDialogCssVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/decision-dialog.css');
+        $appDialogVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/app-dialog.js');
         $immediateEditDecisionVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/immediate-edit-decision.js');
         $validationFeedbackVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/validation-feedback.js');
         ?>
@@ -51,6 +52,7 @@ final class SessionBar
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/bilingual-textareas.css') ?>">
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/decision-dialog.css?v=' . $decisionDialogCssVersion) ?>">
         <script>window.ROOM_TRANSLATION_FEEDBACK = <?= json_encode($translationFeedback, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+        <script src="<?= self::escape($prefix . 'assets/app-dialog.js?v=' . $appDialogVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/immediate-edit-decision.js?v=' . $immediateEditDecisionVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js?v=' . $validationFeedbackVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/bilingual-textareas.js') ?>" data-bilingual-api="<?= self::escape($prefix . 'api.php') ?>"></script>

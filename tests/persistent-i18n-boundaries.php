@@ -24,6 +24,8 @@ $itemLists = $read('item-lists.php');
 $rooms = $read('rooms.php');
 $api = $read('api.php');
 $tasks = $read('tasks.php');
+$categories = $read('verification-categories.php');
+$categoryRepository = $read('src/Checklists/VerificationCategoryRepository.php');
 
 // Editable bilingual content must use the active persisted language, never the
 // canonical PT column merely because it is the internal identity.
@@ -46,6 +48,16 @@ assertPersistentI18n(
 assertPersistentI18n(
     str_contains($rooms, '$interval[\'name\'] = Translator::localized('),
     'interval editor receives the active persisted language'
+);
+assertPersistentI18n(
+    str_contains($categories, "(string) \$category['display_name']")
+        && str_contains($categoryRepository, "'display_name' => Translator::localized("),
+    'category editor receives the active persisted language'
+);
+assertPersistentI18n(
+    str_contains($categoryRepository, 'ContentTranslator $translator')
+        && str_contains($categoryRepository, 'Translator::locale()'),
+    'category writes derive both persistent language versions from the active locale'
 );
 assertPersistentI18n(
     str_contains($api, "'problem' => Translator::localized("),

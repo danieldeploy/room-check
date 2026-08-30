@@ -5,6 +5,7 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/UI/SessionBar.php';
+require_once __DIR__ . '/src/UI/VerificationCategoryNavigation.php';
 require_once __DIR__ . '/src/I18n/ContentTranslator.php';
 
 try {
@@ -21,13 +22,11 @@ try {
 
 $message = null;
 $error = null;
-$verificationAreas = [
-    'rooms' => 'Quartos',
-    'shared_bathrooms' => 'Casas de banho comuns',
-    'corridors' => 'Corredores',
-    'kitchens' => 'Cozinhas',
-    'terraces' => 'Terraços',
-];
+$verificationCategories = verificationCategories($pdo);
+$verificationAreas = [];
+foreach ($verificationCategories as $category) {
+    $verificationAreas[(string) $category['slug']] = (string) $category['display_name'];
+}
 $listId = (int) ($_GET['list_id'] ?? 0);
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
@@ -230,6 +229,7 @@ if ($selectedList) {
 }
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
+$canManageCategories = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_VERIFICATION_CATEGORIES_MANAGE);
 function listEscape(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
 header('Cache-Control: no-store');
 ?>
@@ -256,14 +256,12 @@ header('Cache-Control: no-store');
     <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
     <header class="module-header">
         <p class="eyebrow">GESTÃO DOS ESPAÇOS</p>
-        <nav class="module-tabs" aria-label="Áreas da gestão dos espaços">
-            <a href="rooms.php">QUARTOS</a>
-            <a href="rooms.php?area=shared_bathrooms">CASAS DE BANHO COMUNS</a>
-            <a href="rooms.php?area=corridors">CORREDORES</a>
-            <a href="rooms.php?area=kitchens">COZINHAS</a>
-            <a href="rooms.php?area=terraces">TERRAÇOS</a>
-            <a class="active" href="item-lists.php" aria-current="page">LISTAS DE ITENS</a>
-        </nav>
+        <?php VerificationCategoryNavigation::render(
+            $verificationCategories,
+            'lists',
+            true,
+            $canManageCategories
+        ); ?>
     </header>
     <?php if ($message): ?><div class="notice success" role="status"><?= listEscape($message) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="notice error" role="alert"><?= listEscape($error) ?></div><?php endif; ?>
@@ -304,7 +302,12 @@ header('Cache-Control: no-store');
                 </small>
                 <div class="list-action-buttons">
                     <button type="submit" form="editListForm">Guardar lista</button>
-                    <form method="post" <?= $selectedList['isSystem'] ? '' : 'onsubmit="return confirm(\'Apagar esta lista?\')"' ?>>
+                    <form method="post" <?= $selectedList['isSystem'] ? '' : sprintf(
+                        'data-app-confirm="%s" data-app-confirm-label="%s" data-app-cancel-label="%s" data-app-destructive="1"',
+                        listEscape(SiteTranslations::text('Apagar esta lista?', 'Delete this list?')),
+                        listEscape(SiteTranslations::text('Apagar', 'Delete')),
+                        listEscape(SiteTranslations::text('Cancelar', 'Cancel'))
+                    ) ?>>
                         <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                         <input type="hidden" name="action" value="delete_list"><input type="hidden" name="list_id" value="<?= $listId ?>">
                         <button class="danger" type="submit" <?= $selectedList['isSystem'] ? 'disabled title="Lista base protegida"' : '' ?>>Apagar lista</button>
@@ -323,7 +326,11 @@ header('Cache-Control: no-store');
                     <textarea name="default_instructions" maxlength="5000" rows="1" placeholder="Descreva a verificação…" aria-label="Descrição da verificação: <?= listEscape((string) $item['name']) ?>" data-bilingual-textarea data-bilingual-autosave-action="save_item_list_instructions" data-list-id="<?= $listId ?>" data-item-id="<?= (int) $item['id'] ?>"><?= listEscape((string) $item['default_instructions']) ?></textarea>
                     <button type="submit">Guardar</button>
                 </form>
-                <form method="post" onsubmit="return confirm('Apagar este item?')">
+                <form method="post"
+                      data-app-confirm="<?= listEscape(SiteTranslations::text('Apagar este item?', 'Delete this item?')) ?>"
+                      data-app-confirm-label="<?= listEscape(SiteTranslations::text('Apagar', 'Delete')) ?>"
+                      data-app-cancel-label="<?= listEscape(SiteTranslations::text('Cancelar', 'Cancel')) ?>"
+                      data-app-destructive="1">
                     <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
                     <input type="hidden" name="action" value="delete_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>">
                     <button class="danger subtle" type="submit">Apagar</button>

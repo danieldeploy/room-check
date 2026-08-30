@@ -79,6 +79,12 @@ header('Cache-Control: no-store');
             'csrfToken' => Csrf::token(),
             'canControl' => $canControl,
             'writesEnabled' => ($config['my2n']['allow_writes'] ?? false) === true,
+            'saveConfirmMessage' => SiteTranslations::text(
+                'Guardar alterações em {count} campainha(s)?',
+                'Save changes to {count} bell(s)?'
+            ),
+            'saveConfirmLabel' => SiteTranslations::text('Guardar', 'Save'),
+            'cancelLabel' => SiteTranslations::text('Cancelar', 'Cancel'),
         ], JSON_UNESCAPED_SLASHES) ?>;
     </script>
     <script src="assets/my2n.js?v=<?= (int) filemtime(__DIR__ . '/assets/my2n.js') ?>" defer></script>

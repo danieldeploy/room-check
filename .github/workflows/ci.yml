@@ -29,6 +29,8 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check assets/app.js
+          node --check assets/app-dialog.js
+          node --check assets/verification-categories.js
           node --check assets/immediate-edit-decision.js
           node --check assets/validation-feedback.js
           node --check assets/bilingual-textareas.js
@@ -54,3 +56,4 @@ jobs:
           php tests/bilingual-textarea-transversal.php
           php tests/whatsapp-reminder-template.php
           php tests/user-preferred-name.php
+          php tests/verification-categories.php

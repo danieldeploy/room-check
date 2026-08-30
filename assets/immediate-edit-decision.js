@@ -65,6 +65,31 @@
     };
 
     const askDecision = (textareas = blockingTextareas()) => new Promise((resolve) => {
+        if (window.AppDialog?.choice) {
+            const hasConfirmedError = textareas.some(hasFailedValidation);
+            window.AppDialog.choice({
+                message: String(
+                    hasConfirmedError
+                        ? (config.languageDecisionMessage || 'The text could not be saved. Correct it or cancel the edit?')
+                        : (config.languageDecisionUnsavedMessage || 'There is an unsaved edit. Continue editing or cancel the edit?')
+                ),
+                actions: [
+                    {
+                        label: String(hasConfirmedError
+                            ? (config.languageDecisionCorrect || 'Correct')
+                            : (config.languageDecisionContinue || 'Continue editing')),
+                        value: 'correct',
+                        variant: 'primary',
+                    },
+                    {
+                        label: String(config.languageDecisionCancel || 'Cancel edit'),
+                        value: 'cancel',
+                        variant: 'danger',
+                    },
+                ],
+            }).then(resolve);
+            return;
+        }
         decisionDialog?.remove();
         const hasConfirmedError = textareas.some(hasFailedValidation);
         const overlay = document.createElement('div');

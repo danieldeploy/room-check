@@ -215,7 +215,15 @@
             status.dataset.kind = 'error';
             return;
         }
-        if (!window.confirm(`Guardar alterações em ${assignments.length} campainha(s)?`)) {
+        const confirmationMessage = String(config.saveConfirmMessage || 'Guardar alterações em {count} campainha(s)?')
+            .replace('{count}', String(assignments.length));
+        const confirmed = window.AppDialog?.confirm
+            ? await window.AppDialog.confirm(confirmationMessage, {
+                confirmLabel: config.saveConfirmLabel || 'Guardar',
+                cancelLabel: config.cancelLabel || 'Cancelar',
+            })
+            : window.confirm(confirmationMessage);
+        if (!confirmed) {
             return;
         }
 
