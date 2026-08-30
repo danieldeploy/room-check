@@ -64,8 +64,9 @@
         });
     };
 
-    const askDecision = () => new Promise((resolve) => {
+    const askDecision = (textareas = blockingTextareas()) => new Promise((resolve) => {
         decisionDialog?.remove();
+        const hasConfirmedError = textareas.some(hasFailedValidation);
         const overlay = document.createElement('div');
         overlay.className = 'language-decision-overlay';
         const panel = document.createElement('div');
@@ -74,14 +75,19 @@
         panel.setAttribute('aria-modal', 'true');
         const message = document.createElement('p');
         message.textContent = String(
-            config.languageDecisionMessage
-            || 'There are unfinished or invalid text changes. Continue editing or cancel the edit?'
+            hasConfirmedError
+                ? (config.languageDecisionMessage || 'The text could not be saved. Correct it or cancel the edit?')
+                : (config.languageDecisionUnsavedMessage || 'There is an unsaved edit. Continue editing or cancel the edit?')
         );
         const actions = document.createElement('div');
         actions.className = 'language-decision-actions';
         const correct = document.createElement('button');
         correct.type = 'button';
-        correct.textContent = String(config.languageDecisionCorrect || 'Correct');
+        correct.textContent = String(
+            hasConfirmedError
+                ? (config.languageDecisionCorrect || 'Correct')
+                : (config.languageDecisionContinue || 'Continue editing')
+        );
         const cancel = document.createElement('button');
         cancel.type = 'button';
         cancel.textContent = String(config.languageDecisionCancel || 'Cancel edit');
@@ -178,7 +184,7 @@
         event.preventDefault();
         event.stopImmediatePropagation();
 
-        const decision = await askDecision();
+        const decision = await askDecision(blocked);
         if (decision === 'correct') {
             (blockingTextareas()[0] || blocked[0])?.focus();
             return;
@@ -199,7 +205,7 @@
             contextIntent = null;
             event.preventDefault();
             event.stopImmediatePropagation();
-            const decision = await askDecision();
+            const decision = await askDecision(blocked);
             if (decision === 'correct') {
                 (blockingTextareas()[0] || blocked[0])?.focus();
                 return;
@@ -217,7 +223,7 @@
         contextIntent = null;
         event.preventDefault();
         event.stopImmediatePropagation();
-        const decision = await askDecision();
+        const decision = await askDecision(blocked);
         if (decision === 'correct') {
             (blockingTextareas()[0] || blocked[0])?.focus();
             return;
