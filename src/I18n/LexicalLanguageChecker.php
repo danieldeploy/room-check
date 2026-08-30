@@ -42,11 +42,13 @@ interface LexicalCoverageClassifier
 interface LexicalEntityClassifier
 {
     /**
-     * Compatibility interface for language-bearing country entities.
-     * Person recognition is exposed separately because it needs original case.
+     * Compatibility interface used by the translator. Countries are marked as
+     * country; sourced person names that do not collide with ordinary PT/EN
+     * words are marked as person. Source validation itself uses original-case
+     * person classification and is stricter.
      *
      * @param string[] $tokens Normalized lowercase lexical tokens.
-     * @return array<string, string> Map token => country.
+     * @return array<string, string> Map token => person|country.
      */
     public function classifyEntityTokens(array $tokens): array;
 }
@@ -139,8 +141,6 @@ final class LexicalLanguageChecker implements
         $results = [];
 
         foreach ($tokens as $token) {
-            // Country labels are explicitly language-bearing and take priority
-            // over other lexical ambiguity so Spain/Espanha translate normally.
             $isCountryPt = isset($countryPt[$token]);
             $isCountryEn = isset($countryEn[$token]);
             if ($isCountryPt || $isCountryEn) {
@@ -221,13 +221,39 @@ final class LexicalLanguageChecker implements
 
     public function classifyEntityTokens(array $tokens): array
     {
-        $countryPt = $this->countryMembership('pt');
-        $countryEn = $this->countryMembership('en');
-        $entities = [];
+        $normalized = [];
         foreach ($tokens as $rawToken) {
             $token = self::normalizeToken((string) $rawToken);
-            if ($token !== '' && (isset($countryPt[$token]) || isset($countryEn[$token]))) {
+            if ($token !== '') {
+                $normalized[$token] = true;
+            }
+        }
+        $tokens = array_keys($normalized);
+        if ($tokens === []) {
+            return [];
+        }
+
+        $countryPt = $this->countryMembership('pt');
+        $countryEn = $this->countryMembership('en');
+        [$personWord, $personIndex] = $this->personPaths();
+        $people = $this->requiredIndexedMembership($tokens, $personWord, $personIndex, 'person-name');
+        $ptMembership = $this->languageMembership($tokens, 'pt');
+        $enMembership = $this->languageMembership($tokens, 'en');
+
+        $entities = [];
+        foreach ($tokens as $token) {
+            if (isset($countryPt[$token]) || isset($countryEn[$token])) {
                 $entities[$token] = 'country';
+                continue;
+            }
+            // Translator compatibility: protect sourced names only when they do
+            // not also function as an ordinary PT/EN word. This avoids treating
+            // lowercase lexical words such as may/will as names after case was
+            // discarded by the compatibility interface.
+            if (isset($people[$token])
+                && !isset($ptMembership[$token])
+                && !isset($enMembership[$token])) {
+                $entities[$token] = 'person';
             }
         }
         return $entities;
@@ -248,9 +274,6 @@ final class LexicalLanguageChecker implements
         if ($token === '' || mb_strlen($token, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
             return false;
         }
-        // Require the first Unicode letter to be uppercase. Membership in the
-        // sourced corpus remains mandatory, so Ggjhrtgu does not pass merely
-        // because it has name-like capitalization.
         return preg_match('/^\p{Lu}[\p{L}’\'\-]*$/u', $token) === 1;
     }
 
