@@ -156,18 +156,6 @@
         event.stopPropagation();
     }, true);
 
-    // If the user opened a context control but did not actually change it, allow
-    // the normal blur-save later when that control itself loses focus.
-    document.addEventListener('focusout', (event) => {
-        if (!contextIntent || contextIntent.kind !== 'control' || event.target !== contextIntent.target) return;
-        contextIntent = null;
-        blockingTextareas().forEach((textarea) => {
-            if (hasUnsavedValue(textarea) || textarea.dataset.languageNeedsValidation === '1') {
-                textarea.dispatchEvent(new Event('blur'));
-            }
-        });
-    }, true);
-
     document.addEventListener('change', async (event) => {
         const control = event.target;
         if (!control?.matches?.(contextSelector)) return;
