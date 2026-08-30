@@ -54,7 +54,9 @@ curl --fail --silent --show-error --location \
   -o "$TMP/cldr-pt-territories.json"
 curl --fail --silent --show-error --location \
   "$CLDR_BASE_URL/LICENSE" \
-  -o "$LICENSES/unicode-cldr-LICENSE.txt"\nnpm install --global --silent hunspell-reader@10.0.1
+  -o "$LICENSES/unicode-cldr-LICENSE.txt"
+
+npm install --global --silent hunspell-reader@10.0.1
 hunspell-reader words "$TMP/Portuguese-European.dic" \
   -o "$TMP/pt-expanded.txt"
 
@@ -92,9 +94,6 @@ def valid_token(value: str) -> bool:
 
 
 def english_source_sets() -> tuple[set[str], set[str]]:
-    # CSpell's EN-GB source is keep-case. Lowercase source entries form the
-    # ordinary case-insensitive lexicon; all other exact spellings are preserved
-    # in a separate indexed file instead of being flattened.
     ordinary: set[str] = set()
     lowercase_source: set[str] = set()
     exact_candidates: dict[str, str] = {}
@@ -131,10 +130,6 @@ def build_pt() -> set[str]:
 
 
 def build_people() -> set[str]:
-    # People are sourced, never hand-maintained. Onomaverse provides worldwide
-    # given names and surnames; CSpell's dedicated people-names dictionary adds
-    # another independently maintained source. Exact case is preserved so a
-    # random capitalized token is not accepted merely because it looks like a name.
     names: set[str] = set()
 
     for raw in (tmp / "cspell-people-names.txt").read_text(encoding="utf-8").splitlines():
@@ -166,8 +161,6 @@ def build_country_tokens(path: Path, locale: str) -> set[str]:
         if not match or match.group(1) in PSEUDO_TERRITORIES:
             continue
         exact = normalize_exact(str(value))
-        # Token-level classification intentionally takes only single-token
-        # country names. Multi-word countries remain normal sentence vocabulary.
         if valid_token(exact):
             words.add(normalize(exact))
     return words
@@ -222,12 +215,9 @@ write_indexed(people, "person_neutral")
 write_plain(country_en, "country_en.txt")
 write_plain(country_pt, "country_pt.txt")
 
-# Remove resources from the previous manual/proper-name architecture when a
-# developer rebuilds locally.
-for obsolete in ("proper_neutral.txt",):
-    path = out / obsolete
-    if path.exists():
-        path.unlink()
+obsolete = out / "proper_neutral.txt"
+if obsolete.exists():
+    obsolete.unlink()
 PY
 
 cat > "$OUT/README.md" <<EOF
@@ -261,8 +251,6 @@ Rebuild with:
     bash tools/build-large-lexicons.sh
 EOF
 
-# Build-time regression checks: these are assertions against external sources,
-# not local exception entries.
 grep -Fxq "well" "$OUT/en_GB.txt"
 grep -Fxq "beautiful" "$OUT/en_GB.txt"
 grep -Fxq "necessary" "$OUT/en_GB.txt"
