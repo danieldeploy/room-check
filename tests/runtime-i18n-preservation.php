@@ -56,15 +56,27 @@ assertRuntimeI18nThrows(
 LanguageGuard::assertExpectedLanguage('extinguisher', 'en', $lexicon);
 LanguageGuard::assertExpectedLanguage('detector', 'en', $lexicon);
 LanguageGuard::assertExpectedLanguage('detector', 'pt', $lexicon);
-LanguageGuard::assertExpectedLanguage('HVAC', 'en', $lexicon);
-LanguageGuard::assertExpectedLanguage('HVAC', 'pt', $lexicon);
-LanguageGuard::assertExpectedLanguage('WiFi', 'en', $lexicon);
-LanguageGuard::assertExpectedLanguage('WiFi', 'pt', $lexicon);
-assertRuntimeI18n(true, 'English dictionary word, shared word and technical identifiers are handled independently');
+LanguageGuard::assertExpectedLanguage('"HVAC"', 'en', $lexicon);
+LanguageGuard::assertExpectedLanguage('"HVAC"', 'pt', $lexicon);
+LanguageGuard::assertExpectedLanguage('"WiFi"', 'en', $lexicon);
+LanguageGuard::assertExpectedLanguage('"WiFi"', 'pt', $lexicon);
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage('HVAC', 'en', translationRegressionClassifier()),
+    'unrecognized',
+    'unquoted custom technical identifier is rejected in EN'
+);
+assertRuntimeI18nThrows(
+    static fn() => LanguageGuard::assertExpectedLanguage('WiFi', 'pt', translationRegressionClassifier()),
+    'não reconhecida',
+    'unquoted custom technical identifier is rejected in PT'
+);
+assertRuntimeI18n(true, 'dictionary/shared words remain normal; custom technical identifiers require quotes');
 
 $guardSource = file_get_contents(dirname(__DIR__) . '/src/I18n/LanguageGuard.php');
 assertRuntimeI18n(is_string($guardSource), 'runtime LanguageGuard is readable');
 assertRuntimeI18n(str_contains($guardSource, 'LexicalLanguageClassifier'), 'runtime guard delegates word language to lexical checker');
+assertRuntimeI18n(!str_contains($guardSource, 'looksTechnicalIdentifier'), 'runtime guard has no capitalization-based technical bypass');
+assertRuntimeI18n(!str_contains($guardSource, 'looksGibberishToken'), 'runtime guard has no local gibberish heuristic');
 assertRuntimeI18n(!str_contains($guardSource, 'SHORT_MIN_') && !str_contains($guardSource, 'MIXED_MIN_'), 'old short/mixed statistical rules are gone');
 assertRuntimeI18n(!str_contains($guardSource, 'wordMatchesExpectedLanguage'), 'old detector-as-dictionary code remains removed');
 
