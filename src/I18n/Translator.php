@@ -169,7 +169,6 @@ HTML;
     {
         $dictionary = [
             'lang="pt"' => 'lang="en"',
-            'Portal de Gestão' => 'Management Portal',
             'Entre com a sua conta de trabalho para aceder aos módulos autorizados.' => 'Sign in with your work account to access the authorised modules.',
             'Verificação dos quartos do City Center Guest House e Welcome Guest House.' => 'Room inspections for City Center Guest House and Welcome Guest House.',
             'Consulte os itens que a Governanta lhe atribuiu.' => 'View the items assigned to you by the Housekeeping Manager.',

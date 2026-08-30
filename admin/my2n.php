@@ -69,7 +69,7 @@ header('Cache-Control: no-store');
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>Controlo My2N — Active Lines Unip. Lda.</title>
+    <title>Controlo My2N — <?= htmlspecialchars(PortalBrand::name(), ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="assets/my2n.css?v=<?= (int) filemtime(__DIR__ . '/assets/my2n.css') ?>">
     <link rel="stylesheet" href="../assets/session.css?v=<?= (int) filemtime(dirname(__DIR__) . '/assets/session.css') ?>">
     <script>

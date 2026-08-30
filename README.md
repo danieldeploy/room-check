@@ -1,4 +1,4 @@
-# Portal de Gestão — Active Lines Unip. Lda.
+# Centro de Gestão (Management Hub) — Active Lines Unip. Lda.
 
 Aplicação PHP/MySQL para `check.welcomehostel.pt`. Depois do login, apresenta apenas os módulos autorizados para o utilizador:
 

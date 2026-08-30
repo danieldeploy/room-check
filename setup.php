@@ -76,7 +76,7 @@ header('Cache-Control: no-store');
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>Configuração inicial — Portal Active Lines Unip. Lda.</title>
+    <title>Configuração inicial — <?= htmlspecialchars(PortalBrand::name(), ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="assets/auth.css">
 </head>
 <body>

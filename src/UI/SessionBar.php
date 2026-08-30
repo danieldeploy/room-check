@@ -5,11 +5,10 @@ require_once dirname(__DIR__) . '/Auth/Auth.php';
 require_once dirname(__DIR__) . '/Security/Csrf.php';
 require_once dirname(__DIR__) . '/I18n/SiteTranslations.php';
 require_once dirname(__DIR__) . '/I18n/TranslationFeedback.php';
+require_once __DIR__ . '/PortalBrand.php';
 
 final class SessionBar
 {
-    private const COMPANY_NAME = 'Active Lines Unip. Lda.';
-
     public static function render(
         array $user,
         string $basePath = '',
@@ -29,7 +28,7 @@ final class SessionBar
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
             <div class="session-navigation">
-                <a class="session-brand" href="<?= self::escape($prefix . 'index.php') ?>"><?= self::COMPANY_NAME ?></a>
+                <a class="session-brand" href="<?= self::escape($prefix . 'index.php') ?>"><?= self::escape(PortalBrand::name()) ?></a>
                 <div class="session-links">
                     <a href="<?= self::escape($prefix . 'index.php') ?>">Portal</a>
                     <?php if ($role === 'empregada_andares'): ?><a href="<?= self::escape($prefix . 'tasks.php') ?>">Minha agenda</a><?php endif; ?>

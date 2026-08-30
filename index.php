@@ -91,7 +91,7 @@ header('Cache-Control: no-store');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
     <meta name="theme-color" content="#102a43">
-    <title>Portal de Gestão — Active Lines Unip. Lda.</title>
+    <title><?= htmlspecialchars(PortalBrand::name(), ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars(PortalBrand::legalCompanyName(), ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="assets/portal.css">
     <link rel="stylesheet" href="assets/session.css?v=<?= (int) filemtime(__DIR__ . '/assets/session.css') ?>">
 </head>
@@ -100,7 +100,7 @@ header('Cache-Control: no-store');
         <?php SessionBar::render($currentUser, '', $canManageUsers, $canManagePermissions); ?>
         <header class="portal-header compact-page-header">
             <div class="compact-page-heading">
-                <p class="eyebrow">Portal de Gestão</p>
+                <p class="eyebrow"><?= htmlspecialchars(PortalBrand::name(), ENT_QUOTES, 'UTF-8') ?></p>
                 <h1 class="page-title">O que pretende gerir?</h1>
             </div>
         </header>

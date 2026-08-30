@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/src/UI/PortalBrand.php';
+
 const PROPERTIES = [
     'City Center Guest House' => 6,
     'Welcome Guest House' => 15,

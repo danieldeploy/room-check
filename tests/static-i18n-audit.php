@@ -2,6 +2,10 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/I18n/SiteTranslations.php';
+require_once dirname(__DIR__) . '/src/UI/PortalBrand.php';
+
+// Register the centrally defined bilingual portal name in the runtime dictionary.
+PortalBrand::name('pt');
 
 $root = dirname(__DIR__);
 $catalog = SiteTranslations::catalog();
@@ -39,7 +43,7 @@ $technicalLiterals = array_fill_keys([
 // diagnostics or the PT branch of a message that already has an explicit EN branch.
 $technicalExceptions = [
     'cron/whatsapp-reminders.php' => [
-        '. Consulte no Portal de Gestão os itens e respetivas instruções.',
+        '. Consulte no ' . PortalBrand::name('pt') . ' os itens e respetivas instruções.',
     ],
     'src/Notifications/WhatsAppCloudClient.php' => [
         'A extensão PHP cURL não está disponível.',

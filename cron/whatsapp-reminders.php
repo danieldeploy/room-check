@@ -49,9 +49,10 @@ try {
             $listName = $preferredLanguage === 'en'
                 ? ($listNameEn !== '' ? $listNameEn : $listNamePt)
                 : ($listNamePt !== '' ? $listNamePt : $listNameEn);
+            $portalName = PortalBrand::name($preferredLanguage);
             $portalInstruction = $preferredLanguage === 'en'
-                ? 'List: ' . $listName . '. Open the Management Portal to view the assigned items and instructions.'
-                : 'Lista: ' . $listName . '. Consulte no Portal de Gestão os itens e respetivas instruções.';
+                ? 'List: ' . $listName . '. Open ' . $portalName . ' to view the assigned items and instructions.'
+                : 'Lista: ' . $listName . '. Consulte no ' . $portalName . ' os itens e respetivas instruções.';
             $messageId = $client->sendTemplate((string) $row['mobile'], [
                 (string) $row['display_name'],
                 (new DateTimeImmutable((string) $row['due_date']))->format('d/m/Y'),
