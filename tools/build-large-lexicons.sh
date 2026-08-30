@@ -14,9 +14,10 @@ ONOMAVERSE_BASE_URL="https://github.com/onomaverse/datasets/releases/download/${
 ONOMAVERSE_GIVEN_SHA256="42d889e8c7eab75907aba9b3c4d3c40074439c5b04e7e4eced301411cb6ea848"
 ONOMAVERSE_SURNAME_SHA256="426aab8f6e308047576aa08b4f328ec0680b06251a2a1e2344f2136578929e60"
 ONOMAVERSE_EQUIVALENCE_SHA256="5f367f05331bf0a27c1cbb42ad6c5342241287f2b3acb3bc7b9df0508db40f14"
+GLOBAL_NAMES_REF="ddf0a8605ef11212e3d85e7abcbf2f102e6f7470"
+GLOBAL_NAMES_BASE_URL="https://raw.githubusercontent.com/estifie/Global-Popular-Names-Dataset/${GLOBAL_NAMES_REF}"
 CLDR_REF="29e2b5461f7347f4e5605fd3396a55a7a7cb7f4e"
 CLDR_BASE_URL="https://raw.githubusercontent.com/unicode-org/cldr-json/${CLDR_REF}"
-SSA_NAMES_URL="https://www.ssa.gov/oact/babynames/names.zip"
 
 mkdir -p "$OUT" "$LICENSES"
 
@@ -53,10 +54,11 @@ echo "$ONOMAVERSE_SURNAME_SHA256  $TMP/surname-frequency.csv" | sha256sum -c -
 echo "$ONOMAVERSE_EQUIVALENCE_SHA256  $TMP/name-equivalence.csv" | sha256sum -c -
 
 curl --fail --silent --show-error --location \
-  "$SSA_NAMES_URL" \
-  -o "$TMP/ssa-names.zip"
-mkdir -p "$TMP/ssa-names"
-unzip -q "$TMP/ssa-names.zip" -d "$TMP/ssa-names"
+  "$GLOBAL_NAMES_BASE_URL/data/global_popular_names_min.csv" \
+  -o "$TMP/global-popular-names.csv"
+curl --fail --silent --show-error --location \
+  "$GLOBAL_NAMES_BASE_URL/LICENSE" \
+  -o "$LICENSES/global-popular-names-GPL-3.0.txt"
 
 curl --fail --silent --show-error --location \
   "$CLDR_BASE_URL/cldr-json/cldr-localenames-full/main/en/territories.json" \
@@ -144,8 +146,6 @@ def build_pt() -> set[str]:
 def add_person_name(names: set[str], value: str) -> None:
     exact = normalize_exact(value)
     if valid_token(exact):
-        # Stored normalized because runtime requires both sourced membership and
-        # normal person-name capitalization. Capitalization alone is never proof.
         names.add(normalize(exact))
 
 
@@ -175,14 +175,14 @@ def build_people() -> set[str]:
             add_person_name(names, row.get("name", ""))
             add_person_name(names, row.get("related_name", ""))
 
-    # Official U.S. Social Security national baby-name records provide broad
-    # real-world coverage, including uncommon immigrant names. Each row is
-    # Name,Sex,Count and SSA suppresses names below its privacy threshold.
-    for path in sorted((tmp / "ssa-names").glob("yob*.txt")):
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            for row in csv.reader(handle):
-                if row:
-                    add_person_name(names, row[0])
+    # Additional global given-name dataset, pinned by commit. It supplies real
+    # names from many origins that are absent from the smaller frequency tables.
+    with (tmp / "global-popular-names.csv").open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if "Name" not in (reader.fieldnames or []):
+            raise RuntimeError("Global popular names file has no Name column")
+        for row in reader:
+            add_person_name(names, row.get("Name", ""))
 
     return names
 
@@ -270,9 +270,9 @@ Sources:
 - Portuguese (PT-PT): CSpell/Hunspell Portuguese-European dictionary from the
   same pinned CSpell commit, expanded with hunspell-reader 10.0.1.
 - Person names: Onomaverse ${ONOMAVERSE_TAG} frequency and name-equivalence
-  datasets (CC BY 4.0), CSpell's maintained people-names source, and U.S. Social
-  Security Administration national given-name data. Names data from Onomaverse
-  (https://onomaverse.com/datasets), licensed CC BY 4.0.
+  datasets (CC BY 4.0), CSpell's maintained people-names source, and the Global
+  Popular Names Dataset pinned at commit ${GLOBAL_NAMES_REF}. The latter source
+  is distributed under GPL-3.0; its license is bundled in ./licenses.
 - Country names: Unicode CLDR JSON commit ${CLDR_REF}, locale data for en and
   pt-PT, under the bundled Unicode License V3.
 
