@@ -64,8 +64,28 @@
         });
     };
 
-    const askDecision = () => new Promise((resolve) => {
+    const decisionCopy = (textareas) => {
+        const invalid = textareas.some(hasFailedValidation);
+        const portuguese = String(config.locale || '').toLowerCase().startsWith('pt');
+        if (invalid) {
+            return {
+                message: String(config.languageDecisionMessage || (portuguese
+                    ? 'Existe texto incorretamente escrito em Português. Quer corrigir ou anular a edição?'
+                    : 'There is text incorrectly written in English. Do you want to correct it or cancel the edit?')),
+                primary: String(config.languageDecisionCorrect || (portuguese ? 'Corrigir' : 'Correct')),
+            };
+        }
+        return {
+            message: String(config.unsavedEditDecisionMessage || (portuguese
+                ? 'Tem uma edição não guardada. Quer continuar a editar ou anular a edição?'
+                : 'There is an unsaved edit. Do you want to continue editing or cancel the edit?')),
+            primary: String(config.unsavedEditDecisionContinue || (portuguese ? 'Continuar a editar' : 'Continue editing')),
+        };
+    };
+
+    const askDecision = (textareas) => new Promise((resolve) => {
         decisionDialog?.remove();
+        const copy = decisionCopy(textareas);
         const overlay = document.createElement('div');
         overlay.className = 'language-decision-overlay';
         const panel = document.createElement('div');
@@ -73,18 +93,15 @@
         panel.setAttribute('role', 'alertdialog');
         panel.setAttribute('aria-modal', 'true');
         const message = document.createElement('p');
-        message.textContent = String(
-            config.languageDecisionMessage
-            || 'There are unfinished or invalid text changes. Continue editing or cancel the edit?'
-        );
+        message.textContent = copy.message;
         const actions = document.createElement('div');
         actions.className = 'language-decision-actions';
         const correct = document.createElement('button');
         correct.type = 'button';
-        correct.textContent = String(config.languageDecisionCorrect || 'Correct');
+        correct.textContent = copy.primary;
         const cancel = document.createElement('button');
         cancel.type = 'button';
-        cancel.textContent = String(config.languageDecisionCancel || 'Cancel edit');
+        cancel.textContent = String(config.languageDecisionCancel || (String(config.locale || '').toLowerCase().startsWith('pt') ? 'Anular edição' : 'Cancel edit'));
         const finish = (value) => {
             overlay.remove();
             decisionDialog = null;
@@ -178,7 +195,7 @@
         event.preventDefault();
         event.stopImmediatePropagation();
 
-        const decision = await askDecision();
+        const decision = await askDecision(blocked);
         if (decision === 'correct') {
             (blockingTextareas()[0] || blocked[0])?.focus();
             return;
@@ -199,7 +216,7 @@
             contextIntent = null;
             event.preventDefault();
             event.stopImmediatePropagation();
-            const decision = await askDecision();
+            const decision = await askDecision(blocked);
             if (decision === 'correct') {
                 (blockingTextareas()[0] || blocked[0])?.focus();
                 return;
@@ -217,7 +234,7 @@
         contextIntent = null;
         event.preventDefault();
         event.stopImmediatePropagation();
-        const decision = await askDecision();
+        const decision = await askDecision(blocked);
         if (decision === 'correct') {
             (blockingTextareas()[0] || blocked[0])?.focus();
             return;
