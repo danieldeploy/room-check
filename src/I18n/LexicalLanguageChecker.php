@@ -13,36 +13,50 @@ interface LexicalLanguageClassifier
 interface LexicalCaseSensitiveClassifier
 {
     /**
-     * Return exact-case tokens that are present in the upstream keep-case
-     * English resource. Keys preserve case; values are always true.
-     *
      * @param string[] $tokens Original-case lexical tokens.
-     * @return array<string, bool>
+     * @return array<string, bool> Exact upstream EN-GB keep-case matches.
      */
     public function classifyCaseSensitiveTokens(array $tokens): array;
 }
 
-interface LexicalNearMatchClassifier
+interface LexicalPersonClassifier
 {
-    /** @return array{candidate:string,distance:int,classification:string}|null */
-    public function likelyMisspelling(string $token): ?array;
+    /**
+     * A person is accepted only when the original token has normal name
+     * capitalization AND its normalized spelling exists in a generated,
+     * externally sourced person-name corpus. Capitalization alone is never
+     * evidence that a token is a name.
+     *
+     * @param string[] $tokens Original-case lexical tokens.
+     * @return array<string, bool> Exact original-case token => true.
+     */
+    public function classifyPersonTokens(array $tokens): array;
 }
 
 interface LexicalCoverageClassifier
 {
-    /** True only when all generated full-language resources are available. */
+    /** True only when every generated validation resource is available. */
     public function hasFullCoverage(): bool;
 }
 
 interface LexicalEntityClassifier
 {
     /**
-     * Explicit entity candidates used by the translator.
+     * Compatibility interface for language-bearing country entities.
+     * Person recognition is exposed separately because it needs original case.
      *
      * @param string[] $tokens Normalized lowercase lexical tokens.
-     * @return array<string, string> Map token => person|country|proper.
+     * @return array<string, string> Map token => country.
      */
     public function classifyEntityTokens(array $tokens): array;
+}
+
+// Kept as a compatibility contract for older test doubles. Production lexical
+// verification no longer uses hand-sized near-match lists.
+interface LexicalNearMatchClassifier
+{
+    /** @return array{candidate:string,distance:int,classification:string}|null */
+    public function likelyMisspelling(string $token): ?array;
 }
 
 final class LexicalLookupException extends RuntimeException
@@ -50,44 +64,39 @@ final class LexicalLookupException extends RuntimeException
 }
 
 /**
- * Deterministic PT/EN lexical lookup backed only by local files.
+ * Deterministic PT/EN lexical lookup backed only by generated, externally
+ * sourced files bundled with Room Check.
  *
- * The full PT-PT and EN-GB dictionaries are sorted text files with small
- * two-character byte-range indexes. Only the relevant slices are read for each
- * request. The English source is `keep-case`, so source entries that must retain
- * their original capitalization are indexed separately instead of being lost by
- * lowercase normalization. Explicit person and country resources take precedence
- * over the broader proper-name fallback: people are neutral/preserved, while
- * country names remain lexical PT/EN evidence and are translated normally.
+ * - ordinary EN: pinned CSpell EN-GB
+ * - ordinary PT: pinned PT-PT Hunspell expansion
+ * - EN keep-case forms: preserved from CSpell
+ * - people: generated global person-name corpus
+ * - countries: generated Unicode CLDR labels for EN and PT-PT
+ *
+ * There is intentionally no project-maintained technical-word list, compact
+ * language dictionary, capitalization heuristic or generic proper-name bypass.
+ * Unknown custom/technical text must use the explicit double-quote escape.
  */
-final class LexicalLanguageChecker implements LexicalLanguageClassifier, LexicalCaseSensitiveClassifier, LexicalNearMatchClassifier, LexicalCoverageClassifier, LexicalEntityClassifier
+final class LexicalLanguageChecker implements
+    LexicalLanguageClassifier,
+    LexicalCaseSensitiveClassifier,
+    LexicalPersonClassifier,
+    LexicalCoverageClassifier,
+    LexicalEntityClassifier
 {
     private const MAX_TOKEN_LENGTH = 190;
 
-    /** @var array<string, bool>|null */
-    private static ?array $ptCore = null;
-    /** @var array<string, bool>|null */
-    private static ?array $enCore = null;
-    /** @var array<string, bool>|null */
-    private static ?array $technicalWords = null;
-    /** @var array<string, bool>|null */
-    private static ?array $properWords = null;
-    /** @var array<string, bool>|null */
-    private static ?array $personWords = null;
-    /** @var array<string, bool>|null */
-    private static ?array $countryPtWords = null;
-    /** @var array<string, bool>|null */
-    private static ?array $countryEnWords = null;
     /** @var array<string, array<string, array{0:int,1:int}>> */
     private static array $indexCache = [];
     /** @var array<string, array<string, bool>> */
     private static array $membershipCache = [];
+    /** @var array<string, array<string, bool>> */
+    private static array $plainWordCache = [];
 
     public function __construct(PDO $pdo, private array $config = [])
     {
-        // PDO stays in the public signature for compatibility with
-        // ContentTranslator. Lexical validation itself is file-only.
-        self::loadSmallLexicons($config);
+        // PDO stays in the public signature for ContentTranslator compatibility.
+        // Validation itself is local and file-only.
     }
 
     public function hasFullCoverage(): bool
@@ -95,18 +104,22 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         [$ptWord, $ptIndex] = $this->fullPaths('pt');
         [$enWord, $enIndex] = $this->fullPaths('en');
         [$enCaseWord, $enCaseIndex] = $this->caseSensitiveEnglishPaths();
+        [$personWord, $personIndex] = $this->personPaths();
+
         return self::usableFile($ptWord)
             && self::usableFile($ptIndex)
             && self::usableFile($enWord)
             && self::usableFile($enIndex)
             && self::usableFile($enCaseWord)
             && self::usableFile($enCaseIndex)
-            && self::usableFile($this->properPath());
+            && self::usableFile($personWord)
+            && self::usableFile($personIndex)
+            && self::usableFile($this->countryPath('pt'))
+            && self::usableFile($this->countryPath('en'));
     }
 
     public function classifyTokens(array $tokens): array
     {
-        self::loadSmallLexicons($this->config);
         $normalized = [];
         foreach ($tokens as $rawToken) {
             $token = self::normalizeToken((string) $rawToken);
@@ -119,37 +132,23 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
             return [];
         }
 
+        $countryPt = $this->countryMembership('pt');
+        $countryEn = $this->countryMembership('en');
         $ptMembership = $this->languageMembership($tokens, 'pt');
         $enMembership = $this->languageMembership($tokens, 'en');
         $results = [];
 
         foreach ($tokens as $token) {
-            // A confirmed person name is deliberately neutral. If a token is
-            // both a person and a country name, preserving the person's name is
-            // safer than translating it without sentence-level certainty.
-            if (isset(self::$personWords[$token])) {
-                $results[$token] = 'shared';
-                continue;
-            }
-
-            // Countries are explicit language-bearing entities. This override
-            // must run before the broad proper-name fallback so Spain/Germany/
-            // Romania are not silently treated as neutral names.
-            $countryPt = isset(self::$countryPtWords[$token]);
-            $countryEn = isset(self::$countryEnWords[$token]);
-            if ($countryPt || $countryEn) {
+            // Country labels are explicitly language-bearing and take priority
+            // over other lexical ambiguity so Spain/Espanha translate normally.
+            $isCountryPt = isset($countryPt[$token]);
+            $isCountryEn = isset($countryEn[$token]);
+            if ($isCountryPt || $isCountryEn) {
                 $results[$token] = match (true) {
-                    $countryPt && $countryEn => 'shared',
-                    $countryPt => 'pt_only',
+                    $isCountryPt && $isCountryEn => 'shared',
+                    $isCountryPt => 'pt_only',
                     default => 'en_only',
                 };
-                continue;
-            }
-
-            // Explicit technology/brand identifiers and remaining generated
-            // proper names are neutral for compatibility with existing data.
-            if (isset(self::$technicalWords[$token]) || isset(self::$properWords[$token])) {
-                $results[$token] = 'shared';
                 continue;
             }
 
@@ -180,14 +179,109 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         }
 
         [$wordPath, $indexPath] = $this->caseSensitiveEnglishPaths();
-        if (!self::usableFile($wordPath) || !self::usableFile($indexPath)) {
+        return $this->requiredIndexedMembership($tokens, $wordPath, $indexPath, 'English keep-case');
+    }
+
+    public function classifyPersonTokens(array $tokens): array
+    {
+        $eligible = [];
+        $normalizedWanted = [];
+        foreach ($tokens as $rawToken) {
+            $exact = self::normalizeCaseSensitiveToken((string) $rawToken);
+            if (!self::looksLikePersonCase($exact)) {
+                continue;
+            }
+            $normalized = self::normalizeToken($exact);
+            if ($normalized === '' || mb_strlen($normalized, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
+                continue;
+            }
+            $eligible[$exact] = $normalized;
+            $normalizedWanted[$normalized] = true;
+        }
+        if ($eligible === []) {
             return [];
         }
 
-        $cacheKey = 'en-case|' . $wordPath . '|' . $indexPath;
+        [$wordPath, $indexPath] = $this->personPaths();
+        $members = $this->requiredIndexedMembership(
+            array_keys($normalizedWanted),
+            $wordPath,
+            $indexPath,
+            'person-name'
+        );
+
+        $found = [];
+        foreach ($eligible as $exact => $normalized) {
+            if (isset($members[$normalized])) {
+                $found[$exact] = true;
+            }
+        }
+        return $found;
+    }
+
+    public function classifyEntityTokens(array $tokens): array
+    {
+        $countryPt = $this->countryMembership('pt');
+        $countryEn = $this->countryMembership('en');
+        $entities = [];
+        foreach ($tokens as $rawToken) {
+            $token = self::normalizeToken((string) $rawToken);
+            if ($token !== '' && (isset($countryPt[$token]) || isset($countryEn[$token]))) {
+                $entities[$token] = 'country';
+            }
+        }
+        return $entities;
+    }
+
+    public static function normalizeToken(string $token): string
+    {
+        return mb_strtolower(self::normalizeCaseSensitiveToken($token), 'UTF-8');
+    }
+
+    public static function normalizeCaseSensitiveToken(string $token): string
+    {
+        return str_replace(['’', '‘'], "'", trim($token));
+    }
+
+    private static function looksLikePersonCase(string $token): bool
+    {
+        if ($token === '' || mb_strlen($token, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
+            return false;
+        }
+        // Require the first Unicode letter to be uppercase. Membership in the
+        // sourced corpus remains mandatory, so Ggjhrtgu does not pass merely
+        // because it has name-like capitalization.
+        return preg_match('/^\p{Lu}[\p{L}’\'\-]*$/u', $token) === 1;
+    }
+
+    /** @param string[] $tokens @return array<string, bool> */
+    private function languageMembership(array $tokens, string $language): array
+    {
+        [$fullPath, $indexPath] = $this->fullPaths($language);
+        return $this->requiredIndexedMembership(
+            $tokens,
+            $fullPath,
+            $indexPath,
+            strtoupper($language) . ' lexical'
+        );
+    }
+
+    /** @param string[] $tokens @return array<string, bool> */
+    private function requiredIndexedMembership(
+        array $tokens,
+        string $wordPath,
+        string $indexPath,
+        string $label
+    ): array {
+        if (!self::usableFile($wordPath) || !self::usableFile($indexPath)) {
+            throw new LexicalLookupException($label . ' resource is unavailable.');
+        }
+
+        $cacheKey = $label . '|' . $wordPath . '|' . $indexPath;
         $cache = self::$membershipCache[$cacheKey] ?? [];
         $found = [];
         $unresolved = [];
+
         foreach ($tokens as $token) {
             if (array_key_exists($token, $cache)) {
                 if ($cache[$token]) {
@@ -212,157 +306,6 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         return $found;
     }
 
-    public function classifyEntityTokens(array $tokens): array
-    {
-        self::loadSmallLexicons($this->config);
-        $entities = [];
-        foreach ($tokens as $rawToken) {
-            $token = self::normalizeToken((string) $rawToken);
-            if ($token === '' || mb_strlen($token, 'UTF-8') > self::MAX_TOKEN_LENGTH) {
-                continue;
-            }
-            if (isset(self::$personWords[$token])) {
-                $entities[$token] = 'person';
-                continue;
-            }
-            if (isset(self::$countryPtWords[$token]) || isset(self::$countryEnWords[$token])) {
-                $entities[$token] = 'country';
-                continue;
-            }
-            if (isset(self::$properWords[$token])) {
-                $entities[$token] = 'proper';
-            }
-        }
-        return $entities;
-    }
-
-    /**
-     * Near-match checks deliberately use only compact project vocabulary and
-     * the exact technical list. Scanning full dictionaries/proper names on every
-     * typo would be slower and would create many accidental near-matches.
-     *
-     * @return array{candidate:string,distance:int,classification:string}|null
-     */
-    public function likelyMisspelling(string $token): ?array
-    {
-        self::loadSmallLexicons($this->config);
-        $token = self::normalizeToken($token);
-        $length = mb_strlen($token, 'UTF-8');
-        if ($token === '' || $length < 4 || $length > self::MAX_TOKEN_LENGTH) {
-            return null;
-        }
-
-        // Exact explicit entities/proper names are valid tokens, never typo candidates.
-        if (isset(self::$personWords[$token])
-            || isset(self::$countryPtWords[$token])
-            || isset(self::$countryEnWords[$token])
-            || isset(self::$properWords[$token])) {
-            return null;
-        }
-
-        $known = self::$ptCore + self::$enCore + self::$technicalWords;
-        if (isset($known[$token])) {
-            return null;
-        }
-
-        $maxDistance = $length >= 5 ? 2 : 1;
-        $best = null;
-        foreach (array_keys($known) as $candidate) {
-            $candidateLength = mb_strlen($candidate, 'UTF-8');
-            if ($candidateLength < 3 || abs($candidateLength - $length) > $maxDistance) {
-                continue;
-            }
-            $distance = self::unicodeEditDistance($token, $candidate, $maxDistance);
-            if ($distance < 1 || $distance > $maxDistance) {
-                continue;
-            }
-            if ($best !== null && $distance >= $best['distance']) {
-                continue;
-            }
-            $classification = isset(self::$technicalWords[$candidate])
-                ? 'technical'
-                : (isset(self::$ptCore[$candidate]) && isset(self::$enCore[$candidate])
-                    ? 'shared'
-                    : (isset(self::$ptCore[$candidate]) ? 'pt_only' : 'en_only'));
-            $best = [
-                'candidate' => $candidate,
-                'distance' => $distance,
-                'classification' => $classification,
-            ];
-            if ($distance === 1) {
-                break;
-            }
-        }
-        return $best;
-    }
-
-    public static function isTechnicalNeutral(string $token): bool
-    {
-        self::loadSmallLexicons([]);
-        return isset(self::$technicalWords[self::normalizeToken($token)]);
-    }
-
-    public static function normalizeToken(string $token): string
-    {
-        return mb_strtolower(self::normalizeCaseSensitiveToken($token), 'UTF-8');
-    }
-
-    public static function normalizeCaseSensitiveToken(string $token): string
-    {
-        return str_replace(['’', '‘'], "'", trim($token));
-    }
-
-    /** @param string[] $tokens @return array<string, bool> */
-    private function languageMembership(array $tokens, string $language): array
-    {
-        [$fullPath, $indexPath] = $this->fullPaths($language);
-        $cacheKey = $language . '|' . $fullPath . '|' . $indexPath;
-        $cache = self::$membershipCache[$cacheKey] ?? [];
-        $found = [];
-        $unresolved = [];
-
-        foreach ($tokens as $token) {
-            if (array_key_exists($token, $cache)) {
-                if ($cache[$token]) {
-                    $found[$token] = true;
-                }
-            } else {
-                $unresolved[] = $token;
-            }
-        }
-
-        if ($unresolved === []) {
-            return $found;
-        }
-
-        if (self::usableFile($fullPath) && self::usableFile($indexPath)) {
-            $fresh = self::indexedMembership($unresolved, $fullPath, $indexPath);
-            foreach ($unresolved as $token) {
-                $present = isset($fresh[$token]);
-                $cache[$token] = $present;
-                if ($present) {
-                    $found[$token] = true;
-                }
-            }
-            self::$membershipCache[$cacheKey] = $cache;
-            return $found;
-        }
-
-        // Deployment fail-safe: compact behavior remains available during a
-        // partial deploy. Once all generated resources exist, the full
-        // dictionaries and neutral proper-name list are used automatically.
-        $core = $language === 'pt' ? self::$ptCore : self::$enCore;
-        foreach ($unresolved as $token) {
-            $present = isset($core[$token]);
-            $cache[$token] = $present;
-            if ($present) {
-                $found[$token] = true;
-            }
-        }
-        self::$membershipCache[$cacheKey] = $cache;
-        return $found;
-    }
-
     /** @return array{0:string,1:string} */
     private function fullPaths(string $language): array
     {
@@ -379,18 +322,57 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
     private function caseSensitiveEnglishPaths(): array
     {
         $root = dirname(__DIR__, 2);
-        $word = (string) ($this->config['en_case_full_path']
-            ?? $root . '/resources/lexicon/full/en_GB_case_sensitive.txt');
-        $index = (string) ($this->config['en_case_index_path']
-            ?? $root . '/resources/lexicon/full/en_GB_case_sensitive.index.json');
-        return [$word, $index];
+        return [
+            (string) ($this->config['en_case_full_path']
+                ?? $root . '/resources/lexicon/full/en_GB_case_sensitive.txt'),
+            (string) ($this->config['en_case_index_path']
+                ?? $root . '/resources/lexicon/full/en_GB_case_sensitive.index.json'),
+        ];
     }
 
-    private function properPath(): string
+    /** @return array{0:string,1:string} */
+    private function personPaths(): array
     {
         $root = dirname(__DIR__, 2);
-        return (string) ($this->config['proper_path']
-            ?? $root . '/resources/lexicon/full/proper_neutral.txt');
+        return [
+            (string) ($this->config['person_full_path']
+                ?? $root . '/resources/lexicon/full/person_neutral.txt'),
+            (string) ($this->config['person_index_path']
+                ?? $root . '/resources/lexicon/full/person_neutral.index.json'),
+        ];
+    }
+
+    private function countryPath(string $language): string
+    {
+        $root = dirname(__DIR__, 2);
+        return (string) ($this->config[$language === 'pt' ? 'country_pt_path' : 'country_en_path']
+            ?? $root . '/resources/lexicon/full/' . ($language === 'pt' ? 'country_pt.txt' : 'country_en.txt'));
+    }
+
+    /** @return array<string, bool> */
+    private function countryMembership(string $language): array
+    {
+        $path = $this->countryPath($language);
+        if (!self::usableFile($path)) {
+            throw new LexicalLookupException(strtoupper($language) . ' country resource is unavailable.');
+        }
+        if (isset(self::$plainWordCache[$path])) {
+            return self::$plainWordCache[$path];
+        }
+
+        $contents = file_get_contents($path);
+        if (!is_string($contents)) {
+            throw new LexicalLookupException('Country resource is unreadable.');
+        }
+        $words = [];
+        foreach (preg_split('/\R/u', $contents) ?: [] as $line) {
+            $token = self::normalizeToken($line);
+            if ($token !== '') {
+                $words[$token] = true;
+            }
+        }
+        self::$plainWordCache[$path] = $words;
+        return $words;
     }
 
     private static function usableFile(string $path): bool
@@ -410,7 +392,7 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
 
         $handle = @fopen($wordPath, 'rb');
         if ($handle === false) {
-            throw new LexicalLookupException('Large local lexical resource is unreadable.');
+            throw new LexicalLookupException('Generated lexical resource is unreadable.');
         }
 
         $found = [];
@@ -423,7 +405,7 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
                 $start = (int) $range[0];
                 $end = (int) $range[1];
                 if ($start < 0 || $end < $start || fseek($handle, $start) !== 0) {
-                    throw new LexicalLookupException('Large local lexical index is invalid.');
+                    throw new LexicalLookupException('Generated lexical index is invalid.');
                 }
 
                 while (ftell($handle) < $end && ($line = fgets($handle)) !== false) {
@@ -452,7 +434,7 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         $json = file_get_contents($path);
         $decoded = is_string($json) ? json_decode($json, true) : null;
         if (!is_array($decoded)) {
-            throw new LexicalLookupException('Large local lexical index is unavailable.');
+            throw new LexicalLookupException('Generated lexical index is unavailable.');
         }
 
         $index = [];
@@ -464,92 +446,5 @@ final class LexicalLanguageChecker implements LexicalLanguageClassifier, Lexical
         }
         self::$indexCache[$path] = $index;
         return $index;
-    }
-
-    private static function loadSmallLexicons(array $config): void
-    {
-        if (self::$ptCore !== null
-            && self::$enCore !== null
-            && self::$technicalWords !== null
-            && self::$properWords !== null
-            && self::$personWords !== null
-            && self::$countryPtWords !== null
-            && self::$countryEnWords !== null) {
-            return;
-        }
-        $root = dirname(__DIR__, 2);
-        $ptPath = (string) ($config['pt_path'] ?? $root . '/resources/lexicon/pt_PT_core.txt');
-        $enPath = (string) ($config['en_path'] ?? $root . '/resources/lexicon/en_GB_core.txt');
-        $technicalPath = (string) ($config['technical_path'] ?? $root . '/resources/lexicon/technical_neutral.txt');
-        $properPath = (string) ($config['proper_path'] ?? $root . '/resources/lexicon/full/proper_neutral.txt');
-        $personPath = (string) ($config['person_path'] ?? $root . '/resources/lexicon/full/person_neutral.txt');
-        $countryPtPath = (string) ($config['country_pt_path'] ?? $root . '/resources/lexicon/country_pt.txt');
-        $countryEnPath = (string) ($config['country_en_path'] ?? $root . '/resources/lexicon/country_en.txt');
-
-        self::$ptCore = self::readSmallWordFile($ptPath);
-        self::$enCore = self::readSmallWordFile($enPath);
-        self::$technicalWords = self::readSmallWordFile($technicalPath);
-        self::$properWords = self::readSmallWordFile($properPath);
-        self::$personWords = self::readSmallWordFile($personPath);
-        self::$countryPtWords = self::readSmallWordFile($countryPtPath);
-        self::$countryEnWords = self::readSmallWordFile($countryEnPath);
-        if (self::$ptCore === [] || self::$enCore === []) {
-            throw new LexicalLookupException('Local PT/EN lexical core files are unavailable.');
-        }
-    }
-
-    /** @return array<string, bool> */
-    private static function readSmallWordFile(string $path): array
-    {
-        if ($path === '' || !is_file($path) || !is_readable($path)) {
-            return [];
-        }
-        $contents = file_get_contents($path);
-        if (!is_string($contents)) {
-            return [];
-        }
-        $words = [];
-        foreach (preg_split('/\R/u', $contents) ?: [] as $line) {
-            $line = trim($line);
-            if ($line === '' || str_starts_with($line, '#')) {
-                continue;
-            }
-            $token = self::normalizeToken($line);
-            if ($token !== '') {
-                $words[$token] = true;
-            }
-        }
-        return $words;
-    }
-
-    private static function unicodeEditDistance(string $left, string $right, int $cutoff): int
-    {
-        $a = preg_split('//u', $left, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $b = preg_split('//u', $right, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $aCount = count($a);
-        $bCount = count($b);
-        if (abs($aCount - $bCount) > $cutoff) {
-            return $cutoff + 1;
-        }
-
-        $previous = range(0, $bCount);
-        for ($i = 1; $i <= $aCount; $i++) {
-            $current = [$i];
-            $rowMin = $i;
-            for ($j = 1; $j <= $bCount; $j++) {
-                $cost = $a[$i - 1] === $b[$j - 1] ? 0 : 1;
-                $current[$j] = min(
-                    $current[$j - 1] + 1,
-                    $previous[$j] + 1,
-                    $previous[$j - 1] + $cost
-                );
-                $rowMin = min($rowMin, $current[$j]);
-            }
-            if ($rowMin > $cutoff) {
-                return $cutoff + 1;
-            }
-            $previous = $current;
-        }
-        return $previous[$bCount] ?? ($cutoff + 1);
     }
 }
