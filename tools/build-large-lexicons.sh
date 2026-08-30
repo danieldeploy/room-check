@@ -8,47 +8,72 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 CSPELL_REF="51cd13717e52a6e14b4a36055b7b49a88f267106"
-BASE_URL="https://raw.githubusercontent.com/streetsidesoftware/cspell-dicts/${CSPELL_REF}"
+CSPELL_BASE_URL="https://raw.githubusercontent.com/streetsidesoftware/cspell-dicts/${CSPELL_REF}"
+ONOMAVERSE_TAG="v2026.06"
+ONOMAVERSE_BASE_URL="https://github.com/onomaverse/datasets/releases/download/${ONOMAVERSE_TAG}"
+ONOMAVERSE_GIVEN_SHA256="42d889e8c7eab75907aba9b3c4d3c40074439c5b04e7e4eced301411cb6ea848"
+ONOMAVERSE_SURNAME_SHA256="426aab8f6e308047576aa08b4f328ec0680b06251a2a1e2344f2136578929e60"
+CLDR_REF="29e2b5461f7347f4e5605fd3396a55a7a7cb7f4e"
+CLDR_BASE_URL="https://raw.githubusercontent.com/unicode-org/cldr-json/${CLDR_REF}"
 
 mkdir -p "$OUT" "$LICENSES"
 
 curl --fail --silent --show-error --location \
-  "$BASE_URL/dictionaries/en_GB-MIT/src/generated/base.txt" \
+  "$CSPELL_BASE_URL/dictionaries/en_GB-MIT/src/generated/base.txt" \
   -o "$TMP/en_GB-base.txt"
 curl --fail --silent --show-error --location \
-  "$BASE_URL/dictionaries/pt_PT/src/hunspell/Portuguese-European.dic" \
+  "$CSPELL_BASE_URL/dictionaries/people-names/src/names.txt" \
+  -o "$TMP/cspell-people-names.txt"
+curl --fail --silent --show-error --location \
+  "$CSPELL_BASE_URL/dictionaries/pt_PT/src/hunspell/Portuguese-European.dic" \
   -o "$TMP/Portuguese-European.dic"
 curl --fail --silent --show-error --location \
-  "$BASE_URL/dictionaries/pt_PT/src/hunspell/Portuguese-European.aff" \
+  "$CSPELL_BASE_URL/dictionaries/pt_PT/src/hunspell/Portuguese-European.aff" \
   -o "$TMP/Portuguese-European.aff"
 curl --fail --silent --show-error --location \
-  "$BASE_URL/dictionaries/en_GB-MIT/LICENSE" \
+  "$CSPELL_BASE_URL/dictionaries/en_GB-MIT/LICENSE" \
   -o "$LICENSES/en_GB-MIT-LICENSE.txt"
 curl --fail --silent --show-error --location \
-  "$BASE_URL/dictionaries/pt_PT/LICENSE" \
+  "$CSPELL_BASE_URL/dictionaries/pt_PT/LICENSE" \
   -o "$LICENSES/pt_PT-LICENSE.txt"
 
-npm install --global --silent hunspell-reader@10.0.1
-# The reader applies the .aff prefix/suffix rules by default. Sorting and
-# Unicode normalization are intentionally done in the Python stage so this
-# remains compatible across hunspell-reader CLI option changes.
+curl --fail --silent --show-error --location \
+  "$ONOMAVERSE_BASE_URL/given-name-frequency.csv" \
+  -o "$TMP/given-name-frequency.csv"
+curl --fail --silent --show-error --location \
+  "$ONOMAVERSE_BASE_URL/surname-frequency.csv" \
+  -o "$TMP/surname-frequency.csv"
+echo "$ONOMAVERSE_GIVEN_SHA256  $TMP/given-name-frequency.csv" | sha256sum -c -
+echo "$ONOMAVERSE_SURNAME_SHA256  $TMP/surname-frequency.csv" | sha256sum -c -
+
+curl --fail --silent --show-error --location \
+  "$CLDR_BASE_URL/cldr-json/cldr-localenames-full/main/en/territories.json" \
+  -o "$TMP/cldr-en-territories.json"
+curl --fail --silent --show-error --location \
+  "$CLDR_BASE_URL/cldr-json/cldr-localenames-full/main/pt-PT/territories.json" \
+  -o "$TMP/cldr-pt-territories.json"
+curl --fail --silent --show-error --location \
+  "$CLDR_BASE_URL/LICENSE" \
+  -o "$LICENSES/unicode-cldr-LICENSE.txt"\nnpm install --global --silent hunspell-reader@10.0.1
 hunspell-reader words "$TMP/Portuguese-European.dic" \
   -o "$TMP/pt-expanded.txt"
 
-python3 - "$ROOT" "$TMP" "$OUT" <<'PY'
+python3 - "$TMP" "$OUT" <<'PY'
 from __future__ import annotations
 
+import csv
 import json
+import re
 import sys
 import unicodedata
 from pathlib import Path
 
-root = Path(sys.argv[1])
-tmp = Path(sys.argv[2])
-out = Path(sys.argv[3])
+tmp = Path(sys.argv[1])
+out = Path(sys.argv[2])
 
 ALLOWED_PUNCT = {"'", "-"}
 MAX_LEN = 190
+PSEUDO_TERRITORIES = {"EU", "EZ", "QO", "UN", "XA", "XB", "ZZ"}
 
 
 def normalize_exact(value: str) -> str:
@@ -66,22 +91,12 @@ def valid_token(value: str) -> bool:
     return all(ch.isalpha() or ch in ALLOWED_PUNCT for ch in value)
 
 
-def is_titlecase_candidate(raw: str) -> bool:
-    if not raw or any(ch.isspace() for ch in raw):
-        return False
-    letters = [ch for ch in raw if ch.isalpha()]
-    if len(letters) < 3:
-        return False
-    return letters[0].isupper() and any(ch.islower() for ch in letters[1:])
-
-
-def english_source_sets() -> tuple[set[str], set[str], set[str]]:
-    # The CSpell source declares keep-case. Lowercase source entries form the
-    # normal case-insensitive English lexicon. Other exact-case entries are
-    # preserved separately so valid forms such as I / I'm / I'd are not lost.
+def english_source_sets() -> tuple[set[str], set[str]]:
+    # CSpell's EN-GB source is keep-case. Lowercase source entries form the
+    # ordinary case-insensitive lexicon; all other exact spellings are preserved
+    # in a separate indexed file instead of being flattened.
     ordinary: set[str] = set()
     lowercase_source: set[str] = set()
-    titlecase_source: set[str] = set()
     exact_candidates: dict[str, str] = {}
 
     for raw in (tmp / "en_GB-base.txt").read_text(encoding="utf-8").splitlines():
@@ -98,53 +113,63 @@ def english_source_sets() -> tuple[set[str], set[str], set[str]]:
             ordinary.add(token)
         else:
             exact_candidates[exact] = token
-            if is_titlecase_candidate(exact):
-                titlecase_source.add(token)
 
-    # If CSpell also supplies a lowercase form, normal lexical membership wins
-    # and there is no need for an exact-case entry. Otherwise preserve the exact
-    # spelling from the validated source without inventing local exceptions.
     exact_case = {
         exact for exact, normalized in exact_candidates.items()
         if normalized not in lowercase_source
     }
-
-    # A word that also exists as an ordinary lowercase English entry (Will,
-    # Rose, May...) remains lexical English rather than becoming a neutral name.
-    proper = titlecase_source - lowercase_source
-    return ordinary, proper, exact_case
-
-
-def portuguese_source_proper() -> set[str]:
-    lowercase_source: set[str] = set()
-    titlecase_source: set[str] = set()
-    lines = (tmp / "Portuguese-European.dic").read_text(encoding="utf-8").splitlines()
-    for index, raw in enumerate(lines):
-        if index == 0 and raw.strip().isdigit():
-            continue
-        raw = raw.strip()
-        if not raw:
-            continue
-        lemma = raw.split("/", 1)[0].strip()
-        token = normalize(lemma)
-        if not valid_token(normalize_exact(lemma)):
-            continue
-        first_alpha = next((ch for ch in lemma if ch.isalpha()), "")
-        if first_alpha and first_alpha.islower():
-            lowercase_source.add(token)
-        elif is_titlecase_candidate(lemma):
-            titlecase_source.add(token)
-    return titlecase_source - lowercase_source
+    return ordinary, exact_case
 
 
 def build_pt() -> set[str]:
-    # The full Portuguese lexicon comes only from the validated PT-PT Hunspell
-    # source. Project core lists remain a runtime emergency fallback only.
     words: set[str] = set()
     for raw in (tmp / "pt-expanded.txt").read_text(encoding="utf-8", errors="strict").splitlines():
         token = normalize(raw)
         if valid_token(token):
             words.add(token)
+    return words
+
+
+def build_people() -> set[str]:
+    # People are sourced, never hand-maintained. Onomaverse provides worldwide
+    # given names and surnames; CSpell's dedicated people-names dictionary adds
+    # another independently maintained source. Exact case is preserved so a
+    # random capitalized token is not accepted merely because it looks like a name.
+    names: set[str] = set()
+
+    for raw in (tmp / "cspell-people-names.txt").read_text(encoding="utf-8").splitlines():
+        raw = raw.strip()
+        if not raw or raw.startswith("#"):
+            continue
+        exact = normalize_exact(raw)
+        if valid_token(exact):
+            names.add(exact)
+
+    for csv_name in ("given-name-frequency.csv", "surname-frequency.csv"):
+        with (tmp / csv_name).open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if "name" not in (reader.fieldnames or []):
+                raise RuntimeError(f"Onomaverse file {csv_name} has no name column")
+            for row in reader:
+                exact = normalize_exact(row.get("name", ""))
+                if valid_token(exact):
+                    names.add(exact)
+    return names
+
+
+def build_country_tokens(path: Path, locale: str) -> set[str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    territories = data["main"][locale]["localeDisplayNames"]["territories"]
+    words: set[str] = set()
+    for key, value in territories.items():
+        match = re.fullmatch(r"([A-Z]{2})(?:-alt-[a-z-]+)?", key)
+        if not match or match.group(1) in PSEUDO_TERRITORIES:
+            continue
+        exact = normalize_exact(str(value))
+        # Token-level classification intentionally takes only single-token
+        # country names. Multi-word countries remain normal sentence vocabulary.
+        if valid_token(exact):
+            words.add(normalize(exact))
     return words
 
 
@@ -175,62 +200,69 @@ def write_indexed(words: set[str], stem: str) -> None:
         json.dumps(index, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
-    print(f"{stem}: {len(ordered)} words, {offset} bytes")
+    print(f"{stem}: {len(ordered)} entries, {offset} bytes")
 
 
 def write_plain(words: set[str], name: str) -> None:
     ordered = sorted(words)
-    path = out / name
-    path.write_text("".join(word + "\n" for word in ordered), encoding="utf-8")
-    print(f"{name}: {len(ordered)} neutral proper names")
+    (out / name).write_text("".join(word + "\n" for word in ordered), encoding="utf-8")
+    print(f"{name}: {len(ordered)} entries")
 
 
-en_words, en_proper, en_case_sensitive = english_source_sets()
+en_words, en_case_sensitive = english_source_sets()
 pt_words = build_pt()
-proper_words = en_proper | portuguese_source_proper()
+people = build_people()
+country_en = build_country_tokens(tmp / "cldr-en-territories.json", "en")
+country_pt = build_country_tokens(tmp / "cldr-pt-territories.json", "pt-PT")
 
 write_indexed(en_words, "en_GB")
 write_indexed(en_case_sensitive, "en_GB_case_sensitive")
 write_indexed(pt_words, "pt_PT")
-write_plain(proper_words, "proper_neutral.txt")
+write_indexed(people, "person_neutral")
+write_plain(country_en, "country_en.txt")
+write_plain(country_pt, "country_pt.txt")
+
+# Remove resources from the previous manual/proper-name architecture when a
+# developer rebuilds locally.
+for obsolete in ("proper_neutral.txt",):
+    path = out / obsolete
+    if path.exists():
+        path.unlink()
 PY
 
 cat > "$OUT/README.md" <<EOF
-# Large local PT/EN lexical resources
+# Validated local PT/EN lexical resources
 
-These files are generated for Room Check and are used only for local lexical
-verification. They introduce no runtime network dependency.
+Room Check does not maintain its own language, technical-term, person-name or
+country word lists. Runtime validation uses generated resources from maintained
+external sources and has no network dependency.
 
-Sources are pinned to cspell-dicts commit ${CSPELL_REF}:
+Sources are pinned/reproducible:
 
-- English: dictionaries/en_GB-MIT/src/generated/base.txt (MIT). Lowercase
-  entries form the normal EN lexicon. The upstream file is explicitly
-  case-sensitive (keep-case), so valid exact-case entries are preserved in
-  en_GB_case_sensitive.txt instead of being flattened or recreated manually.
-  The existing title-case extraction continues to form the neutral proper-name
-  fallback.
-- Portuguese (Portugal): dictionaries/pt_PT/src/hunspell/Portuguese-European.dic
-  plus Portuguese-European.aff. The Hunspell rules are expanded with
-  hunspell-reader 10.0.1, then normalized to a one-word-per-line lexicon.
-  Unambiguous title-case lemmas also contribute to the neutral proper-name list.
+- English (EN-GB): CSpell dictionaries, commit ${CSPELL_REF}. The upstream
+  keep-case information is preserved in en_GB_case_sensitive.* so forms such as
+  I / I'm / I'd / I'll / I've are not lost by lowercase lookup.
+- Portuguese (PT-PT): CSpell/Hunspell Portuguese-European dictionary from the
+  same pinned CSpell commit, expanded with hunspell-reader 10.0.1.
+- Person names: Onomaverse ${ONOMAVERSE_TAG} given-name and surname frequency
+  datasets (CC BY 4.0), supplemented by CSpell's maintained people-names source.
+  Names data from Onomaverse (https://onomaverse.com/datasets), licensed CC BY 4.0.
+- Country names: Unicode CLDR JSON commit ${CLDR_REF}, locale data for en and
+  pt-PT, under the bundled Unicode License V3.
 
-The compact Room Check core lists are not merged into these full dictionaries;
-they exist only as a runtime fail-safe for an incomplete deployment. Exact-case
-CSpell entries prove that a spelling is valid but are neutral by themselves, so
-proper names and acronyms do not incorrectly decide whether a sentence is PT or
-EN. Sentence language and ordinary PT/EN lexical evidence remain decisive.
-
-The corresponding upstream licenses are kept in ./licenses. Generated word
-files are sorted UTF-8 text. Each .index.json stores byte ranges by the first two
-Unicode characters so PHP can look up only the relevant slices without loading
-hundreds of thousands of words into memory.
+Unknown brands, technical labels, codes or intentionally unvalidated text must
+be written inside double quotes. Quoted spans are preserved exactly and skipped
+by language validation/translation. Person names recognized by the generated
+name resource do not require quotes. Country names remain language-bearing and
+are translated normally.
 
 Rebuild with:
 
     bash tools/build-large-lexicons.sh
 EOF
 
-# Build-time sanity checks use ordinary examples plus CSpell's exact-case forms.
+# Build-time regression checks: these are assertions against external sources,
+# not local exception entries.
 grep -Fxq "well" "$OUT/en_GB.txt"
 grep -Fxq "beautiful" "$OUT/en_GB.txt"
 grep -Fxq "necessary" "$OUT/en_GB.txt"
@@ -246,5 +278,17 @@ fi
 grep -Fxq "cadeira" "$OUT/pt_PT.txt"
 grep -Fxq "coração" "$OUT/pt_PT.txt"
 grep -Fxq "toalha" "$OUT/pt_PT.txt"
+grep -Fxq "Michael" "$OUT/person_neutral.txt"
+grep -Fxq "Ranjana" "$OUT/person_neutral.txt"
+grep -Fxq "spain" "$OUT/country_en.txt"
+grep -Fxq "romania" "$OUT/country_en.txt"
+grep -Fxq "espanha" "$OUT/country_pt.txt"
+grep -Fxq "roménia" "$OUT/country_pt.txt"
+if grep -Fxiq "Spania" "$OUT/person_neutral.txt" || \
+   grep -Fxiq "Spania" "$OUT/country_en.txt" || \
+   grep -Fxiq "Spania" "$OUT/country_pt.txt"; then
+  echo "ERROR: Spania unexpectedly appears in a PT/EN person/country source" >&2
+  exit 1
+fi
 
-printf 'Large lexicons built successfully.\n'
+printf 'Validated lexicons built successfully.\n'
