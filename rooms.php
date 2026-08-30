@@ -107,10 +107,15 @@ try {
             'csrfToken' => Csrf::token(),
             'locale' => Translator::locale(),
             'languageDecisionMessage' => SiteTranslations::text(
-                'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?',
-                'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?'
+                'Existe texto incorretamente escrito em Português. Quer corrigir ou anular a edição?',
+                'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'
             ),
             'languageDecisionCorrect' => SiteTranslations::text('Corrigir', 'Correct'),
+            'unsavedEditDecisionMessage' => SiteTranslations::text(
+                'Tem uma edição não guardada. Quer continuar a editar ou anular a edição?',
+                'There is an unsaved edit. Do you want to continue editing or cancel the edit?'
+            ),
+            'unsavedEditDecisionContinue' => SiteTranslations::text('Continuar a editar', 'Continue editing'),
             'languageDecisionCancel' => SiteTranslations::text('Anular edição', 'Cancel edit'),
             'today' => (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d'),
             'initialProperty' => $initialProperty,
@@ -177,7 +182,7 @@ try {
                     <select id="intervalSelect" aria-label="Intervalo de verificação">
                         <option value="">Escolher intervalo</option>
                         <?php foreach ($intervals as $interval): ?>
-                            <option value="<?= (int) $interval['id'] ?>"><?= htmlspecialchars((string) $interval['name'], ENT_QUOTES, 'UTF-8') ?></option>
+                            <option value="<?= (int) $interval['id'] ?>"><?= htmlspecialchars((string) $interval['name'], ENT_QUOTES, 'UTF-8') ?> — <?= (new DateTimeImmutable((string) $interval['start_date']))->format('d/m/Y') ?> a <?= (new DateTimeImmutable((string) $interval['end_date']))->format('d/m/Y') ?></option>
                         <?php endforeach; ?>
                     </select>
                     <small id="intervalDates" class="interval-dates" aria-live="polite"></small>
