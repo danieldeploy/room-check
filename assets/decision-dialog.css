@@ -1,0 +1,99 @@
+.language-decision-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(23, 49, 58, 0.42);
+    backdrop-filter: blur(6px);
+}
+
+.language-decision-dialog {
+    width: min(460px, 100%);
+    overflow: hidden;
+    border: 1px solid rgba(220, 230, 229, 0.96);
+    border-radius: 20px;
+    color: var(--ink, #17313a);
+    background: var(--surface, #fff);
+    box-shadow: 0 24px 60px rgba(23, 49, 58, 0.24);
+}
+
+.language-decision-dialog::before {
+    content: "";
+    display: block;
+    height: 6px;
+    background: linear-gradient(135deg, var(--brand-dark, #115e59), var(--brand, #0f766e));
+}
+
+.language-decision-dialog p {
+    margin: 0;
+    padding: 24px 24px 20px;
+    color: var(--ink, #17313a);
+    font-size: 0.98rem;
+    font-weight: 650;
+    line-height: 1.55;
+}
+
+.language-decision-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 0 24px 24px;
+    flex-wrap: wrap;
+}
+
+.language-decision-actions button {
+    min-height: 42px;
+    padding: 9px 18px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.language-decision-actions button:hover {
+    transform: translateY(-1px);
+}
+
+.language-decision-actions button:first-child {
+    color: #fff;
+    background: var(--brand, #0f766e);
+}
+
+.language-decision-actions button:first-child:hover {
+    background: var(--brand-dark, #115e59);
+}
+
+.language-decision-actions button:last-child {
+    color: var(--wrong, #b42318);
+    border-color: #f0c7c2;
+    background: #fff5f4;
+}
+
+.language-decision-actions button:last-child:hover {
+    border-color: #e5aaa3;
+    background: #feeceb;
+}
+
+@media (max-width: 520px) {
+    .language-decision-overlay {
+        padding: 14px;
+    }
+
+    .language-decision-dialog p {
+        padding: 22px 20px 18px;
+    }
+
+    .language-decision-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        padding: 0 20px 20px;
+    }
+
+    .language-decision-actions button {
+        width: 100%;
+        min-height: 46px;
+    }
+}
