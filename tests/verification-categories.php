@@ -98,7 +98,7 @@ assertVerificationCategories(
     'the dialog implementation is global and legacy item-list confirmations use it'
 );
 assertVerificationCategories(
-    str_contains($navigation, 'class="module-menu module-areas-menu"')
+    str_contains($navigation, 'class="module-menu module-areas-menu" data-global-menu')
         && str_contains($navigation, '$areasActive = $active === \'categories\' || str_starts_with($active, \'category:\');')
         && str_contains($navigation, 'foreach ($categories as $category)')
         && str_contains($navigation, 'foreach ($lists as $list)')

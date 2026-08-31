@@ -18,7 +18,7 @@ final class VerificationCategoryNavigation
         ?>
         <nav class="module-tabs" aria-label="<?= self::escape(SiteTranslations::text('Áreas da gestão dos espaços', 'Space management areas')) ?>">
             <?php $areasActive = $active === 'categories' || str_starts_with($active, 'category:'); ?>
-            <details class="module-menu module-areas-menu">
+            <details class="module-menu module-areas-menu" data-global-menu>
                 <summary class="<?= $areasActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Áreas', 'Areas')) ?></summary>
                 <div class="module-submenu">
                     <?php if ($canManageCategories): ?>
@@ -36,7 +36,7 @@ final class VerificationCategoryNavigation
             </details>
             <?php if ($canManageLists): ?>
                 <?php $listsActive = $active === 'lists' || str_starts_with($active, 'list:'); ?>
-                <details class="module-menu">
+                <details class="module-menu" data-global-menu>
                     <summary class="<?= $listsActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Listas', 'Lists')) ?></summary>
                     <div class="module-submenu">
                         <a class="module-submenu-edit <?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')) ?></a>
