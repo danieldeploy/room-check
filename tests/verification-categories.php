@@ -98,14 +98,18 @@ assertVerificationCategories(
     'the dialog implementation is global and legacy item-list confirmations use it'
 );
 assertVerificationCategories(
-    str_contains($navigation, 'foreach ($categories as $category)')
+    str_contains($navigation, 'class="module-menu module-areas-menu"')
+        && str_contains($navigation, '$areasActive = $active === \'categories\' || str_starts_with($active, \'category:\');')
+        && str_contains($navigation, 'foreach ($categories as $category)')
         && str_contains($navigation, 'foreach ($lists as $list)')
+        && str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")
         && str_contains($navigation, "SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')")
+        && str_contains($navigation, "'rooms.php?area=' . rawurlencode($slug)")
         && str_contains($navigation, "'item-lists.php?list_id=' . \$listId . '&list_view=menu'")
         && str_contains($rooms, 'verificationCategories($pdo)')
         && str_contains($rooms, '$navigationLists = itemLists($pdo)')
         && str_contains($lists, '$verificationAreas[(string) $category[\'slug\']]'),
-    'area navigation, hierarchical list submenu and list selectors are database-driven'
+    'hierarchical area and list submenus are database-driven'
 );
 assertVerificationCategories(
     str_contains($lists, '<?php if (!$isMenuListView): ?>')

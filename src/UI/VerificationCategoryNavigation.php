@@ -17,14 +17,23 @@ final class VerificationCategoryNavigation
         $prefix = $prefix === '' ? '' : rtrim($prefix, '/') . '/';
         ?>
         <nav class="module-tabs" aria-label="<?= self::escape(SiteTranslations::text('Áreas da gestão dos espaços', 'Space management areas')) ?>">
-            <?php foreach ($categories as $category): ?>
-                <?php
-                $slug = (string) ($category['slug'] ?? '');
-                $name = (string) ($category['display_name'] ?? $category['name'] ?? $slug);
-                $isActive = $active === 'category:' . $slug;
-                ?>
-                <a class="<?= $isActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'rooms.php?area=' . rawurlencode($slug)) ?>" title="<?= self::escape($name) ?>" <?= $isActive ? 'aria-current="page"' : '' ?>><?= self::escape($name) ?></a>
-            <?php endforeach; ?>
+            <?php $areasActive = $active === 'categories' || str_starts_with($active, 'category:'); ?>
+            <details class="module-menu module-areas-menu">
+                <summary class="<?= $areasActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Áreas', 'Areas')) ?></summary>
+                <div class="module-submenu">
+                    <?php if ($canManageCategories): ?>
+                        <a class="module-submenu-edit <?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')) ?></a>
+                    <?php endif; ?>
+                    <?php foreach ($categories as $category): ?>
+                        <?php
+                        $slug = (string) ($category['slug'] ?? '');
+                        $name = (string) ($category['display_name'] ?? $category['name'] ?? $slug);
+                        $isActive = $active === 'category:' . $slug;
+                        ?>
+                        <a class="module-submenu-list <?= $isActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'rooms.php?area=' . rawurlencode($slug)) ?>" title="<?= self::escape($name) ?>" <?= $isActive ? 'aria-current="page"' : '' ?>><?= self::escape($name) ?></a>
+                    <?php endforeach; ?>
+                </div>
+            </details>
             <?php if ($canManageLists): ?>
                 <?php $listsActive = $active === 'lists' || str_starts_with($active, 'list:'); ?>
                 <details class="module-menu">
@@ -41,9 +50,6 @@ final class VerificationCategoryNavigation
                         <?php endforeach; ?>
                     </div>
                 </details>
-            <?php endif; ?>
-            <?php if ($canManageCategories): ?>
-                <a class="<?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Áreas', 'Areas')) ?></a>
             <?php endif; ?>
         </nav>
         <?php
