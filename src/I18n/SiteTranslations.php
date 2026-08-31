@@ -257,6 +257,8 @@ final class SiteTranslations
             'Lista' => 'List',
             'Editar' => 'Edit',
             'Selecionar lista para editar' => 'Select list to edit',
+            'Selecionar lista para apagar' => 'Select list to delete',
+            'Apagar lista selecionada' => 'Delete selected list',
             'Escolher lista' => 'Choose list',
             'Escolha a lista.' => 'Choose the list.',
             'Escolha uma lista válida.' => 'Choose a valid list.',

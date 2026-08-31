@@ -127,6 +127,15 @@ assertVerificationCategories(
     'successful list creation disables Create List and reveals the Add Item row below it'
 );
 assertVerificationCategories(
+    str_contains($lists, '<summary>Selecionar lista para apagar</summary>')
+        && str_contains($lists, '<input type="hidden" name="list_view" value="delete">')
+        && str_contains($lists, '$isDeleteListView = $listView === \'delete\';')
+        && str_contains($lists, '<h2 class="section-title">Apagar lista selecionada</h2>')
+        && str_contains($lists, '<?php if ($selectedList && !$creationFlow && !$isDeleteListView): ?>')
+        && substr_count($lists, 'name="action" value="delete_list"') === 1,
+    'list deletion has a dedicated selector and is absent from the list editor'
+);
+assertVerificationCategories(
     str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")
         && str_contains($navigation, "SiteTranslations::text('Listas', 'Lists')")
         && str_contains($page, "SiteTranslations::text('Criar nova área', 'Create new area')")

@@ -207,6 +207,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
 }
 $isMenuListView = $listView === 'menu';
+$isDeleteListView = $listView === 'delete';
 
 $lists = itemLists($pdo);
 if ($listId > 0 && !array_filter($lists, static fn(array $list): bool => $list['id'] === $listId)) {
@@ -306,9 +307,43 @@ header('Cache-Control: no-store');
             </select></label>
         </form>
     </details>
+
+    <details class="list-create-panel list-select-panel list-delete-panel" <?= $isDeleteListView ? 'open' : '' ?>>
+        <summary>Selecionar lista para apagar</summary>
+        <form method="get" class="list-selector">
+            <input type="hidden" name="list_view" value="delete">
+            <label><span>Lista</span><select name="list_id" required onchange="this.form.submit()">
+                <option value="" <?= !$isDeleteListView || $listId === 0 ? 'selected' : '' ?> disabled>Escolher lista</option>
+                <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $isDeleteListView && $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
+            </select></label>
+        </form>
+    </details>
     <?php endif; ?>
 
-    <?php if ($selectedList && !$creationFlow): ?>
+    <?php if ($selectedList && $isDeleteListView): ?>
+    <section class="list-card list-delete-card">
+        <h2 class="section-title">Apagar lista selecionada</h2>
+        <div class="selected-list-summary" role="status">
+            <span><strong>Lista:</strong> <?= listEscape((string) $selectedList['displayName']) ?></span>
+            <span><strong>Área:</strong> <?= listEscape($selectedAreaName) ?></span>
+        </div>
+        <small class="list-protection-note <?= $selectedList['isSystem'] ? '' : 'is-placeholder' ?>" <?= $selectedList['isSystem'] ? '' : 'aria-hidden="true"' ?>>
+            <?= $selectedList['isSystem'] ? 'Lista base protegida — não pode ser apagada.' : 'Lista base protegida' ?>
+        </small>
+        <form method="post" class="delete-list-form" <?= $selectedList['isSystem'] ? '' : sprintf(
+            'data-app-confirm="%s" data-app-confirm-label="%s" data-app-cancel-label="%s" data-app-destructive="1"',
+            listEscape(SiteTranslations::text('Apagar esta lista?', 'Delete this list?')),
+            listEscape(SiteTranslations::text('Apagar', 'Delete')),
+            listEscape(SiteTranslations::text('Cancelar', 'Cancel'))
+        ) ?>>
+            <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
+            <input type="hidden" name="action" value="delete_list"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="list_view" value="delete">
+            <button class="danger" type="submit" <?= $selectedList['isSystem'] ? 'disabled title="Lista base protegida"' : '' ?>>Apagar lista</button>
+        </form>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($selectedList && !$creationFlow && !$isDeleteListView): ?>
     <section class="list-card">
         <?php if ($isMenuListView): ?>
         <div class="selected-list-summary" role="status">
@@ -326,21 +361,8 @@ header('Cache-Control: no-store');
                 <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>" <?= $selectedList['area'] === $value ? 'selected' : '' ?>><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
             </form>
             <div class="list-edit-actions">
-                <small class="list-protection-note <?= $selectedList['isSystem'] ? '' : 'is-placeholder' ?>" <?= $selectedList['isSystem'] ? '' : 'aria-hidden="true"' ?>>
-                    <?= $selectedList['isSystem'] ? 'Lista base protegida — não pode ser apagada.' : 'Lista base protegida' ?>
-                </small>
                 <div class="list-action-buttons">
                     <button type="submit" form="editListForm">Guardar lista</button>
-                    <form method="post" <?= $selectedList['isSystem'] ? '' : sprintf(
-                        'data-app-confirm="%s" data-app-confirm-label="%s" data-app-cancel-label="%s" data-app-destructive="1"',
-                        listEscape(SiteTranslations::text('Apagar esta lista?', 'Delete this list?')),
-                        listEscape(SiteTranslations::text('Apagar', 'Delete')),
-                        listEscape(SiteTranslations::text('Cancelar', 'Cancel'))
-                    ) ?>>
-                        <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
-                        <input type="hidden" name="action" value="delete_list"><input type="hidden" name="list_id" value="<?= $listId ?>">
-                        <button class="danger" type="submit" <?= $selectedList['isSystem'] ? 'disabled title="Lista base protegida"' : '' ?>>Apagar lista</button>
-                    </form>
                 </div>
             </div>
         </div>
