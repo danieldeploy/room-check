@@ -5,6 +5,10 @@
     const panelSelector = 'details[data-crud-action]';
     const boundAttribute = 'data-global-crud-bound';
     const actionOrder = ['new', 'delete', 'edit'];
+    const externalActionSelectors = {
+        delete: 'input[name="action"][value^="delete_"]',
+        edit: 'input[name="action"][value^="rename_"]',
+    };
 
     const resetPanel = (panel) => {
         panel.querySelectorAll('form').forEach((form) => form.reset());
@@ -38,6 +42,32 @@
         });
     };
 
+    const externalContentForAction = (workflow, action) => {
+        const selector = externalActionSelectors[action];
+        if (!selector) {
+            return [];
+        }
+
+        const content = new Set();
+        document.querySelectorAll(selector).forEach((marker) => {
+            if (workflow.contains(marker)) {
+                return;
+            }
+
+            const container = marker.closest('section.list-card');
+            if (container) {
+                content.add(container);
+            }
+        });
+        return Array.from(content);
+    };
+
+    const hideExternalContent = (workflow, action) => {
+        externalContentForAction(workflow, action).forEach((content) => {
+            content.hidden = true;
+        });
+    };
+
     const bindWorkflow = (workflow) => {
         if (workflow.hasAttribute(boundAttribute)) {
             return;
@@ -59,6 +89,7 @@
             panels.forEach((panel) => {
                 if (panel !== openedPanel) {
                     resetPanel(panel);
+                    hideExternalContent(workflow, panel.dataset.crudAction);
                     panel.open = false;
                 }
             });
