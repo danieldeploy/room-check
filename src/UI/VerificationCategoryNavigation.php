@@ -30,14 +30,14 @@ final class VerificationCategoryNavigation
                 <details class="module-menu">
                     <summary class="<?= $listsActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Listas', 'Lists')) ?></summary>
                     <div class="module-submenu">
-                        <a class="module-submenu-edit <?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Editar', 'Edit')) ?></a>
+                        <a class="module-submenu-edit <?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')) ?></a>
                         <?php foreach ($lists as $list): ?>
                             <?php
                             $listId = (int) ($list['id'] ?? 0);
                             $listName = (string) ($list['displayName'] ?? $list['display_name'] ?? $list['name'] ?? '');
                             $listIsActive = $active === 'list:' . $listId;
                             ?>
-                            <a class="module-submenu-list <?= $listIsActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php?list_id=' . $listId) ?>" title="<?= self::escape($listName) ?>" <?= $listIsActive ? 'aria-current="page"' : '' ?>><?= self::escape($listName) ?></a>
+                            <a class="module-submenu-list <?= $listIsActive ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php?list_id=' . $listId . '&list_view=menu') ?>" title="<?= self::escape($listName) ?>" <?= $listIsActive ? 'aria-current="page"' : '' ?>><?= self::escape($listName) ?></a>
                         <?php endforeach; ?>
                     </div>
                 </details>

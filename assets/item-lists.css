@@ -43,6 +43,7 @@ button.danger { background:var(--danger); }
 button:disabled { cursor:not-allowed; opacity:.42; }
 button.subtle { color:var(--danger); border:1px solid #f0c7c2; background:#fff5f4; }
 .section-title { margin:0 0 16px; color:var(--brand-dark); font-size:1rem; }
+.selected-list-summary { display:flex; flex-wrap:wrap; gap:8px 24px; margin:0 0 18px; padding:12px 14px; border:1px solid #bbdec6; border-radius:12px; color:#166534; background:#f0fdf4; }
 .list-card-heading { display:flex; align-items:end; justify-content:space-between; gap:12px; margin-bottom:18px; }
 .rename-list { flex:1; }
 .list-edit-actions { display:grid; flex:0 0 294px; align-self:stretch; align-content:end; gap:6px; }

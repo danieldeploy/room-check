@@ -100,12 +100,31 @@ assertVerificationCategories(
 assertVerificationCategories(
     str_contains($navigation, 'foreach ($categories as $category)')
         && str_contains($navigation, 'foreach ($lists as $list)')
-        && str_contains($navigation, "SiteTranslations::text('Editar', 'Edit')")
-        && str_contains($navigation, "'item-lists.php?list_id=' . \$listId")
+        && str_contains($navigation, "SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')")
+        && str_contains($navigation, "'item-lists.php?list_id=' . \$listId . '&list_view=menu'")
         && str_contains($rooms, 'verificationCategories($pdo)')
         && str_contains($rooms, '$navigationLists = itemLists($pdo)')
         && str_contains($lists, '$verificationAreas[(string) $category[\'slug\']]'),
     'area navigation, hierarchical list submenu and list selectors are database-driven'
+);
+assertVerificationCategories(
+    str_contains($lists, '<?php if (!$isMenuListView): ?>')
+        && str_contains($lists, 'class="selected-list-summary"')
+        && str_contains($lists, '<strong>Lista:</strong>')
+        && str_contains($lists, '<strong>Área:</strong>')
+        && str_contains($lists, '<?php if ($isMenuListView): ?>')
+        && str_contains($lists, 'id="editListForm"')
+        && str_contains($lists, 'aria-label="Nome da lista"'),
+    'direct menu list view is read-only at the top while the administrative editor keeps list metadata controls'
+);
+assertVerificationCategories(
+    str_contains($lists, '$creationFlow = $listView === \'create\';')
+        && str_contains($lists, '$listView = \'create\';')
+        && str_contains($lists, '$creationFlow = true;')
+        && str_contains($lists, '<button type="submit" <?= $creationFlow ? \'disabled\' : \'\' ?>>Criar lista</button>')
+        && str_contains($lists, 'class="add-item create-flow-add-item"')
+        && str_contains($lists, 'name="list_view" value="create"'),
+    'successful list creation disables Create List and reveals the Add Item row below it'
 );
 assertVerificationCategories(
     str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")

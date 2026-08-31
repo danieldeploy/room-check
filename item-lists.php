@@ -28,10 +28,14 @@ foreach ($verificationCategories as $category) {
     $verificationAreas[(string) $category['slug']] = (string) $category['display_name'];
 }
 $listId = (int) ($_GET['list_id'] ?? 0);
+$listView = (string) ($_GET['list_view'] ?? '');
+$creationFlow = false;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
         Csrf::validate($_POST['csrf_token'] ?? null);
         $action = (string) ($_POST['action'] ?? '');
+        $listView = (string) ($_POST['list_view'] ?? '');
+        $creationFlow = $listView === 'create';
         $listId = (int) ($_POST['list_id'] ?? 0);
         $itemId = (int) ($_POST['item_id'] ?? 0);
         $name = trim((string) ($_POST['name'] ?? ''));
@@ -65,6 +69,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'area' => $area, 'user_id' => (int) $currentUser['id'],
             ]);
             $listId = (int) $pdo->lastInsertId();
+            $listView = 'create';
+            $creationFlow = true;
             $message = 'Lista criada.';
         } elseif ($action === 'rename_list') {
             $oldList = itemList($pdo, $listId);
@@ -200,6 +206,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $error = $exception->getMessage();
     }
 }
+$isMenuListView = $listView === 'menu';
 
 $lists = itemLists($pdo);
 if ($listId > 0 && !array_filter($lists, static fn(array $list): bool => $list['id'] === $listId)) {
@@ -207,10 +214,12 @@ if ($listId > 0 && !array_filter($lists, static fn(array $list): bool => $list['
 }
 $selectedList = array_values(array_filter($lists, static fn(array $list): bool => $list['id'] === $listId))[0] ?? null;
 $itemRows = [];
+$selectedAreaName = '';
 if ($selectedList) {
     $selectedList['displayName'] = Translator::localized(
         (string) $selectedList['name'], (string) ($selectedList['nameEn'] ?? '')
     );
+    $selectedAreaName = $verificationAreas[(string) $selectedList['area']] ?? (string) $selectedList['area'];
     $statement = $pdo->prepare(
         'SELECT id, name, name_en, default_instructions, default_instructions_en FROM item_list_items
          WHERE list_id = :list_id ORDER BY sort_order, id'
@@ -267,15 +276,25 @@ header('Cache-Control: no-store');
     <?php if ($message): ?><div class="notice success" role="status"><?= listEscape($message) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="notice error" role="alert"><?= listEscape($error) ?></div><?php endif; ?>
 
-    <details class="list-create-panel">
+    <?php if (!$isMenuListView): ?>
+    <details class="list-create-panel" <?= $creationFlow ? 'open' : '' ?>>
         <summary>Criar nova lista</summary>
         <form method="post" class="create-list">
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
             <input type="hidden" name="action" value="create_list">
-            <label><span>Nova lista</span><input name="name" maxlength="120" required placeholder="Nome da nova lista"></label>
-            <label class="list-area"><span>Área a verificar</span><select name="area" required><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>"><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
-            <button type="submit">Criar lista</button>
+            <label><span>Nova lista</span><input name="name" maxlength="120" required placeholder="Nome da nova lista" value="<?= $creationFlow && $selectedList ? listEscape((string) $selectedList['displayName']) : '' ?>" <?= $creationFlow ? 'disabled' : '' ?>></label>
+            <label class="list-area"><span>Área a verificar</span><select name="area" required <?= $creationFlow ? 'disabled' : '' ?>><?php foreach ($verificationAreas as $value => $label): ?><option value="<?= listEscape($value) ?>" <?= $creationFlow && $selectedList && $selectedList['area'] === $value ? 'selected' : '' ?>><?= listEscape($label) ?></option><?php endforeach; ?></select></label>
+            <button type="submit" <?= $creationFlow ? 'disabled' : '' ?>>Criar lista</button>
         </form>
+        <?php if ($creationFlow && $selectedList): ?>
+        <form method="post" class="add-item create-flow-add-item">
+            <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
+            <input type="hidden" name="action" value="add_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="list_view" value="create">
+            <label><span>Novo item</span><input name="name" maxlength="80" required placeholder="Nome do item"></label>
+            <label class="new-instructions"><span>Descrição da verificação</span><textarea name="default_instructions" maxlength="5000" rows="1" placeholder="Descreva a verificação…" data-bilingual-textarea data-bilingual-new-item="1"></textarea></label>
+            <button type="submit">Adicionar item</button>
+        </form>
+        <?php endif; ?>
     </details>
 
     <details class="list-create-panel list-select-panel">
@@ -287,9 +306,16 @@ header('Cache-Control: no-store');
             </select></label>
         </form>
     </details>
+    <?php endif; ?>
 
-    <?php if ($selectedList): ?>
+    <?php if ($selectedList && !$creationFlow): ?>
     <section class="list-card">
+        <?php if ($isMenuListView): ?>
+        <div class="selected-list-summary" role="status">
+            <span><strong>Lista:</strong> <?= listEscape((string) $selectedList['displayName']) ?></span>
+            <span><strong>Área:</strong> <?= listEscape($selectedAreaName) ?></span>
+        </div>
+        <?php else: ?>
         <h2 class="section-title">Editar lista selecionada</h2>
         <div class="list-card-heading">
             <form method="post" class="rename-list" id="editListForm">
@@ -318,13 +344,14 @@ header('Cache-Control: no-store');
                 </div>
             </div>
         </div>
+        <?php endif; ?>
         <div class="items-heading"><span>Item</span><span>Descreva a verificação</span><span>Ações</span></div>
         <?php if ($itemRows === []): ?><p class="empty">Esta lista ainda não tem itens.</p><?php endif; ?>
         <?php foreach ($itemRows as $item): ?>
             <div class="item-row">
                 <form method="post" class="rename-item">
                     <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
-                    <input type="hidden" name="action" value="rename_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>">
+                    <input type="hidden" name="action" value="rename_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>"><?php if ($isMenuListView): ?><input type="hidden" name="list_view" value="menu"><?php endif; ?>
                     <input name="name" maxlength="80" required value="<?= listEscape((string) $item['name']) ?>" aria-label="Nome do item">
                     <textarea name="default_instructions" maxlength="5000" rows="1" placeholder="Descreva a verificação…" aria-label="Descrição da verificação: <?= listEscape((string) $item['name']) ?>" data-bilingual-textarea data-bilingual-autosave-action="save_item_list_instructions" data-list-id="<?= $listId ?>" data-item-id="<?= (int) $item['id'] ?>"><?= listEscape((string) $item['default_instructions']) ?></textarea>
                     <button type="submit">Guardar</button>
@@ -335,14 +362,14 @@ header('Cache-Control: no-store');
                       data-app-cancel-label="<?= listEscape(SiteTranslations::text('Cancelar', 'Cancel')) ?>"
                       data-app-destructive="1">
                     <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
-                    <input type="hidden" name="action" value="delete_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>">
+                    <input type="hidden" name="action" value="delete_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><input type="hidden" name="item_id" value="<?= (int) $item['id'] ?>"><?php if ($isMenuListView): ?><input type="hidden" name="list_view" value="menu"><?php endif; ?>
                     <button class="danger subtle" type="submit">Apagar</button>
                 </form>
             </div>
         <?php endforeach; ?>
         <form method="post" class="add-item">
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
-            <input type="hidden" name="action" value="add_item"><input type="hidden" name="list_id" value="<?= $listId ?>">
+            <input type="hidden" name="action" value="add_item"><input type="hidden" name="list_id" value="<?= $listId ?>"><?php if ($isMenuListView): ?><input type="hidden" name="list_view" value="menu"><?php endif; ?>
             <label><span>Novo item</span><input name="name" maxlength="80" required placeholder="Nome do item"></label>
             <label class="new-instructions"><span>Descrição da verificação</span><textarea name="default_instructions" maxlength="5000" rows="1" placeholder="Descreva a verificação…" data-bilingual-textarea data-bilingual-new-item="1"></textarea></label>
             <button type="submit">Adicionar item</button>
