@@ -6,6 +6,38 @@
     const boundAttribute = 'data-global-crud-bound';
     const actionOrder = ['new', 'delete', 'edit'];
 
+    const resetPanel = (panel) => {
+        panel.querySelectorAll('form').forEach((form) => form.reset());
+
+        panel.querySelectorAll('input, textarea, select').forEach((field) => {
+            if (field instanceof HTMLInputElement) {
+                if (field.type === 'hidden' || field.disabled) {
+                    return;
+                }
+                if (field.type === 'checkbox' || field.type === 'radio') {
+                    field.checked = field.defaultChecked;
+                    return;
+                }
+                field.value = '';
+                return;
+            }
+
+            if (field instanceof HTMLTextAreaElement) {
+                if (!field.disabled) {
+                    field.value = '';
+                }
+                return;
+            }
+
+            if (field instanceof HTMLSelectElement) {
+                const placeholder = Array.from(field.options).find((option) => option.value === '');
+                if (placeholder) {
+                    field.selectedIndex = placeholder.index;
+                }
+            }
+        });
+    };
+
     const bindWorkflow = (workflow) => {
         if (workflow.hasAttribute(boundAttribute)) {
             return;
@@ -26,6 +58,7 @@
 
             panels.forEach((panel) => {
                 if (panel !== openedPanel) {
+                    resetPanel(panel);
                     panel.open = false;
                 }
             });
