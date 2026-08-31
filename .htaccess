@@ -1,12 +1,22 @@
 Options -Indexes
 DirectoryIndex index.php
 
-<FilesMatch "^(config\.local\.php|database\.sql|README\.md|\.cpanel\.yml)$">
+<FilesMatch "^(config\.local\.php|database\.sql|README\.md|\.cpanel\.yml|my2n-secrets\.json|\.env)$">
     Require all denied
 </FilesMatch>
+
+RewriteEngine On
+RewriteRule ^(?:src|tests|migrations)/ - [F,L,NC]
 
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php82” package as the default “PHP” programming language.
+<IfModule mime_module>
+    AddHandler application/x-httpd-ea-php82 .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

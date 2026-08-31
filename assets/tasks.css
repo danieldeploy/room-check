@@ -1,0 +1,48 @@
+:root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #102a43; background: #f3f7fb; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #e6fffa 0, transparent 34rem), #f3f7fb; }
+a { color: inherit; }
+.tasks-shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 56px; }
+.tasks-header { padding: 52px 4px 26px; }
+.eyebrow { margin: 0 0 8px; color: #0f766e; font-size: .76rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.tasks-header h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; line-height: 1.05; }
+.tasks-header > p:last-child { margin: 14px 0 0; color: #486581; font-size: 1.05rem; }
+.notice { margin: 0 0 18px; padding: 14px 16px; border-radius: 12px; font-weight: 750; }
+.notice.success { background: #d1fae5; color: #047857; }
+.notice.error { background: #fee2e2; color: #b91c1c; }
+.selectors { display: flex; gap: 16px; padding: 18px; border: 1px solid #d9e2ec; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(16,42,67,.07); }
+label span, .selectors span { display: block; margin-bottom: 6px; color: #486581; font-size: .78rem; font-weight: 850; text-transform: uppercase; letter-spacing: .05em; }
+select { min-height: 44px; border: 1px solid #bcccdc; border-radius: 10px; background: #fff; padding: 9px 34px 9px 11px; color: #102a43; font: inherit; }
+.assignment-card { margin-top: 18px; overflow: hidden; border: 1px solid #d9e2ec; border-radius: 18px; background: #fff; box-shadow: 0 14px 34px rgba(16,42,67,.08); }
+.assignment-heading, .assignment-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(230px, 1.2fr); gap: 22px; align-items: center; }
+.assignment-heading { padding: 13px 20px; background: #e8f5f3; color: #0f766e; font-size: .75rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.assignment-row { padding: 13px 20px; border-top: 1px solid #edf2f7; }
+.assignment-row .item-name { margin: 0; color: #102a43; font-size: 1rem; text-transform: none; letter-spacing: 0; }
+.assignment-row select { width: 100%; }
+.item-name small { display: inline-block; margin-left: 8px; padding: 4px 7px; border-radius: 999px; background: #d1fae5; color: #047857; font-size: .68rem; text-transform: uppercase; }
+.save-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 16px 20px; border-top: 1px solid #d9e2ec; background: rgba(255,255,255,.96); }
+button { border: 0; border-radius: 10px; background: #0f766e; padding: 12px 18px; color: #fff; font: inherit; font-weight: 850; cursor: pointer; }
+.task-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.task-card { padding: 20px; border: 1px solid #d9e2ec; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(16,42,67,.07); }
+.task-location { display: flex; justify-content: space-between; gap: 12px; color: #486581; font-size: .83rem; }
+.task-location strong { color: #0f766e; }
+.task-card h2 { margin: 22px 0 10px; font-size: 1.4rem; }
+.task-date { margin: -2px 0 12px; color: #526d82; }
+.problem { padding: 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; line-height: 1.45; }
+.task-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 22px; }
+.task-actions a { color: #0f766e; font-weight: 800; }
+.task-actions form { margin: 0; }
+.empty-state { padding: 30px; border: 1px dashed #9fb3c8; border-radius: 18px; background: #fff; }
+.empty-state h2 { margin-top: 0; }
+.empty-state p { margin-bottom: 0; color: #627d98; }
+@media (max-width: 700px) {
+    .tasks-shell { width: min(100% - 20px, 1120px); padding-top: 10px; }
+    .tasks-header { padding-top: 40px; }
+    .selectors { display: grid; grid-template-columns: 1fr 1fr; }
+    .selectors select { width: 100%; }
+    .assignment-heading { display: none; }
+    .assignment-row { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
+    .task-list { grid-template-columns: 1fr; }
+    .task-actions { align-items: stretch; flex-direction: column; }
+    .task-actions button { width: 100%; }
+}

@@ -1,0 +1,19 @@
+body { background: #f2f7f6; }
+.users-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 60px; }
+header { margin: 36px 0 24px; }
+header h1 { font-size: clamp(2.4rem, 6vw, 4rem); }
+header p:not(.eyebrow) { color: #65777d; }
+.management-card { padding: 20px; margin-top: 16px; border: 1px solid #d9e5e3; border-radius: 18px; background: #fff; }
+.management-card h2 { margin-top: 0; }
+.create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.create-grid button { align-self: end; }
+.user-list { display: grid; gap: 12px; }
+.user-row { display: grid; grid-template-columns: minmax(170px, 1fr) auto minmax(260px, 1.4fr) minmax(260px, 1.4fr) auto; align-items: center; gap: 12px; padding: 14px; border: 1px solid #e0e9e8; border-radius: 13px; }
+.user-row > div span { display: block; color: #65777d; font-size: .86rem; }
+.account-state { padding: 5px 8px; border-radius: 999px; font-size: .75rem; font-weight: 850; }
+.account-state.active { color: #137333; background: #e4f7e9; }
+.account-state.inactive { color: #9f231b; background: #fff0ee; }
+.inline-form { display: flex; align-items: center; gap: 7px; }
+.inline-form input, .inline-form select { min-height: 42px; }
+button.secondary { color: #17313a; background: #e8efee; }
+@media (max-width: 900px) { .users-shell { width: min(100% - 20px, 1180px); padding-top: 10px; } .user-row { grid-template-columns: 1fr; align-items: stretch; } .create-grid { grid-template-columns: 1fr; } }
