@@ -278,7 +278,8 @@ header('Cache-Control: no-store');
     <?php if ($error): ?><div class="notice error" role="alert"><?= listEscape($error) ?></div><?php endif; ?>
 
     <?php if (!$isMenuListView): ?>
-    <details class="list-create-panel" <?= $creationFlow ? 'open' : '' ?>>
+    <section class="global-crud-workflow" data-global-crud>
+    <details class="list-create-panel" data-crud-action="new" <?= $creationFlow ? 'open' : '' ?>>
         <summary>Criar nova lista</summary>
         <form method="post" class="create-list">
             <input type="hidden" name="csrf_token" value="<?= listEscape(Csrf::token()) ?>">
@@ -298,17 +299,7 @@ header('Cache-Control: no-store');
         <?php endif; ?>
     </details>
 
-    <details class="list-create-panel list-select-panel">
-        <summary>Selecionar lista para editar</summary>
-        <form method="get" class="list-selector">
-            <label><span>Lista</span><select name="list_id" required onchange="this.form.submit()">
-                <option value="" <?= $listId === 0 ? 'selected' : '' ?> disabled>Escolher lista</option>
-                <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
-            </select></label>
-        </form>
-    </details>
-
-    <details class="list-create-panel list-select-panel list-delete-panel" <?= $isDeleteListView ? 'open' : '' ?>>
+    <details class="list-create-panel list-select-panel list-delete-panel" data-crud-action="delete" <?= $isDeleteListView ? 'open' : '' ?>>
         <summary>Selecionar lista para apagar</summary>
         <form method="get" class="list-selector">
             <input type="hidden" name="list_view" value="delete">
@@ -318,6 +309,17 @@ header('Cache-Control: no-store');
             </select></label>
         </form>
     </details>
+
+    <details class="list-create-panel list-select-panel" data-crud-action="edit">
+        <summary>Selecionar lista para editar</summary>
+        <form method="get" class="list-selector">
+            <label><span>Lista</span><select name="list_id" required onchange="this.form.submit()">
+                <option value="" <?= $listId === 0 ? 'selected' : '' ?> disabled>Escolher lista</option>
+                <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
+            </select></label>
+        </form>
+    </details>
+    </section>
     <?php endif; ?>
 
     <?php if ($selectedList && $isDeleteListView): ?>

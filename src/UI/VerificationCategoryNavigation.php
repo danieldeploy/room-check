@@ -22,7 +22,7 @@ final class VerificationCategoryNavigation
                 <summary class="<?= $areasActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Áreas', 'Areas')) ?></summary>
                 <div class="module-submenu">
                     <?php if ($canManageCategories): ?>
-                        <a class="module-submenu-edit <?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')) ?></a>
+                        <a class="module-submenu-edit <?= $active === 'categories' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'verification-categories.php') ?>" <?= $active === 'categories' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Apagar / Editar', 'New / Delete / Edit')) ?></a>
                     <?php endif; ?>
                     <?php foreach ($categories as $category): ?>
                         <?php
@@ -39,7 +39,7 @@ final class VerificationCategoryNavigation
                 <details class="module-menu" data-global-menu>
                     <summary class="<?= $listsActive ? 'active' : '' ?>"><?= self::escape(SiteTranslations::text('Listas', 'Lists')) ?></summary>
                     <div class="module-submenu">
-                        <a class="module-submenu-edit <?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')) ?></a>
+                        <a class="module-submenu-edit <?= $active === 'lists' ? 'active' : '' ?>" href="<?= self::escape($prefix . 'item-lists.php') ?>" <?= $active === 'lists' ? 'aria-current="page"' : '' ?>><?= self::escape(SiteTranslations::text('Nova / Apagar / Editar', 'New / Delete / Edit')) ?></a>
                         <?php foreach ($lists as $list): ?>
                             <?php
                             $listId = (int) ($list['id'] ?? 0);

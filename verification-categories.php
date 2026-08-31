@@ -23,6 +23,8 @@ try {
 
 $message = null;
 $error = null;
+$categoryId = (int) ($_GET['category_id'] ?? 0);
+$categoryView = (string) ($_GET['category_view'] ?? '');
 $storageAvailable = VerificationCategoryRepository::storageAvailable($pdo);
 $navigationLists = itemLists($pdo);
 foreach ($navigationLists as &$navigationList) {
@@ -38,6 +40,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         Csrf::validate($_POST['csrf_token'] ?? null);
         $action = (string) ($_POST['action'] ?? '');
         $categoryId = (int) ($_POST['category_id'] ?? 0);
+        $categoryView = (string) ($_POST['category_view'] ?? '');
         $name = trim((string) ($_POST['name'] ?? ''));
         $translator = new ContentTranslator($pdo, $config['translation'] ?? []);
 
@@ -84,6 +87,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     ),
                 ]
             );
+            $categoryId = 0;
         } else {
             throw new InvalidArgumentException(SiteTranslations::text('Operação inválida.', 'Invalid action.'));
         }
@@ -124,6 +128,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $categories = verificationCategories($pdo, true);
+$isDeleteCategoryView = $categoryView === 'delete';
+if ($categoryId > 0 && !array_filter($categories, static fn(array $category): bool => $category['id'] === $categoryId)) {
+    $categoryId = 0;
+}
+$selectedCategory = array_values(array_filter(
+    $categories,
+    static fn(array $category): bool => $category['id'] === $categoryId
+))[0] ?? null;
 $canManageUsers = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_USERS_MANAGE);
 $canManagePermissions = Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_PERMISSIONS_MANAGE);
 
@@ -187,7 +199,8 @@ header('Cache-Control: no-store');
     <?php endif; ?>
     <?php if ($error): ?><noscript><div class="notice error" role="alert"><?= categoryEscape($error) ?></div></noscript><?php endif; ?>
 
-    <details class="list-create-panel" <?= $categories === [] ? 'open' : '' ?>>
+    <section class="global-crud-workflow" data-global-crud>
+    <details class="list-create-panel" data-crud-action="new" <?= $categories === [] ? 'open' : '' ?>>
         <summary><?= categoryEscape(SiteTranslations::text('Criar nova área', 'Create new area')) ?></summary>
         <form method="post" class="create-list category-create-form">
             <input type="hidden" name="csrf_token" value="<?= categoryEscape(Csrf::token()) ?>">
@@ -197,37 +210,62 @@ header('Cache-Control: no-store');
         </form>
     </details>
 
-    <section class="category-list" aria-label="<?= categoryEscape(SiteTranslations::text('Áreas existentes', 'Existing areas')) ?>">
-        <div class="category-list-heading" aria-hidden="true">
-            <span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span>
-            <span><?= categoryEscape(SiteTranslations::text('Conteúdo', 'Content')) ?></span>
-            <span><?= categoryEscape(SiteTranslations::text('Ações', 'Actions')) ?></span>
-        </div>
-        <?php if ($categories === []): ?><p class="empty"><?= categoryEscape(SiteTranslations::text('Ainda não existem áreas.', 'There are no areas yet.')) ?></p><?php endif; ?>
-        <?php foreach ($categories as $category): ?>
-            <article class="category-row">
-                <form method="post" class="category-rename-form">
-                    <input type="hidden" name="csrf_token" value="<?= categoryEscape(Csrf::token()) ?>">
-                    <input type="hidden" name="action" value="rename_category">
-                    <input type="hidden" name="category_id" value="<?= (int) $category['id'] ?>">
-                    <label><span class="mobile-only"><?= categoryEscape(SiteTranslations::text('Nome da área', 'Area name')) ?></span><input name="name" maxlength="80" required value="<?= categoryEscape((string) $category['display_name']) ?>" aria-label="<?= categoryEscape(SiteTranslations::text('Nome da área', 'Area name')) ?>" <?= $storageAvailable ? '' : 'disabled' ?>></label>
-                    <div class="category-counts">
-                        <?php $listCount = (int) $category['list_count']; $itemCount = (int) $category['item_count']; ?>
-                        <span><?= $listCount ?> <?= categoryEscape(SiteTranslations::text($listCount === 1 ? 'lista' : 'listas', $listCount === 1 ? 'list' : 'lists')) ?></span>
-                        <span><?= $itemCount ?> <?= categoryEscape(SiteTranslations::text($itemCount === 1 ? 'item' : 'itens', $itemCount === 1 ? 'item' : 'items')) ?></span>
-                        <?php if ((int) $category['assignment_count'] > 0): ?><strong><?= categoryEscape(SiteTranslations::text('Com itens atribuídos', 'Contains assigned items')) ?></strong><?php endif; ?>
-                    </div>
-                    <button type="submit" <?= $storageAvailable ? '' : 'disabled' ?>><?= categoryEscape(SiteTranslations::text('Guardar', 'Save')) ?></button>
-                </form>
-                <form method="post" class="category-delete-form" data-category-delete data-category-name="<?= categoryEscape((string) $category['display_name']) ?>" data-list-count="<?= (int) $category['list_count'] ?>" data-item-count="<?= (int) $category['item_count'] ?>" data-assignment-count="<?= (int) $category['assignment_count'] ?>">
-                    <input type="hidden" name="csrf_token" value="<?= categoryEscape(Csrf::token()) ?>">
-                    <input type="hidden" name="action" value="delete_category">
-                    <input type="hidden" name="category_id" value="<?= (int) $category['id'] ?>">
-                    <button class="danger subtle" type="submit" <?= $storageAvailable ? '' : 'disabled' ?>><?= categoryEscape(SiteTranslations::text('Apagar', 'Delete')) ?></button>
-                </form>
-            </article>
-        <?php endforeach; ?>
+    <details class="list-create-panel list-select-panel list-delete-panel" data-crud-action="delete" <?= $isDeleteCategoryView ? 'open' : '' ?>>
+        <summary><?= categoryEscape(SiteTranslations::text('Selecionar área para apagar', 'Select area to delete')) ?></summary>
+        <form method="get" class="list-selector">
+            <input type="hidden" name="category_view" value="delete">
+            <label><span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span><select name="category_id" required onchange="this.form.submit()">
+                <option value="" <?= !$isDeleteCategoryView || !$selectedCategory ? 'selected' : '' ?> disabled><?= categoryEscape(SiteTranslations::text('Escolher área', 'Choose area')) ?></option>
+                <?php foreach ($categories as $category): ?><option value="<?= (int) $category['id'] ?>" <?= $isDeleteCategoryView && $category['id'] === $categoryId ? 'selected' : '' ?>><?= categoryEscape((string) $category['display_name']) ?></option><?php endforeach; ?>
+            </select></label>
+        </form>
+    </details>
+
+    <details class="list-create-panel list-select-panel" data-crud-action="edit" <?= $selectedCategory && !$isDeleteCategoryView ? 'open' : '' ?>>
+        <summary><?= categoryEscape(SiteTranslations::text('Selecionar área para editar', 'Select area to edit')) ?></summary>
+        <form method="get" class="list-selector">
+            <input type="hidden" name="category_view" value="edit">
+            <label><span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span><select name="category_id" required onchange="this.form.submit()">
+                <option value="" <?= !$selectedCategory || $isDeleteCategoryView ? 'selected' : '' ?> disabled><?= categoryEscape(SiteTranslations::text('Escolher área', 'Choose area')) ?></option>
+                <?php foreach ($categories as $category): ?><option value="<?= (int) $category['id'] ?>" <?= !$isDeleteCategoryView && $category['id'] === $categoryId ? 'selected' : '' ?>><?= categoryEscape((string) $category['display_name']) ?></option><?php endforeach; ?>
+            </select></label>
+        </form>
+    </details>
     </section>
+
+    <?php if ($selectedCategory && !$isDeleteCategoryView): ?>
+        <section class="list-card category-edit-card">
+            <h2 class="section-title"><?= categoryEscape(SiteTranslations::text('Editar área selecionada', 'Edit selected area')) ?></h2>
+            <form method="post" class="category-edit-form">
+                <input type="hidden" name="csrf_token" value="<?= categoryEscape(Csrf::token()) ?>">
+                <input type="hidden" name="action" value="rename_category">
+                <input type="hidden" name="category_id" value="<?= $categoryId ?>">
+                <input type="hidden" name="category_view" value="edit">
+                <label><span><?= categoryEscape(SiteTranslations::text('Nome da área', 'Area name')) ?></span><input name="name" maxlength="80" required value="<?= categoryEscape((string) $selectedCategory['display_name']) ?>" <?= $storageAvailable ? '' : 'disabled' ?>></label>
+                <button type="submit" <?= $storageAvailable ? '' : 'disabled' ?>><?= categoryEscape(SiteTranslations::text('Guardar área', 'Save area')) ?></button>
+            </form>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($selectedCategory && $isDeleteCategoryView): ?>
+        <?php $listCount = (int) $selectedCategory['list_count']; $itemCount = (int) $selectedCategory['item_count']; ?>
+        <section class="list-card category-delete-card">
+            <h2 class="section-title"><?= categoryEscape(SiteTranslations::text('Apagar área selecionada', 'Delete selected area')) ?></h2>
+            <div class="selected-list-summary" role="status">
+                <span><strong><?= categoryEscape(SiteTranslations::text('Área:', 'Area:')) ?></strong> <?= categoryEscape((string) $selectedCategory['display_name']) ?></span>
+                <span><?= $listCount ?> <?= categoryEscape(SiteTranslations::text($listCount === 1 ? 'lista' : 'listas', $listCount === 1 ? 'list' : 'lists')) ?></span>
+                <span><?= $itemCount ?> <?= categoryEscape(SiteTranslations::text($itemCount === 1 ? 'item' : 'itens', $itemCount === 1 ? 'item' : 'items')) ?></span>
+                <?php if ((int) $selectedCategory['assignment_count'] > 0): ?><strong class="category-blocked"><?= categoryEscape(SiteTranslations::text('Com itens atribuídos', 'Contains assigned items')) ?></strong><?php endif; ?>
+            </div>
+            <form method="post" class="category-delete-form" data-category-delete data-category-name="<?= categoryEscape((string) $selectedCategory['display_name']) ?>" data-list-count="<?= $listCount ?>" data-item-count="<?= $itemCount ?>" data-assignment-count="<?= (int) $selectedCategory['assignment_count'] ?>">
+                <input type="hidden" name="csrf_token" value="<?= categoryEscape(Csrf::token()) ?>">
+                <input type="hidden" name="action" value="delete_category">
+                <input type="hidden" name="category_id" value="<?= $categoryId ?>">
+                <input type="hidden" name="category_view" value="delete">
+                <button class="danger" type="submit" <?= $storageAvailable ? '' : 'disabled' ?>><?= categoryEscape(SiteTranslations::text('Apagar área', 'Delete area')) ?></button>
+            </form>
+        </section>
+    <?php endif; ?>
 </main>
 </body>
 </html>

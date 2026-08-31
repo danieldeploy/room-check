@@ -27,6 +27,7 @@ final class SessionBar
         $immediateEditDecisionVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/immediate-edit-decision.js');
         $validationFeedbackVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/validation-feedback.js');
         $globalMenusVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/global-menus.js');
+        $globalCrudVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/global-crud.js');
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
             <div class="session-navigation">
@@ -57,6 +58,7 @@ final class SessionBar
         <script src="<?= self::escape($prefix . 'assets/immediate-edit-decision.js?v=' . $immediateEditDecisionVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js?v=' . $validationFeedbackVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/global-menus.js?v=' . $globalMenusVersion) ?>" defer></script>
+        <script src="<?= self::escape($prefix . 'assets/global-crud.js?v=' . $globalCrudVersion) ?>" defer></script>
         <script src="<?= self::escape($prefix . 'assets/bilingual-textareas.js') ?>" data-bilingual-api="<?= self::escape($prefix . 'api.php') ?>"></script>
         <?php
     }

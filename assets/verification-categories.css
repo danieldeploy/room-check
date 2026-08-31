@@ -1,24 +1,13 @@
 .categories-shell { width: min(1180px, calc(100% - 32px)); }
 .category-create-form { max-width: 720px; }
-.category-list { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.92); box-shadow: 0 20px 50px rgba(29,68,66,.1); }
-.category-list-heading { display: grid; grid-template-columns: minmax(240px, 1.5fr) minmax(250px, 1fr) 210px; gap: 12px; padding: 13px 18px; color: var(--muted); border-bottom: 1px solid var(--line); font-size: .75rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
-.category-list-heading span:last-child { text-align: right; }
-.category-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); }
-.category-row:last-child { border-bottom: 0; }
-.category-rename-form { display: grid; grid-template-columns: minmax(240px, 1.5fr) minmax(250px, 1fr) 100px; gap: 12px; align-items: center; }
-.category-counts { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
-.category-counts span,.category-counts strong { padding: 5px 8px; border-radius: 999px; color: var(--muted); background: #eef5f4; font-size: .75rem; }
-.category-counts strong { color: var(--danger); background: #fff0ee; }
+.category-edit-card,.category-delete-card { margin-bottom: 18px; }
+.category-edit-form { display: flex; align-items: end; gap: 10px; max-width: 720px; }
 .category-delete-form { margin: 0; }
-.category-delete-form button { min-width: 100px; }
-.mobile-only { display: none; }
-.category-list > .empty { padding: 8px 18px 18px; }
+.category-delete-form button { min-width: 160px; }
+.category-blocked { color: var(--danger); }
 
 @media (max-width: 760px) {
     .categories-shell { width: min(100% - 20px, 680px); }
-    .category-list-heading { display: none; }
-    .category-row { grid-template-columns: 1fr; padding: 16px; }
-    .category-rename-form { grid-template-columns: 1fr; }
-    .category-delete-form button,.category-rename-form button { width: 100%; }
-    .mobile-only { display: inline; }
+    .category-edit-form { align-items: stretch; flex-direction: column; }
+    .category-delete-form button,.category-edit-form button { width: 100%; }
 }

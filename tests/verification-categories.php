@@ -21,10 +21,12 @@ $dialog = file_get_contents($root . '/assets/app-dialog.js');
 $categoryDialog = file_get_contents($root . '/assets/verification-categories.js');
 $deployment = file_get_contents($root . '/.cpanel.yml');
 $permissionsPage = file_get_contents($root . '/admin/permissions.php');
+$globalCrud = file_get_contents($root . '/assets/global-crud.js');
+$sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
 
 require_once $root . '/src/Auth/Auth.php';
 
-foreach (compact('repository', 'migration', 'auth', 'page', 'navigation', 'rooms', 'lists', 'dialog', 'categoryDialog', 'deployment', 'permissionsPage') as $source) {
+foreach (compact('repository', 'migration', 'auth', 'page', 'navigation', 'rooms', 'lists', 'dialog', 'categoryDialog', 'deployment', 'permissionsPage', 'globalCrud', 'sessionBar') as $source) {
     assertVerificationCategories(is_string($source), 'category feature source is readable');
 }
 
@@ -92,6 +94,43 @@ assertVerificationCategories(
     'the approved popup distinguishes blocked deletion from destructive confirmation'
 );
 assertVerificationCategories(
+    str_contains($page, "SiteTranslations::text('Selecionar área para editar', 'Select area to edit')")
+        && str_contains($page, "SiteTranslations::text('Selecionar área para apagar', 'Select area to delete')")
+        && str_contains($page, '<input type="hidden" name="category_view" value="edit">')
+        && str_contains($page, '<input type="hidden" name="category_view" value="delete">')
+        && str_contains($page, '$isDeleteCategoryView = $categoryView === \'delete\';')
+        && str_contains($page, "SiteTranslations::text('Editar área selecionada', 'Edit selected area')")
+        && str_contains($page, "SiteTranslations::text('Apagar área selecionada', 'Delete selected area')")
+        && substr_count($page, 'name="action" value="delete_category"') === 1,
+    'area creation, editing and deletion use three independent panels like item lists'
+);
+assertVerificationCategories(
+    strpos($page, "SiteTranslations::text('Criar nova área', 'Create new area')")
+        < strpos($page, "SiteTranslations::text('Selecionar área para apagar', 'Select area to delete')")
+        && strpos($page, "SiteTranslations::text('Selecionar área para apagar', 'Select area to delete')")
+        < strpos($page, "SiteTranslations::text('Selecionar área para editar', 'Select area to edit')")
+        && strpos($lists, '<summary>Criar nova lista</summary>')
+        < strpos($lists, '<summary>Selecionar lista para apagar</summary>')
+        && strpos($lists, '<summary>Selecionar lista para apagar</summary>')
+        < strpos($lists, '<summary>Selecionar lista para editar</summary>'),
+    'area and list administration use the New, Delete, Edit order'
+);
+assertVerificationCategories(
+    substr_count($page, 'data-global-crud') === 1
+        && str_contains($page, 'data-crud-action="new"')
+        && str_contains($page, 'data-crud-action="delete"')
+        && str_contains($page, 'data-crud-action="edit"')
+        && substr_count($lists, 'data-global-crud') === 1
+        && str_contains($lists, 'data-crud-action="new"')
+        && str_contains($lists, 'data-crud-action="delete"')
+        && str_contains($lists, 'data-crud-action="edit"')
+        && str_contains($globalCrud, "const actionOrder = ['new', 'delete', 'edit'];")
+        && str_contains($globalCrud, 'panel.open = false;')
+        && str_contains($globalCrud, 'MutationObserver')
+        && str_contains($sessionBar, 'assets/global-crud.js'),
+    'global CRUD contract is reusable, ordered and loaded throughout authenticated modules'
+);
+assertVerificationCategories(
     str_contains($dialog, 'window.AppDialog')
         && str_contains($dialog, "form[data-app-confirm]")
         && !str_contains($lists, 'onsubmit="return confirm'),
@@ -103,7 +142,7 @@ assertVerificationCategories(
         && str_contains($navigation, 'foreach ($categories as $category)')
         && str_contains($navigation, 'foreach ($lists as $list)')
         && str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")
-        && str_contains($navigation, "SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')")
+        && str_contains($navigation, "SiteTranslations::text('Nova / Apagar / Editar', 'New / Delete / Edit')")
         && str_contains($navigation, "'rooms.php?area=' . rawurlencode(\$slug)")
         && str_contains($navigation, "'item-lists.php?list_id=' . \$listId . '&list_view=menu'")
         && str_contains($rooms, 'verificationCategories($pdo)')

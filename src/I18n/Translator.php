@@ -270,7 +270,7 @@ HTML;
             'Nome da nova lista' => 'New list name',
             'Selecionar lista para editar' => 'Select list to edit',
             'Selecionar lista para apagar' => 'Select list to delete',
-            'Nova / Editar / Apagar' => 'New / Edit / Delete',
+            'Nova / Apagar / Editar' => 'New / Delete / Edit',
             'Lista:' => 'List:',
             'Área:' => 'Area:',
             'Editar lista selecionada' => 'Edit selected list',
