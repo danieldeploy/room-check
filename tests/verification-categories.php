@@ -104,7 +104,7 @@ assertVerificationCategories(
         && str_contains($navigation, 'foreach ($lists as $list)')
         && str_contains($navigation, "SiteTranslations::text('Áreas', 'Areas')")
         && str_contains($navigation, "SiteTranslations::text('Nova / Editar / Apagar', 'New / Edit / Delete')")
-        && str_contains($navigation, "'rooms.php?area=' . rawurlencode($slug)")
+        && str_contains($navigation, "'rooms.php?area=' . rawurlencode(\$slug)")
         && str_contains($navigation, "'item-lists.php?list_id=' . \$listId . '&list_view=menu'")
         && str_contains($rooms, 'verificationCategories($pdo)')
         && str_contains($rooms, '$navigationLists = itemLists($pdo)')
