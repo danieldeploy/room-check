@@ -9,7 +9,7 @@ final class WhatsAppReminderTemplate
     public static function values(
         string $templateName,
         array $reminder,
-        string $preferredLanguage,
+        string $templateLanguage,
         string $portalName,
         string $legacyPortalInstruction,
         string $v2TemplateName = self::V2_NAME
@@ -24,14 +24,19 @@ final class WhatsAppReminderTemplate
             ];
         }
 
-        return [
+        $values = [
             self::requiredValue($reminder, 'display_name', 'destinatário'),
             self::requiredText($portalName, 'portal'),
-            self::v2Date((string) ($reminder['due_date'] ?? ''), $preferredLanguage),
+            self::v2Date((string) ($reminder['due_date'] ?? ''), $templateLanguage),
             self::requiredValue($reminder, 'property_name', 'estabelecimento'),
             self::requiredValue($reminder, 'creator_display_name', 'remetente'),
-            self::requiredText($portalName, 'portal'),
         ];
+
+        if (!self::isEnglishTemplateLanguage($templateLanguage)) {
+            $values[] = self::requiredText($portalName, 'portal');
+        }
+
+        return $values;
     }
 
     private static function legacyDate(string $date): string
@@ -39,12 +44,17 @@ final class WhatsAppReminderTemplate
         return self::date($date)->format('d/m/Y');
     }
 
-    private static function v2Date(string $date, string $preferredLanguage): string
+    private static function v2Date(string $date, string $templateLanguage): string
     {
         $value = self::date($date);
-        return strtolower(trim($preferredLanguage)) === 'en'
+        return self::isEnglishTemplateLanguage($templateLanguage)
             ? $value->format('j F Y')
             : $value->format('d/m/Y');
+    }
+
+    private static function isEnglishTemplateLanguage(string $language): bool
+    {
+        return preg_match('/^en(?:[_-]|$)/i', trim($language)) === 1;
     }
 
     private static function date(string $date): DateTimeImmutable

@@ -62,7 +62,7 @@ try {
             $templateValues = WhatsAppReminderTemplate::values(
                 $templateName,
                 $row,
-                $preferredLanguage,
+                $languageCode,
                 $portalName,
                 $portalInstruction,
                 (string) ($config['whatsapp']['template_v2_name'] ?? WhatsAppReminderTemplate::V2_NAME)
