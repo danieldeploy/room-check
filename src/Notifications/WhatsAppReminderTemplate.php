@@ -24,14 +24,19 @@ final class WhatsAppReminderTemplate
             ];
         }
 
-        return [
+        $values = [
             self::requiredValue($reminder, 'display_name', 'destinatário'),
             self::requiredText($portalName, 'portal'),
             self::v2Date((string) ($reminder['due_date'] ?? ''), $preferredLanguage),
             self::requiredValue($reminder, 'property_name', 'estabelecimento'),
             self::requiredValue($reminder, 'creator_display_name', 'remetente'),
-            self::requiredText($portalName, 'portal'),
         ];
+
+        if (strtolower(trim($preferredLanguage)) !== 'en') {
+            $values[] = self::requiredText($portalName, 'portal');
+        }
+
+        return $values;
     }
 
     private static function legacyDate(string $date): string
