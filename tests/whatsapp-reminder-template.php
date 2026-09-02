@@ -19,16 +19,30 @@ $reminder = [
     'creator_display_name' => 'Kasia',
 ];
 
-$v2Values = WhatsAppReminderTemplate::values(
+$v2EnglishValues = WhatsAppReminderTemplate::values(
     WhatsAppReminderTemplate::V2_NAME,
     $reminder,
     'en',
     'Management Hub',
     'unused legacy instruction'
 );
+
 assertReminderTemplate(
-    $v2Values === ['Ranjana Kumari', 'Management Hub', '30 August 2026', 'City Center Guest House', 'Kasia', 'Management Hub'],
-    'V2 sends recipient, centralized portal name, English date, property, scheduling user and repeated portal signature in Meta placeholder order'
+    $v2EnglishValues === ['Ranjana Kumari', 'Management Hub', '30 August 2026', 'City Center Guest House', 'Kasia'],
+    'English V2 matches the five approved Meta placeholders'
+);
+
+$v2PortugueseValues = WhatsAppReminderTemplate::values(
+    WhatsAppReminderTemplate::V2_NAME,
+    $reminder,
+    'pt',
+    'Centro de Gestão',
+    'instrução legacy não utilizada'
+);
+
+assertReminderTemplate(
+    $v2PortugueseValues === ['Ranjana Kumari', 'Centro de Gestão', '30/08/2026', 'City Center Guest House', 'Kasia', 'Centro de Gestão'],
+    'Portuguese V2 matches the six approved Meta placeholders'
 );
 
 $legacyValues = WhatsAppReminderTemplate::values(
