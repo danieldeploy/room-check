@@ -39,7 +39,10 @@ assertVerificationCategories(
 assertVerificationCategories(
     str_contains($lists, 'if ($listId > 0 && !array_filter(')
         && !str_contains($lists, "\$listId = (int) (\$lists[0]['id'] ?? 0);")
-        && str_contains($lists, '<details class="list-create-panel list-select-panel">')
+        && str_contains(
+            $lists,
+            '<details class="list-create-panel list-select-panel" data-crud-action="edit">'
+        )
         && str_contains($lists, '<option value="" <?= $listId === 0 ? \'selected\' : \'\' ?> disabled>'),
     'the list editor waits for an explicit list selection before rendering fields'
 );
