@@ -187,7 +187,7 @@ noscript { display: block; margin-top: 18px; color: var(--wrong); }
 }
 
 
-/* Bilingual validation: preserve rejected edits and mark the changed segment. */
+/* Bilingual saves: preserve failed edits and mark the changed segment. */
 .language-highlight-layer { color: inherit; }
 .language-highlight-layer .language-wrong-segment { color: var(--wrong, #b91c1c); font-weight: inherit; }
 .language-decision-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.38); display: grid; place-items: center; padding: 20px; }

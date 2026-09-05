@@ -44,6 +44,7 @@ return [
     'A lista inicial dos quartos não pode ser apagada.' => 'The initial room list cannot be deleted.',
     'Esta lista já tem dados ou atribuições e não pode ser apagada.' => 'This list already has data or assignments and cannot be deleted.',
     'Item não encontrado.' => 'Item not found.',
+    'O item foi alterado por outro utilizador. Recarregue e tente novamente.' => 'The item was changed by another user. Reload and try again.',
     'Este item já tem dados ou atribuições e não pode ser apagado.' => 'This item already has data or assignments and cannot be deleted.',
     'Não foi possível guardar a alteração.' => 'Could not save the change.',
 

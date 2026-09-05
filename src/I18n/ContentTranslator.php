@@ -1,27 +1,19 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/LanguageGuard.php';
-require_once __DIR__ . '/LexicalLanguageChecker.php';
-
 final class ContentTranslator
 {
-    private const MYMEMORY_MAX_QUERY_BYTES = 500;
-
-    private LexicalLanguageClassifier $lexicalChecker;
+    private const MAX_TEXT_CHARACTERS = 5000;
+    private const MAX_TEXTS_PER_REQUEST = 100;
+    private const DEFAULT_ENDPOINT = 'https://translation.googleapis.com/language/translate/v2';
+    private const DEFAULT_ENGINE_KEY = 'google-basic-nmt-v2';
 
     /** @var array<int, array<string, string>> */
     private static array $responseMetadata = [];
+    private ?string $resolvedApiKey = null;
 
-    public function __construct(
-        private PDO $pdo,
-        private array $config,
-        ?LexicalLanguageClassifier $lexicalChecker = null
-    ) {
-        $this->lexicalChecker = $lexicalChecker
-            ?? new LexicalLanguageChecker($pdo, is_array($config['lexical'] ?? null) ? $config['lexical'] : []);
-        // A request may have created a maintenance translator while database()
-        // initialized. The application translator starts a clean response set.
+    public function __construct(private PDO $pdo, private array $config)
+    {
         self::$responseMetadata = [];
     }
 
@@ -36,6 +28,7 @@ final class ContentTranslator
         self::$responseMetadata = [];
     }
 
+    /** @return array{pt:string,en:string,status:string,message:string} */
     public function versions(string $text, string $sourceLanguage, string $existingPt = '', string $existingEn = ''): array
     {
         $text = trim($text);
@@ -45,48 +38,37 @@ final class ContentTranslator
         $existingEn = trim($existingEn);
 
         if ($text === '') {
-            return $this->result('', '', 'empty', 'empty', $sourceLanguage);
+            return $this->result('', '', 'empty', $sourceLanguage);
+        }
+        if (mb_strlen($text, 'UTF-8') > self::MAX_TEXT_CHARACTERS) {
+            throw new InvalidArgumentException(
+                $sourceLanguage === 'en'
+                    ? 'Not saved: text is longer than 5000 characters.'
+                    : 'Não guardado: o texto ultrapassa 5000 caracteres.'
+            );
         }
 
-        // Persisted bilingual pairs are authoritative when the active-language
-        // value is unchanged. Revisiting a page must not call any external
-        // verifier or translator again.
+        // An unchanged persisted pair is authoritative and must not call Google.
         if ($sourceLanguage === 'en'
             && $existingEn === $text
             && $existingPt !== ''
             && $existingPt !== $existingEn) {
-            return $this->result($existingPt, $text, 'reused', 'reused', $sourceLanguage);
+            return $this->result($existingPt, $text, 'reused', $sourceLanguage);
         }
         if ($sourceLanguage === 'pt'
             && $existingPt === $text
             && $existingEn !== ''
             && $existingEn !== $existingPt) {
-            return $this->result($text, $existingEn, 'reused', 'reused', $sourceLanguage);
+            return $this->result($text, $existingEn, 'reused', $sourceLanguage);
         }
 
-        // The original text is verified before MyMemory is called. MyMemory is
-        // only a translator and can never prove the source language.
-        $sourceAnalysis = $this->validateSource($text, $sourceLanguage);
-        $translated = $this->translateValidated($text, $sourceLanguage, $targetLanguage);
-
+        $translation = $this->translatedText($text, $sourceLanguage, $targetLanguage);
         return $sourceLanguage === 'en'
-            ? $this->result(
-                $translated['text'],
-                $text,
-                (string) $sourceAnalysis['conclusion'],
-                $translated['conclusion'],
-                'en'
-            )
-            : $this->result(
-                $text,
-                $translated['text'],
-                (string) $sourceAnalysis['conclusion'],
-                $translated['conclusion'],
-                'pt'
-            );
+            ? $this->result($translation['text'], $text, $translation['status'], 'en')
+            : $this->result($text, $translation['text'], $translation['status'], 'pt');
     }
 
-    public function translateStrict(string $text, string $sourceLanguage, string $targetLanguage): ?string
+    public function translateStrict(string $text, string $sourceLanguage, string $targetLanguage): string
     {
         $text = trim($text);
         if ($text === '') {
@@ -98,136 +80,39 @@ final class ContentTranslator
         if ($source === $target) {
             return $text;
         }
+        if (mb_strlen($text, 'UTF-8') > self::MAX_TEXT_CHARACTERS) {
+            throw new InvalidArgumentException('Translation text is longer than 5000 characters.');
+        }
 
-        $this->validateSource($text, $source);
-        return $this->translateValidated($text, $source, $target)['text'];
+        return $this->translatedText($text, $source, $target)['text'];
     }
 
-    /**
-     * Static compatibility helper. Production calls pass the lexical checker;
-     * without one it falls back to sentence-level context only.
-     */
-    public static function isPlausibleTargetText(
-        string $text,
-        string $targetLanguage,
-        ?LexicalLanguageClassifier $lexicalChecker = null
-    ): bool {
-        return self::targetConclusion($text, $targetLanguage, $lexicalChecker) !== 'wrong';
-    }
-
-    /** Returns correct, ambiguous or wrong for the complete translated phrase. */
-    public static function targetConclusion(
-        string $text,
-        string $targetLanguage,
-        ?LexicalLanguageClassifier $lexicalChecker = null
-    ): string {
-        $text = trim($text);
-        if ($text === '') {
-            return 'wrong';
-        }
-        $targetLanguage = $targetLanguage === 'pt' ? 'pt' : 'en';
-
-        if ($lexicalChecker !== null) {
-            $analysis = LanguageGuard::sourceAnalysis($text, $targetLanguage, $lexicalChecker);
-            return match ($analysis['conclusion']) {
-                'correct' => 'correct',
-                'ambiguous' => 'ambiguous',
-                default => 'wrong',
-            };
-        }
-
-        $detected = LanguageGuard::confidentSentenceLanguage($text);
-        if ($detected === null) {
-            return 'ambiguous';
-        }
-        return $detected === $targetLanguage ? 'correct' : 'wrong';
-    }
-
-    /**
-     * Green feedback reports only what was actually established by the server.
-     */
-    public static function successMessage(
-        string $sourceConclusion,
-        string $translationConclusion,
-        string $sourceLanguage
-    ): string {
-        $sourceLanguage = $sourceLanguage === 'en' ? 'en' : 'pt';
-        $sourceLabel = strtoupper($sourceLanguage);
-        $targetLabel = strtoupper($sourceLanguage === 'en' ? 'pt' : 'en');
-
-        if ($sourceConclusion === 'empty') {
-            return $sourceLanguage === 'en' ? 'Saved: empty field.' : 'Guardado: campo vazio.';
-        }
-        if ($sourceConclusion === 'reused') {
-            return $sourceLanguage === 'en'
-                ? 'Saved: existing bilingual translation reused.'
-                : 'Guardado: tradução bilingue existente reutilizada.';
-        }
-
-        if ($sourceConclusion === 'correct' && $translationConclusion === 'correct') {
-            return $sourceLanguage === 'en'
-                ? "Saved: {$sourceLabel} text confirmed; {$targetLabel} translation confirmed."
-                : "Guardado: texto {$sourceLabel} confirmado; tradução {$targetLabel} confirmada.";
-        }
-        if ($sourceConclusion === 'correct') {
-            return $sourceLanguage === 'en'
-                ? "Saved: {$sourceLabel} text confirmed; ambiguous/technical {$targetLabel} translation accepted."
-                : "Guardado: texto {$sourceLabel} confirmado; tradução {$targetLabel} ambígua/técnica aceite.";
-        }
-        if ($translationConclusion === 'correct') {
-            return $sourceLanguage === 'en'
-                ? "Saved: shared/technical term accepted; {$targetLabel} translation confirmed."
-                : "Guardado: termo técnico/partilhado aceite; tradução {$targetLabel} confirmada.";
-        }
-        return $sourceLanguage === 'en'
-            ? "Saved: shared/technical term accepted; ambiguous/technical {$targetLabel} translation accepted."
-            : "Guardado: termo técnico/partilhado aceite; tradução {$targetLabel} ambígua/técnica aceite.";
-    }
-
-    /** @return array<string, mixed> */
-    private function validateSource(string $text, string $sourceLanguage): array
-    {
-        try {
-            return LanguageGuard::validateSource($text, $sourceLanguage, $this->lexicalChecker);
-        } catch (LexicalLookupException) {
-            throw new InvalidArgumentException(
-                $sourceLanguage === 'en'
-                    ? 'Not saved: language verification service is unavailable. Please try again.'
-                    : 'Não guardado: serviço de verificação linguística indisponível. Tente novamente.'
-            );
-        }
-    }
-
-    /** @return array{text:string, conclusion:string} */
-    private function translateValidated(string $text, string $source, string $target): array
+    /** @return array{text:string,status:string} */
+    private function translatedText(string $text, string $source, string $target): array
     {
         $cached = $this->cachedTranslation($text, $source, $target);
         if ($cached !== null) {
-            return $cached;
+            return ['text' => $cached, 'status' => 'cached'];
         }
 
         if (($this->config['enabled'] ?? true) !== true || !function_exists('curl_init')) {
             throw new InvalidArgumentException(
                 $source === 'en'
-                    ? 'Not saved: translation API is unavailable.'
-                    : 'Não guardado: API de tradução indisponível.'
+                    ? 'Not saved: translation service is unavailable.'
+                    : 'Não guardado: serviço de tradução indisponível.'
+            );
+        }
+        if ($this->apiKey() === '') {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Not saved: Google translation is not configured.'
+                    : 'Não guardado: a tradução Google não está configurada.'
             );
         }
 
-        // Quotes and confirmed person/proper names are protected before the
-        // provider is called. Country names are deliberately not protected: they
-        // must be translated normally. Punctuation is normalized only in this
-        // provider copy, so the user's original text remains unchanged.
         $prepared = $this->prepareTranslationInput($text);
         $translated = $this->translatePrepared($prepared, $source, $target);
-        if ($translated === null || trim($translated) === '') {
-            throw new InvalidArgumentException(
-                $source === 'en'
-                    ? 'Not saved: automatic translation returned no text.'
-                    : 'Não guardado: a tradução automática não devolveu texto.'
-            );
-        }
-        if (!self::hasPlausibleLength($text, $translated)) {
+        if ($translated === '') {
             throw new InvalidArgumentException(
                 $source === 'en'
                     ? 'Not saved: automatic translation appears incomplete.'
@@ -235,129 +120,46 @@ final class ContentTranslator
             );
         }
 
-        $analysis = $this->targetAnalysis($translated, $target, $source);
-        if (in_array($analysis['conclusion'], ['wrong', 'mixed'], true)) {
-            // Retry only when the provider really returned the wrong/mixed language.
-            // Unknown proper nouns or lexical edge cases must not double the network
-            // wait; network/timeout exceptions are never retried here.
-            $retry = $this->translatePrepared($prepared, $source, $target);
-            if ($retry !== null && trim($retry) !== '' && self::hasPlausibleLength($text, $retry)) {
-                $retryAnalysis = $this->targetAnalysis($retry, $target, $source);
-                if (in_array($retryAnalysis['conclusion'], ['correct', 'ambiguous'], true)) {
-                    $translated = trim($retry);
-                    $analysis = $retryAnalysis;
-                }
-            }
-        }
-
-        if (!in_array($analysis['conclusion'], ['correct', 'ambiguous'], true)) {
-            $this->throwTargetValidationError($analysis, $source, $target);
-        }
-
-        $translated = trim($translated);
         $this->storeTranslation($text, $translated, $source, $target);
-        return [
-            'text' => $translated,
-            'conclusion' => (string) $analysis['conclusion'],
-        ];
+        return ['text' => $translated, 'status' => 'translated'];
     }
 
-    /** @return array<string, mixed> */
-    private function targetAnalysis(string $translated, string $target, string $source): array
-    {
-        try {
-            return LanguageGuard::sourceAnalysis($translated, $target, $this->lexicalChecker);
-        } catch (LexicalLookupException) {
-            throw new InvalidArgumentException(
-                $source === 'en'
-                    ? 'Not saved: could not verify the translated text. Please try again.'
-                    : 'Não guardado: não foi possível verificar a tradução. Tente novamente.'
-            );
-        }
-    }
-
-    /** @param array<string, mixed> $analysis */
-    private function throwTargetValidationError(array $analysis, string $source, string $target): never
-    {
-        $targetLabel = strtoupper($target);
-        $oppositeLabel = strtoupper($target === 'pt' ? 'en' : 'pt');
-        $isEnglishUi = $source === 'en';
-
-        if (($analysis['conclusion'] ?? '') === 'unknown') {
-            $words = is_array($analysis['unknownWords'] ?? null) ? $analysis['unknownWords'] : [];
-            $quoted = self::quotedWords($words);
-            throw new LanguageValidationException(
-                $isEnglishUi
-                    ? "Not saved: translation contains unrecognized word(s)" . ($quoted !== '' ? " — {$quoted}." : '.')
-                    : "Não guardado: a tradução contém palavra(s) não reconhecida(s)" . ($quoted !== '' ? " — {$quoted}." : '.'),
-                $words
-            );
-        }
-        if (($analysis['conclusion'] ?? '') === 'mixed') {
-            throw new LanguageValidationException(
-                $isEnglishUi
-                    ? 'Not saved: translation mixes EN and PT.'
-                    : 'Não guardado: a tradução mistura PT e EN.'
-            );
-        }
-        throw new LanguageValidationException(
-            $isEnglishUi
-                ? "Not saved: translation was returned in {$oppositeLabel} instead of {$targetLabel}."
-                : "Não guardado: tradução devolvida em {$oppositeLabel} em vez de {$targetLabel}."
-        );
-    }
-
-    /** @return array{text:string, conclusion:string}|null */
-    private function cachedTranslation(string $text, string $source, string $target): ?array
+    private function cachedTranslation(string $text, string $source, string $target): ?string
     {
         try {
             $statement = $this->pdo->prepare(
                 'SELECT translated_text
                  FROM translation_cache
-                 WHERE source_language = :source_language
+                 WHERE engine_key = :engine_key
+                   AND source_language = :source_language
                    AND target_language = :target_language
                    AND source_hash = :source_hash
                    AND source_text = :source_text
                  LIMIT 1'
             );
-            $parameters = [
-                'source_language' => $source,
-                'target_language' => $target,
-                'source_hash' => hash('sha256', $text),
-                'source_text' => $text,
-            ];
+            $parameters = $this->cacheParameters($text, $source, $target);
             $statement->execute($parameters);
             $translated = $statement->fetchColumn();
-            if (is_string($translated) && trim($translated) !== '') {
-                $translated = trim($translated);
-                if (self::hasPlausibleLength($text, $translated)
-                    && $this->preservesProtectedSource($text, $translated)) {
-                    $analysis = $this->targetAnalysis($translated, $target, $source);
-                    if (in_array($analysis['conclusion'], ['correct', 'ambiguous'], true)) {
-                        return [
-                            'text' => $translated,
-                            'conclusion' => (string) $analysis['conclusion'],
-                        ];
-                    }
-                }
-
-                try {
-                    $delete = $this->pdo->prepare(
-                        'DELETE FROM translation_cache
-                         WHERE source_language = :source_language
-                           AND target_language = :target_language
-                           AND source_hash = :source_hash
-                           AND source_text = :source_text'
-                    );
-                    $delete->execute($parameters);
-                } catch (Throwable) {
-                    // A stale cache row must not prevent a fresh translation.
-                }
+            if (!is_string($translated) || trim($translated) === '') {
+                return null;
             }
-        } catch (InvalidArgumentException | LexicalLookupException $exception) {
-            throw $exception;
+
+            $translated = trim($translated);
+            if ($this->preservesProtectedSource($text, $translated)) {
+                return $translated;
+            }
+
+            $delete = $this->pdo->prepare(
+                'DELETE FROM translation_cache
+                 WHERE engine_key = :engine_key
+                   AND source_language = :source_language
+                   AND target_language = :target_language
+                   AND source_hash = :source_hash
+                   AND source_text = :source_text'
+            );
+            $delete->execute($parameters);
         } catch (Throwable) {
-            // Translation still works when the translation cache is unavailable.
+            // Translation remains available if the cache or its migration is unavailable.
         }
         return null;
     }
@@ -367,41 +169,46 @@ final class ContentTranslator
         try {
             $statement = $this->pdo->prepare(
                 'INSERT INTO translation_cache
-                    (source_language, target_language, source_hash, source_text, translated_text)
+                    (engine_key, source_language, target_language, source_hash, source_text, translated_text)
                  VALUES
-                    (:source_language, :target_language, :source_hash, :source_text, :translated_text)
+                    (:engine_key, :source_language, :target_language, :source_hash, :source_text, :translated_text)
                  ON DUPLICATE KEY UPDATE
                     source_text = VALUES(source_text),
                     translated_text = VALUES(translated_text),
                     updated_at = CURRENT_TIMESTAMP'
             );
-            $statement->execute([
-                'source_language' => $source,
-                'target_language' => $target,
-                'source_hash' => hash('sha256', $text),
-                'source_text' => $text,
+            $statement->execute($this->cacheParameters($text, $source, $target) + [
                 'translated_text' => $translated,
             ]);
         } catch (Throwable) {
-            // A cache failure must never prevent a valid save operation.
+            // A cache failure must never prevent a valid bilingual save.
         }
     }
 
-    /**
-     * @return array{text:string,protected:array<string,string>}
-     */
+    /** @return array<string,string> */
+    private function cacheParameters(string $text, string $source, string $target): array
+    {
+        $engineKey = trim((string) ($this->config['engine_key'] ?? self::DEFAULT_ENGINE_KEY));
+        return [
+            'engine_key' => $engineKey !== '' ? $engineKey : self::DEFAULT_ENGINE_KEY,
+            'source_language' => $source,
+            'target_language' => $target,
+            'source_hash' => hash('sha256', $text),
+            'source_text' => $text,
+        ];
+    }
+
+    /** @return array{text:string,protected:array<string,string>} */
     private function prepareTranslationInput(string $text): array
     {
         $protected = [];
         $counter = 0;
         $placeholder = static function (string $value) use (&$protected, &$counter): string {
-            $token = 'RoomCheckKeep' . $counter++ . 'Token';
+            $token = 'RoomCheckKeep' . self::alphabeticCounter($counter++) . 'Token';
             $protected[$token] = $value;
             return $token;
         };
 
-        // Explicit double quotes are a user escape hatch: preserve the complete
-        // span exactly and keep it out of both language validation and translation.
         $working = preg_replace_callback(
             '/"[^"\r\n]*"|“[^”\r\n]*”/u',
             static fn(array $match): string => $placeholder((string) $match[0]),
@@ -411,149 +218,126 @@ final class ContentTranslator
             $working = $text;
         }
 
-        // Protect explicitly classified people and non-country proper names.
-        // Capitalization alone never creates an entity. Countries are left in
-        // the provider text so Alemanha/Spain/etc. translate normally.
-        if ($this->lexicalChecker instanceof LexicalEntityClassifier) {
-            preg_match_all("/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u", $working, $matches);
-            $normalized = [];
-            foreach (($matches[0] ?? []) as $raw) {
-                $token = LexicalLanguageChecker::normalizeToken((string) $raw);
-                if ($token !== '') {
-                    $normalized[$token] = true;
-                }
-            }
-            $entities = $this->lexicalChecker->classifyEntityTokens(array_keys($normalized));
-            if ($entities !== []) {
-                $working = preg_replace_callback(
-                    "/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u",
-                    static function (array $match) use ($entities, $placeholder): string {
-                        $raw = (string) $match[0];
-                        $token = LexicalLanguageChecker::normalizeToken($raw);
-                        $type = $entities[$token] ?? null;
-                        return in_array($type, ['person', 'proper'], true) ? $placeholder($raw) : $raw;
-                    },
-                    $working
-                );
-                if (!is_string($working)) {
-                    $working = $text;
-                    $protected = [];
-                }
-            }
-        }
-
-        // MyMemory can split the first letter after punctuation when there is no
-        // separating space (HAR regression: "danos.supra" -> "upra"). Normalize
-        // only the provider copy, never the source text persisted by Room Check.
-        $normalized = preg_replace('/([.!?;:])(?=\\p{L})/u', '$1 ', $working);
-        if (is_string($normalized)) {
-            $working = $normalized;
+        $withNumbers = preg_replace_callback(
+            '/\p{N}+(?:[.,:\/\-]\p{N}+)*/u',
+            static fn(array $match): string => $placeholder((string) $match[0]),
+            $working
+        );
+        if (is_string($withNumbers)) {
+            $working = $withNumbers;
         }
 
         return ['text' => $working, 'protected' => $protected];
     }
 
-    /**
-     * @param array{text:string,protected:array<string,string>} $prepared
-     */
-    private function translatePrepared(array $prepared, string $source, string $target): ?string
+    private static function alphabeticCounter(int $value): string
     {
-        $translated = $this->translateFresh($prepared['text'], $source, $target);
-        if ($translated === null) {
-            return null;
-        }
+        $result = '';
+        do {
+            $result = chr(65 + ($value % 26)) . $result;
+            $value = intdiv($value, 26) - 1;
+        } while ($value >= 0);
+        return $result;
+    }
 
+    /** @param array{text:string,protected:array<string,string>} $prepared */
+    private function translatePrepared(array $prepared, string $source, string $target): string
+    {
+        $translated = $this->translateKeepingLineBreaks($prepared['text'], $source, $target);
         foreach ($prepared['protected'] as $token => $original) {
             $count = 0;
             $translated = str_ireplace($token, $original, $translated, $count);
             if ($count < 1) {
-                // Do not save a provider response that lost a quoted span/name.
-                return null;
+                throw new InvalidArgumentException(
+                    $source === 'en'
+                        ? 'Not saved: automatic translation changed protected content.'
+                        : 'Não guardado: a tradução automática alterou conteúdo protegido.'
+                );
             }
         }
         return trim($translated);
     }
 
-    private function preservesProtectedSource(string $source, string $translated): bool
+    private function translateKeepingLineBreaks(string $text, string $source, string $target): string
     {
-        // Old cache entries created before quote/name protection are reused only
-        // when they already preserved every protected source segment.
-        preg_match_all('/"[^"\r\n]*"|“[^”\r\n]*”/u', $source, $quoted);
-        foreach (($quoted[0] ?? []) as $span) {
-            if (!str_contains($translated, (string) $span)) {
-                return false;
-            }
+        $parts = preg_split('/(\R)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if (!is_array($parts)) {
+            $parts = [$text];
         }
 
-        if (!($this->lexicalChecker instanceof LexicalEntityClassifier)) {
-            return true;
-        }
-
-        $sourceWithoutQuotes = preg_replace('/"[^"\r\n]*"|“[^”\r\n]*”/u', ' ', $source);
-        if (!is_string($sourceWithoutQuotes)) {
-            $sourceWithoutQuotes = $source;
-        }
-        preg_match_all("/[\\p{L}]+(?:[’'\\-][\\p{L}]+)*/u", $sourceWithoutQuotes, $matches);
-        $tokens = [];
-        foreach (($matches[0] ?? []) as $raw) {
-            $normalized = LexicalLanguageChecker::normalizeToken((string) $raw);
-            if ($normalized !== '') {
-                $tokens[$normalized] = (string) $raw;
-            }
-        }
-        $entities = $this->lexicalChecker->classifyEntityTokens(array_keys($tokens));
-        foreach ($entities as $normalized => $type) {
-            if (!in_array($type, ['person', 'proper'], true)) {
+        $requests = [];
+        $requestIndexes = [];
+        $spacing = [];
+        foreach ($parts as $index => $part) {
+            if ($part === '' || preg_match('/^\R$/u', $part) === 1 || trim($part) === '') {
                 continue;
             }
-            $raw = $tokens[$normalized] ?? $normalized;
-            if (mb_stripos($translated, $raw, 0, 'UTF-8') === false) {
-                return false;
-            }
+            preg_match('/^(\s*)(.*?)(\s*)$/us', $part, $match);
+            $spacing[$index] = [(string) ($match[1] ?? ''), (string) ($match[3] ?? '')];
+            $requests[] = (string) ($match[2] ?? $part);
+            $requestIndexes[] = $index;
         }
-        return true;
+
+        $translatedParts = [];
+        foreach (array_chunk($requests, self::MAX_TEXTS_PER_REQUEST) as $batch) {
+            array_push($translatedParts, ...$this->translateBatch($batch, $source, $target));
+        }
+        if (count($translatedParts) !== count($requestIndexes)) {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Not saved: translation service returned an invalid response.'
+                    : 'Não guardado: serviço de tradução devolveu uma resposta inválida.'
+            );
+        }
+
+        foreach ($requestIndexes as $position => $partIndex) {
+            [$prefix, $suffix] = $spacing[$partIndex];
+            $parts[$partIndex] = $prefix . $translatedParts[$position] . $suffix;
+        }
+        return implode('', $parts);
     }
 
-    private function translateFresh(string $text, string $source, string $target): ?string
+    /** @param string[] $texts @return string[] */
+    private function translateBatch(array $texts, string $source, string $target): array
     {
-        $translatedChunks = [];
-        foreach ($this->chunks($text) as $chunk) {
-            $translation = $this->translateChunk($chunk, $source, $target);
-            if ($translation === null || trim($translation) === '') {
-                return null;
-            }
-            $translatedChunks[] = trim($translation);
-        }
-        $translated = trim(implode("\n", $translatedChunks));
-        return $translated !== '' ? $translated : null;
-    }
-
-    private static function hasPlausibleLength(string $source, string $translated): bool
-    {
-        $sourceLength = mb_strlen(trim($source), 'UTF-8');
-        $targetLength = mb_strlen(trim($translated), 'UTF-8');
-        if ($sourceLength <= 20 || $targetLength <= 20) {
-            return $targetLength > 0;
-        }
-        $ratio = $targetLength / max(1, $sourceLength);
-        return $ratio >= 0.20 && $ratio <= 5.0;
-    }
-
-    private function translateChunk(string $text, string $source, string $target): ?string
-    {
-        $endpoint = rtrim((string) ($this->config['endpoint'] ?? 'https://api.mymemory.translated.net/get'), '?');
-        $query = ['q' => $text, 'langpair' => $source . '|' . $target, 'mt' => '1'];
-        $contactEmail = trim((string) ($this->config['contact_email'] ?? ''));
-        if ($contactEmail !== '') {
-            $query['de'] = $contactEmail;
+        if ($texts === []) {
+            return [];
         }
 
-        $curl = curl_init($endpoint . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986));
+        $endpoint = trim((string) ($this->config['endpoint'] ?? self::DEFAULT_ENDPOINT));
+        if ($endpoint === '') {
+            $endpoint = self::DEFAULT_ENDPOINT;
+        }
+        $endpoint = rtrim($endpoint, '?&');
+        $apiKey = $this->apiKey();
+        $url = $endpoint . (str_contains($endpoint, '?') ? '&' : '?')
+            . http_build_query(['key' => $apiKey], '', '&', PHP_QUERY_RFC3986);
+        $payload = json_encode([
+            'q' => array_values($texts),
+            'source' => self::providerLanguage($source),
+            'target' => self::providerLanguage($target),
+            'format' => 'text',
+            'model' => 'nmt',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        $curl = curl_init($url);
+        if ($curl === false) {
+            throw new InvalidArgumentException(
+                $source === 'en'
+                    ? 'Not saved: translation service is unavailable.'
+                    : 'Não guardado: serviço de tradução indisponível.'
+            );
+        }
         curl_setopt_array($curl, [
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $payload,
             CURLOPT_TIMEOUT => max(3, (int) ($this->config['timeout_seconds'] ?? 12)),
             CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_HTTPHEADER => ['Accept: application/json'],
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json; charset=utf-8',
+            ],
             CURLOPT_USERAGENT => 'RoomCheck/1.0 translation',
         ]);
         $response = curl_exec($curl);
@@ -564,70 +348,112 @@ final class ContentTranslator
         if ($errno === CURLE_OPERATION_TIMEDOUT) {
             throw new InvalidArgumentException(
                 $source === 'en'
-                    ? 'Not saved: translation API timed out.'
-                    : 'Não guardado: API de tradução excedeu o tempo limite.'
+                    ? 'Not saved: translation service timed out.'
+                    : 'Não guardado: serviço de tradução excedeu o tempo limite.'
             );
         }
         if (!is_string($response) || $errno !== 0 || $status < 200 || $status >= 300) {
             throw new InvalidArgumentException(
                 $source === 'en'
-                    ? 'Not saved: translation API is temporarily unavailable.'
-                    : 'Não guardado: API de tradução temporariamente indisponível.'
+                    ? 'Not saved: translation service is temporarily unavailable.'
+                    : 'Não guardado: serviço de tradução temporariamente indisponível.'
             );
         }
 
         $data = json_decode($response, true);
-        if (!is_array($data)) {
+        $translations = is_array($data) ? ($data['data']['translations'] ?? null) : null;
+        if (!is_array($translations) || count($translations) !== count($texts)) {
             throw new InvalidArgumentException(
                 $source === 'en'
-                    ? 'Not saved: translation API returned an invalid response.'
-                    : 'Não guardado: API de tradução devolveu uma resposta inválida.'
+                    ? 'Not saved: translation service returned an invalid response.'
+                    : 'Não guardado: serviço de tradução devolveu uma resposta inválida.'
             );
         }
-        $responseStatus = (int) ($data['responseStatus'] ?? 200);
-        if ($responseStatus < 200 || $responseStatus >= 300) {
-            throw new InvalidArgumentException(
-                $source === 'en'
-                    ? 'Not saved: translation API rejected the request.'
-                    : 'Não guardado: API de tradução rejeitou o pedido.'
-            );
+
+        $results = [];
+        foreach ($translations as $translation) {
+            $translated = is_array($translation) ? ($translation['translatedText'] ?? null) : null;
+            if (!is_string($translated) || trim($translated) === '') {
+                throw new InvalidArgumentException(
+                    $source === 'en'
+                        ? 'Not saved: automatic translation returned no text.'
+                        : 'Não guardado: a tradução automática não devolveu texto.'
+                );
+            }
+            $results[] = html_entity_decode(trim($translated), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }
-        $translated = $data['responseData']['translatedText'] ?? null;
-        if (!is_string($translated)) {
-            throw new InvalidArgumentException(
-                $source === 'en'
-                    ? 'Not saved: translation API returned no translated text.'
-                    : 'Não guardado: API de tradução não devolveu texto traduzido.'
-            );
-        }
-        $translated = html_entity_decode(trim($translated), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        return $translated !== '' ? $translated : null;
+        return $results;
     }
 
-    private function result(
-        string $pt,
-        string $en,
-        string $sourceConclusion,
-        string $translationConclusion,
-        string $sourceLanguage
-    ): array {
-        $message = self::successMessage($sourceConclusion, $translationConclusion, $sourceLanguage);
-        $targetLanguage = $sourceLanguage === 'en' ? 'pt' : 'en';
+    private static function providerLanguage(string $language): string
+    {
+        return $language === 'pt' ? 'pt-PT' : 'en';
+    }
+
+    private function apiKey(): string
+    {
+        if ($this->resolvedApiKey !== null) {
+            return $this->resolvedApiKey;
+        }
+
+        $configured = trim((string) ($this->config['api_key'] ?? ''));
+        if ($configured !== '') {
+            return $this->resolvedApiKey = $configured;
+        }
+
+        $path = trim((string) ($this->config['secrets_file'] ?? ''));
+        if ($path === '' || !is_file($path) || !is_readable($path)) {
+            return $this->resolvedApiKey = '';
+        }
+
+        try {
+            $contents = file_get_contents($path);
+            $secret = is_string($contents) ? json_decode($contents, true, 8, JSON_THROW_ON_ERROR) : null;
+            $apiKey = is_array($secret) ? trim((string) ($secret['api_key'] ?? '')) : '';
+            return $this->resolvedApiKey = $apiKey;
+        } catch (Throwable) {
+            return $this->resolvedApiKey = '';
+        }
+    }
+
+    private function preservesProtectedSource(string $source, string $translated): bool
+    {
+        preg_match_all('/"[^"\r\n]*"|“[^”\r\n]*”|\p{N}+(?:[.,:\/\-]\p{N}+)*/u', $source, $matches);
+        foreach (($matches[0] ?? []) as $protected) {
+            if (!str_contains($translated, (string) $protected)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** @return array{pt:string,en:string,status:string,message:string} */
+    private function result(string $pt, string $en, string $status, string $sourceLanguage): array
+    {
+        $message = self::successMessage($status, $sourceLanguage);
         self::$responseMetadata[] = [
             'sourceLanguage' => $sourceLanguage,
-            'targetLanguage' => $targetLanguage,
-            'sourceConclusion' => $sourceConclusion,
-            'translationConclusion' => $translationConclusion,
+            'targetLanguage' => $sourceLanguage === 'en' ? 'pt' : 'en',
+            'status' => $status,
             'message' => $message,
         ];
         self::publishResponseMetadataHeader();
-        return [
-            'pt' => $pt,
-            'en' => $en,
-            'sourceConclusion' => $sourceConclusion,
-            'translationConclusion' => $translationConclusion,
-            'validationMessage' => $message,
-        ];
+        return ['pt' => $pt, 'en' => $en, 'status' => $status, 'message' => $message];
+    }
+
+    private static function successMessage(string $status, string $sourceLanguage): string
+    {
+        $english = $sourceLanguage === 'en';
+        return match ($status) {
+            'empty' => $english ? 'Saved: empty field.' : 'Guardado: campo vazio.',
+            'reused' => $english
+                ? 'Saved: existing translation reused.'
+                : 'Guardado: tradução existente reutilizada.',
+            'cached' => $english
+                ? 'Saved: cached translation reused.'
+                : 'Guardado: tradução em cache reutilizada.',
+            default => $english ? 'Saved and translated.' : 'Guardado e traduzido.',
+        };
     }
 
     private static function publishResponseMetadataHeader(): void
@@ -640,75 +466,6 @@ final class ContentTranslator
             return;
         }
         $encoded = rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
-        // Metadata contains conclusions/messages only, never source text.
         header('X-Room-Translation-Results: ' . $encoded, true);
-    }
-
-    /** @param string[] $words */
-    private static function quotedWords(array $words): string
-    {
-        return implode(', ', array_map(
-            static fn(string $word): string => '“' . $word . '”',
-            $words
-        ));
-    }
-
-    private function chunks(string $text): array
-    {
-        if (strlen($text) <= self::MYMEMORY_MAX_QUERY_BYTES) {
-            return [$text];
-        }
-        $parts = preg_split('/(?<=[.!?;:])\s+|\R+/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [$text];
-        $chunks = [];
-        $current = '';
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if ($part === '') {
-                continue;
-            }
-            $candidate = $current === '' ? $part : $current . ' ' . $part;
-            if (strlen($candidate) <= self::MYMEMORY_MAX_QUERY_BYTES) {
-                $current = $candidate;
-                continue;
-            }
-            if ($current !== '') {
-                $chunks[] = $current;
-                $current = '';
-            }
-            foreach ($this->splitOversizedPart($part) as $piece) {
-                if ($current === '') {
-                    $current = $piece;
-                } elseif (strlen($current . ' ' . $piece) <= self::MYMEMORY_MAX_QUERY_BYTES) {
-                    $current .= ' ' . $piece;
-                } else {
-                    $chunks[] = $current;
-                    $current = $piece;
-                }
-            }
-        }
-        if ($current !== '') {
-            $chunks[] = $current;
-        }
-        return $chunks;
-    }
-
-    private function splitOversizedPart(string $text): array
-    {
-        $pieces = [];
-        while (strlen($text) > self::MYMEMORY_MAX_QUERY_BYTES) {
-            $piece = function_exists('mb_strcut')
-                ? mb_strcut($text, 0, self::MYMEMORY_MAX_QUERY_BYTES, 'UTF-8')
-                : substr($text, 0, self::MYMEMORY_MAX_QUERY_BYTES);
-            $lastSpace = strrpos($piece, ' ');
-            if ($lastSpace !== false && $lastSpace > 250) {
-                $piece = substr($piece, 0, $lastSpace);
-            }
-            $pieces[] = trim($piece);
-            $text = ltrim(substr($text, strlen($piece)));
-        }
-        if ($text !== '') {
-            $pieces[] = trim($text);
-        }
-        return $pieces;
     }
 }

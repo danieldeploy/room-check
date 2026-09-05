@@ -15,16 +15,12 @@ final class TranslationFeedback
                 'Saved.'
             ),
             'timeout' => SiteTranslations::text(
-                'Erro: o processo de validação/tradução excedeu o tempo limite.',
-                'Error: validation/translation timed out.'
+                'Erro: a gravação/tradução excedeu o tempo limite.',
+                'Error: save/translation timed out.'
             ),
             'saveError' => SiteTranslations::text(
                 'Erro ao guardar.',
                 'Error: could not save.'
-            ),
-            'validationError' => SiteTranslations::text(
-                'Não guardado: não foi possível verificar o texto.',
-                'Not saved: could not verify the text.'
             ),
         ];
     }

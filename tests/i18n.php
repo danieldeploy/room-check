@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/I18n/SiteTranslations.php';
 require_once dirname(__DIR__) . '/src/I18n/ContentTranslator.php';
-require_once __DIR__ . '/support/FakeLexicalLanguageClassifier.php';
 
 function assertI18n(bool $condition, string $message): void
 {
@@ -13,117 +12,46 @@ function assertI18n(bool $condition, string $message): void
     echo 'PASS: ' . $message . PHP_EOL;
 }
 
-function assertThrowsI18n(callable $callback, string $expectedFragment, string $message): void
-{
-    try {
-        $callback();
-    } catch (InvalidArgumentException $exception) {
-        assertI18n(str_contains($exception->getMessage(), $expectedFragment), $message);
-        return;
-    }
-    throw new RuntimeException('FAIL: ' . $message);
-}
-
+$root = dirname(__DIR__);
 $catalog = SiteTranslations::catalog();
-assertI18n(($catalog['Controlo My2N'] ?? null) === 'My2N Control', 'My2N/Bell UI is in the shared catalogue');
-assertI18n(($catalog['Estado da integração'] ?? null) === 'Integration status', 'ZKAccess UI is in the shared catalogue');
-assertI18n(($catalog['Novo utilizador'] ?? null) === 'New user', 'Users UI is in the shared catalogue');
-assertI18n(($catalog['Permissões dos perfis'] ?? null) === 'Role permissions', 'Permissions UI is in the shared catalogue');
+assertI18n(($catalog['Controlo My2N'] ?? null) === 'My2N Control', 'static UI keeps the shared PT/EN catalogue');
 
 $_SESSION = [];
 Translator::setLocale('pt', false);
-assertI18n(SiteTranslations::text('Guardar exemplo', 'Save example') === 'Guardar exemplo', 'static helper returns Portuguese in PT locale');
-assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Verificação da cozinha', 'bilingual value uses Portuguese column in PT locale');
+assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Verificação da cozinha', 'PT locale reads the PT column');
 Translator::setLocale('en', false);
-assertI18n(SiteTranslations::text('Guardar exemplo 2', 'Save example 2') === 'Save example 2', 'static helper returns English in EN locale');
-assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Kitchen Check', 'bilingual value uses English column in EN locale');
+assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Kitchen Check', 'EN locale reads the EN column');
 
-$itemListsSource = file_get_contents(dirname(__DIR__) . '/item-lists.php');
-assertI18n(is_string($itemListsSource), 'item-list editor source is readable');
-assertI18n(str_contains((string) $itemListsSource, "\$selectedList['displayName'] = Translator::localized("), 'list editor derives editable list name from both saved languages');
+$pdo = (new ReflectionClass(PDO::class))->newInstanceWithoutConstructor();
+$translator = new ContentTranslator($pdo, ['enabled' => false]);
+$reusedEn = $translator->versions('Kitchen Check', 'en', 'Verificação da cozinha', 'Kitchen Check');
+assertI18n($reusedEn['pt'] === 'Verificação da cozinha' && $reusedEn['en'] === 'Kitchen Check', 'unchanged EN value reuses the persisted pair');
+assertI18n($reusedEn['status'] === 'reused', 'unchanged pair reports reuse');
+$reusedPt = $translator->versions('Verificação da cozinha', 'pt', 'Verificação da cozinha', 'Kitchen Check');
+assertI18n($reusedPt['status'] === 'reused', 'unchanged PT value reuses the persisted pair');
+assertI18n($translator->versions('', 'pt')['status'] === 'empty', 'empty text does not call the provider');
 
-$lexicon = translationRegressionClassifier();
-$ptAnalysis = LanguageGuard::sourceAnalysis('Verificar a limpeza da cozinha e das janelas', 'pt', $lexicon);
-$enAnalysis = LanguageGuard::sourceAnalysis('Check the kitchen windows and curtains', 'en', $lexicon);
-assertI18n($ptAnalysis['conclusion'] === 'correct', 'Portuguese source is confirmed lexically');
-assertI18n($enAnalysis['conclusion'] === 'correct', 'English source is confirmed lexically');
-assertI18n(LanguageGuard::sourceAnalysis('casa grande', 'pt', $lexicon)['conclusion'] === 'correct', 'short Portuguese source is lexically confirmed');
-assertI18n(LanguageGuard::sourceAnalysis('new house', 'pt', $lexicon)['conclusion'] === 'wrong', 'short English source is rejected in PT mode');
-assertI18n(LanguageGuard::sourceAnalysis('extinguisher', 'en', $lexicon)['conclusion'] === 'correct', 'extinguisher is positively identified as English');
-assertI18n(LanguageGuard::sourceAnalysis('detector', 'pt', $lexicon)['conclusion'] === 'ambiguous', 'shared PT/EN word stays ambiguous');
-assertI18n(LanguageGuard::sourceAnalysis('"HVAC"', 'pt', $lexicon)['conclusion'] === 'ambiguous', 'quoted technical identifier is explicitly protected');
-assertI18n(LanguageGuard::sourceAnalysis('HVAC', 'pt', $lexicon)['conclusion'] === 'unknown', 'unquoted unknown technical identifier is not implicitly whitelisted');
-assertI18n(LanguageGuard::sourceAnalysis('Verificar se está limpo house', 'pt', $lexicon)['conclusion'] === 'mixed', 'one EN word makes a PT sentence mixed');
-assertI18n(LanguageGuard::sourceAnalysis('Verificar se está limpo qdsffasdfaasdf', 'pt', $lexicon)['conclusion'] === 'unknown', 'unknown ordinary word is not hidden by PT sentence context');
-
-assertThrowsI18n(
-    static fn() => LanguageGuard::assertExpectedLanguage('Verificar a limpeza da cozinha e das janelas', 'en', translationRegressionClassifier()),
-    'clearly PT',
-    'Portuguese source is blocked in English input mode'
-);
-assertThrowsI18n(
-    static fn() => LanguageGuard::assertExpectedLanguage('Check the kitchen windows and curtains', 'pt', translationRegressionClassifier()),
-    'claramente EN',
-    'English source is blocked in Portuguese input mode'
-);
-assertThrowsI18n(
-    static fn() => LanguageGuard::assertExpectedLanguage('Verificar se está limpo house', 'pt', translationRegressionClassifier()),
-    'mistura PT e EN',
-    'mixed text is blocked before a translator could normalize it'
-);
-
-$contentTranslatorWithoutProvider = (new ReflectionClass(ContentTranslator::class))->newInstanceWithoutConstructor();
-$reusedEn = $contentTranslatorWithoutProvider->versions('Kitchen Check', 'en', 'Verificação da cozinha', 'Kitchen Check');
-assertI18n(($reusedEn['pt'] ?? null) === 'Verificação da cozinha' && ($reusedEn['en'] ?? null) === 'Kitchen Check', 'unchanged English value reuses existing bilingual pair');
-assertI18n(($reusedEn['sourceConclusion'] ?? null) === 'reused', 'reused value reports reuse instead of pretending a fresh validation');
-$reusedPt = $contentTranslatorWithoutProvider->versions('Verificação da cozinha', 'pt', 'Verificação da cozinha', 'Kitchen Check');
-assertI18n(($reusedPt['pt'] ?? null) === 'Verificação da cozinha' && ($reusedPt['en'] ?? null) === 'Kitchen Check', 'unchanged Portuguese value reuses existing bilingual pair');
-
-$contentTranslatorSource = file_get_contents(dirname(__DIR__) . '/src/I18n/ContentTranslator.php');
-$guardSource = file_get_contents(dirname(__DIR__) . '/src/I18n/LanguageGuard.php');
-$lexicalSource = file_get_contents(dirname(__DIR__) . '/src/I18n/LexicalLanguageChecker.php');
-assertI18n(is_string($contentTranslatorSource) && is_string($guardSource) && is_string($lexicalSource), 'translation architecture sources are readable');
-$sourceValidationPosition = strpos((string) $contentTranslatorSource, '$sourceAnalysis = $this->validateSource');
-$translationPosition = strpos((string) $contentTranslatorSource, '$translated = $this->translateValidated');
-$reusePosition = strpos((string) $contentTranslatorSource, '$existingEn === $text');
-assertI18n($reusePosition !== false && $sourceValidationPosition !== false && $reusePosition < $sourceValidationPosition, 'unchanged pair reuse happens before external verification');
-assertI18n($sourceValidationPosition !== false && $translationPosition !== false && $sourceValidationPosition < $translationPosition, 'source is verified before MyMemory translation');
-assertI18n(str_contains((string) $contentTranslatorSource, "'langpair' => \$source . '|' . \$target"), 'MyMemory receives explicit source/target only after source verification');
-assertI18n(!str_contains((string) $guardSource, 'looksTechnicalIdentifier'), 'capitalization-based technical bypass is removed');
-assertI18n(!str_contains((string) $guardSource, 'looksGibberishToken'), 'unknown words use dictionary membership instead of local gibberish heuristics');
-assertI18n(!str_contains((string) $lexicalSource, 'technical_neutral.txt'), 'manual technical vocabulary file is not part of runtime validation');
-assertI18n(!str_contains((string) $lexicalSource, 'en_GB_core.txt') && !str_contains((string) $lexicalSource, 'pt_PT_core.txt'), 'manual PT/EN core dictionaries are not part of runtime validation');
-assertI18n(!str_contains((string) $lexicalSource, 'curl_init') && !str_contains(mb_strtolower((string) $lexicalSource), 'wiktionary'), 'lexical verification has no runtime network dependency');
-assertI18n(file_exists(dirname(__DIR__) . '/resources/lexicon/full/pt_PT.txt') && file_exists(dirname(__DIR__) . '/resources/lexicon/full/en_GB.txt'), 'full generated PT/EN lexicons are bundled');
-assertI18n(file_exists(dirname(__DIR__) . '/resources/lexicon/full/person_neutral.txt'), 'generated person-name resource is bundled');
-assertI18n(file_exists(dirname(__DIR__) . '/resources/lexicon/full/country_pt.txt') && file_exists(dirname(__DIR__) . '/resources/lexicon/full/country_en.txt'), 'generated CLDR country resources are bundled');
-
-assertI18n(ContentTranslator::targetConclusion('Check the kitchen windows and curtains', 'en', $lexicon) === 'correct', 'clear English translation is correct for EN target');
-assertI18n(ContentTranslator::targetConclusion('Verificar a limpeza da cozinha e das janelas', 'pt', $lexicon) === 'correct', 'clear Portuguese translation is correct for PT target');
-assertI18n(ContentTranslator::targetConclusion('casa grande', 'en', $lexicon) === 'wrong', 'Portuguese translation is wrong for EN target');
-assertI18n(ContentTranslator::targetConclusion('new house', 'pt', $lexicon) === 'wrong', 'English translation is wrong for PT target');
-assertI18n(ContentTranslator::targetConclusion('detector', 'en', $lexicon) === 'ambiguous', 'shared translated word is accepted as ambiguous');
-assertI18n(ContentTranslator::targetConclusion('"HVAC"', 'pt', $lexicon) === 'ambiguous', 'quoted technical translated identifier is accepted as protected');
-assertI18n(ContentTranslator::targetConclusion('HVAC', 'pt', $lexicon) === 'wrong', 'unquoted unknown technical identifier is not accepted');
-assertI18n(ContentTranslator::targetConclusion('qdsffasdfaasdf', 'en', $lexicon) === 'wrong', 'unknown ordinary translation is not accepted');
-
-$ptGood = ContentTranslator::successMessage('correct', 'correct', 'pt');
-$ptTechnical = ContentTranslator::successMessage('ambiguous', 'correct', 'pt');
-$enTargetAmbiguous = ContentTranslator::successMessage('correct', 'ambiguous', 'en');
-assertI18n(str_contains($ptGood, 'texto PT confirmado') && str_contains($ptGood, 'tradução EN confirmada'), 'green PT message states confirmed source and translation');
-assertI18n(str_contains($ptTechnical, 'termo técnico/partilhado aceite') && str_contains($ptTechnical, 'tradução EN confirmada'), 'green PT message still reports neutral/protected source');
-assertI18n(str_contains($enTargetAmbiguous, 'EN text confirmed') && str_contains($enTargetAmbiguous, 'ambiguous/technical PT translation accepted'), 'green EN message accurately reports ambiguous target');
+$source = file_get_contents($root . '/src/I18n/ContentTranslator.php');
+$config = file_get_contents($root . '/config.php');
+$api = file_get_contents($root . '/api.php');
+assertI18n(is_string($source) && is_string($config) && is_string($api), 'translation sources are readable');
+assertI18n(str_contains($source, 'translation.googleapis.com/language/translate/v2'), 'Google Basic v2 endpoint is used');
+assertI18n(str_contains($source, "CURLOPT_POST => true") && str_contains($source, "'format' => 'text'"), 'Google request uses JSON POST text mode');
+assertI18n(str_contains($source, "'model' => 'nmt'"), 'Google request pins the standard NMT model used by the cache namespace');
+assertI18n(str_contains($source, "return \$language === 'pt' ? 'pt-PT' : 'en';"), 'provider receives explicit pt-PT and en language codes');
+assertI18n(str_contains($source, "\$this->config['secrets_file']"), 'Google key can be loaded from a private server-side JSON file');
+assertI18n(str_contains($source, 'engine_key') && str_contains($source, 'google-basic-nmt-v2'), 'translation cache is namespaced by engine');
+assertI18n(!str_contains($source, 'LanguageGuard') && !str_contains($source, 'LexicalLanguage'), 'content translation has no local linguistic gate');
+assertI18n(!str_contains($source, 'MyMemory') && !str_contains($source, 'langpair'), 'MyMemory-specific processing is removed');
+assertI18n(!str_contains($api, 'validate_bilingual_texts') && !str_contains($api, 'invalidWords'), 'API has no language-validation action or invalid-word response');
+assertI18n(!file_exists($root . '/translation-validate.php'), 'validation-only translation endpoint is removed');
+assertI18n(!file_exists($root . '/src/I18n/LanguageGuard.php'), 'local LanguageGuard is removed');
+assertI18n(!file_exists($root . '/src/I18n/LexicalLanguageChecker.php'), 'local lexical checker is removed');
 
 SiteTranslations::boot();
 $json = '{"label":"Controlo My2N"}';
 assertI18n(Translator::translateOutput($json) === $json, 'JSON/API payloads are never globally translated');
-$html = '<html><body><span>Controlo My2N</span><code>device_id=123</code><div data-i18n-skip>rooms</div></body></html>';
-$translatedOutput = Translator::translateOutput($html);
-assertI18n(str_contains($translatedOutput, 'My2N Control'), 'HTML output receives shared English catalogue');
-assertI18n(str_contains($translatedOutput, 'MutationObserver'), 'dynamic DOM translation remains enabled');
-assertI18n(str_contains($translatedOutput, "closest('[data-i18n-skip]')"), 'technical DOM subtrees can opt out of translation');
+$html = '<html><body><span>Controlo My2N</span><code>device_id=123</code></body></html>';
+assertI18n(str_contains(Translator::translateOutput($html), 'My2N Control'), 'static HTML translation remains available');
 
-$validatorSource = file_get_contents(dirname(__DIR__) . '/translation-validate.php');
-assertI18n(is_string($validatorSource) && str_contains($validatorSource, 'sourceConclusion') && str_contains($validatorSource, 'translationConclusion') && str_contains($validatorSource, "'message'"), 'validation-only endpoint still reports exact conclusions for non-persisted text');
-
-echo 'Site-wide lexical translation tests passed.' . PHP_EOL;
+echo "Google translation architecture tests passed.\n";

@@ -23,6 +23,7 @@ $defaultMy2NSecretsFile = $serverHome === ''
     ? ''
     : $serverHome . '/room-check-private/my2n-secrets.json';
 $defaultWhatsAppSecretsFile = $serverHome === '' ? '' : $serverHome . '/room-check-private/whatsapp-secrets.json';
+$defaultTranslationSecretsFile = $serverHome === '' ? '' : $serverHome . '/room-check-private/google-translation.json';
 
 return [
     'db' => [
@@ -68,15 +69,20 @@ return [
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
     ],
     'translation' => [
-        // MyMemory is translation-only. All language resources are bundled and
-        // generated from pinned external sources; no manual lexical config exists.
+        // User-authored bilingual content is translated server-side with Google
+        // Cloud Translation Basic. The key must never be exposed to browser code.
         'enabled' => (bool) ($localConfig['translation']['enabled'] ?? true),
         'endpoint' => $localConfig['translation']['endpoint']
-            ?? getenv('MYMEMORY_TRANSLATION_ENDPOINT')
-            ?: 'https://api.mymemory.translated.net/get',
-        'contact_email' => $localConfig['translation']['contact_email']
-            ?? getenv('MYMEMORY_CONTACT_EMAIL')
+            ?? getenv('GOOGLE_CLOUD_TRANSLATION_ENDPOINT')
+            ?: 'https://translation.googleapis.com/language/translate/v2',
+        'api_key' => $localConfig['translation']['api_key']
+            ?? getenv('GOOGLE_CLOUD_TRANSLATION_API_KEY')
             ?: '',
+        'secrets_file' => $localConfig['translation']['secrets_file']
+            ?? getenv('GOOGLE_CLOUD_TRANSLATION_SECRETS_FILE')
+            ?: $defaultTranslationSecretsFile,
+        'engine_key' => $localConfig['translation']['engine_key']
+            ?? 'google-basic-nmt-v2',
         'timeout_seconds' => (int) ($localConfig['translation']['timeout_seconds'] ?? 12),
     ],
 ];

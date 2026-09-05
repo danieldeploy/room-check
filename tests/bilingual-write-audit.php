@@ -9,7 +9,7 @@ declare(strict_types=1);
  *  - derive the source language from Translator::locale();
  *  - pass user text through ContentTranslator::versions();
  *  - for UPDATE/upsert paths, pass the existing PT/EN pair (4 arguments) so
- *    unchanged fields are reused before LanguageGuard validation.
+ *    unchanged fields are reused before provider translation.
  *
  * New modules are discovered recursively, so no filename needs to be added to
  * this test for ordinary application code.
@@ -26,8 +26,6 @@ $failures = [];
 $protectedFiles = [];
 
 $maintenanceExceptions = [
-    'lib.php' => 'runtime schema/legacy backfill',
-    'src/I18n/BilingualContentMaintenance.php' => 'legacy bilingual repair/backfill',
     'deploy/migrate_dynamic_list_item_names.php' => 'deployment migration',
 ];
 

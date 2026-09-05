@@ -17,13 +17,12 @@ $css = file_get_contents($root . '/assets/app.css');
 $rooms = file_get_contents($root . '/rooms.php');
 $itemLists = file_get_contents($root . '/item-lists.php');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');
-$validator = file_get_contents($root . '/translation-validate.php');
 $translator = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 
 assertInvalidEditUx(
     is_string($app) && is_string($immediateGuard) && is_string($feedback) && is_string($css)
         && is_string($rooms) && is_string($itemLists) && is_string($sessionBar)
-        && is_string($validator) && is_string($translator),
+        && is_string($translator),
     'UX sources are readable'
 );
 assertInvalidEditUx(str_contains($feedback, "textarea.classList.add('language-invalid')"), 'rejected text remains marked invalid without changing its contents');
@@ -60,21 +59,21 @@ assertInvalidEditUx(
     str_contains($immediateGuard, 'const hasConfirmedError = textareas.some(hasFailedValidation);')
         && str_contains($immediateGuard, 'config.languageDecisionUnsavedMessage')
         && str_contains($immediateGuard, 'config.languageDecisionContinue'),
-    'decision copy distinguishes a confirmed red error from an edit that has not yet been validated'
+    'decision copy distinguishes a failed save from an edit that has not yet been saved'
 );
 assertInvalidEditUx(
-    str_contains($rooms, "'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?'")
-        && str_contains($rooms, "'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'")
+    str_contains($rooms, "'O texto não foi guardado ou traduzido. Quer tentar novamente ou anular a edição?'")
+        && str_contains($rooms, "'The text was not saved or translated. Do you want to try again or cancel the edit?'")
         && str_contains($rooms, "'Tem uma edição não guardada. Quer continuar a editar ou anular a edição?'")
         && str_contains($rooms, "'There is an unsaved edit. Do you want to continue editing or cancel the edit?'")
         && str_contains($rooms, "'languageDecisionContinue'"),
-    'room decision messages describe the active language for confirmed errors and do not diagnose unvalidated edits'
+    'room decision messages describe save/translation failure without diagnosing the text'
 );
 assertInvalidEditUx(
-    str_contains($itemLists, "'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?'")
-        && str_contains($itemLists, "'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'")
+    str_contains($itemLists, "'O texto não foi guardado ou traduzido. Quer tentar novamente ou anular a edição?'")
+        && str_contains($itemLists, "'The text was not saved or translated. Do you want to try again or cancel the edit?'")
         && !str_contains($itemLists, 'Tem texto errado em Inglês. Quer corrigir, ou anular a edição?'),
-    'item-list editor no longer uses the inverted language error message'
+    'item-list editor reports a save/translation failure without a false language diagnosis'
 );
 assertInvalidEditUx(
     !str_contains($rooms, 'There is text incorrectly written in Portuguese. Do you want to correct it or cancel the edit?')
@@ -117,7 +116,7 @@ assertInvalidEditUx(
         && str_contains($feedback, 'requestRows'),
     'green conclusion appears only after real persistence success on the request-bound row'
 );
-assertInvalidEditUx(str_contains($validator, 'ContentTranslator') && str_contains($validator, '->versions('), 'validation-only flow remains for non-persistable text');
+assertInvalidEditUx(!file_exists($root . '/translation-validate.php'), 'obsolete validation-only flow is removed');
 
 assertInvalidEditUx(
     str_contains($feedback, 'keepValidationTextareaEditable')

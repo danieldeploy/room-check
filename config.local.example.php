@@ -41,11 +41,12 @@ return [
         'default_country_code' => '351',
     ],
     'translation' => [
-        // Free MyMemory REST translation; no API key is required.
+        // Google Cloud Translation Basic. The JSON file contains
+        // {"api_key":"..."} and stays outside public_html and Git.
         'enabled' => true,
-        'endpoint' => 'https://api.mymemory.translated.net/get',
-        // Optional identification recommended by the provider.
-        'contact_email' => '',
+        'endpoint' => 'https://translation.googleapis.com/language/translate/v2',
+        'secrets_file' => '/home/CPANEL_USER/room-check-private/google-translation.json',
+        'engine_key' => 'google-basic-nmt-v2',
         'timeout_seconds' => 12,
     ],
 ];

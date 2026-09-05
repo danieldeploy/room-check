@@ -71,7 +71,7 @@ final class SiteTranslations
             'Painel administrativo' => 'Administration panel',
             'Administração' => 'Administration',
             'Ação inválida.' => 'Invalid action.',
-            'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?' => 'There is text incorrectly written in English. Do you want to correct it or cancel the edit?',
+            'O texto não foi guardado ou traduzido. Quer tentar novamente ou anular a edição?' => 'The text was not saved or translated. Do you want to try again or cancel the edit?',
             'Tem uma edição não guardada. Quer continuar a editar ou anular a edição?' => 'There is an unsaved edit. Do you want to continue editing or cancel the edit?',
             'Continuar a editar' => 'Continue editing',
             'Anular edição' => 'Cancel edit',

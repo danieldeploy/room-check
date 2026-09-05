@@ -234,8 +234,9 @@
         const row = document.createElement('article');
         row.className = 'check-row';
 
+        const displayName = item.displayName || item.name;
         const name = document.createElement('h2');
-        name.textContent = item.name;
+        name.textContent = displayName;
         const itemHeading = document.createElement('div');
         itemHeading.className = 'item-heading';
 
@@ -245,7 +246,7 @@
         textarea.rows = 1;
         textarea.maxLength = 5000;
         textarea.readOnly = !canEdit;
-        textarea.setAttribute('aria-label', `Problema identificado: ${item.name}`);
+        textarea.setAttribute('aria-label', `Problema identificado: ${displayName}`);
         textarea.addEventListener('input', () => {
             autoGrow(textarea);
             if (row.classList.contains('assignment-mode')) {
@@ -288,7 +289,7 @@
         const status = document.createElement('div');
         status.className = 'status-options';
         status.setAttribute('role', 'group');
-        status.setAttribute('aria-label', `Estado: ${item.name}`);
+        status.setAttribute('aria-label', `Estado: ${displayName}`);
 
         const buttons = [
             ['wrong', 'Problema', 'wrong'],
@@ -323,7 +324,7 @@
             assignmentCheckbox = document.createElement('input');
             assignmentCheckbox.type = 'checkbox';
             assignmentCheckbox.disabled = true;
-            assignmentCheckbox.setAttribute('aria-label', `Atribuir ${item.name}`);
+            assignmentCheckbox.setAttribute('aria-label', `Atribuir ${displayName}`);
             assignmentCheckbox.addEventListener('change', () => {
                 window.clearTimeout(instructionSaveTimers.get(item.name));
                 instructionSaveTimers.delete(item.name);
@@ -521,7 +522,7 @@
                 roomAssignmentCounts = {};
                 applyRoomAssignmentStates();
                 renderChecklist(config.items.map((name) => ({
-                    name, problem: '', status: null,
+                    name, displayName: config.itemDisplayNames?.[name] || name, problem: '', status: null,
                     defaultInstructions: config.itemDefaults?.[name] || '',
                 })));
                 setStatus(error.message, 'error');
@@ -845,12 +846,13 @@
         clearInstructionSaveTimers();
         const list = config.lists.find((candidate) => Number(candidate.id) === Number(listSelect.value));
         config.items = Array.isArray(list?.items) ? list.items : [];
+        config.itemDisplayNames = list?.itemDisplayNames || {};
         config.itemDefaults = list?.defaults || {};
         assignments = {};
         roomAssignmentCounts = {};
         applyRoomAssignmentStates();
         renderChecklist(config.items.map((name) => ({
-            name, problem: '', status: null,
+            name, displayName: config.itemDisplayNames?.[name] || name, problem: '', status: null,
             defaultInstructions: config.itemDefaults?.[name] || '',
         })));
         loadChecklist();
@@ -961,7 +963,7 @@
     renderRooms(Number(config.initialRoom) || 1);
     if (assignmentDate && !assignmentDate.value) assignmentDate.value = config.today;
     renderChecklist(config.items.map((name) => ({
-        name, problem: '', status: null,
+        name, displayName: config.itemDisplayNames?.[name] || name, problem: '', status: null,
         defaultInstructions: config.itemDefaults?.[name] || '',
     })));
     loadChecklist();

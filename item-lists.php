@@ -124,10 +124,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             ]);
             $message = 'Item adicionado.';
         } elseif ($action === 'rename_item') {
-            $pdo->beginTransaction();
             $statement = $pdo->prepare(
                 'SELECT name, name_en, default_instructions, default_instructions_en
-                 FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+                 FROM item_list_items WHERE id = :id AND list_id = :list_id'
             );
             $statement->execute(['id' => $itemId, 'list_id' => $listId]);
             $oldItem = $statement->fetch();
@@ -143,6 +142,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $instructions, Translator::locale(),
                 (string) $oldItem['default_instructions'], (string) ($oldItem['default_instructions_en'] ?? '')
             );
+            // Translate before opening the transaction, then verify that the row
+            // did not change while the external request was in flight.
+            $pdo->beginTransaction();
+            $lockedStatement = $pdo->prepare(
+                'SELECT name, name_en, default_instructions, default_instructions_en
+                 FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+            );
+            $lockedStatement->execute(['id' => $itemId, 'list_id' => $listId]);
+            $lockedItem = $lockedStatement->fetch();
+            if (!is_array($lockedItem)) {
+                throw new InvalidArgumentException('Item não encontrado.');
+            }
+            foreach (['name', 'name_en', 'default_instructions', 'default_instructions_en'] as $column) {
+                if ((string) ($lockedItem[$column] ?? '') !== (string) ($oldItem[$column] ?? '')) {
+                    throw new InvalidArgumentException(SiteTranslations::text(
+                        'O item foi alterado por outro utilizador. Recarregue e tente novamente.',
+                        'The item was changed by another user. Reload and try again.'
+                    ));
+                }
+            }
             $newCanonicalName = $nameVersions['pt'];
             $renameValues = $pdo->prepare(
                 'UPDATE room_checklist_values SET item_name = :new_name
@@ -255,10 +274,10 @@ header('Cache-Control: no-store');
 </head>
 <body
     data-bilingual-decision-message="<?= listEscape(SiteTranslations::text(
-        'Existe texto incorretamente escrito em português. Quer corrigir ou anular a edição?',
-        'There is text incorrectly written in English. Do you want to correct it or cancel the edit?'
+        'O texto não foi guardado ou traduzido. Quer tentar novamente ou anular a edição?',
+        'The text was not saved or translated. Do you want to try again or cancel the edit?'
     )) ?>"
-    data-bilingual-correct="<?= listEscape(SiteTranslations::text('Corrigir', 'Correct')) ?>"
+    data-bilingual-correct="<?= listEscape(SiteTranslations::text('Tentar novamente', 'Try again')) ?>"
     data-bilingual-cancel="<?= listEscape(SiteTranslations::text('Anular edição', 'Cancel edit')) ?>"
     data-bilingual-saved="<?= listEscape(SiteTranslations::text('Guardado', 'Saved')) ?>"
 >

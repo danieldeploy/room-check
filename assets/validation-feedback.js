@@ -81,7 +81,7 @@
     };
 
     // Reused by the transversal bilingual textarea script so every persistent
-    // save reads the same server conclusion without a second validation request.
+    // save reads the same server conclusion without a second preview request.
     window.ROOM_TRANSLATION_RESULT_READER = Object.freeze({
         fromResponse: translationResultsFromResponse,
     });
@@ -184,7 +184,7 @@
     );
 
     // A list/context change is blocked by either an unsaved edit OR a confirmed
-    // red validation error. The old guard looked only at the pending flag, which
+    // red save error. The old guard looked only at the pending flag, which
     // meant an already-rejected edit could sometimes be left behind silently.
     const blockingTextareas = () => allTextareas().filter((textarea) =>
         hasUnsavedValue(textarea)
@@ -254,7 +254,7 @@
         }
         showErrorFeedback(
             dirty[0]?.closest('.check-row'),
-            translationFeedback.timeout || 'Error: validation/translation timed out.'
+            translationFeedback.timeout || 'Error: save/translation timed out.'
         );
         return false;
     };

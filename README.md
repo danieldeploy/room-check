@@ -27,21 +27,19 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 `config.local.php` contém configuração local, está excluído do Git e não deve ser partilhado.
 
-### Tradução automática gratuita
+### Tradução automática
 
-As instruções dinâmicas são traduzidas entre português e inglês quando são criadas ou alteradas. A aplicação usa por defeito a API pública MyMemory, sem chave e sem chamadas durante a simples navegação. As duas versões ficam guardadas nas colunas bilingues criadas pela migração `017_bilingual_content.sql`.
+As instruções dinâmicas são traduzidas entre português de Portugal e inglês quando são criadas ou alteradas. A aplicação usa Google Cloud Translation Basic, sem chamadas durante a simples navegação. As duas versões ficam guardadas nas colunas bilingues criadas pela migração `017_bilingual_content.sql`.
 
-Não é necessária configuração adicional. Opcionalmente, pode identificar os pedidos no `config.local.php`:
+Ative a Cloud Translation API e guarde a chave fora de `public_html`, por exemplo em `/home/CPANEL_USER/room-check-private/google-translation.json`:
 
-```php
-'translation' => [
-    'enabled' => true,
-    'contact_email' => 'email@dominio.pt',
-    'timeout_seconds' => 12,
-],
+```json
+{"api_key":"CHAVE_RESTRITA_DO_GOOGLE_CLOUD"}
 ```
 
-Se o serviço estiver temporariamente indisponível, a gravação não é bloqueada: a versão original é guardada também como fallback na segunda língua. Uma alteração posterior volta a tentar a tradução.
+Em `config.local.php`, indique apenas o caminho através de `translation.secrets_file`, como no ficheiro de exemplo. Em alternativa, configure `GOOGLE_CLOUD_TRANSLATION_API_KEY` no ambiente do servidor. Importe também `migrations/023_google_translation_cache.sql` antes do novo código. A sequência completa está em `docs/GOOGLE_TRANSLATION_DEPLOYMENT.md`.
+
+Se o serviço estiver temporariamente indisponível, o texto não é guardado como uma tradução falsa: permanece editável e o utilizador pode tentar novamente. Uma tradução bem-sucedida fica em cache e as duas línguas ficam persistidas juntas.
 
 O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment. Para esta funcionalidade, siga `docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md`, incluindo o backup prévio e a ordem das migrações.
 

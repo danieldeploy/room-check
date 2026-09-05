@@ -43,6 +43,7 @@ try {
 
                 return [
                     'name' => $name,
+                    'displayName' => (string) ($selectedList['itemDisplayNames'][$name] ?? $name),
                     'problem' => $intervalId > 0
                         ? $listInstructions
                         : ($roomInstructions !== '' ? $roomInstructions : $listInstructions),
@@ -108,42 +109,6 @@ try {
     $pdo = database();
     $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
 
-    if (($payload['action'] ?? '') === 'validate_bilingual_texts') {
-        Auth::requireLogin($pdo, $config);
-        Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
-        $fields = $payload['fields'] ?? null;
-        if (!is_array($fields) || count($fields) > 100) {
-            throw new InvalidArgumentException('Invalid language validation request.');
-        }
-        $invalidFields = [];
-        foreach ($fields as $field) {
-            if (!is_array($field)) continue;
-            $fieldKey = trim((string) ($field['fieldKey'] ?? ''));
-            $text = trim((string) ($field['text'] ?? ''));
-            if (mb_strlen($text) > 5000) {
-                throw new InvalidArgumentException('Text is too long.');
-            }
-            try {
-                LanguageGuard::assertExpectedLanguage($text, Translator::locale());
-            } catch (LanguageValidationException $exception) {
-                $invalidFields[] = [
-                    'fieldKey' => $fieldKey,
-                    'invalidWords' => $exception->invalidWords,
-                    'error' => $exception->getMessage(),
-                ];
-            }
-        }
-        if ($invalidFields !== []) {
-            jsonResponse([
-                'ok' => false,
-                'validation' => true,
-                'error' => (string) $invalidFields[0]['error'],
-                'invalidFields' => $invalidFields,
-            ], 422);
-        }
-        jsonResponse(['ok' => true, 'valid' => true]);
-    }
-
     if (($payload['action'] ?? '') === 'save_item_list_instructions') {
         $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_TASK_ASSIGN);
         Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
@@ -157,10 +122,9 @@ try {
             throw new InvalidArgumentException('A descrição da verificação não pode ultrapassar 5000 caracteres.');
         }
         itemList($pdo, $listId);
-        $pdo->beginTransaction();
         $currentStatement = $pdo->prepare(
             'SELECT default_instructions, default_instructions_en
-             FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+             FROM item_list_items WHERE id = :id AND list_id = :list_id'
         );
         $currentStatement->execute(['id' => $itemId, 'list_id' => $listId]);
         $currentItem = $currentStatement->fetch();
@@ -173,6 +137,25 @@ try {
             (string) ($currentItem['default_instructions'] ?? ''),
             (string) ($currentItem['default_instructions_en'] ?? '')
         );
+        // Never hold a database lock while waiting for the external provider.
+        $pdo->beginTransaction();
+        $lockedStatement = $pdo->prepare(
+            'SELECT default_instructions, default_instructions_en
+             FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
+        );
+        $lockedStatement->execute(['id' => $itemId, 'list_id' => $listId]);
+        $lockedItem = $lockedStatement->fetch();
+        if (!is_array($lockedItem)) {
+            throw new InvalidArgumentException('Item não encontrado.');
+        }
+        if ((string) ($lockedItem['default_instructions'] ?? '') !== (string) ($currentItem['default_instructions'] ?? '')
+            || (string) ($lockedItem['default_instructions_en'] ?? '') !== (string) ($currentItem['default_instructions_en'] ?? '')) {
+            throw new InvalidArgumentException(
+                Translator::locale() === 'en'
+                    ? 'The item was changed by another user. Reload and try again.'
+                    : 'O item foi alterado por outro utilizador. Recarregue e tente novamente.'
+            );
+        }
         $updateStatement = $pdo->prepare(
             'UPDATE item_list_items
              SET default_instructions = :instructions_pt, default_instructions_en = :instructions_en
@@ -449,16 +432,12 @@ try {
                 throw new InvalidArgumentException("As instruções de {$name} são demasiado longas.");
             }
             $existingInstruction = $existingInstructions[$name] ?? [];
-            try {
-                $instructionVersions = $contentTranslator->versions(
-                    $instructions,
-                    Translator::locale(),
-                    (string) ($existingInstruction['verification_instructions'] ?? ''),
-                    (string) ($existingInstruction['verification_instructions_en'] ?? '')
-                );
-            } catch (LanguageValidationException $exception) {
-                throw $exception->withField($name);
-            }
+            $instructionVersions = $contentTranslator->versions(
+                $instructions,
+                Translator::locale(),
+                (string) ($existingInstruction['verification_instructions'] ?? ''),
+                (string) ($existingInstruction['verification_instructions_en'] ?? '')
+            );
             $normalizedChanges[$name] = [
                 'selected' => filter_var($change['selected'] ?? false, FILTER_VALIDATE_BOOL),
                 'instructions' => $instructionVersions['pt'],
@@ -761,22 +740,18 @@ try {
         // The UI displays default list instructions when no room-specific text
         // exists. That fallback is not new user input. Multi-row autosave sends
         // every visible textarea, so discard an untouched fallback before the
-        // language guard/provider sees it. A genuinely edited value differs
+        // translation provider sees it. A genuinely edited value differs
         // from the fallback and continues through normal PT/EN persistence.
         if ($existingPt === '' && $existingEn === '' && $problem === $defaultProblem) {
             $problem = '';
         }
 
-        try {
-            $problemVersions = $contentTranslator->versions(
-                $problem,
-                Translator::locale(),
-                $existingPt,
-                $existingEn
-            );
-        } catch (LanguageValidationException $exception) {
-            throw $exception->withField($name);
-        }
+        $problemVersions = $contentTranslator->versions(
+            $problem,
+            Translator::locale(),
+            $existingPt,
+            $existingEn
+        );
         $normalized[$name] = [
             'problem' => $problemVersions['pt'],
             'problem_en' => $problemVersions['en'],
@@ -813,17 +788,6 @@ try {
 
     $pdo->commit();
     jsonResponse(['ok' => true, 'savedAt' => gmdate('c')]);
-} catch (LanguageValidationException $exception) {
-    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
-    jsonResponse([
-        'ok' => false,
-        'validation' => true,
-        'error' => $exception->getMessage(),
-        'invalidWords' => $exception->invalidWords,
-        'fieldKey' => $exception->fieldKey,
-    ], 422);
 } catch (JsonException | InvalidArgumentException $exception) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
         $pdo->rollBack();

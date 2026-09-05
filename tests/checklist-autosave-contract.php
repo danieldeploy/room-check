@@ -19,7 +19,7 @@ assertChecklistAutosave(is_string($app), 'assets/app.js is readable');
 // The UI intentionally displays list defaults as a visual fallback when a room
 // has no room-specific text. The multi-row autosave therefore submits values
 // that the user did not edit. Those fallbacks must be discarded server-side
-// before language validation/translation so one untouched row cannot reject the
+// before provider translation so one untouched row cannot reject the
 // whole English (or Portuguese) save request.
 assertChecklistAutosave(
     str_contains($api, '$defaultProblem = trim((string) ($selectedList[\'defaults\'][$name] ?? \'\'));'),
@@ -34,7 +34,7 @@ $fallbackPosition = strpos($api, '$problem === $defaultProblem');
 $translationPosition = strpos($api, '$problemVersions = $contentTranslator->versions(', $fallbackPosition ?: 0);
 assertChecklistAutosave(
     $fallbackPosition !== false && $translationPosition !== false && $fallbackPosition < $translationPosition,
-    'fallback is removed before LanguageGuard/provider translation is reached'
+    'fallback is removed before provider translation is reached'
 );
 assertChecklistAutosave(
     str_contains($api, '$existingPt,') && str_contains($api, '$existingEn'),

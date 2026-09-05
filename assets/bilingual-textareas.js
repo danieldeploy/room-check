@@ -3,7 +3,6 @@
 
     const script = document.currentScript;
     const apiUrl = script?.dataset.bilingualApi || 'api.php';
-    const validationUrl = apiUrl.replace(/api\.php(?:[?#].*)?$/, 'translation-validate.php');
     const selector = 'textarea[data-bilingual-textarea]';
     const translationFeedback = window.ROOM_TRANSLATION_FEEDBACK || {};
     const savePromises = new WeakMap();
@@ -58,68 +57,53 @@
         return String(results?.[0]?.message || '');
     };
 
-    // Validation-only is kept only for text that cannot yet be persisted, such
-    // as instructions for a new item before that item has an ID.
-    const validateTextarea = async (textarea) => {
-        const response = await fetch(validationUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-                csrfToken: csrfToken(textarea),
-                fields: [{ fieldKey: 'field', text: textarea.value }]
-            })
-        });
-        let payload = null;
-        try { payload = await response.json(); } catch (_) { payload = null; }
-        if (response.ok && payload?.ok) {
-            clearInvalid(textarea);
-            const result = payload.fields?.[0] || {};
-            return {
-                valid: true,
-                message: result.message || translationFeedback.saved || 'Saved.'
-            };
-        }
-        markInvalid(textarea);
-        showFeedback(textarea, payload?.error || translationFeedback.validationError || 'Not saved: could not verify the text.', 'error');
-        return { valid: false };
-    };
-
-    // Existing/persistable instructions go straight through their real save.
-    // The same server operation validates source, translates, validates target,
-    // persists both languages and returns the exact green conclusion.
+    // Existing instructions go through their real save. New-item instructions
+    // are translated only when their containing form creates the item.
     const autosaveTextarea = async (textarea) => {
         const action = textarea.dataset.bilingualAutosaveAction || '';
         if (!action) return true;
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-                action,
-                csrfToken: csrfToken(textarea),
-                listId: Number(textarea.dataset.listId || 0),
-                itemId: Number(textarea.dataset.itemId || 0),
-                text: textarea.value
-            })
-        });
-        let payload = null;
-        try { payload = await response.json(); } catch (_) { payload = null; }
-        if (!response.ok || payload?.ok === false) {
+        const requestValue = textarea.value;
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                    action,
+                    csrfToken: csrfToken(textarea),
+                    listId: Number(textarea.dataset.listId || 0),
+                    itemId: Number(textarea.dataset.itemId || 0),
+                    text: requestValue
+                })
+            });
+            let payload = null;
+            try { payload = await response.json(); } catch (_) { payload = null; }
+            if (!response.ok || payload?.ok === false) {
+                markInvalid(textarea);
+                showFeedback(textarea, payload?.error || translationFeedback.saveError || 'Error: could not save.', 'error');
+                return false;
+            }
+            if (textarea.value !== requestValue) {
+                textarea.dataset.bilingualPending = '1';
+                clearInvalid(textarea);
+                return true;
+            }
+            textarea.dataset.bilingualLastValidValue = requestValue;
+            delete textarea.dataset.bilingualPending;
+            clearInvalid(textarea);
+            showFeedback(
+                textarea,
+                responseMessage(response) || translationFeedback.saved || 'Saved.',
+                'saved'
+            );
+            return true;
+        } catch (_) {
             markInvalid(textarea);
-            showFeedback(textarea, payload?.error || translationFeedback.saveError || 'Error: could not save.', 'error');
+            showFeedback(textarea, translationFeedback.saveError || 'Error: could not save.', 'error');
             return false;
         }
-        textarea.dataset.bilingualLastValidValue = textarea.value;
-        delete textarea.dataset.bilingualPending;
-        clearInvalid(textarea);
-        showFeedback(
-            textarea,
-            responseMessage(response) || translationFeedback.saved || 'Saved.',
-            'saved'
-        );
-        return true;
     };
 
-    const processTextarea = (textarea, persistWhenPossible = true) => {
+    const processTextarea = (textarea, persistWhenPossible = true, allowFormSubmit = false) => {
         const existing = savePromises.get(textarea);
         if (existing) return existing;
         const promise = (async () => {
@@ -133,12 +117,9 @@
                 return autosaveTextarea(textarea);
             }
 
-            const validation = await validateTextarea(textarea);
-            if (!validation.valid) return false;
-            delete textarea.dataset.bilingualPending;
-            textarea.dataset.bilingualValidatedValue = textarea.value;
-            showFeedback(textarea, validation.message, 'saved');
-            return true;
+            // A field without a persistence action must never call a translation
+            // preview endpoint. Its normal form submission owns translation/save.
+            return allowFormSubmit;
         })().finally(() => savePromises.delete(textarea));
         savePromises.set(textarea, promise);
         return promise;
@@ -205,7 +186,9 @@
             else textarea.dataset.bilingualPending = '1';
         });
         textarea.addEventListener('blur', () => {
-            if (textarea.dataset.bilingualPending === '1') void processTextarea(textarea, true);
+            if (textarea.dataset.bilingualPending === '1' && textarea.dataset.bilingualAutosaveAction) {
+                void processTextarea(textarea, true);
+            }
         });
     };
 
@@ -221,7 +204,7 @@
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 const results = await Promise.all(ownFields.map((textarea) =>
-                    processTextarea(textarea, Boolean(textarea.dataset.bilingualAutosaveAction))
+                    processTextarea(textarea, Boolean(textarea.dataset.bilingualAutosaveAction), true)
                 ));
                 if (!results.every(Boolean)) return;
                 bypassForms.add(form);
