@@ -93,6 +93,11 @@ return [
             ?? 'America/Los_Angeles',
         'display_timezone' => $localConfig['translation']['display_timezone']
             ?? 'Europe/Lisbon',
+        // Quota-limited edits remain server-side drafts until both language
+        // versions can be committed together by the worker.
+        'pending_enabled' => (bool) ($localConfig['translation']['pending_enabled'] ?? true),
+        'pending_worker_batch_size' => (int) ($localConfig['translation']['pending_worker_batch_size'] ?? 10),
+        'pending_max_attempts' => (int) ($localConfig['translation']['pending_max_attempts'] ?? 5),
         'quota_alert' => [
             // Enable only after the Meta template is approved and the private
             // recipient mobile is configured on the server.

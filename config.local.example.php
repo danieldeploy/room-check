@@ -51,6 +51,9 @@ return [
         'daily_character_limit' => 15500,
         'quota_timezone' => 'America/Los_Angeles',
         'display_timezone' => 'Europe/Lisbon',
+        'pending_enabled' => true,
+        'pending_worker_batch_size' => 10,
+        'pending_max_attempts' => 5,
         'quota_alert' => [
             // Enable only after translation_quota_alert_v1 is approved by Meta.
             'enabled' => false,

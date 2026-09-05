@@ -100,11 +100,15 @@ final class VerificationCategoryRepository
         PDO $pdo,
         ContentTranslator $translator,
         string $name,
-        int $actorId
+        int $actorId,
+        ?callable $beforeWrite = null
     ): int
     {
         self::requireStorage($pdo);
         $versions = $translator->versions($name, Translator::locale());
+        if ($beforeWrite !== null) {
+            $beforeWrite();
+        }
         $position = (int) $pdo->query('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM verification_categories')->fetchColumn();
         $statement = $pdo->prepare(
             'INSERT INTO verification_categories (slug, name, name_en, sort_order, created_by_user_id)
@@ -135,7 +139,8 @@ final class VerificationCategoryRepository
         PDO $pdo,
         ContentTranslator $translator,
         int $categoryId,
-        string $name
+        string $name,
+        ?callable $beforeWrite = null
     ): void
     {
         self::requireStorage($pdo);
@@ -146,6 +151,17 @@ final class VerificationCategoryRepository
             (string) $category['name'],
             (string) $category['name_en']
         );
+        if ($beforeWrite !== null) {
+            $beforeWrite();
+        }
+        if ($pdo->inTransaction()) {
+            $lockedCategory = self::find($pdo, $categoryId, true);
+            if ($lockedCategory === null
+                || (string) $lockedCategory['name'] !== (string) $category['name']
+                || (string) ($lockedCategory['name_en'] ?? '') !== (string) $category['name_en']) {
+                throw new InvalidArgumentException('A área foi alterada por outro utilizador. Recarregue e tente novamente.');
+            }
+        }
         $statement = $pdo->prepare(
             'UPDATE verification_categories SET name = :name_pt, name_en = :name_en WHERE id = :id'
         );

@@ -92,7 +92,7 @@
             clearInvalid(textarea);
             showFeedback(
                 textarea,
-                responseMessage(response) || translationFeedback.saved || 'Saved.',
+                responseMessage(response) || payload?.message || translationFeedback.saved || 'Saved.',
                 'saved'
             );
             return true;

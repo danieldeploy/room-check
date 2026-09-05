@@ -6,6 +6,7 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Auth/Auth.php';
 require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/I18n/ContentTranslator.php';
+require_once __DIR__ . '/src/I18n/PendingTranslationQueue.php';
 
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -139,6 +140,11 @@ try {
         );
         // Never hold a database lock while waiting for the external provider.
         $pdo->beginTransaction();
+        (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+            'api',
+            $payload,
+            (int) $currentUser['id']
+        );
         $lockedStatement = $pdo->prepare(
             'SELECT default_instructions, default_instructions_en
              FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
@@ -199,6 +205,12 @@ try {
         }
 
         $nameVersions = $contentTranslator->versions($name, Translator::locale());
+        $pdo->beginTransaction();
+        (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+            'api',
+            $payload,
+            (int) $currentUser['id']
+        );
         $statement = $pdo->prepare(
             'INSERT INTO room_verification_intervals (name, name_en, start_date, end_date, created_by_user_id)
              VALUES (:name_pt, :name_en, :start_date, :end_date, :created_by)'
@@ -219,6 +231,7 @@ try {
             'start_date' => $startDate,
             'end_date' => $endDate,
         ]);
+        $pdo->commit();
         jsonResponse(['ok' => true, 'interval' => [
             'id' => $intervalId, 'name' => $displayName, 'startDate' => $startDate, 'endDate' => $endDate,
         ]]);
@@ -246,7 +259,7 @@ try {
         }
 
         $currentIntervalStatement = $pdo->prepare(
-            'SELECT name, name_en FROM room_verification_intervals WHERE id = :id'
+            'SELECT name, name_en, start_date, end_date FROM room_verification_intervals WHERE id = :id'
         );
         $currentIntervalStatement->execute(['id' => $intervalId]);
         $currentInterval = $currentIntervalStatement->fetch();
@@ -259,6 +272,31 @@ try {
             (string) $currentInterval['name'],
             (string) ($currentInterval['name_en'] ?? '')
         );
+
+        $pdo->beginTransaction();
+        (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+            'api',
+            $payload,
+            (int) $currentUser['id']
+        );
+        $lockedIntervalStatement = $pdo->prepare(
+            'SELECT name, name_en, start_date, end_date
+             FROM room_verification_intervals WHERE id = :id FOR UPDATE'
+        );
+        $lockedIntervalStatement->execute(['id' => $intervalId]);
+        $lockedInterval = $lockedIntervalStatement->fetch();
+        if (!is_array($lockedInterval)) {
+            throw new InvalidArgumentException('Intervalo de verificação não encontrado.');
+        }
+        foreach (['name', 'name_en', 'start_date', 'end_date'] as $column) {
+            if ((string) ($lockedInterval[$column] ?? '') !== (string) ($currentInterval[$column] ?? '')) {
+                throw new InvalidArgumentException(
+                    Translator::locale() === 'en'
+                        ? 'The period was changed by another user. Reload and try again.'
+                        : 'O intervalo foi alterado por outro utilizador. Recarregue e tente novamente.'
+                );
+            }
+        }
 
         $boundsStatement = $pdo->prepare(
             'SELECT MIN(due_date) AS first_due_date, MAX(due_date) AS last_due_date, COUNT(*) AS assignment_count
@@ -295,6 +333,7 @@ try {
             'start_date' => $startDate,
             'end_date' => $endDate,
         ]);
+        $pdo->commit();
         jsonResponse(['ok' => true, 'interval' => [
             'id' => $intervalId, 'name' => $displayName, 'startDate' => $startDate, 'endDate' => $endDate,
         ]]);
@@ -446,6 +485,11 @@ try {
         }
 
         $pdo->beginTransaction();
+        (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+            'api',
+            $payload,
+            (int) $currentUser['id']
+        );
         $intervalCheck = $pdo->prepare(
             'SELECT start_date, end_date FROM room_verification_intervals WHERE id = :id FOR UPDATE'
         );
@@ -611,6 +655,28 @@ try {
             );
         }
         $pdo->beginTransaction();
+        (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+            'api',
+            $payload,
+            (int) $currentUser['id']
+        );
+        $lockedIntervalCheck = $pdo->prepare(
+            'SELECT start_date, end_date FROM room_verification_intervals WHERE id = :id FOR UPDATE'
+        );
+        $lockedIntervalCheck->execute(['id' => $intervalId]);
+        $lockedInterval = $lockedIntervalCheck->fetch();
+        if (!is_array($lockedInterval)
+            || $dueDate < (string) $lockedInterval['start_date']
+            || $dueDate > (string) $lockedInterval['end_date']) {
+            throw new InvalidArgumentException('A data da verificação já não pertence ao intervalo escolhido.');
+        }
+        $lockedEmployeeCheck = $pdo->prepare(
+            "SELECT id FROM users WHERE id = :id AND role = 'empregada_andares' AND is_active = 1 FOR UPDATE"
+        );
+        $lockedEmployeeCheck->execute(['id' => $employeeId]);
+        if ($lockedEmployeeCheck->fetchColumn() === false) {
+            throw new InvalidArgumentException('A empregada selecionada já não está disponível.');
+        }
         $assignmentLock = $pdo->prepare(
             'SELECT assigned_to_user_id, due_date, completed_at FROM room_item_assignments
              WHERE interval_id = :interval_id AND list_id = :list_id AND property_name = :property
@@ -684,7 +750,8 @@ try {
         ]);
     }
 
-    Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_EDIT);
+    $currentUser = Auth::requirePermission($pdo, $config, Auth::PERMISSION_ROOM_CHECK_EDIT);
+    Csrf::validate(isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null);
     $property = trim((string) ($payload['property'] ?? ''));
     $room = (int) ($payload['room'] ?? 0);
     $listId = (int) ($payload['listId'] ?? 0);
@@ -760,6 +827,11 @@ try {
     }
 
     $pdo->beginTransaction();
+    (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+        'api',
+        $payload,
+        (int) $currentUser['id']
+    );
 
     $statement = $pdo->prepare(
         'INSERT INTO room_checklist_values
@@ -788,6 +860,34 @@ try {
 
     $pdo->commit();
     jsonResponse(['ok' => true, 'savedAt' => gmdate('c')]);
+} catch (TranslationQuotaExceededException $exception) {
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    try {
+        if (!isset($payload) || !is_array($payload) || !isset($currentUser) || !is_array($currentUser)) {
+            throw $exception;
+        }
+        $queue = new PendingTranslationQueue($pdo, $config['translation'] ?? []);
+        $pending = $queue->enqueue(
+            'api',
+            $payload,
+            Translator::locale(),
+            (int) $currentUser['id'],
+            $exception
+        );
+        ContentTranslator::clearResponseMetadata();
+        ContentTranslator::recordPending(Translator::locale(), $pending['message']);
+        jsonResponse([
+            'ok' => true,
+            'pending' => true,
+            'pendingJobKey' => $pending['jobKey'],
+            'message' => $pending['message'],
+            'resetAt' => $pending['resetDisplay'],
+        ], 202);
+    } catch (Throwable $queueError) {
+        jsonResponse(['ok' => false, 'error' => $queueError->getMessage()], 422);
+    }
 } catch (JsonException | InvalidArgumentException $exception) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
         $pdo->rollBack();

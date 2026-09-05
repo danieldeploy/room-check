@@ -8,6 +8,7 @@ require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/UI/SessionBar.php';
 require_once __DIR__ . '/src/UI/VerificationCategoryNavigation.php';
 require_once __DIR__ . '/src/I18n/ContentTranslator.php';
+require_once __DIR__ . '/src/I18n/PendingTranslationQueue.php';
 
 try {
     $pdo = database();
@@ -58,7 +59,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $pdo,
                 $translator,
                 $name,
-                (int) $currentUser['id']
+                (int) $currentUser['id'],
+                static function () use ($pdo, $config, $currentUser): void {
+                    $pdo->beginTransaction();
+                    (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+                        'verification_categories',
+                        $_POST,
+                        (int) $currentUser['id']
+                    );
+                }
             );
             $message = SiteTranslations::text('Área criada e adicionada ao menu.', 'Area created and added to the menu.');
         } elseif ($action === 'rename_category') {
@@ -66,7 +75,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $pdo,
                 $translator,
                 $categoryId,
-                $name
+                $name,
+                static function () use ($pdo, $config, $currentUser): void {
+                    $pdo->beginTransaction();
+                    (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->supersedeForAcceptedSave(
+                        'verification_categories',
+                        $_POST,
+                        (int) $currentUser['id']
+                    );
+                }
             );
             $message = SiteTranslations::text('Nome da área atualizado.', 'Area name updated.');
         } elseif ($action === 'delete_category') {
@@ -96,6 +113,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             'action' => $action,
             'category_id' => $categoryId,
         ]);
+        if ($pdo->inTransaction()) {
+            $pdo->commit();
+        }
+    } catch (TranslationQuotaExceededException $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        try {
+            $pending = (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->enqueue(
+                'verification_categories',
+                $_POST,
+                Translator::locale(),
+                (int) $currentUser['id'],
+                $exception
+            );
+            $message = $pending['message'];
+        } catch (Throwable $queueError) {
+            $error = $queueError->getMessage();
+        }
     } catch (PDOException $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

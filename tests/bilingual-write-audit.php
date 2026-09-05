@@ -245,8 +245,12 @@ foreach (bilingualPhpFiles($root) as $path) {
     if (!str_contains($source, 'ContentTranslator')) {
         $failures[] = "$path: bilingual writes must use ContentTranslator";
     }
-    if (!str_contains($source, 'Translator::locale()')) {
-        $failures[] = "$path: bilingual writes must use the active Translator::locale()";
+    $usesRequestLocale = str_contains($source, 'Translator::locale()');
+    $usesAuthenticatedQueuedLocale = $path === 'src/I18n/PendingTranslationProcessor.php'
+        && str_contains($source, "\$job['source_language']")
+        && str_contains($source, 'created_by_user_id');
+    if (!$usesRequestLocale && !$usesAuthenticatedQueuedLocale) {
+        $failures[] = "$path: bilingual writes must use the active or authenticated queued locale";
     }
 
     $argumentCounts = bilingualVersionsArgumentCounts($source);

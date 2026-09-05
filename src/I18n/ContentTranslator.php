@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/TranslationQuotaManager.php';
+require_once __DIR__ . '/TranslationServiceException.php';
 
 final class ContentTranslator
 {
@@ -29,6 +30,18 @@ final class ContentTranslator
     public static function clearResponseMetadata(): void
     {
         self::$responseMetadata = [];
+    }
+
+    public static function recordPending(string $sourceLanguage, string $message): void
+    {
+        $sourceLanguage = $sourceLanguage === 'en' ? 'en' : 'pt';
+        self::$responseMetadata[] = [
+            'sourceLanguage' => $sourceLanguage,
+            'targetLanguage' => $sourceLanguage === 'en' ? 'pt' : 'en',
+            'status' => 'pending',
+            'message' => $message,
+        ];
+        self::publishResponseMetadataHeader();
     }
 
     /** @return array{pt:string,en:string,status:string,message:string} */
@@ -99,17 +112,19 @@ final class ContentTranslator
         }
 
         if (($this->config['enabled'] ?? true) !== true || !function_exists('curl_init')) {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: translation service is unavailable.'
-                    : 'Não guardado: serviço de tradução indisponível.'
+                    : 'Não guardado: serviço de tradução indisponível.',
+                false
             );
         }
         if ($this->apiKey() === '') {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: Google translation is not configured.'
-                    : 'Não guardado: a tradução Google não está configurada.'
+                    : 'Não guardado: a tradução Google não está configurada.',
+                false
             );
         }
 
@@ -120,7 +135,7 @@ final class ContentTranslator
         );
         $translated = $this->translatePrepared($prepared, $source, $target);
         if ($translated === '') {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: automatic translation appears incomplete.'
                     : 'Não guardado: a tradução automática parece incompleta.'
@@ -255,10 +270,11 @@ final class ContentTranslator
             $count = 0;
             $translated = str_ireplace($token, $original, $translated, $count);
             if ($count < 1) {
-                throw new InvalidArgumentException(
+                throw new TranslationServiceException(
                     $source === 'en'
                         ? 'Not saved: automatic translation changed protected content.'
-                        : 'Não guardado: a tradução automática alterou conteúdo protegido.'
+                        : 'Não guardado: a tradução automática alterou conteúdo protegido.',
+                    false
                 );
             }
         }
@@ -278,7 +294,7 @@ final class ContentTranslator
             array_push($translatedParts, ...$this->translateBatch($batch, $source, $target));
         }
         if (count($translatedParts) !== count($requestIndexes)) {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: translation service returned an invalid response.'
                     : 'Não guardado: serviço de tradução devolveu uma resposta inválida.'
@@ -317,7 +333,7 @@ final class ContentTranslator
 
         $curl = curl_init($url);
         if ($curl === false) {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: translation service is unavailable.'
                     : 'Não guardado: serviço de tradução indisponível.'
@@ -341,29 +357,30 @@ final class ContentTranslator
         curl_close($curl);
 
         $data = is_string($response) ? json_decode($response, true) : null;
-        if ($status === 403 && $this->isDailyLimitResponse($data, (string) $response)) {
+        if (in_array($status, [403, 429], true) && $this->isDailyLimitResponse($data, (string) $response)) {
             $this->quotaManager()->markProviderLimitReached();
             throw $this->quotaManager()->limitException($source);
         }
 
         if ($errno === CURLE_OPERATION_TIMEDOUT) {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: translation service timed out.'
                     : 'Não guardado: serviço de tradução excedeu o tempo limite.'
             );
         }
         if (!is_string($response) || $errno !== 0 || $status < 200 || $status >= 300) {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: translation service is temporarily unavailable.'
-                    : 'Não guardado: serviço de tradução temporariamente indisponível.'
+                    : 'Não guardado: serviço de tradução temporariamente indisponível.',
+                $status === 0 || $status === 429 || $status >= 500
             );
         }
 
         $translations = is_array($data) ? ($data['data']['translations'] ?? null) : null;
         if (!is_array($translations) || count($translations) !== count($texts)) {
-            throw new InvalidArgumentException(
+            throw new TranslationServiceException(
                 $source === 'en'
                     ? 'Not saved: translation service returned an invalid response.'
                     : 'Não guardado: serviço de tradução devolveu uma resposta inválida.'
@@ -374,7 +391,7 @@ final class ContentTranslator
         foreach ($translations as $translation) {
             $translated = is_array($translation) ? ($translation['translatedText'] ?? null) : null;
             if (!is_string($translated) || trim($translated) === '') {
-                throw new InvalidArgumentException(
+                throw new TranslationServiceException(
                     $source === 'en'
                         ? 'Not saved: automatic translation returned no text.'
                         : 'Não guardado: a tradução automática não devolveu texto.'
@@ -444,7 +461,10 @@ final class ContentTranslator
         }
 
         foreach ($signals as $signal) {
-            if (str_contains($signal, 'daily limit') || str_contains($signal, 'dailylimitexceeded')) {
+            if (str_contains($signal, 'daily limit')
+                || str_contains($signal, 'dailylimitexceeded')
+                || str_contains($signal, 'characters per day')
+                || (str_contains($signal, 'quota') && str_contains($signal, 'per day'))) {
                 return true;
             }
         }

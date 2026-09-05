@@ -571,6 +571,27 @@
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar automaticamente.');
+            if (result.pending) {
+                if (contextMatches()) {
+                    changes.forEach((change) => {
+                        if (change.selected) {
+                            assignments[change.itemName] = {
+                                employeeId, dueDate, instructions: change.instructions || '', completed: false,
+                                pendingTranslation: true,
+                                reminderTime: assignments[change.itemName]?.reminderTime || null,
+                                reminderStatus: assignments[change.itemName]?.reminderStatus || null,
+                            };
+                        } else {
+                            delete assignments[change.itemName];
+                        }
+                    });
+                    roomAssignmentCounts[String(current.room)] = Object.keys(assignments).length;
+                    applyRoomAssignmentStates();
+                    updateAssignmentMode();
+                    setStatus(result.message || 'Alteração guardada para tradução.', 'success');
+                }
+                return true;
+            }
             const interval = config.intervals.find((candidate) => candidate.id === intervalId);
             if (interval && result.intervalBounds) {
                 interval.firstDueDate = result.intervalBounds.firstDueDate;
@@ -663,12 +684,19 @@
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
                 },
-                body: JSON.stringify({ ...current, items: snapshot.items }),
+                body: JSON.stringify({ ...current, csrfToken: config.csrfToken, items: snapshot.items }),
             });
             const result = await response.json();
 
             if (!response.ok || !result.ok) {
                 throw new Error(result.error || 'Erro ao guardar.');
+            }
+            if (result.pending) {
+                if (version === requestVersion) {
+                    lastSavedChecklistFingerprint = snapshot.fingerprint;
+                    setStatus(result.message || 'Alteração guardada para tradução.', 'success');
+                }
+                return true;
             }
             if (version === requestVersion) {
                 lastSavedChecklistFingerprint = snapshot.fingerprint;
@@ -724,6 +752,13 @@
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao criar o intervalo.');
+            if (result.pending) {
+                intervalName.value = '';
+                intervalStart.value = '';
+                intervalEnd.value = '';
+                setStatus(result.message || 'Intervalo guardado para tradução.', 'success');
+                return;
+            }
             config.intervals.unshift(result.interval);
             const option = document.createElement('option');
             option.value = String(result.interval.id);
@@ -772,6 +807,10 @@
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Erro ao guardar o intervalo.');
+            if (result.pending) {
+                setStatus(result.message || 'Alteração guardada para tradução.', 'success');
+                return;
+            }
             Object.assign(interval, result.interval);
             const option = intervalSelect.querySelector(`option[value="${interval.id}"]`);
             if (option) option.textContent = interval.name;

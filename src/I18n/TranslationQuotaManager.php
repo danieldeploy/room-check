@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/TranslationQuotaExceededException.php';
+
 final class TranslationQuotaManager
 {
     private const DEFAULT_DAILY_LIMIT = 15500;
@@ -32,7 +34,7 @@ final class TranslationQuotaManager
             if ($next > $limit) {
                 $this->markLimitReachedRow($period['quota_date'], $limit);
                 $this->pdo->commit();
-                throw $this->limitException($sourceLanguage, $period['reset_display']);
+                throw $this->limitException($sourceLanguage, $period);
             }
 
             $statement = $this->pdo->prepare(
@@ -182,13 +184,19 @@ final class TranslationQuotaManager
         ]);
     }
 
-    public function limitException(string $sourceLanguage, ?string $resetDisplay = null): InvalidArgumentException
+    /** @param array{quota_date:string,reset_display:string,reset_utc:string}|null $period */
+    public function limitException(string $sourceLanguage, ?array $period = null): TranslationQuotaExceededException
     {
-        $reset = $resetDisplay ?? $this->currentPeriod()['reset_display'];
-        return new InvalidArgumentException(
+        $period ??= $this->currentPeriod();
+        $reset = $period['reset_display'];
+        return new TranslationQuotaExceededException(
             $sourceLanguage === 'en'
                 ? "Not saved: daily translation limit reached. Try again after {$reset} (Portugal time)."
-                : "Não guardado: limite diário de tradução atingido. Tente novamente depois de {$reset} (hora de Portugal)."
+                : "Não guardado: limite diário de tradução atingido. Tente novamente depois de {$reset} (hora de Portugal).",
+            $period['quota_date'],
+            $period['reset_display'],
+            $period['reset_utc'],
+            $sourceLanguage === 'en' ? 'en' : 'pt'
         );
     }
 

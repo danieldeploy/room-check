@@ -7,6 +7,7 @@ require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/UI/SessionBar.php';
 require_once __DIR__ . '/src/UI/VerificationCategoryNavigation.php';
 require_once __DIR__ . '/src/I18n/ContentTranslator.php';
+require_once __DIR__ . '/src/I18n/PendingTranslationQueue.php';
 
 try {
     $pdo = database();
@@ -42,6 +43,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $area = trim((string) ($_POST['area'] ?? ''));
         $instructions = trim((string) ($_POST['default_instructions'] ?? ''));
         $contentTranslator = new ContentTranslator($pdo, $config['translation'] ?? []);
+        $pendingQueue = new PendingTranslationQueue($pdo, $config['translation'] ?? []);
         if (in_array($action, ['create_list', 'rename_list'], true)) {
             if ($name === '' || mb_strlen($name) > 120) {
                 throw new InvalidArgumentException('O nome da lista deve ter entre 1 e 120 caracteres.');
@@ -60,6 +62,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         if ($action === 'create_list') {
             $nameVersions = $contentTranslator->versions($name, Translator::locale());
+            $pdo->beginTransaction();
+            $pendingQueue->supersedeForAcceptedSave('item_lists', $_POST, (int) $currentUser['id']);
             $statement = $pdo->prepare(
                 'INSERT INTO item_lists (name, name_en, area, created_by_user_id)
                  VALUES (:name_pt, :name_en, :area, :user_id)'
@@ -78,6 +82,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $name, Translator::locale(),
                 (string) $oldList['name'], (string) ($oldList['nameEn'] ?? '')
             );
+            $pdo->beginTransaction();
+            $pendingQueue->supersedeForAcceptedSave('item_lists', $_POST, (int) $currentUser['id']);
+            $lockedList = $pdo->prepare('SELECT name, name_en, area FROM item_lists WHERE id = :id FOR UPDATE');
+            $lockedList->execute(['id' => $listId]);
+            $lockedListRow = $lockedList->fetch();
+            if (!is_array($lockedListRow)
+                || (string) $lockedListRow['name'] !== (string) $oldList['name']
+                || (string) ($lockedListRow['name_en'] ?? '') !== (string) ($oldList['nameEn'] ?? '')
+                || (string) $lockedListRow['area'] !== (string) $oldList['area']) {
+                throw new InvalidArgumentException(SiteTranslations::text(
+                    'A lista foi alterada por outro utilizador. Recarregue e tente novamente.',
+                    'The list was changed by another user. Reload and try again.'
+                ));
+            }
             $statement = $pdo->prepare(
                 'UPDATE item_lists SET name = :name_pt, name_en = :name_en, area = :area WHERE id = :id'
             );
@@ -107,6 +125,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             itemList($pdo, $listId);
             $nameVersions = $contentTranslator->versions($name, Translator::locale());
             $instructionVersions = $contentTranslator->versions($instructions, Translator::locale());
+            $pdo->beginTransaction();
+            $pendingQueue->supersedeForAcceptedSave('item_lists', $_POST, (int) $currentUser['id']);
+            $listLock = $pdo->prepare('SELECT id FROM item_lists WHERE id = :id FOR UPDATE');
+            $listLock->execute(['id' => $listId]);
+            if ($listLock->fetchColumn() === false) {
+                throw new InvalidArgumentException('Lista não encontrada.');
+            }
             $position = $pdo->prepare(
                 'SELECT COALESCE(MAX(sort_order), 0) + 10 FROM item_list_items WHERE list_id = :list_id'
             );
@@ -145,6 +170,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             // Translate before opening the transaction, then verify that the row
             // did not change while the external request was in flight.
             $pdo->beginTransaction();
+            $pendingQueue->supersedeForAcceptedSave('item_lists', $_POST, (int) $currentUser['id']);
             $lockedStatement = $pdo->prepare(
                 'SELECT name, name_en, default_instructions, default_instructions_en
                  FROM item_list_items WHERE id = :id AND list_id = :list_id FOR UPDATE'
@@ -184,7 +210,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'instructions_en' => $instructionVersions['en'],
                 'id' => $itemId,
             ]);
-            $pdo->commit();
             $message = 'Item atualizado em todos os registos.';
         } elseif ($action === 'delete_item') {
             $statement = $pdo->prepare(
@@ -215,6 +240,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         Auth::audit($pdo, (int) $currentUser['id'], 'item_lists_updated', [
             'action' => $action, 'list_id' => $listId, 'item_id' => $itemId,
         ]);
+        if ($pdo->inTransaction()) {
+            $pdo->commit();
+        }
+    } catch (TranslationQuotaExceededException $exception) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        try {
+            $pending = (new PendingTranslationQueue($pdo, $config['translation'] ?? []))->enqueue(
+                'item_lists',
+                $_POST,
+                Translator::locale(),
+                (int) $currentUser['id'],
+                $exception
+            );
+            $message = $pending['message'];
+        } catch (Throwable $queueError) {
+            $error = $queueError->getMessage();
+        }
     } catch (PDOException $exception) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         $error = $exception->getCode() === '23000'
