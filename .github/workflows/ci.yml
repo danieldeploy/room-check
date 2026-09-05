@@ -53,5 +53,6 @@ jobs:
           php tests/invalid-edit-ux.php
           php tests/bilingual-textarea-transversal.php
           php tests/whatsapp-reminder-template.php
+          php tests/translation-quota.php
           php tests/user-preferred-name.php
           php tests/verification-categories.php

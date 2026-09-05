@@ -6,6 +6,8 @@ if (!is_file($appRoot . '/config.php')) { fwrite(STDERR, "Portal config not foun
 require $appRoot . '/lib.php';
 require $appRoot . '/src/Notifications/WhatsAppCloudClient.php';
 require $appRoot . '/src/Notifications/WhatsAppReminderTemplate.php';
+require $appRoot . '/src/Notifications/WhatsAppTranslationQuotaTemplate.php';
+require $appRoot . '/src/I18n/TranslationQuotaManager.php';
 $config = require $appRoot . '/config.php';
 $configuredTemplate = (string) ($config['whatsapp']['template_name'] ?? '');
 if ($configuredTemplate === '' || $configuredTemplate === 'room_assignment_reminder') {
@@ -17,6 +19,50 @@ $lock = (int) $pdo->query("SELECT GET_LOCK('room_check_whatsapp_reminders', 0)")
 if ($lock !== 1) exit(0);
 $client = new WhatsAppCloudClient($config['whatsapp']);
 try {
+    $translationConfig = $config['translation'] ?? [];
+    $quotaAlertConfig = is_array($translationConfig['quota_alert'] ?? null)
+        ? $translationConfig['quota_alert']
+        : [];
+    if ((bool) ($quotaAlertConfig['enabled'] ?? false)) {
+        try {
+            $quotaManager = new TranslationQuotaManager($pdo, $translationConfig);
+            $quotaAlert = $quotaManager->pendingAlert();
+            $quotaAlertMobile = trim((string) ($quotaAlertConfig['recipient_mobile'] ?? ''));
+            if (is_array($quotaAlert) && $quotaAlertMobile === '') {
+                throw new RuntimeException('Translation quota alert recipient is not configured.');
+            }
+            if (is_array($quotaAlert)) {
+                $quotaTemplateName = trim((string) ($quotaAlertConfig['template_name']
+                    ?? WhatsAppTranslationQuotaTemplate::NAME));
+                $quotaLanguage = trim((string) ($quotaAlertConfig['language']
+                    ?? WhatsAppTranslationQuotaTemplate::LANGUAGE));
+                $messageId = $client->sendTemplate(
+                    $quotaAlertMobile,
+                    WhatsAppTranslationQuotaTemplate::values(
+                        (int) $quotaAlert['characters_used'],
+                        (int) $quotaAlert['character_limit'],
+                        (string) $quotaAlert['reset_display']
+                    ),
+                    $quotaLanguage !== '' ? $quotaLanguage : WhatsAppTranslationQuotaTemplate::LANGUAGE,
+                    $quotaTemplateName !== '' ? $quotaTemplateName : WhatsAppTranslationQuotaTemplate::NAME
+                );
+                $quotaManager->markAlertSent((string) $quotaAlert['quota_date'], $messageId);
+            }
+        } catch (Throwable $quotaAlertError) {
+            if (isset($quotaManager, $quotaAlert) && is_array($quotaAlert)) {
+                try {
+                    $quotaManager->markAlertFailed(
+                        (string) $quotaAlert['quota_date'],
+                        $quotaAlertError->getMessage()
+                    );
+                } catch (Throwable) {
+                    // Existing assignment reminders must still run if alert state cannot be updated.
+                }
+            }
+            fwrite(STDERR, "Translation quota alert: {$quotaAlertError->getMessage()}\n");
+        }
+    }
+
     $query = $pdo->query(
         "SELECT r.id, r.attempt_count, r.due_date, r.property_name, r.list_id,
                 l.name AS list_name, l.name_en AS list_name_en,

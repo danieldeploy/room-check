@@ -48,5 +48,15 @@ return [
         'secrets_file' => '/home/CPANEL_USER/room-check-private/google-translation.json',
         'engine_key' => 'google-basic-nmt-v2',
         'timeout_seconds' => 12,
+        'daily_character_limit' => 15500,
+        'quota_timezone' => 'America/Los_Angeles',
+        'display_timezone' => 'Europe/Lisbon',
+        'quota_alert' => [
+            // Enable only after translation_quota_alert_v1 is approved by Meta.
+            'enabled' => false,
+            'recipient_mobile' => '351XXXXXXXXX',
+            'template_name' => 'translation_quota_alert_v1',
+            'language' => 'pt_PT',
+        ],
     ],
 ];

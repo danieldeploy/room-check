@@ -5,18 +5,25 @@ final class WhatsAppCloudClient
 {
     public function __construct(private array $config) {}
 
-    public function sendTemplate(string $mobile, array $values, string $languageCode): string
+    public function sendTemplate(
+        string $mobile,
+        array $values,
+        string $languageCode,
+        ?string $templateName = null
+    ): string
     {
         if (!function_exists('curl_init')) throw new RuntimeException('A extensão PHP cURL não está disponível.');
         $secrets = $this->loadSecrets();
         $to = preg_replace('/\D+/', '', $mobile) ?: '';
         if (strlen($to) === 9) $to = (string) ($this->config['default_country_code'] ?? '351') . $to;
         if (strlen($to) < 8 || strlen($to) > 15) throw new RuntimeException('Número de telemóvel inválido.');
+        $resolvedTemplate = trim((string) ($templateName ?? $this->config['template_name'] ?? ''));
+        if ($resolvedTemplate === '') throw new RuntimeException('Nome do template WhatsApp não configurado.');
         $parameters = array_map(static fn(string $text): array => ['type' => 'text', 'text' => $text], $values);
         $payload = [
             'messaging_product' => 'whatsapp', 'to' => $to, 'type' => 'template',
             'template' => [
-                'name' => (string) $this->config['template_name'],
+                'name' => $resolvedTemplate,
                 'language' => ['code' => $languageCode],
                 'components' => [['type' => 'body', 'parameters' => $parameters]],
             ],

@@ -84,5 +84,27 @@ return [
         'engine_key' => $localConfig['translation']['engine_key']
             ?? 'google-basic-nmt-v2',
         'timeout_seconds' => (int) ($localConfig['translation']['timeout_seconds'] ?? 12),
+        // The local cap follows Google's own quota day, which resets at
+        // midnight in America/Los_Angeles rather than at midnight in Portugal.
+        'daily_character_limit' => (int) ($localConfig['translation']['daily_character_limit']
+            ?? getenv('GOOGLE_CLOUD_TRANSLATION_DAILY_LIMIT')
+            ?: 15500),
+        'quota_timezone' => $localConfig['translation']['quota_timezone']
+            ?? 'America/Los_Angeles',
+        'display_timezone' => $localConfig['translation']['display_timezone']
+            ?? 'Europe/Lisbon',
+        'quota_alert' => [
+            // Enable only after the Meta template is approved and the private
+            // recipient mobile is configured on the server.
+            'enabled' => (bool) ($localConfig['translation']['quota_alert']['enabled']
+                ?? (getenv('TRANSLATION_QUOTA_ALERT_ENABLED') === '1')),
+            'recipient_mobile' => $localConfig['translation']['quota_alert']['recipient_mobile']
+                ?? getenv('TRANSLATION_QUOTA_ALERT_MOBILE')
+                ?: '',
+            'template_name' => $localConfig['translation']['quota_alert']['template_name']
+                ?? 'translation_quota_alert_v1',
+            'language' => $localConfig['translation']['quota_alert']['language']
+                ?? 'pt_PT',
+        ],
     ],
 ];

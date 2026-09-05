@@ -48,6 +48,7 @@ $technicalExceptions = [
     'src/Notifications/WhatsAppCloudClient.php' => [
         'A extensão PHP cURL não está disponível.',
         'Número de telemóvel inválido.',
+        'Nome do template WhatsApp não configurado.',
         'A Meta não devolveu o identificador da mensagem.',
         'Credenciais WhatsApp Cloud API não configuradas.',
     ],

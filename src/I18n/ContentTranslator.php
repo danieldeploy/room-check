@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/TranslationQuotaManager.php';
+
 final class ContentTranslator
 {
     private const MAX_TEXT_CHARACTERS = 5000;
@@ -11,6 +13,7 @@ final class ContentTranslator
     /** @var array<int, array<string, string>> */
     private static array $responseMetadata = [];
     private ?string $resolvedApiKey = null;
+    private ?TranslationQuotaManager $quotaManager = null;
 
     public function __construct(private PDO $pdo, private array $config)
     {
@@ -111,6 +114,10 @@ final class ContentTranslator
         }
 
         $prepared = $this->prepareTranslationInput($text);
+        $this->quotaManager()->reserve(
+            $this->translatableCharacterCount($prepared['text']),
+            $source
+        );
         $translated = $this->translatePrepared($prepared, $source, $target);
         if ($translated === '') {
             throw new InvalidArgumentException(
@@ -260,23 +267,11 @@ final class ContentTranslator
 
     private function translateKeepingLineBreaks(string $text, string $source, string $target): string
     {
-        $parts = preg_split('/(\R)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
-        if (!is_array($parts)) {
-            $parts = [$text];
-        }
-
-        $requests = [];
-        $requestIndexes = [];
-        $spacing = [];
-        foreach ($parts as $index => $part) {
-            if ($part === '' || preg_match('/^\R$/u', $part) === 1 || trim($part) === '') {
-                continue;
-            }
-            preg_match('/^(\s*)(.*?)(\s*)$/us', $part, $match);
-            $spacing[$index] = [(string) ($match[1] ?? ''), (string) ($match[3] ?? '')];
-            $requests[] = (string) ($match[2] ?? $part);
-            $requestIndexes[] = $index;
-        }
+        $segments = $this->translationSegments($text);
+        $parts = $segments['parts'];
+        $requests = $segments['requests'];
+        $requestIndexes = $segments['request_indexes'];
+        $spacing = $segments['spacing'];
 
         $translatedParts = [];
         foreach (array_chunk($requests, self::MAX_TEXTS_PER_REQUEST) as $batch) {
@@ -345,6 +340,12 @@ final class ContentTranslator
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         curl_close($curl);
 
+        $data = is_string($response) ? json_decode($response, true) : null;
+        if ($status === 403 && $this->isDailyLimitResponse($data, (string) $response)) {
+            $this->quotaManager()->markProviderLimitReached();
+            throw $this->quotaManager()->limitException($source);
+        }
+
         if ($errno === CURLE_OPERATION_TIMEDOUT) {
             throw new InvalidArgumentException(
                 $source === 'en'
@@ -360,7 +361,6 @@ final class ContentTranslator
             );
         }
 
-        $data = json_decode($response, true);
         $translations = is_array($data) ? ($data['data']['translations'] ?? null) : null;
         if (!is_array($translations) || count($translations) !== count($texts)) {
             throw new InvalidArgumentException(
@@ -383,6 +383,77 @@ final class ContentTranslator
             $results[] = html_entity_decode(trim($translated), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }
         return $results;
+    }
+
+    private function translatableCharacterCount(string $text): int
+    {
+        $total = 0;
+        foreach ($this->translationSegments($text)['requests'] as $request) {
+            $total += mb_strlen($request, 'UTF-8');
+        }
+        return $total;
+    }
+
+    /**
+     * @return array{
+     *   parts:array<int,string>,
+     *   requests:array<int,string>,
+     *   request_indexes:array<int,int>,
+     *   spacing:array<int,array{0:string,1:string}>
+     * }
+     */
+    private function translationSegments(string $text): array
+    {
+        $parts = preg_split('/(\R)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if (!is_array($parts)) {
+            $parts = [$text];
+        }
+
+        $requests = [];
+        $requestIndexes = [];
+        $spacing = [];
+        foreach ($parts as $index => $part) {
+            if ($part === '' || preg_match('/^\R$/u', $part) === 1 || trim($part) === '') {
+                continue;
+            }
+            preg_match('/^(\s*)(.*?)(\s*)$/us', $part, $match);
+            $spacing[$index] = [(string) ($match[1] ?? ''), (string) ($match[3] ?? '')];
+            $requests[] = (string) ($match[2] ?? $part);
+            $requestIndexes[] = $index;
+        }
+
+        return [
+            'parts' => $parts,
+            'requests' => $requests,
+            'request_indexes' => $requestIndexes,
+            'spacing' => $spacing,
+        ];
+    }
+
+    private function isDailyLimitResponse(mixed $data, string $rawResponse): bool
+    {
+        $signals = [mb_strtolower($rawResponse, 'UTF-8')];
+        if (is_array($data)) {
+            $signals[] = mb_strtolower((string) ($data['error']['message'] ?? ''), 'UTF-8');
+            foreach (($data['error']['errors'] ?? []) as $error) {
+                if (is_array($error)) {
+                    $signals[] = mb_strtolower((string) ($error['reason'] ?? ''), 'UTF-8');
+                    $signals[] = mb_strtolower((string) ($error['message'] ?? ''), 'UTF-8');
+                }
+            }
+        }
+
+        foreach ($signals as $signal) {
+            if (str_contains($signal, 'daily limit') || str_contains($signal, 'dailylimitexceeded')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function quotaManager(): TranslationQuotaManager
+    {
+        return $this->quotaManager ??= new TranslationQuotaManager($this->pdo, $this->config);
     }
 
     private static function providerLanguage(string $language): string

@@ -37,7 +37,9 @@ Ative a Cloud Translation API e guarde a chave fora de `public_html`, por exempl
 {"api_key":"CHAVE_RESTRITA_DO_GOOGLE_CLOUD"}
 ```
 
-Em `config.local.php`, indique apenas o caminho através de `translation.secrets_file`, como no ficheiro de exemplo. Em alternativa, configure `GOOGLE_CLOUD_TRANSLATION_API_KEY` no ambiente do servidor. Importe também `migrations/023_google_translation_cache.sql` antes do novo código. A sequência completa está em `docs/GOOGLE_TRANSLATION_DEPLOYMENT.md`.
+Em `config.local.php`, indique apenas o caminho através de `translation.secrets_file`, como no ficheiro de exemplo. Em alternativa, configure `GOOGLE_CLOUD_TRANSLATION_API_KEY` no ambiente do servidor. Importe também `migrations/023_google_translation_cache.sql` e `migrations/024_translation_daily_quota.sql` antes do novo código. A sequência completa está em `docs/GOOGLE_TRANSLATION_DEPLOYMENT.md`.
+
+As chamadas novas ao Google têm um limite local transacional de 15 500 carateres por dia, alinhado com `America/Los_Angeles`, o período diário usado pela Google. Conteúdo já persistido ou encontrado na cache não consome esse limite. Ao atingir o limite, a aplicação não grava uma versão bilingue incompleta e coloca um único alerta por período na fila do cron WhatsApp. O alerta usa `translation_quota_alert_v1` em `pt_PT` e só deve ser ativado em `config.local.php` depois da aprovação da Meta e da configuração privada do número do administrador.
 
 Se o serviço estiver temporariamente indisponível, o texto não é guardado como uma tradução falsa: permanece editável e o utilizador pode tentar novamente. Uma tradução bem-sucedida fica em cache e as duas línguas ficam persistidas juntas.
 
