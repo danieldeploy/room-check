@@ -33,6 +33,8 @@ return [
     'As instruções de {value} são demasiado longas.' => 'The instructions for {value} are too long.',
     'Escolha um intervalo de verificação válido.' => 'Choose a valid verification period.',
     'A data da verificação tem de ficar dentro do intervalo escolhido.' => 'The verification date must be within the selected period.',
+    'A data da verificação já não pertence ao intervalo escolhido.' => 'The verification date is no longer within the selected period.',
+    'A empregada selecionada já não está disponível.' => 'The selected housekeeper is no longer available.',
     'O item {value} já está atribuído ou concluído noutra data deste intervalo.' => 'The item {value} is already assigned or completed on another date in this period.',
     'Seleção de itens inválida.' => 'Invalid item selection.',
     'Instruções de verificação inválidas.' => 'Invalid verification instructions.',
