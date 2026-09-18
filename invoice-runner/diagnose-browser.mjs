@@ -3,10 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 
 process.umask(0o077);
 const require = createRequire(import.meta.url);
-const result = { node: process.version, sandboxEnabled: true, success: false };
+const result = { node: process.version, nodePath: process.execPath, sandboxEnabled: true, success: false };
 let browser;
 let profile;
 
@@ -35,6 +36,12 @@ try {
     if (missingLibrary) {
       result.code = 'missing_shared_library';
       result.library = missingLibrary[1];
+      const dependencies = spawnSync('ldd', [result.executablePath], {
+        encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024,
+      });
+      result.missingLibraries = [...new Set([...String(dependencies.stdout || '')
+        .matchAll(/^\s*([A-Za-z0-9_.+-]+)\s+=>\s+not found\s*$/gm)]
+        .map(match => match[1]))].sort();
     } else if (/no usable sandbox|sandbox.*not supported|operation not permitted|failed to move to new namespace/i.test(message)) {
       result.code = 'sandbox_unavailable';
     } else if (error?.code === 'ERR_MODULE_NOT_FOUND' || error?.code === 'MODULE_NOT_FOUND') {

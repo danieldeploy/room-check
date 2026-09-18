@@ -26,7 +26,7 @@ export function validateMap(map, property) {
   for (const key of ['rows', 'number', 'date', 'pdf', 'empty', 'propertyMarker']) {
     if (typeof target[key] !== 'string' || !target[key].trim()) fail('connector_unconfigured');
   }
-  if (!['YYYY-MM-DD', 'DD/MM/YYYY'].includes(target.dateFormat)) fail('connector_unconfigured');
+  if (!['YYYY-MM-DD', 'DD/MM/YYYY', 'D MMM YYYY'].includes(target.dateFormat)) fail('connector_unconfigured');
   return { login, target };
 }
 
@@ -35,6 +35,10 @@ export function invoiceDate(value, format) {
   let iso;
   if (format === 'YYYY-MM-DD' && (match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim()))) iso = match[0];
   else if (format === 'DD/MM/YYYY' && (match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim()))) iso = `${match[3]}-${match[2]}-${match[1]}`;
+  else if (format === 'D MMM YYYY' && (match = /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+(\d{4})$/.exec(value.trim()))) {
+    const months = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Sept: '09', Oct: '10', Nov: '11', Dec: '12' };
+    iso = `${match[3]}-${months[match[2]]}-${match[1].padStart(2, '0')}`;
+  }
   else fail('portal_changed');
   const date = new Date(`${iso}T00:00:00Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== iso) fail('portal_changed');

@@ -20,6 +20,16 @@ test('invalid or ambiguous dates are rejected', () => {
   for (const value of ['2026-02-30', '09/18/2026', 'September 18']) assert.throws(() => invoiceDate(value, 'YYYY-MM-DD'));
 });
 
+test('English invoice dates observed in the portal retain strict calendar validation', () => {
+  assert.equal(invoiceDate('3 Sept 2026', 'D MMM YYYY'), '2026-09-03');
+  assert.equal(invoiceDate('3 Aug 2026', 'D MMM YYYY'), '2026-08-03');
+  assert.equal(invoiceDate('29 Feb 2024', 'D MMM YYYY'), '2024-02-29');
+  for (const value of ['29 Feb 2026', '31 Apr 2026', '3 Setembro 2026', '3 Aug 26', '0 Aug 2026']) {
+    assert.throws(() => invoiceDate(value, 'D MMM YYYY'));
+  }
+  assert.equal(validateMap({ ...map, properties: { '1140306': { ...target, dateFormat: 'D MMM YYYY' } } }, '1140306').target.dateFormat, 'D MMM YYYY');
+});
+
 test('challenge stops login before any credential is typed', async () => {
   let typed = 0;
   const page = { goto: async () => {}, url: () => login.url, $eval: async selector => selector === '.challenge', type: async () => { typed++; } };
