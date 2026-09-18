@@ -13,7 +13,7 @@ let profile;
 try {
   const { default: puppeteer } = await import('puppeteer');
   result.puppeteer = require('puppeteer/package.json').version;
-  result.executablePath = puppeteer.executablePath();
+  result.executablePath = await puppeteer.executablePath();
   try {
     await fs.access(result.executablePath, fs.constants.X_OK);
   } catch {
