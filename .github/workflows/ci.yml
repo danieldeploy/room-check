@@ -12,6 +12,19 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-only-ci-password
+          MYSQL_DATABASE: hub_invoice_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +33,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: mbstring, pdo_mysql
+          extensions: mbstring, pdo_mysql, pdo_sqlite
           coverage: none
 
       - name: Validate PHP syntax
@@ -36,8 +49,15 @@ jobs:
           node --check assets/bilingual-textareas.js
           if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
 
+      - name: Validate invoice runner
+        run: |
+          node --check invoice-runner/runner.mjs
+          node --check invoice-runner/booking.mjs
+          node --test invoice-runner/tests/*.test.mjs
+
       - name: Run PHP tests
         run: |
+          TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           php tests/run.php
           php tests/i18n.php
           php tests/static-i18n-audit.php
@@ -57,3 +77,10 @@ jobs:
           php tests/pending-translations.php
           php tests/user-preferred-name.php
           php tests/verification-categories.php
+
+      - name: Validate invoice migration and MySQL concurrency
+        env:
+          INVOICES_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=hub_invoice_test
+          INVOICES_TEST_USER: root
+          INVOICES_TEST_PASSWORD: test-only-ci-password
+        run: php tests/invoices-mysql.php

@@ -6,7 +6,7 @@ DirectoryIndex index.php
 </FilesMatch>
 
 RewriteEngine On
-RewriteRule ^(?:src|tests|migrations)/ - [F,L,NC]
+RewriteRule ^(?:src|tests|migrations|invoice-runner|deploy|cron)/ - [F,L,NC]
 
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"

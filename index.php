@@ -29,6 +29,15 @@ try {
 
 $modules = [
     [
+        'permission' => Auth::PERMISSION_INVOICES_VIEW,
+        'eyebrow' => 'Documentos dos portais',
+        'title' => 'Faturas e Portais',
+        'description' => 'Faturas do Booking, histórico e recolha automática.',
+        'href' => 'admin/invoices.php',
+        'status' => 'Abrir módulo',
+        'tone' => 'blue',
+    ],
+    [
         'permission' => Auth::PERMISSION_ZKACCESS_VIEW,
         'eyebrow' => 'Automação de códigos',
         'title' => 'ZKAccess Control',

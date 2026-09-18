@@ -4,3 +4,9 @@ my2n-secrets.json
 .DS_Store
 Thumbs.db
 error_log
+
+node_modules/
+*.enc
+master.key
+booking-map.json
+invoice-runtime.json

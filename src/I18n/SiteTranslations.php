@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/Translator.php';
+require_once __DIR__ . '/InvoiceText.php';
 
 /**
  * Shared site-wide PT/EN catalogue.
@@ -311,6 +312,6 @@ final class SiteTranslations
         ];
 
         $coverage = require __DIR__ . '/SiteTranslationsCoverage.php';
-        return array_replace($catalog, is_array($coverage) ? $coverage : []);
+        return array_replace(InvoiceText::catalog(), $catalog, is_array($coverage) ? $coverage : []);
     }
 }
