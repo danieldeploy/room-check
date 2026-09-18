@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
+import os from 'node:os';
 
 process.umask(0o077);
 const require = createRequire(import.meta.url);
@@ -12,6 +13,24 @@ let browser;
 let profile;
 
 try {
+  result.host = { platform: process.platform, arch: process.arch, kernel: os.release() };
+  if (process.platform === 'linux') {
+    const release = await fs.readFile('/etc/os-release', 'utf8').catch(() => '');
+    for (const key of ['ID', 'VERSION_ID']) {
+      const value = release.match(new RegExp(`^${key}=["']?([A-Za-z0-9._-]+)["']?$`, 'm'))?.[1];
+      if (value) result.host[key.toLowerCase()] = value;
+    }
+    // A transient, unprivileged namespace probe; no host settings are changed.
+    const namespace = spawnSync('unshare', ['--user', '--', 'true'], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 65536,
+    });
+    result.host.userNamespace = namespace.status === 0 ? 'available'
+      : /operation not permitted|permission denied/i.test(String(namespace.stderr || '')) ? 'denied' : 'unknown';
+    for (const command of ['rpm2cpio', 'cpio']) {
+      const probe = spawnSync(command, ['--version'], { timeout: 5000, maxBuffer: 65536 });
+      result.host[command] = probe.status === 0 ? 'available' : 'unavailable';
+    }
+  }
   const { default: puppeteer } = await import('puppeteer');
   result.puppeteer = require('puppeteer/package.json').version;
   result.executablePath = await puppeteer.executablePath();
