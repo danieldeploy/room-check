@@ -25,7 +25,7 @@ $portugueseKeys = array_keys($portugueseKeys);
 usort($portugueseKeys, static fn(string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
 
 $excludedPaths = [
-    '/migrations/', '/tests/', '/deploy/', '/docs/', '/.github/',
+    '/node_modules/', '/migrations/', '/tests/', '/deploy/', '/docs/', '/.github/',
     // Vendored libraries/models are not application UI. Application code that
     // calls them remains audited; this exclusion is restricted to ThirdParty.
     '/src/ThirdParty/',

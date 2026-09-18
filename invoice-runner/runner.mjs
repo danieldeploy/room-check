@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
+import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 
 process.umask(0o077);
 let browser;
@@ -30,37 +31,66 @@ try {
   const root = await fs.realpath(input.privateDir);
   const stat = await fs.stat(root);
   if (!stat.isDirectory() || root.split(path.sep).includes('public_html') || (stat.mode & 0o077)) throw new PortalError('browser_unavailable');
-  const runtime = JSON.parse(await fs.readFile(path.join(root, 'invoice-runtime.json'), 'utf8'));
-  // Sandbox remains enabled. No arbitrary Chrome flags are accepted from configuration.
-  if (runtime.executablePath && !path.isAbsolute(runtime.executablePath)) throw new PortalError('browser_unavailable');
-  const { default: puppeteer } = await import('puppeteer');
-  profile = await fs.mkdtemp(path.join(root, '.browser-'));
-  browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
-    userDataDir: profile, timeout: 30000, dumpio: false });
-  const page = await browser.newPage();
-  page.setDefaultNavigationTimeout(30000);
-  page.setDefaultTimeout(15000);
-  if (input.action === 'preflight') {
-    await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
-    if (await page.title() !== 'Invoice preflight') throw new PortalError('browser_unavailable');
-    process.stdout.write(JSON.stringify({ code: 'ok' }));
+  if (input.action !== 'preflight' && (!Number.isSafeInteger(input.accountId) || input.accountId < 1
+      || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.period))) throw new PortalError('connector_unconfigured');
+  if (input.action !== 'preflight' && input.portal === 'email') {
+    const { openMailbox } = await import('./email.mjs');
+    const mailbox = await openMailbox(input.credentials || {});
+    await mailbox.logout();
+    // The email invoice extractor requires separate document-date validation before collection.
+    if (input.action !== 'login') throw new PortalError('connector_unconfigured');
+    process.stdout.write(JSON.stringify({ code: 'ok', documents: [] }));
   } else {
-    const map = JSON.parse(await fs.readFile(path.join(root, 'booking-map.json'), 'utf8').catch(() => { throw new PortalError('connector_unconfigured'); }));
-    const { login, target } = validateMap(map, input.property);
-    const cookies = input.session?.cookies;
-    if (Array.isArray(cookies) && cookies.length <= 200) {
-      const safe = cookies.filter(cookie => typeof cookie.domain === 'string'
-        && /(^|\.)booking\.com$/.test(cookie.domain.replace(/^\./, '')) && cookie.secure === true);
-      if (safe.length) await browser.setCookie(...safe);
+    const runtime = JSON.parse(await fs.readFile(path.join(root, 'invoice-runtime.json'), 'utf8'));
+    if (runtime.executablePath && !path.isAbsolute(runtime.executablePath)) throw new PortalError('browser_unavailable');
+    const { default: puppeteer } = await import('puppeteer');
+    profile = await fs.mkdtemp(path.join(root, '.browser-'));
+    browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
+      userDataDir: profile, timeout: 30000, dumpio: false });
+    const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
+    if (input.action === 'preflight') {
+      await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
+      if (await page.title() !== 'Invoice preflight') throw new PortalError('browser_unavailable');
+      process.stdout.write(JSON.stringify({ code: 'ok' }));
+    } else {
+      const mapFile = path.join(root, `account-${input.accountId}-map.json`);
+      let map;
+      try { map = JSON.parse(await fs.readFile(mapFile, 'utf8')); }
+      catch {
+        if (input.portal !== 'booking' || input.accountId !== 1) throw new PortalError('connector_unconfigured');
+        map = JSON.parse(await fs.readFile(path.join(root, 'booking-map.json'), 'utf8').catch(() => { throw new PortalError('connector_unconfigured'); }));
+      }
+      await page.setRequestInterception(true);
+      page.on('request', request => {
+        if (request.isInterceptResolutionHandled()) return;
+        if (request.isNavigationRequest() || !['GET', 'HEAD'].includes(request.method())) {
+          try { portalUrl(input.portal, request.url()); } catch { void request.abort().catch(() => {}); return; }
+        }
+        void request.continue().catch(() => {});
+      });
+      const cookies = safeCookies(input.portal, input.session?.cookies);
+      if (cookies.length) await browser.setCookie(...cookies);
+      let documents;
+      if (map.version === 1 && input.portal === 'booking' && input.accountId === 1) {
+        // Preserve the old validated password/session flow until its map is upgraded.
+        const { login, target } = validateMap(map, input.property);
+        await authenticate(page, login, input.credentials);
+        documents = input.action === 'collect' ? await collect(page, login, target, input.property, input.period) : [];
+      } else {
+        const { login, target } = validatePortalMap(map, input);
+        if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
+        await authenticatePortal(page, login, input);
+        const downloads = path.join(profile, 'invoice-downloads'); await fs.mkdir(downloads, { mode: 0o700 });
+        documents = input.action === 'collect' ? await collectPortal(page, login, target, input, browser, downloads) : [];
+      }
+      const session = { cookies: safeCookies(input.portal, await browser.cookies()) };
+      process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok', documents, session }));
     }
-    await authenticate(page, login, input.credentials);
-    const documents = input.action === 'collect' ? await collect(page, login, target, input.property, input.period) : [];
-    const session = { cookies: (await browser.cookies()).filter(cookie => /(^|\.)booking\.com$/.test(cookie.domain.replace(/^\./, '')) && cookie.secure) };
-    process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok', documents, session }));
   }
 } catch (error) {
   // Never emit error.message from Chrome, the portal, network or filesystem.
-  const allowed = ['needs_auth', 'connector_unconfigured', 'portal_changed', 'browser_unavailable', 'document_limit'];
+  const allowed = ['needs_auth', 'connector_unconfigured', 'portal_changed', 'browser_unavailable', 'document_limit', 'auth_unconfigured', 'auth_timeout', 'auth_invalid', 'account_mismatch', 'invalid_document', 'network_error'];
   const code = error instanceof PortalError && allowed.includes(error.message) ? error.message : 'browser_unavailable';
   process.stdout.write(JSON.stringify({ code }));
 } finally {

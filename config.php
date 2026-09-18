@@ -40,9 +40,9 @@ return [
         'session_idle_seconds' => 28800,
     ],
     'invoices' => [
-        'private_dir' => getenv('INVOICES_PRIVATE_DIR') ?: ($serverHome === '' ? '' : $serverHome . '/room-check-private/invoices'),
-        'node_binary' => getenv('INVOICES_NODE_BINARY') ?: '/usr/bin/node',
-        'runner_script' => $serverHome === '' ? '' : $serverHome . '/room-check-private/invoice-runner/runner.mjs',
+        'private_dir' => $localConfig['invoices']['private_dir'] ?? getenv('INVOICES_PRIVATE_DIR') ?: ($serverHome === '' ? '' : $serverHome . '/room-check-private/invoices'),
+        'node_binary' => $localConfig['invoices']['node_binary'] ?? getenv('INVOICES_NODE_BINARY') ?: '/usr/bin/node',
+        'runner_script' => $localConfig['invoices']['runner_script'] ?? ($serverHome === '' ? '' : $serverHome . '/room-check-private/invoice-runner/runner.mjs'),
     ],
     'zkaccess' => [
         'runner_version' => 'V5.1 Direct POST',

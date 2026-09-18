@@ -11,3 +11,8 @@
 .card .form-actions { flex-wrap:wrap; }
 .card p.invoice-note { margin-top:22px; }
 @media (max-width:620px) { .invoice-filters>* { width:100%; } .invoice-table-wrap table { min-width:570px; } }
+
+.invoice-secret { display: block; overflow-wrap: anywhere; padding: 1rem; }
+.card details { margin: 1rem 0; }
+.card summary { cursor: pointer; font-weight: 600; }
+.card form + form { margin-top: 1.25rem; }

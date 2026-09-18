@@ -14,7 +14,7 @@ if ((int) $pdo->query("SELECT GET_LOCK('room_check_invoices', 0)")->fetchColumn(
     exit;
 }
 try {
-    (new InvoiceRunner($pdo, $config['invoices'] ?? []))->run();
+    (new InvoiceRunner($pdo, array_merge($config['invoices'] ?? [], ['whatsapp' => $config['whatsapp'] ?? []])))->run();
 } catch (Throwable) {
     // Never log portal responses, cookies, credentials or raw exceptions.
     fwrite(STDERR, "Invoice worker failed. Check module status and private setup.\n");
