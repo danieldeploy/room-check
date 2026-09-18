@@ -1,0 +1,13 @@
+.categories-shell { width: min(1180px, calc(100% - 32px)); }
+.category-create-form { max-width: 720px; }
+.category-edit-card,.category-delete-card { margin-bottom: 18px; }
+.category-edit-form { display: flex; align-items: end; gap: 10px; max-width: 720px; }
+.category-delete-form { margin: 0; }
+.category-delete-form button { min-width: 160px; }
+.category-blocked { color: var(--danger); }
+
+@media (max-width: 760px) {
+    .categories-shell { width: min(100% - 20px, 680px); }
+    .category-edit-form { align-items: stretch; flex-direction: column; }
+    .category-delete-form button,.category-edit-form button { width: 100%; }
+}
