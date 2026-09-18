@@ -1,0 +1,13 @@
+.invoice-filters { display:flex; flex-wrap:wrap; align-items:end; gap:14px; margin:20px 0; }
+.invoice-filters label { display:grid; gap:8px; }
+.invoice-table-wrap { overflow-x:auto; margin-top:18px; }
+.invoice-table-wrap table { width:100%; border-collapse:collapse; text-align:left; }
+.invoice-table-wrap th,.invoice-table-wrap td { padding:12px; border-bottom:1px solid #e6edf3; vertical-align:top; }
+.invoice-table-wrap th { color:#486581; font-size:.8rem; }
+.invoice-table-wrap small { color:#627d98; }
+.card select,.card input[type="month"],.card input[type="number"],.card input[type="password"] { width:100%; min-height:48px; padding:10px 12px; border:1px solid #bcccdc; border-radius:10px; background:#fff; }
+.card fieldset { border:0; padding:0; margin:0; }
+.card fieldset:disabled { opacity:.6; }
+.card .form-actions { flex-wrap:wrap; }
+.card p.invoice-note { margin-top:22px; }
+@media (max-width:620px) { .invoice-filters>* { width:100%; } .invoice-table-wrap table { min-width:570px; } }
