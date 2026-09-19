@@ -25,6 +25,8 @@ try {
     if (!is_dir($app) || !is_file($app.'/lib.php')) throw new RuntimeException('application_missing');
     require $app.'/lib.php';
     $pdo=database();
+    $installed=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('invoice_account_settings','invoice_property_settings','invoice_batches','invoice_batch_tasks')")->fetchColumn();
+    if ((int)$installed===4) { echo json_encode(['ok'=>true,'migration'=>'029','already_installed'=>true])."\n"; exit; }
     if (runCommand(['git','-C',$repo,'status','--porcelain'])!=='') throw new RuntimeException('dirty_repository');
     $head=runCommand(['git','-C',$repo,'rev-parse','HEAD']);
     $backup=$backupRoot.'/invoice-workspace-'.substr($head,0,12);
