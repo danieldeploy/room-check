@@ -175,8 +175,8 @@ header('Cache-Control: no-store');
     <main class="users-shell">
         <?php SessionBar::render($currentUser, '..', true, $canManagePermissions); ?>
         <header class="compact-page-header"><div class="compact-page-heading"><p class="eyebrow">Administração</p><h1 class="page-title">Utilizadores</h1></div></header>
-        <?php if ($message): ?><div class="success"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
-        <?php if ($error): ?><div class="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+        <?php if ($message): ?><div class="success" role="status" data-save-feedback="success"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+        <?php if ($error): ?><div class="alert" role="alert" data-save-feedback="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
 
         <section class="management-card">
             <h2>Novo utilizador</h2>

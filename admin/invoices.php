@@ -170,8 +170,8 @@ $viewRoot=__DIR__.'/partials/invoices'; define('INVOICE_VIEW',true);
 <?php SessionBar::render($currentUser,'..',Auth::hasPermission($pdo,$currentUser,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$currentUser,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
 <header class="page-header"><h1><?= it('title') ?></h1><p><?= it('scope') ?></p></header>
 <nav class="invoice-tabs" aria-label="<?= it('module_navigation') ?>"><?php foreach ($tabs as $navTab): ?><a href="<?= ie(invoiceUrl($navTab)) ?>" <?= $navTab===$tab?'aria-current="page"':'' ?>><?= it('tab_'.$navTab) ?></a><?php endforeach; ?></nav>
-<?php if ($error): ?><div class="alert" role="alert"><?= it($error) ?></div><?php endif; ?>
-<?php if ($flash): ?><div class="success" role="status"><?= it($flash) ?></div><?php endif; ?>
+<?php if ($error): ?><div class="alert" role="alert" data-save-feedback="error"><?= it($error) ?></div><?php endif; ?>
+<?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= it($flash) ?></div><?php endif; ?>
 <?php if ($device): ?><div class="notice"><p><?= it('token_once') ?> <?= (int)$device['account'] ?></p><code class="invoice-secret"><?= ie($device['token']) ?></code></div><?php endif; ?>
 <?php if ($settings): ?>
 <?php if (strtotime(($settings['worker_seen_at'] ?? '').' UTC')<time()-300): ?><div class="notice"><?= it('worker_stale') ?></div><?php endif; ?>

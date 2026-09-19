@@ -335,8 +335,8 @@ header('Cache-Control: no-store');
             $canManageCategories
         ); ?>
     </header>
-    <?php if ($message): ?><div class="notice success" role="status"><?= listEscape($message) ?></div><?php endif; ?>
-    <?php if ($error): ?><div class="notice error" role="alert"><?= listEscape($error) ?></div><?php endif; ?>
+    <?php if ($message): ?><div class="notice success" role="status" data-save-feedback="success"><?= listEscape($message) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="notice error" role="alert" data-save-feedback="error"><?= listEscape($error) ?></div><?php endif; ?>
 
     <?php if (!$isMenuListView): ?>
     <section class="global-crud-workflow" data-global-crud>

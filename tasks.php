@@ -257,8 +257,8 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
             <h1 class="page-title"><?= $canAssign ? 'Atribuir itens a verificar' : 'Os meus itens a verificar' ?></h1>
         </div>
     </header>
-    <?php if ($message): ?><div class="notice success" role="status"><?= taskEscape($message) ?></div><?php endif; ?>
-    <?php if ($error): ?><div class="notice error" role="alert"><?= taskEscape($error) ?></div><?php endif; ?>
+    <?php if ($message): ?><div class="notice success" role="status" data-save-feedback="success"><?= taskEscape($message) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="notice error" role="alert" data-save-feedback="error"><?= taskEscape($error) ?></div><?php endif; ?>
 
     <?php if ($canAssign): ?>
         <form method="get" class="selectors">

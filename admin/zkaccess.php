@@ -188,8 +188,8 @@ header('Cache-Control: no-store');
         </header>
 
         <?php if (!$settingsStorageAvailable): ?><div class="alert">Importe <code>migrations/004_portal_permissions.sql</code> para ativar esta configuração.</div><?php endif; ?>
-        <?php if ($message !== null): ?><div class="success"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
-        <?php if ($error !== null): ?><div class="alert"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+        <?php if ($message !== null): ?><div class="success" role="status" data-save-feedback="success"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+        <?php if ($error !== null): ?><div class="alert" role="alert" data-save-feedback="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
         <?php if (!$canConfigure): ?><div class="notice">O seu perfil permite consultar esta página, mas não alterar a configuração.</div><?php endif; ?>
 
         <section class="card">

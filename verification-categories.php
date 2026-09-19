@@ -226,7 +226,7 @@ header('Cache-Control: no-store');
         <?php VerificationCategoryNavigation::render($categories, $navigationLists, 'categories', Auth::hasPermission($pdo, $currentUser, Auth::PERMISSION_TASK_ASSIGN), true); ?>
     </header>
 
-    <?php if ($message): ?><div class="notice success" role="status"><?= categoryEscape($message) ?></div><?php endif; ?>
+    <?php if ($message): ?><div class="notice success" role="status" data-save-feedback="success"><?= categoryEscape($message) ?></div><?php endif; ?>
     <?php if (!$storageAvailable): ?>
         <div class="notice error" role="alert"><?= categoryEscape(SiteTranslations::text(
             'Importe migrations/022_verification_categories.sql para ativar a gestão de áreas.',
