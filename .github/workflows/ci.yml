@@ -41,6 +41,7 @@ jobs:
 
       - name: Validate JavaScript syntax
         run: |
+          node --check admin/assets/invoices.js
           node --check assets/app.js
           node --check assets/app-dialog.js
           node --check assets/verification-categories.js
@@ -58,6 +59,7 @@ jobs:
       - name: Run PHP tests
         run: |
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
+          php tests/invoice-workspace.php
           php tests/invoice-drive.php
           php tests/run.php
           php tests/i18n.php

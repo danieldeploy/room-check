@@ -34,7 +34,7 @@ try {
         $pdo->prepare("UPDATE invoice_drive_settings SET state='configured',checked_at=? WHERE id=1")->execute([gmdate('Y-m-d H:i:s')]);
         Auth::audit($pdo,(int)$user['id'],'invoices_drive_connected',[]);
     } finally { $pdo->query("SELECT RELEASE_LOCK('room_check_invoices')"); }
-    $_SESSION['invoice_flash']='saved'; header('Location: invoices.php',true,303);
+    $_SESSION['invoice_flash']='saved'; header('Location: invoices.php?tab=settings',true,303);
 } catch (Throwable $e) {
     http_response_code(400);
     echo htmlspecialchars(InvoiceText::get(isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'drive_auth'),ENT_QUOTES,'UTF-8');

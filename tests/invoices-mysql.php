@@ -9,7 +9,7 @@ $pdo->exec('CREATE TABLE IF NOT EXISTS role_permissions (role VARCHAR(40), permi
 $migration = (string) file_get_contents(dirname(__DIR__) . '/migrations/026_invoices_portals.sql');
 $pdo->exec($migration);
 $pdo->exec($migration);
-foreach (['027_invoice_accounts.sql','028_invoice_drive.sql'] as $file) { $sql=file_get_contents(dirname(__DIR__).'/migrations/'.$file); $pdo->exec($sql); $pdo->exec($sql); }
+foreach (['027_invoice_accounts.sql','028_invoice_drive.sql','029_invoice_workspace.sql'] as $file) { $sql=file_get_contents(dirname(__DIR__).'/migrations/'.$file); $pdo->exec($sql); $pdo->exec($sql); }
 $service = new InvoiceService($pdo);
 if ((int) $service->settings()['enabled'] !== 0) throw new RuntimeException('Default must be disabled');
 $id = $service->enqueue('collect', '1140306', '2026-08', 1);
@@ -26,3 +26,5 @@ $service->scheduleDue(new DateTimeImmutable('2026-10-06T03:00:00Z'));
 if ((int) $pdo->query("SELECT COUNT(*) FROM invoice_tasks WHERE schedule_key IS NOT NULL")->fetchColumn() !== 2) throw new RuntimeException('Schedule duplicated');
 echo "MySQL migration, queue idempotency, retry, advisory lock and schedule passed.\n";
 require __DIR__ . '/invoice-drive-cases.php';
+
+require __DIR__ . '/invoice-workspace-cases.php';
