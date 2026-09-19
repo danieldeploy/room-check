@@ -5,6 +5,7 @@ deployment:
     - export PRIVATEPATH=$HOME/room-check-private/
     - /bin/mkdir -p $DEPLOYPATH
     - /bin/mkdir -p $PRIVATEPATH
+    - /usr/local/bin/php deploy/prepare_invoice_workspace.php "$DEPLOYPATH" "$HOME/room-check-backups"
     - /bin/cp -R assets $DEPLOYPATH
     - /bin/cp -R admin src $DEPLOYPATH
     - /bin/cp -R cron $PRIVATEPATH
