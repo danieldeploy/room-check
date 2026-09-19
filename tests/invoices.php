@@ -48,6 +48,10 @@ try {
     CREATE TABLE invoice_drive_alerts (id INTEGER PRIMARY KEY,state TEXT);
     CREATE TABLE invoice_notification_settings (id INTEGER PRIMARY KEY,enabled INTEGER);
     INSERT INTO invoice_notification_settings VALUES (1,0);");
+    $pdo->exec("CREATE TABLE invoice_account_settings(account_id INTEGER PRIMARY KEY,is_active INTEGER DEFAULT 1,archived_at TEXT);
+CREATE TABLE invoice_property_settings(account_id INTEGER,property_id TEXT,is_active INTEGER DEFAULT 1,PRIMARY KEY(account_id,property_id));
+CREATE TABLE invoice_batches(id INTEGER PRIMARY KEY AUTOINCREMENT,request_key TEXT UNIQUE,period TEXT,source TEXT,requested_by INTEGER,retry_of INTEGER,created_at TEXT);
+CREATE TABLE invoice_batch_tasks(batch_id INTEGER,task_id INTEGER,PRIMARY KEY(batch_id,task_id));");
     $service = new InvoiceService($pdo);
     $first = $service->enqueue('collect', '1140306', '2026-08', 1);
     checkInvoice($first === $service->enqueue('collect', '1140306', '2026-08', 1), 'Double click creates one active job');

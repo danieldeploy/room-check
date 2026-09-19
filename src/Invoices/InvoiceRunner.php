@@ -41,6 +41,12 @@ final class InvoiceRunner
                 ->execute([InvoiceService::utcNow(), $job['attempts'], $job['id']]);
             try {
                 $account = $accounts->get((int) $job['account_id']);
+                if ($job['kind'] !== 'preflight' && (!$accounts->active((int)$account['id'])
+                    || !isset($accounts->collectionProperties((int)$account['id'])[$job['property_id']]))) {
+                    $this->pdo->prepare("UPDATE invoice_tasks SET state='cancelled',result_code='account_inactive',active_key=NULL,finished_at=? WHERE id=?")
+                        ->execute([InvoiceService::utcNow(),$job['id']]);
+                    continue;
+                }
                 $vault = new InvoiceVault((string) ($this->config['private_dir'] ?? ''));
                 $input = ['action' => $job['kind'], 'accountId' => (int) $account['id'], 'portal' => $account['portal'],
                     'property' => $job['property_id'], 'period' => $job['period'], 'periodBasis' => $account['period_basis'], 'privateDir' => $vault->root];

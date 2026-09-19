@@ -27,6 +27,7 @@ final class InvoiceService
     {
         $accounts = new InvoiceAccounts($this->pdo);
         $accounts->get($accountId);
+        if ($kind !== 'preflight' && !$accounts->active($accountId)) throw new RuntimeException('account_inactive');
         if (!in_array($kind, ['preflight', 'login', 'collect'], true) || !self::validPeriod($period)
             || !array_key_exists($property, $accounts->properties($accountId))) throw new RuntimeException('invalid_request');
         $active = $kind === 'preflight' ? 'preflight' : "$accountId:$property:$period:$kind";
@@ -46,7 +47,8 @@ final class InvoiceService
     public function saveSchedule(bool $enabled, int $day, string $time, int $accountId = 1): void
     {
         $a = (new InvoiceAccounts($this->pdo))->get($accountId);
-        if ($enabled && in_array($a['portal'], ['expedia','hostelsclub'], true)) throw new RuntimeException('connector_unconfigured');
+        if ($enabled && !(new InvoiceAccounts($this->pdo))->active($accountId)) throw new RuntimeException('account_inactive');
+        if ($enabled && in_array($a['portal'], ['expedia','hostelsclub','email'], true)) throw new RuntimeException('connector_unconfigured');
         if ($day < 1 || $day > 28 || !preg_match('/\A(?:[01]\d|2[0-3]):[0-5]\d\z/', $time)) throw new RuntimeException('invalid_schedule');
         $this->pdo->prepare('UPDATE invoice_accounts SET enabled = ?, schedule_day = ?, schedule_time = ? WHERE id = ?')
             ->execute([(int) $enabled, $day, $time, $accountId]);
@@ -56,13 +58,48 @@ final class InvoiceService
         $accounts = new InvoiceAccounts($this->pdo);
         $local = $now->setTimezone(new DateTimeZone('Europe/Lisbon'));
         foreach ($accounts->all() as $a) {
-            if (!(int) $a['enabled']) continue;
+            if (!(int) $a['enabled'] || !$accounts->active((int) $a['id'])) continue;
             $due = $local->format('Y-m-') . sprintf('%02d', $a['schedule_day']) . ' ' . $a['schedule_time'];
             if ($local->format('Y-m-d H:i') < $due) continue;
             $period = $local->modify('first day of last month')->format('Y-m');
-            foreach ($accounts->properties((int) $a['id']) as $p => $_) {
-                $this->enqueue('collect', (string) $p, $period, null, $a['id'] . ':monthly:' . $local->format('Y-m') . ':' . $p, (int) $a['id']);
+            $targets = [];
+            foreach ($accounts->collectionProperties((int) $a['id']) as $p => $_) $targets[] = ['account_id'=>(int)$a['id'], 'property_id'=>(string)$p];
+            if ($targets) $this->collectBatch($targets, $period, null, hash('sha256', 'scheduled:' . $a['id'] . ':' . $local->format('Y-m')), 'scheduled');
+        }
+    }
+
+    /** Atomic request creation; shared active tasks can appear in more than one request. */
+    public function collectBatch(array $targets, string $period, ?int $actor, string $key, string $source = 'manual', ?int $retryOf = null): int
+    {
+        if (!$targets || !self::validPeriod($period) || !preg_match('/\A[a-f0-9]{64}\z/', $key)
+            || !in_array($source, ['manual','scheduled','retry'], true)) throw new RuntimeException('invalid_request');
+        $existing = $this->pdo->prepare('SELECT * FROM invoice_batches WHERE request_key=?'); $existing->execute([$key]);
+        if ($batch = $existing->fetch(PDO::FETCH_ASSOC)) {
+            if ($batch['period'] !== $period || (int)$batch['requested_by'] !== (int)$actor) throw new RuntimeException('invalid_request');
+            return (int)$batch['id'];
+        }
+        $accounts = new InvoiceAccounts($this->pdo);
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare('INSERT INTO invoice_batches (request_key,period,source,requested_by,retry_of,created_at) VALUES (?,?,?,?,?,?)')
+                ->execute([$key,$period,$source,$actor,$retryOf,self::utcNow()]);
+            $id = (int)$this->pdo->lastInsertId(); $seen = [];
+            foreach ($targets as $target) {
+                $account = (int)$target['account_id']; $property = (string)$target['property_id'];
+                if (!isset($accounts->collectionProperties($account)[$property])) throw new RuntimeException('property_inactive');
+                $targetKey = $account . ':' . $property; if (isset($seen[$targetKey])) continue; $seen[$targetKey] = true;
+                $scheduleKey = $source === 'scheduled' ? $account . ':monthly:' . (new DateTimeImmutable($period . '-01'))->modify('+1 month')->format('Y-m') . ':' . $property : null;
+                $task = $this->enqueue('collect',$property,$period,$actor,$scheduleKey,$account);
+                $this->pdo->prepare('INSERT INTO invoice_batch_tasks (batch_id,task_id) VALUES (?,?)')->execute([$id,$task]);
             }
+            $this->pdo->commit(); return $id;
+        } catch (Throwable $e) {
+            $this->pdo->rollBack();
+            if ($e instanceof PDOException && $e->getCode()==='23000') {
+                $existing->execute([$key]); $batch=$existing->fetch(PDO::FETCH_ASSOC);
+                if ($batch && $batch['period']===$period && (int)$batch['requested_by']===(int)$actor) return (int)$batch['id'];
+            }
+            throw $e;
         }
     }
     public function import(InvoiceVault $vault, array $job, array $document): bool
