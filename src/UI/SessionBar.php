@@ -28,6 +28,8 @@ final class SessionBar
         $validationFeedbackVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/validation-feedback.js');
         $globalMenusVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/global-menus.js');
         $globalCrudVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/global-crud.js');
+        $saveContextVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/save-context.js');
+        $saveContextCssVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/save-context.css');
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
             <div class="session-navigation">
@@ -53,12 +55,14 @@ final class SessionBar
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/readonly-textarea.css') ?>">
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/bilingual-textareas.css') ?>">
         <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/decision-dialog.css?v=' . $decisionDialogCssVersion) ?>">
+        <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/save-context.css?v=' . $saveContextCssVersion) ?>">
         <script>window.ROOM_TRANSLATION_FEEDBACK = <?= json_encode($translationFeedback, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
         <script src="<?= self::escape($prefix . 'assets/app-dialog.js?v=' . $appDialogVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/immediate-edit-decision.js?v=' . $immediateEditDecisionVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js?v=' . $validationFeedbackVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/global-menus.js?v=' . $globalMenusVersion) ?>" defer></script>
         <script src="<?= self::escape($prefix . 'assets/global-crud.js?v=' . $globalCrudVersion) ?>" defer></script>
+        <script src="<?= self::escape($prefix . 'assets/save-context.js?v=' . $saveContextVersion) ?>" data-user-id="<?= (int) ($user['id'] ?? 0) ?>" data-dismiss-label="<?= self::escape(SiteTranslations::text('Fechar', 'Close')) ?>" defer></script>
         <script src="<?= self::escape($prefix . 'assets/bilingual-textareas.js') ?>" data-bilingual-api="<?= self::escape($prefix . 'api.php') ?>"></script>
         <?php
     }

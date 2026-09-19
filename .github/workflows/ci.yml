@@ -41,6 +41,7 @@ jobs:
 
       - name: Validate JavaScript syntax
         run: |
+          node --check assets/save-context.js
           node --check admin/assets/invoices.js
           node --check assets/app.js
           node --check assets/app-dialog.js
@@ -49,6 +50,11 @@ jobs:
           node --check assets/validation-feedback.js
           node --check assets/bilingual-textareas.js
           if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
+
+      - name: Test shared save context
+        run: |
+          npm ci --prefix tests/ui --ignore-scripts --no-audit --no-fund
+          node --test tests/ui/*.test.cjs
 
       - name: Validate invoice runner
         run: |

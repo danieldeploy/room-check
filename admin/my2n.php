@@ -112,10 +112,10 @@ header('Cache-Control: no-store');
                         <?= $credentialsConfigured ? 'CONFIGURADO' : 'POR CONFIGURAR' ?>
                     </span>
                 </div>
-                <?php if ($credentialMessage !== null): ?><div class="form-message success"><?= htmlspecialchars($credentialMessage, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
-                <?php if ($credentialError !== null): ?><div class="form-message error"><?= htmlspecialchars($credentialError, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+                <?php if ($credentialMessage !== null): ?><div class="form-message success" role="status" data-save-feedback="success"><?= htmlspecialchars($credentialMessage, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+                <?php if ($credentialError !== null): ?><div class="form-message error" role="alert" data-save-feedback="error"><?= htmlspecialchars($credentialError, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
                 <?php if ($maskedIdentifier !== null): ?><p class="configured-login">Login atual: <strong><?= htmlspecialchars($maskedIdentifier, ENT_QUOTES, 'UTF-8') ?></strong></p><?php endif; ?>
-                <form class="credential-form" method="post" autocomplete="off">
+                <form class="credential-form" method="post" autocomplete="off" data-save-context-return="my2n.php?credentials=saved">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(Csrf::token(), ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="action" value="save_credentials">
                     <label><span>Login My2N</span><input type="text" name="identifier" autocomplete="username" maxlength="190" required></label>
