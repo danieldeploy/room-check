@@ -261,11 +261,11 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
     <?php if ($error): ?><div class="notice error" role="alert" data-save-feedback="error"><?= taskEscape($error) ?></div><?php endif; ?>
 
     <?php if ($canAssign): ?>
-        <form method="get" class="selectors">
-            <label><span>Alojamento</span><select name="property" onchange="this.form.submit()">
+        <form method="get" class="selectors" data-save-context="keep" data-save-context-key="task-selectors">
+            <label><span>Alojamento</span><select name="property" onchange="this.form.requestSubmit()">
                 <?php foreach (PROPERTIES as $name => $count): ?><option value="<?= taskEscape($name) ?>" <?= $name === $property ? 'selected' : '' ?>><?= taskEscape($name) ?></option><?php endforeach; ?>
             </select></label>
-            <label><span>Quarto</span><select name="room" onchange="this.form.submit()">
+            <label><span>Quarto</span><select name="room" onchange="this.form.requestSubmit()">
                 <?php for ($number = 1; $number <= PROPERTIES[$property]; $number++): ?><option value="<?= $number ?>" <?= $number === $room ? 'selected' : '' ?>><?= $number ?></option><?php endfor; ?>
             </select></label>
         </form>
@@ -291,11 +291,11 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
             </form>
         <?php endif; ?>
     <?php else: ?>
-        <section class="task-calendar" aria-label="Calendário de itens atribuídos">
+        <section id="task-calendar" class="task-calendar" aria-label="Calendário de itens atribuídos">
             <div class="calendar-heading">
-                <a href="tasks.php?date=<?= taskEscape($selectedDateValue) ?>&amp;month=<?= $previousMonth ?>" aria-label="Mês anterior">‹</a>
+                <a href="tasks.php?date=<?= taskEscape($selectedDateValue) ?>&amp;month=<?= $previousMonth ?>" data-save-context="keep" data-save-context-target="#task-calendar" aria-label="Mês anterior">‹</a>
                 <h2><?= $monthNames[(int) $calendarStart->format('n')] ?> <?= $calendarStart->format('Y') ?></h2>
-                <a href="tasks.php?date=<?= taskEscape($selectedDateValue) ?>&amp;month=<?= $nextMonth ?>" aria-label="Mês seguinte">›</a>
+                <a href="tasks.php?date=<?= taskEscape($selectedDateValue) ?>&amp;month=<?= $nextMonth ?>" data-save-context="keep" data-save-context-target="#task-calendar" aria-label="Mês seguinte">›</a>
             </div>
             <div class="calendar-weekdays" aria-hidden="true"><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span></div>
             <div class="calendar-days">
@@ -306,7 +306,7 @@ function taskEscape(string $value): string { return htmlspecialchars($value, ENT
                     $isSelected = $dayValue === $selectedDateValue;
                     $isToday = $dayValue === $today->format('Y-m-d');
                 ?>
-                    <a class="calendar-day<?= $hasTasks ? ' has-tasks' : '' ?><?= $isSelected ? ' selected' : '' ?><?= $isToday ? ' today' : '' ?>" href="tasks.php?date=<?= $dayValue ?>&amp;month=<?= $calendarMonthValue ?>" <?= $isSelected ? 'aria-current="date"' : '' ?>><?= $day ?></a>
+                    <a data-save-context="keep" data-save-context-target="#task-calendar" class="calendar-day<?= $hasTasks ? ' has-tasks' : '' ?><?= $isSelected ? ' selected' : '' ?><?= $isToday ? ' today' : '' ?>" href="tasks.php?date=<?= $dayValue ?>&amp;month=<?= $calendarMonthValue ?>" <?= $isSelected ? 'aria-current="date"' : '' ?>><?= $day ?></a>
                 <?php endfor; ?>
             </div>
             <p class="calendar-legend"><span></span> Dia com itens atribuídos</p>

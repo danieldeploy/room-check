@@ -362,9 +362,9 @@ header('Cache-Control: no-store');
 
     <details class="list-create-panel list-select-panel list-delete-panel" data-crud-action="delete" <?= $isDeleteListView ? 'open' : '' ?>>
         <summary>Selecionar lista para apagar</summary>
-        <form method="get" class="list-selector">
+        <form method="get" class="list-selector" data-save-context="keep">
             <input type="hidden" name="list_view" value="delete">
-            <label><span>Lista</span><select name="list_id" required onchange="this.form.submit()">
+            <label><span>Lista</span><select name="list_id" required onchange="this.form.requestSubmit()">
                 <option value="" <?= !$isDeleteListView || $listId === 0 ? 'selected' : '' ?> disabled>Escolher lista</option>
                 <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $isDeleteListView && $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
             </select></label>
@@ -373,8 +373,8 @@ header('Cache-Control: no-store');
 
     <details class="list-create-panel list-select-panel" data-crud-action="edit">
         <summary>Selecionar lista para editar</summary>
-        <form method="get" class="list-selector">
-            <label><span>Lista</span><select name="list_id" required onchange="this.form.submit()">
+        <form method="get" class="list-selector" data-save-context="keep">
+            <label><span>Lista</span><select name="list_id" required onchange="this.form.requestSubmit()">
                 <option value="" <?= $listId === 0 ? 'selected' : '' ?> disabled>Escolher lista</option>
                 <?php foreach ($lists as $list): ?><option value="<?= $list['id'] ?>" <?= $list['id'] === $listId ? 'selected' : '' ?>><?= listEscape(Translator::localized((string) $list['name'], (string) ($list['nameEn'] ?? ''))) ?></option><?php endforeach; ?>
             </select></label>

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { JSDOM } = require('jsdom');
 const source = readFileSync(require('node:path').join(__dirname, '../../assets/save-context.js'), 'utf8');
-const key = 'room-check:save-context:v1';
+const key = 'room-check:save-context:v2';
 const url = 'https://hub.example/admin/invoices.php?tab=settings&period=2026-08';
 const markup = `<main><details id="advanced"><summary>Advanced</summary><p>Details</p></details>
     <form method="post" data-y="1400"><input type="hidden" name="action" value="notifications">
@@ -13,13 +13,23 @@ const markup = `<main><details id="advanced"><summary>Advanced</summary><p>Detai
     <details id="inside"><summary>More</summary><input name="required_field" required></details>
     <button data-y="1800">Save</button></form></main>`;
 
-function page(t, { html = markup, href = url, stored, y = 0, shift = 0, height = 800, user = '1', navigation = 'navigate', blocked = false } = {}) {
+function page(t, { html = markup, href = url, stored, y = 0, shift = 0, height = 800, user = '1', navigation = 'navigate', blocked = false, clock = false } = {}) {
     const dom = new JSDOM(html, { url: href, runScripts: 'outside-only', pretendToBeVisual: true });
     const w = dom.window;
     t.after(() => w.close());
     const d = w.document;
     const frames = [];
     const scrolls = [];
+    const timers = [];
+    let time = 0;
+    if (clock) w.setTimeout = (callback, delay) => { timers.push({ callback, at: time + delay }); };
+    const advance = milliseconds => {
+        time += milliseconds;
+        for (const timer of timers.filter(timer => timer.at <= time)) {
+            timers.splice(timers.indexOf(timer), 1);
+            timer.callback();
+        }
+    };
     w.CSS = { escape: value => value.replace(/[^\w-]/g, '\\$&') };
     w.history.scrollRestoration = 'auto';
     w.performance.getEntriesByType = () => [{ type: navigation }];
@@ -43,7 +53,8 @@ function page(t, { html = markup, href = url, stored, y = 0, shift = 0, height =
         form.dispatchEvent(new w.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: button }));
     };
     const leave = () => w.dispatchEvent(new w.PageTransitionEvent('pagehide'));
-    return { w, d, start, flush, submit, leave, scrolls, stored: () => w.sessionStorage.getItem(key) };
+    const click = (element, options = {}) => element.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true, ...options }));
+    return { w, d, start, flush, submit, leave, click, advance, scrolls, stored: () => w.sessionStorage.getItem(key) };
 }
 
 function snapshot(t, options = {}) {
@@ -233,4 +244,123 @@ test('same-action repeated record forms restore to the correct record after rows
     next.start(); next.flush();
     // The old selector now identifies user 1. Use user 2's form as fallback.
     assert.equal(next.w.scrollY, 1100);
+});
+
+test('success notice lasts two seconds without a close button or a focus change; errors persist', t => {
+    for (const kind of ['success', 'error']) {
+        const p = page(t, { stored: snapshot(t), clock: true, html: markup + `<p data-save-feedback="${kind}">Server result</p>` });
+        p.start(); p.flush();
+        const notice = p.d.querySelector('.save-context-notice');
+        assert.equal(Boolean(notice.querySelector('button')), kind === 'error');
+        assert.equal(p.d.activeElement, p.d.body);
+        p.advance(1999);
+        assert.equal(notice.isConnected, true);
+        p.advance(1);
+        assert.equal(notice.isConnected, kind === 'error');
+    }
+});
+
+const filterMarkup = `<form method="get" id="filters" data-save-context="filter" data-save-context-target="#results" data-y="1000">
+    <input type="hidden" name="tab" value="documents"><input name="q" value="Air & Sea">
+    <input name="disabled" disabled value="excluded"><input type="checkbox" name="unchecked" value="excluded">
+    <select name="portal"><option value="booking" selected>Booking</option></select>
+    <button name="sort" value="date" data-y="1200">Filter</button></form>
+    <section id="results" data-y="1500"><details id="record"><summary>Record</summary></details></section>`;
+const filteredUrl = 'https://hub.example/admin/invoices.php?tab=documents&q=Air+%26+Sea&portal=booking&sort=date';
+
+test('GET filters match the actual successful controls and keep visible results in place', t => {
+    const p = page(t, { html: filterMarkup, y: 900 });
+    p.start(); p.d.querySelector('#record').open = true;
+    p.submit(); p.leave();
+    const state = JSON.parse(p.stored());
+    assert.doesNotMatch(state.to, /excluded|disabled|unchecked/);
+    const next = page(t, { html: filterMarkup, href: filteredUrl, stored: state, shift: 100 });
+    next.start(); next.flush();
+    assert.equal(next.d.querySelector('#results').getBoundingClientRect().top, 600);
+    assert.equal(next.d.querySelector('#record').open, false, 'New result rows use their server state');
+    assert.equal(next.d.querySelector('.save-context-notice'), null);
+});
+
+test('filters reveal an off-screen result area, including an empty result, and reject unexpected redirects', t => {
+    const p = page(t, { html: filterMarkup, y: 400 });
+    p.start(); p.submit(); p.leave();
+    const html = filterMarkup.replace('<details id="record"><summary>Record</summary></details>', '<p>No matches</p>');
+    const next = page(t, { html, href: filteredUrl, stored: p.stored(), height: 430 });
+    next.start(); next.flush();
+    assert.equal(next.d.querySelector('#results').getBoundingClientRect().top, 16);
+    const wrong = page(t, { html, href: filteredUrl + '&edit=3', stored: p.stored() });
+    wrong.start(); wrong.flush();
+    assert.equal(wrong.scrolls.length, 0);
+});
+
+test('selectors submitted without a button preserve their section and selected value', t => {
+    const html = '<details id="selector"><summary>Edit list</summary><form method="get" id="select-list" data-save-context="keep" data-y="1000"><select name="list_id"><option value="2" selected>List 2</option></select></form></details>';
+    const p = page(t, { html, href: 'https://hub.example/item-lists.php', y: 650 });
+    p.start(); p.d.querySelector('details').open = true; p.submit(); p.leave();
+    const next = page(t, { html, href: 'https://hub.example/item-lists.php?list_id=2', stored: p.stored(), shift: 80 });
+    next.start(); next.flush();
+    assert.equal(next.d.querySelector('details').open, true);
+    assert.equal(next.d.querySelector('form').getBoundingClientRect().top, 350);
+    assert.equal(next.d.querySelector('select').value, '2');
+});
+
+test('annotated GET password forms and cancelled filters never produce snapshots', t => {
+    for (const password of [false, true]) {
+        const html = filterMarkup.replace('</form>', password ? '<input type="password" name="password" value="secret"></form>' : '</form>');
+        const p = page(t, { html });
+        p.start();
+        if (!password) p.w.addEventListener('submit', event => event.preventDefault());
+        p.submit(); p.leave();
+        assert.equal(p.stored(), null);
+    }
+});
+
+test('pagination starts the relevant results while calendar arrows keep the calendar position', t => {
+    for (const mode of ['page', 'keep']) {
+        const html = `<section id="results" data-y="1100">Results</section><a href="?page=2" data-save-context="${mode}" data-save-context-target="#results" data-y="3000">Next</a>`;
+        const p = page(t, { html, y: mode === 'page' ? 2600 : 800 });
+        p.start(); p.click(p.d.querySelector('a')); p.leave();
+        const next = page(t, { html, href: 'https://hub.example/admin/invoices.php?page=2', stored: p.stored(), shift: 150 });
+        next.start(); next.flush();
+        assert.equal(next.d.querySelector('#results').getBoundingClientRect().top, mode === 'page' ? 16 : 300);
+    }
+});
+
+test('modified, downloaded, cancelled, new-tab and cross-module links keep native navigation', t => {
+    for (const kind of ['ctrl', 'meta', 'shift', 'alt', 'middle', 'cancel', 'download', 'target', 'other']) {
+        const html = `<a href="${kind === 'other' ? '../tasks.php' : '?page=2'}" data-save-context="page" ${kind === 'download' ? 'download' : ''} ${kind === 'target' ? 'target="_blank"' : ''}>Next</a>`;
+        const p = page(t, { html });
+        p.start();
+        if (kind === 'cancel') p.w.addEventListener('click', event => event.preventDefault());
+        p.click(p.d.querySelector('a'), { ctrlKey: kind === 'ctrl', metaKey: kind === 'meta', shiftKey: kind === 'shift', altKey: kind === 'alt', button: kind === 'middle' ? 1 : 0 });
+        p.leave();
+        assert.equal(p.stored(), null, kind);
+    }
+});
+
+test('opening or closing a section anchors its heading after sibling layout changes', t => {
+    const html = '<details id="earlier" open><summary>Earlier</summary></details><details id="chosen"><summary data-y="1200">Chosen</summary></details>';
+    const p = page(t, { html, y: 800 });
+    p.start();
+    const summary = p.d.querySelector('#chosen summary');
+    p.click(summary);
+    p.d.querySelector('#earlier').open = false;
+    summary.dataset.y = '900'; // A previous accordion section collapsed.
+    p.flush();
+    assert.equal(summary.getBoundingClientRect().top, 400);
+    assert.equal(p.d.querySelector('#chosen').open, true);
+    p.click(summary); p.flush();
+    assert.equal(summary.getBoundingClientRect().top, 400);
+    assert.equal(p.d.querySelector('#chosen').open, false);
+});
+
+test('section correction respects user scrolling, validation dialogs and opt-outs', t => {
+    for (const kind of ['scroll', 'modal', 'off']) {
+        const p = page(t, { html: `<details ${kind === 'off' ? 'data-save-context="off"' : ''}><summary>Section</summary></details>` });
+        p.start(); p.click(p.d.querySelector('summary'));
+        if (kind === 'scroll') p.w.dispatchEvent(new p.w.Event('wheel'));
+        if (kind === 'modal') p.d.body.insertAdjacentHTML('beforeend', '<dialog open>Validation</dialog>');
+        p.flush();
+        assert.equal(p.scrolls.length, 0, kind);
+    }
 });

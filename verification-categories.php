@@ -248,9 +248,9 @@ header('Cache-Control: no-store');
 
     <details class="list-create-panel list-select-panel list-delete-panel" data-crud-action="delete" <?= $isDeleteCategoryView ? 'open' : '' ?>>
         <summary><?= categoryEscape(SiteTranslations::text('Selecionar área para apagar', 'Select area to delete')) ?></summary>
-        <form method="get" class="list-selector">
+        <form method="get" class="list-selector" data-save-context="keep">
             <input type="hidden" name="category_view" value="delete">
-            <label><span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span><select name="category_id" required onchange="this.form.submit()">
+            <label><span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span><select name="category_id" required onchange="this.form.requestSubmit()">
                 <option value="" <?= !$isDeleteCategoryView || !$selectedCategory ? 'selected' : '' ?> disabled><?= categoryEscape(SiteTranslations::text('Escolher área', 'Choose area')) ?></option>
                 <?php foreach ($categories as $category): ?><option value="<?= (int) $category['id'] ?>" <?= $isDeleteCategoryView && $category['id'] === $categoryId ? 'selected' : '' ?>><?= categoryEscape((string) $category['display_name']) ?></option><?php endforeach; ?>
             </select></label>
@@ -259,9 +259,9 @@ header('Cache-Control: no-store');
 
     <details class="list-create-panel list-select-panel" data-crud-action="edit" <?= $selectedCategory && !$isDeleteCategoryView ? 'open' : '' ?>>
         <summary><?= categoryEscape(SiteTranslations::text('Selecionar área para editar', 'Select area to edit')) ?></summary>
-        <form method="get" class="list-selector">
+        <form method="get" class="list-selector" data-save-context="keep">
             <input type="hidden" name="category_view" value="edit">
-            <label><span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span><select name="category_id" required onchange="this.form.submit()">
+            <label><span><?= categoryEscape(SiteTranslations::text('Área', 'Area')) ?></span><select name="category_id" required onchange="this.form.requestSubmit()">
                 <option value="" <?= !$selectedCategory || $isDeleteCategoryView ? 'selected' : '' ?> disabled><?= categoryEscape(SiteTranslations::text('Escolher área', 'Choose area')) ?></option>
                 <?php foreach ($categories as $category): ?><option value="<?= (int) $category['id'] ?>" <?= !$isDeleteCategoryView && $category['id'] === $categoryId ? 'selected' : '' ?>><?= categoryEscape((string) $category['display_name']) ?></option><?php endforeach; ?>
             </select></label>
