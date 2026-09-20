@@ -1,5 +1,5 @@
 <?php if (!defined('INVOICE_VIEW')) { http_response_code(404); exit; } ?>
-<form method="get" class="invoice-filters" data-invoice-filters>
+<form method="get" class="invoice-filters" data-invoice-filters data-save-context="filter" data-save-context-key="invoice-filters" data-save-context-target="#invoice-results">
 <input type="hidden" name="tab" value="<?= ie($tab) ?>">
 <label class="field"><span><?= it('period') ?></span><input type="month" name="period" value="<?= ie($period) ?>" required></label>
 <label class="field"><span><?= it('platform') ?></span><select name="portal" data-filter-portal><option value=""><?= it('all_platforms') ?></option><?php foreach (InvoiceAccounts::PORTALS as $key=>$label): ?><option value="<?= ie($key) ?>" <?= $filters['portal']===$key?'selected':'' ?>><?= ie($label) ?></option><?php endforeach; ?></select></label>
@@ -7,5 +7,5 @@
 <label class="field"><span><?= it('property') ?></span><select name="property" data-filter-property><option value=""><?= it('all') ?></option><?php foreach ($accounts as $a): foreach ($properties[$a['id']] as $id=>$label): if (in_array($a['portal'],['airbnb','email'],true) && (string)$id!=='account') continue; $value=$a['id'].':'.$id; ?><option value="<?= ie($value) ?>" data-account="<?= (int)$a['id'] ?>" data-portal="<?= ie($a['portal']) ?>" <?= $filters['property']===$value?'selected':'' ?>><?= ie($label.' — '.InvoiceAccounts::PORTALS[$a['portal']].' / '.$a['label']) ?></option><?php endforeach; endforeach; ?></select></label>
 <?php if ($tab==='documents'): ?><label class="field"><span><?= it('search') ?></span><input type="search" name="q" value="<?= ie($filters['q']) ?>" maxlength="120" placeholder="<?= it('search_hint') ?>"></label><?php endif; ?>
 <?php if (in_array($tab,['documents','activity'],true)): ?><label class="field"><span><?= it('state') ?></span><select name="state"><option value=""><?= it('all_states') ?></option><?php foreach ($tab==='documents'?InvoiceWorkspace::DOCUMENT_STATES:InvoiceWorkspace::TASK_STATES as $state): ?><option value="<?= ie($state) ?>" <?= $filters['state']===$state?'selected':'' ?>><?= it($state) ?></option><?php endforeach; ?></select></label><?php endif; ?>
-<div class="form-actions"><button class="primary-button"><?= it('filter') ?></button><a href="<?= ie(invoiceUrl($tab,['account'=>0,'portal'=>'','property'=>''])) ?>"><?= it('clear_filters') ?></a></div>
+<div class="form-actions"><button class="primary-button"><?= it('filter') ?></button><a data-save-context="filter" data-save-context-target="#invoice-results" href="<?= ie(invoiceUrl($tab,['account'=>0,'portal'=>'','property'=>''])) ?>"><?= it('clear_filters') ?></a></div>
 </form>
