@@ -141,9 +141,10 @@ do agente em PHP/SQLite, 35 do executor existente e 32 do espaço de faturas apr
 vistas PT/EN, arquivo Drive, permissões e tradução verificados. A sintaxe dos 104 ficheiros
 PHP foi analisada. Runtime local: PHP 8.5.10 e Node 24.19.0. A suite existente emite um
 aviso de depreciação de ReflectionMethod::setAccessible() em PHP 8.5; não é uma falha
-do agente. Os testes CI em PHP 8.2/MySQL e Windows estão preparados, mas **ainda não
-foram executados**: a publicação no GitHub público ficou bloqueada pela revisão
-automática até autorização explícita. Nenhuma configuração de produção foi alterada.
+do agente. Os resultados atuais do CI em PHP 8.2/MySQL e Windows ficam registados no
+[pedido de revisão 72](https://github.com/danieldeploy/room-check/pull/72), publicado
+após autorização do proprietário. A publicação do código não ativa a instalação:
+continua a ser necessária a validação no computador real e no alojamento.
 
 Referências: https://pptr.dev/troubleshooting,
 https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection,

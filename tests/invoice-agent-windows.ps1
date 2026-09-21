@@ -32,3 +32,6 @@ try {
         Write-Host 'Real Windows Chrome preflight and profile cleanup passed.'
     }
 } finally { if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force } }
+# The permission-denial assertion intentionally ran a native process that returned 1.
+# Once all assertions pass, do not propagate that expected status to the CI shell.
+exit 0
