@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+  <meta name="theme-color" content="#e7f0f7">
+  <title>Code generator</title>
+
+  <style>
+    :root {
+      color-scheme: light;
+      --background: #e7f0f7;
+      --surface: #ffffff;
+      --primary: #245f8f;
+      --primary-hover: #194c77;
+      --text: #111827;
+      --muted: #60758a;
+      --success: #07862f;
+      --error: #b42318;
+      --border: #dce6ee;
+      --selected: #edf6fc;
+      --control-border: #8293a2;
+      --shadow: 0 10px 30px rgba(20, 52, 78, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      padding: 7px 10px 9px;
+      background: var(--background);
+      color: var(--text);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 8px;
+      width: min(100%, 1180px);
+      height: 100%;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .generator-card {
+      padding: 8px 16px 7px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      line-height: 1.2;
+    }
+
+
+    .generator-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .code-created-line,
+    #status {
+      width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+
+    .code-created-line {
+      justify-content: center;
+    }
+
+    .code-created-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 9px;
+      width: 100%;
+      min-height: 42px;
+      text-align: center;
+    }
+
+    #generatedCode {
+      color: var(--primary);
+      font-variant-numeric: tabular-nums;
+      font-size: 24px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      line-height: 1;
+    }
+
+    .code-created-separator,
+    .code-created-title {
+      color: var(--text);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+
+    #status {
+      min-height: 17px;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+      text-align: center;
+    }
+
+    #status.success {
+      color: var(--success);
+    }
+
+    #status.error {
+      color: var(--error);
+    }
+
+    .rooms-card {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .room-grid {
+      display: grid;
+      grid-template-columns:
+        minmax(72px, 0.72fr)
+        minmax(104px, 0.96fr)
+        minmax(82px, 0.78fr)
+        minmax(300px, 2.45fr)
+        minmax(82px, 0.78fr)
+        minmax(92px, 0.82fr);
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+    }
+
+    .room-header {
+      min-height: 33px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 10.5px;
+      font-weight: 750;
+      text-align: center;
+      line-height: 1.15;
+    }
+
+    .room-header > :first-child {
+      text-align: left;
+    }
+
+    #roomsList {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .room-row {
+      flex: 1 1 0;
+      min-height: 40px;
+      border-bottom: 1px solid rgba(18, 57, 91, 0.08);
+      transition: background 80ms ease;
+    }
+
+    .room-row:last-child {
+      border-bottom: 0;
+    }
+
+    .room-row.selected {
+      flex-grow: 1.35;
+      min-height: 58px;
+      background: var(--selected);
+    }
+
+    .room-name {
+      font-size: 12.5px;
+      font-weight: 760;
+    }
+
+    .date-cell,
+    .change-count {
+      color: var(--text);
+      font-size: 11px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .code-cell {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      font-size: 14px;
+      font-weight: 760;
+      letter-spacing: 0.05em;
+      text-align: center;
+    }
+
+    .actual-code.changed {
+      color: var(--success);
+    }
+
+    .selection-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .control-group {
+      display: grid;
+      justify-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .control-label {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .manual-entry-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+
+    .control-group:not(:has(.control-label)) {
+      padding-top: 19px;
+    }
+
+
+    /* Align the radio button with the Auto/manual input row */
+    .selection-controls > input[type="radio"] {
+      transform: translateY(10px);
+    }
+
+    input[type="radio"] {
+      width: 19px;
+      height: 19px;
+      margin: 0;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .action-button,
+    .manual-input {
+      height: 30px;
+      border: 1px solid var(--control-border);
+      border-radius: 6px;
+      font: inherit;
+    }
+
+    .action-button {
+      padding: 0 8px;
+      background: #ffffff;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .action-button:hover:not(:disabled) {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .action-button:disabled,
+    .manual-input:disabled {
+      cursor: not-allowed;
+      opacity: 0.42;
+      background: #edf1f4;
+    }
+
+    .manual-input {
+      width: 100%;
+      min-width: 0;
+      padding: 0 7px;
+      background: #ffffff;
+      color: var(--text);
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-align: center;
+      outline: none;
+    }
+
+    .manual-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(36, 95, 143, 0.13);
+    }
+
+    .empty-code,
+    .empty-date {
+      color: #a3adb7;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+
+    .app-alert {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.58);
+      backdrop-filter: blur(5px);
+      animation: alertFadeIn 160ms ease-out;
+    }
+
+    .app-alert[hidden] {
+      display: none;
+    }
+
+    .app-alert-box {
+      width: min(92vw, 480px);
+      padding: 34px 30px 27px;
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, #ffffff 0%, #fffafa 100%);
+      box-shadow:
+        0 28px 80px rgba(15, 23, 42, 0.34),
+        0 0 0 6px rgba(220, 38, 38, 0.06);
+      text-align: center;
+      animation: alertScaleIn 180ms ease-out;
+    }
+
+    .app-alert-icon {
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 18px;
+      border: 3px solid #dc2626;
+      border-radius: 50%;
+      background: #fff1f2;
+      color: #dc2626;
+      font-size: 38px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .app-alert-message {
+      color: #dc2626;
+      font-size: clamp(22px, 3.8vw, 30px);
+      font-weight: 900;
+      letter-spacing: -0.025em;
+      line-height: 1.12;
+      text-wrap: balance;
+    }
+
+
+    .app-alert-secondary {
+      margin-top: 14px;
+      color: #0a8f3d;
+      font-size: clamp(18px, 3vw, 24px);
+      font-weight: 800;
+      line-height: 1.25;
+      text-wrap: balance;
+    }
+
+    .app-alert-button {
+      min-width: 128px;
+      min-height: 46px;
+      margin-top: 28px;
+      padding: 10px 26px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--primary);
+      color: #ffffff;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 850;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(36, 95, 143, 0.22);
+      transition:
+        transform 100ms ease,
+        background 100ms ease;
+    }
+
+    .app-alert-button:hover {
+      background: var(--primary-hover);
+    }
+
+    .app-alert-button:active {
+      transform: scale(0.98);
+    }
+
+    @keyframes alertFadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes alertScaleIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+
+    #copyBuffer {
+      position: fixed;
+      left: -10000px;
+      top: -10000px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    @media (max-height: 650px) {
+      body {
+        padding-top: 4px;
+        padding-bottom: 4px;
+      }
+
+      .app {
+        gap: 5px;
+      }
+
+      .generator-card {
+        padding-top: 5px;
+        padding-bottom: 4px;
+      }
+
+      .code-created-line {
+        min-height: 34px;
+        gap: 7px;
+      }
+
+      #generatedCode {
+        font-size: 20px;
+      }
+
+      .code-created-separator,
+      .code-created-title {
+        font-size: 18px;
+      }
+
+      #status {
+        min-height: 13px;
+        margin-top: 0;
+        font-size: 9.5px;
+      }
+
+      .room-header {
+        min-height: 27px;
+        font-size: 9.5px;
+      }
+
+      .room-row {
+        min-height: 34px;
+      }
+
+      .room-row.selected {
+        min-height: 52px;
+      }
+
+      .action-button,
+      .manual-input {
+        height: 27px;
+      }
+    }
+
+
+    .mobile-copy-button {
+      display: none;
+    }
+
+    /*
+     * Mobile layout is enabled by CSS and by the mobile-display class.
+     * The class is applied through matchMedia, without relying on user-agent
+     * detection.
+     */
+    @media (max-width: 760px), (pointer: coarse) {
+      html,
+      body {
+        width: 100%;
+        height: auto;
+        min-height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+
+      body {
+        padding:
+          max(8px, env(safe-area-inset-top))
+          max(8px, env(safe-area-inset-right))
+          max(12px, env(safe-area-inset-bottom))
+          max(8px, env(safe-area-inset-left));
+      }
+
+      .app {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        height: auto;
+        min-height: 100%;
+      }
+
+      .card {
+        width: 100%;
+        border-radius: 13px;
+      }
+
+      .generator-card {
+        padding: 12px 10px 10px;
+      }
+
+      .code-created-line {
+        flex-wrap: wrap;
+        min-height: 34px;
+        gap: 5px 7px;
+        line-height: 1.1;
+      }
+
+      #generatedCode {
+        font-size: 22px;
+      }
+
+      .code-created-separator,
+      .code-created-title {
+        font-size: 20px;
+      }
+
+      #status {
+        min-height: 20px;
+        margin-top: 5px;
+        padding: 0 4px;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .rooms-card {
+        display: block;
+        padding: 8px;
+        overflow: visible;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+      }
+
+      .room-header {
+        display: none;
+      }
+
+      #roomsList {
+        display: grid;
+        gap: 9px;
+        width: 100%;
+      }
+
+      .room-grid,
+      .room-row,
+      .room-row.selected {
+        min-width: 0;
+      }
+
+      .room-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+          "room room"
+          "previous-code previous-date"
+          "actual-code change-count"
+          "selection selection";
+        gap: 9px 12px;
+        width: 100%;
+        min-height: 0;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: 0 5px 16px rgba(20, 52, 78, 0.08);
+      }
+
+      .room-row.selected {
+        min-height: 0;
+        border-color: rgba(36, 95, 143, 0.42);
+        background: var(--selected);
+        box-shadow:
+          0 6px 18px rgba(20, 52, 78, 0.12),
+          0 0 0 2px rgba(36, 95, 143, 0.08);
+      }
+
+      .room-name {
+        grid-area: room;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(18, 57, 91, 0.10);
+        font-size: 17px;
+        line-height: 1.2;
+        text-align: center;
+      }
+
+      .date-cell {
+        grid-area: previous-date;
+      }
+
+      .previous-code {
+        grid-area: previous-code;
+      }
+
+      .actual-code {
+        grid-area: actual-code;
+      }
+
+      .change-count {
+        grid-area: change-count;
+      }
+
+      .date-cell,
+      .code-cell,
+      .change-count {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        min-height: 52px;
+        padding: 7px 6px;
+        border: 1px solid rgba(18, 57, 91, 0.10);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.68);
+        font-size: 15px;
+        line-height: 1.25;
+        text-align: center;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .date-cell::before,
+      .code-cell::before,
+      .change-count::before {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0;
+        line-height: 1.15;
+        text-align: center;
+      }
+
+      .selection-controls {
+        grid-area: selection;
+        display: grid;
+        grid-template-columns:
+          34px
+          minmax(72px, 0.72fr)
+          minmax(178px, 1.55fr);
+        align-items: end;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        padding-top: 2px;
+      }
+
+      .selection-controls > input[type="radio"] {
+        align-self: end;
+        justify-self: center;
+        width: 24px;
+        height: 24px;
+        margin-bottom: 10px;
+        transform: none;
+      }
+
+      .control-group,
+      .manual-entry-row {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .control-group {
+        gap: 6px;
+      }
+
+      .control-group:not(:has(.control-label)) {
+        padding-top: 0;
+      }
+
+      .control-label {
+        font-size: 13px;
+        line-height: 1.15;
+        text-align: center;
+      }
+
+      .manual-entry-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 7px;
+      }
+
+      .action-button,
+      .manual-input {
+        height: 44px;
+        min-height: 44px;
+        border-radius: 9px;
+        font-size: 16px;
+      }
+
+      .action-button {
+        min-width: 58px;
+        padding: 0 11px;
+        touch-action: manipulation;
+      }
+
+      .manual-input {
+        width: 100%;
+        padding: 0 8px;
+      }
+
+      .app-alert {
+        align-items: center;
+        padding:
+          max(12px, env(safe-area-inset-top))
+          max(12px, env(safe-area-inset-right))
+          max(12px, env(safe-area-inset-bottom))
+          max(12px, env(safe-area-inset-left));
+      }
+
+      .app-alert-box {
+        width: min(100%, 420px);
+        max-height: calc(100dvh - 24px);
+        padding: 25px 18px 21px;
+        overflow-y: auto;
+        border-radius: 19px;
+      }
+
+      .app-alert-icon {
+        width: 55px;
+        height: 55px;
+        margin-bottom: 14px;
+        font-size: 32px;
+      }
+
+      .app-alert-message {
+        font-size: clamp(21px, 7vw, 28px);
+        line-height: 1.16;
+      }
+
+      .app-alert-secondary {
+        margin-top: 12px;
+        font-size: clamp(17px, 5.5vw, 22px);
+      }
+
+      .app-alert-button {
+        width: min(100%, 220px);
+        min-height: 48px;
+        margin-top: 22px;
+      }
+    }
+
+    /* Same responsive layout for narrow desktop windows detected at runtime. */
+    .mobile-display body {
+      overflow-x: hidden;
+    }
+
+
+    /* Requested text sizing below the generated code */
+    #status,
+    .rooms-card,
+    .room-header,
+    .room-name,
+    .date-cell,
+    .change-count,
+    .code-cell,
+    .action-button,
+    .manual-input,
+    .control-label {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+
+    @media (max-width: 760px), (pointer: coarse) {
+      .room-row .room-name {
+        font-size: 40px;
+      }
+
+      .room-row .actual-code {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          "actual-label copy"
+          "actual-value copy";
+        column-gap: 10px;
+        row-gap: 5px;
+        align-items: center;
+        font-size: 40px;
+      }
+
+      .room-row .actual-code::before {
+        grid-area: actual-label;
+        align-self: end;
+        margin-bottom: 0;
+        font-size: 30px;
+        line-height: 1.1;
+      }
+
+      .actual-code-value {
+        grid-area: actual-value;
+        align-self: start;
+        min-width: 0;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        line-height: 1.05;
+        text-align: center;
+      }
+
+      .mobile-copy-button {
+        grid-area: copy;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: stretch;
+        min-width: 133.2px;
+        min-height: 64px;
+        padding: 8px 13px;
+        border: 1px solid var(--primary);
+        border-radius: 10px;
+        background: var(--primary);
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+
+      .mobile-copy-button.copied {
+        border-color: #0a8f3d;
+        background: #0a8f3d;
+        color: #ffffff;
+      }
+
+      .mobile-copy-button:active:not(:disabled) {
+        transform: scale(0.97);
+      }
+
+      .mobile-copy-button:disabled {
+        border-color: #b8c4ce;
+        background: #d5dde4;
+        color: #7a8791;
+        cursor: not-allowed;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .room-row {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <section class="card generator-card" aria-labelledby="appTitle">
+      <h1 id="appTitle" class="code-created-line">
+        <span
+          id="generatedCode"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          ----
+        </span>
+
+        <span class="code-created-separator" aria-hidden="true">-</span>
+        <span class="code-created-title">Code Created</span>
+      </h1>
+
+      <div id="status" role="status" aria-live="polite">
+        Loading room data…
+      </div>
+    </section>
+
+    <section class="card rooms-card" aria-label="Room codes">
+      <div class="room-grid room-header" aria-hidden="true">
+        <div>Room</div>
+        <div>Previous code date</div>
+        <div>Previous code</div>
+        <div>Select</div>
+        <div>Actual code</div>
+        <div>Today changed</div>
+      </div>
+
+      <div id="roomsList"></div>
+    </section>
+  </main>
+
+
+  <div
+    id="appAlert"
+    class="app-alert"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="appAlertMessage"
+    hidden
+  >
+    <div class="app-alert-box">
+      <div class="app-alert-icon" aria-hidden="true">!</div>
+
+      <div
+        id="appAlertMessage"
+        class="app-alert-message"
+      >
+        The code already used! in the last 30 days!
+      </div>
+
+      <div class="app-alert-secondary">
+        Inform the Airbnb guest a new code!
+      </div>
+
+      <button
+        id="appAlertButton"
+        class="app-alert-button"
+        type="button"
+      >
+        OK
+      </button>
+    </div>
+  </div>
+
+  <textarea id="copyBuffer" aria-hidden="true" tabindex="-1"></textarea>
+
+  <script>
+    let rooms = [];
+    let prepared = null;
+    let selectedRoomId = '';
+    let copiedRoomId = '';
+    let busy = false;
+    let todayKey = '';
+    let todayDisplay = '';
+    const manualInputs = Object.create(null);
+
+    const generatedCode = document.getElementById('generatedCode');
+    const statusElement = document.getElementById('status');
+    const roomsList = document.getElementById('roomsList');
+    const copyBuffer = document.getElementById('copyBuffer');
+    const appAlert = document.getElementById('appAlert');
+    const appAlertMessage =
+      document.getElementById('appAlertMessage');
+    const appAlertButton =
+      document.getElementById('appAlertButton');
+
+    function setStatus(message, type = '') {
+      statusElement.className = type;
+      statusElement.textContent = message;
+    }
+
+    function showAppAlert(message) {
+      appAlertMessage.textContent = message;
+      appAlert.hidden = false;
+      window.setTimeout(function() {
+        appAlertButton.focus();
+      }, 0);
+    }
+
+    function closeAppAlert() {
+      appAlert.hidden = true;
+    }
+
+    appAlertButton.addEventListener('click', closeAppAlert);
+
+    appAlert.addEventListener('click', function(event) {
+      if (event.target === appAlert) {
+        closeAppAlert();
+      }
+    });
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape' && !appAlert.hidden) {
+        closeAppAlert();
+      }
+    });
+
+    function codeText(value) {
+      return value || '—';
+    }
+
+    function dateText(value) {
+      return value || '—';
+    }
+
+    function countText(count) {
+      const number = Number(count) || 0;
+      return number + (number === 1 ? ' Time' : ' Times');
+    }
+
+    function cloneRooms(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function selectedRoom() {
+      return rooms.find(function(room) {
+        return room.id === selectedRoomId;
+      }) || null;
+    }
+
+    function mergeRoomState(updatedRoom) {
+      if (!updatedRoom) {
+        return;
+      }
+
+      const index = rooms.findIndex(function(room) {
+        return room.id === updatedRoom.id;
+      });
+
+      if (index !== -1) {
+        const previousActualCode = rooms[index].actualCode;
+        rooms[index] = updatedRoom;
+
+        if (
+          copiedRoomId === updatedRoom.id &&
+          previousActualCode !== updatedRoom.actualCode
+        ) {
+          copiedRoomId = '';
+        }
+      }
+    }
+
+    function isCodeAlreadyUsed(code) {
+      return rooms.some(function(room) {
+        return room.previousCode === code ||
+          room.actualCode === code;
+      });
+    }
+
+    function renderRooms() {
+      roomsList.replaceChildren();
+
+      rooms.forEach(function(room) {
+        const selected = room.id === selectedRoomId;
+        const row = document.createElement('div');
+
+        row.className =
+          'room-grid room-row' +
+          (selected ? ' selected' : '');
+
+        const name = document.createElement('div');
+        name.className = 'room-name';
+        name.textContent = room.name;
+
+        const previousDate = document.createElement('div');
+        previousDate.className =
+          'date-cell' +
+          (!room.previousCodeDateDisplay ? ' empty-date' : '');
+        previousDate.textContent =
+          dateText(room.previousCodeDateDisplay);
+        previousDate.dataset.label = 'Previous code date';
+
+        const previous = document.createElement('div');
+        previous.className =
+          'code-cell previous-code' +
+          (!room.previousCode ? ' empty-code' : '');
+        previous.textContent = codeText(room.previousCode);
+        previous.dataset.label = 'Previous code';
+
+        const controls = document.createElement('div');
+        controls.className = 'selection-controls';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'roomSelection';
+        radio.value = room.id;
+        radio.checked = selected;
+        radio.disabled = busy;
+        radio.setAttribute('aria-label', 'Select ' + room.name);
+
+        radio.addEventListener('change', function() {
+          selectedRoomId = room.id;
+          renderRooms();
+          setStatus('Ready for ' + room.name + '.');
+
+          window.requestAnimationFrame(function() {
+            const selectedInput = roomsList.querySelector(
+              '.room-row.selected .manual-input'
+            );
+
+            if (selectedInput && !selectedInput.disabled) {
+              selectedInput.focus();
+              selectedInput.select();
+            }
+          });
+        });
+
+        controls.appendChild(radio);
+
+        const autoGroup = document.createElement('div');
+        autoGroup.className = 'control-group';
+
+        // The label appears only in the selected room row.
+        if (selected) {
+          const autoLabel = document.createElement('div');
+          autoLabel.className = 'control-label';
+          autoLabel.textContent = 'Auto code';
+          autoGroup.appendChild(autoLabel);
+        }
+
+        const autoButton = document.createElement('button');
+        autoButton.type = 'button';
+        autoButton.className = 'action-button';
+        autoButton.textContent = 'Auto';
+        autoButton.disabled =
+          !selected ||
+          busy ||
+          !prepared;
+
+        autoButton.addEventListener('click', function(event) {
+          event.stopPropagation();
+          handleAutoCode(room.id);
+        });
+
+        autoGroup.appendChild(autoButton);
+
+        const manualGroup = document.createElement('div');
+        manualGroup.className = 'control-group';
+
+        // The label appears only in the selected room row.
+        if (selected) {
+          const manualLabel = document.createElement('div');
+          manualLabel.className = 'control-label';
+          manualLabel.textContent = 'Manual Code';
+          manualGroup.appendChild(manualLabel);
+        }
+
+        const manualEntryRow = document.createElement('div');
+        manualEntryRow.className = 'manual-entry-row';
+
+        const manualInput = document.createElement('input');
+        manualInput.type = 'text';
+        manualInput.className = 'manual-input';
+        manualInput.inputMode = 'numeric';
+        manualInput.autocomplete = 'off';
+        manualInput.maxLength = 4;
+        manualInput.placeholder = '0000';
+        manualInput.value = manualInputs[room.id] || '';
+        manualInput.disabled =
+          !selected ||
+          busy;
+        manualInput.setAttribute(
+          'aria-label',
+          'Manual four-digit code for ' + room.name
+        );
+
+        const okButton = document.createElement('button');
+        okButton.type = 'button';
+        okButton.className = 'action-button';
+        okButton.textContent = 'OK';
+        okButton.disabled =
+          !selected ||
+          busy ||
+          manualInput.value.length !== 4;
+
+        manualInput.addEventListener('input', function() {
+          const digits = manualInput.value
+            .replace(/\D/g, '')
+            .slice(0, 4);
+
+          manualInput.value = digits;
+          manualInputs[room.id] = digits;
+          okButton.disabled =
+            !selected ||
+            busy ||
+            digits.length !== 4;
+        });
+
+        manualInput.addEventListener('keydown', function(event) {
+          if (
+            event.key === 'Enter' &&
+            !okButton.disabled
+          ) {
+            event.preventDefault();
+            handleManualCode(room.id);
+          }
+        });
+
+        okButton.addEventListener('click', function(event) {
+          event.stopPropagation();
+          handleManualCode(room.id);
+        });
+
+        manualEntryRow.append(manualInput, okButton);
+        manualGroup.appendChild(manualEntryRow);
+        controls.append(autoGroup, manualGroup);
+
+        const actual = document.createElement('div');
+        actual.className =
+          'code-cell actual-code' +
+          (room.changed ? ' changed' : '') +
+          (!room.actualCode ? ' empty-code' : '');
+        actual.dataset.label = 'Actual code';
+
+        const actualValue = document.createElement('span');
+        actualValue.className = 'actual-code-value';
+        actualValue.textContent = codeText(room.actualCode);
+
+        const copyButton = document.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className =
+          'mobile-copy-button' +
+          (copiedRoomId === room.id ? ' copied' : '');
+        copyButton.textContent =
+          copiedRoomId === room.id
+            ? 'Copied'
+            : 'Copy';
+        copyButton.disabled = !room.actualCode;
+        copyButton.setAttribute(
+          'aria-label',
+          'Copy actual code for ' + room.name
+        );
+
+        copyButton.addEventListener('click', async function(event) {
+          event.stopPropagation();
+
+          if (!room.actualCode) {
+            return;
+          }
+
+          const copied = await copyImmediately(room.actualCode);
+
+          if (copied) {
+            copiedRoomId = room.id;
+
+            roomsList
+              .querySelectorAll('.mobile-copy-button')
+              .forEach(function(button) {
+                button.classList.remove('copied');
+                button.textContent = 'Copy';
+              });
+
+            copyButton.classList.add('copied');
+            copyButton.textContent = 'Copied';
+
+            setStatus(room.name + ' code copied.', 'success');
+          } else {
+            setStatus(
+              'Clipboard access was blocked.',
+              'error'
+            );
+          }
+        });
+
+        actual.append(actualValue, copyButton);
+
+        const count = document.createElement('div');
+        count.className = 'change-count';
+        count.textContent = countText(room.todayChangedCount);
+        count.dataset.label = 'Today changed';
+
+        row.append(
+          name,
+          previousDate,
+          previous,
+          controls,
+          actual,
+          count
+        );
+
+        roomsList.appendChild(row);
+      });
+    }
+
+    function loadInitialState() {
+      busy = true;
+      renderRooms();
+      setStatus('Loading room data…');
+
+      google.script.run
+        .withSuccessHandler(function(state) {
+          rooms = state.rooms || [];
+          prepared = state.next;
+          todayKey = state.todayKey || '';
+          todayDisplay = state.todayDisplay || '';
+          busy = false;
+          renderRooms();
+          setStatus('Select one room.');
+        })
+        .withFailureHandler(showError)
+        .getInitialState();
+    }
+
+    async function copyImmediately(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (error) {
+        console.log('Clipboard API unavailable:', error);
+      }
+
+      try {
+        copyBuffer.value = text;
+        copyBuffer.focus();
+        copyBuffer.select();
+        copyBuffer.setSelectionRange(0, text.length);
+
+        const copied = document.execCommand('copy');
+        window.getSelection()?.removeAllRanges();
+        return copied;
+      } catch (error) {
+        console.log('Clipboard fallback unavailable:', error);
+        return false;
+      }
+    }
+
+    function applyOptimisticAssignment(roomId, code) {
+      const room = rooms.find(function(item) {
+        return item.id === roomId;
+      });
+
+      if (!room) {
+        return;
+      }
+
+      room.previousCode = room.actualCode;
+      room.previousCodeDate = room.actualCodeDate;
+      room.previousCodeDateDisplay =
+        room.actualCodeDateDisplay || '';
+
+      room.actualCode = code;
+      room.actualCodeDate = todayKey;
+      room.actualCodeDateDisplay = todayDisplay;
+      room.todayChangedCount =
+        (Number(room.todayChangedCount) || 0) + 1;
+      room.changed =
+        room.actualCode !== '' &&
+        room.actualCode !== room.previousCode;
+    }
+
+    async function handleAutoCode(roomId) {
+      if (
+        busy ||
+        !prepared ||
+        selectedRoomId !== roomId
+      ) {
+        return;
+      }
+
+      const room = selectedRoom();
+
+      if (!room) {
+        return;
+      }
+
+      busy = true;
+      const selectedPreview = prepared;
+      const roomSnapshot = cloneRooms(rooms);
+      prepared = null;
+
+      generatedCode.textContent = selectedPreview.code;
+      applyOptimisticAssignment(roomId, selectedPreview.code);
+      renderRooms();
+      setStatus('Saving ' + room.name + ' automatically…');
+
+      const copied = await copyImmediately(selectedPreview.code);
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          busy = false;
+          todayKey = result.todayKey || todayKey;
+          todayDisplay = result.todayDisplay || todayDisplay;
+
+          if (!result.ok && result.conflict) {
+            rooms = roomSnapshot;
+            prepared = result.next;
+            generatedCode.textContent = '----';
+            renderRooms();
+            setStatus(
+              'The sequence changed in another session. Click Auto again.',
+              'error'
+            );
+            return;
+          }
+
+          mergeRoomState(result.assignment);
+          prepared = result.next;
+          generatedCode.textContent =
+            result.assignment.actualCode;
+
+          renderRooms();
+
+          setStatus(
+            result.assignment.name +
+              ' updated - automatic code',
+            'success'
+          );
+        })
+        .withFailureHandler(function(error) {
+          busy = false;
+          rooms = roomSnapshot;
+          prepared = selectedPreview;
+          generatedCode.textContent = '----';
+          renderRooms();
+          showError(error);
+        })
+        .assignPreparedCode(roomId, selectedPreview.index);
+    }
+
+    function handleManualCode(roomId) {
+      if (
+        busy ||
+        selectedRoomId !== roomId
+      ) {
+        return;
+      }
+
+      const code = manualInputs[roomId] || '';
+
+      if (!/^\d{4}$/.test(code)) {
+        return;
+      }
+
+      if (isCodeAlreadyUsed(code)) {
+        showAppAlert('The code already used! in the last 30 days!');
+        setStatus('The code already used! in the last 30 days!', 'error');
+        return;
+      }
+
+      const room = selectedRoom();
+
+      if (!room) {
+        return;
+      }
+
+      busy = true;
+      const roomSnapshot = cloneRooms(rooms);
+
+      generatedCode.textContent = code;
+      applyOptimisticAssignment(roomId, code);
+      renderRooms();
+      setStatus('Saving manual code for ' + room.name + '…');
+
+      google.script.run
+        .withSuccessHandler(async function(result) {
+          busy = false;
+          todayKey = result.todayKey || todayKey;
+          todayDisplay = result.todayDisplay || todayDisplay;
+          prepared = result.next || prepared;
+
+          if (!result.ok && result.duplicate) {
+            rooms = roomSnapshot;
+            generatedCode.textContent = '----';
+            renderRooms();
+            showAppAlert('The code already used! in the last 30 days!');
+            setStatus('The code already used! in the last 30 days!', 'error');
+            return;
+          }
+
+          mergeRoomState(result.assignment);
+          manualInputs[roomId] = '';
+          generatedCode.textContent =
+            result.assignment.actualCode;
+
+          renderRooms();
+
+          const copied = await copyImmediately(
+            result.assignment.actualCode
+          );
+
+          setStatus(
+            result.assignment.name +
+              ' updated - manual code',
+            'success'
+          );
+        })
+        .withFailureHandler(function(error) {
+          busy = false;
+          rooms = roomSnapshot;
+          generatedCode.textContent = '----';
+          renderRooms();
+          showError(error);
+        })
+        .assignManualCode(roomId, code);
+    }
+
+    function showError(error) {
+      busy = false;
+      renderRooms();
+
+      const message =
+        error && error.message
+          ? error.message
+          : String(error || 'Unexpected error.');
+
+      setStatus(message, 'error');
+    }
+
+    const mobileDisplayQuery = window.matchMedia(
+      '(max-width: 760px), (pointer: coarse)'
+    );
+
+    function updateDisplayMode() {
+      document.documentElement.classList.toggle(
+        'mobile-display',
+        mobileDisplayQuery.matches
+      );
+    }
+
+    updateDisplayMode();
+
+    if (mobileDisplayQuery.addEventListener) {
+      mobileDisplayQuery.addEventListener(
+        'change',
+        updateDisplayMode
+      );
+    } else {
+      mobileDisplayQuery.addListener(updateDisplayMode);
+    }
+
+    window.addEventListener('orientationchange', function() {
+      window.setTimeout(updateDisplayMode, 100);
+    });
+
+    loadInitialState();
+  </script>
+</body>
+</html>

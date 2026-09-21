@@ -1,0 +1,10 @@
+# Local private configuration and runtime state must not be committed.
+config.json
+browser_profiles/
+logs/
+reports/
+screenshots/
+__pycache__/
+*.py[cod]
+.venv/
+venv/

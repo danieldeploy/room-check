@@ -1,0 +1,257 @@
+{
+  "prepared_on": "2026-09-21",
+  "purpose": "Development references imported from four project attachments; operational private values excluded. Not a runtime backup or deployment.",
+  "file_count": 50,
+  "files": [
+    {
+      "path": "GENERATOR_MIGRATION_NOTES.md",
+      "bytes": 6544,
+      "sha256": "fc6673bff35321fd9b2bd267cc0252aedc3196e9e3ffc8228762d7fa76ce5dd8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2796,
+      "sha256": "0efc620c72a778141e6e18929290d289562b511d5b75a754b8b7bbd5854f8a35"
+    },
+    {
+      "path": "ZK_MIGRATION_NOTES.md",
+      "bytes": 3637,
+      "sha256": "532b72ced2237b5f987e94a047581aadd0f6bd0d552a5e4f9b0076b85cc03751"
+    },
+    {
+      "path": "room-code-generator/Code.gs",
+      "bytes": 42795,
+      "sha256": "542f80e646eb84ac0d12734760abe3e578e6fade71447fc14607439786842be8"
+    },
+    {
+      "path": "room-code-generator/Index.html",
+      "bytes": 36767,
+      "sha256": "f2a001feb1fc52eb165a3d74da16dcc8e4d1910c47a678f0194a4182006a2702"
+    },
+    {
+      "path": "room-code-generator/VERSIONS.txt",
+      "bytes": 642,
+      "sha256": "5115e801bdacb8c9f320eef914e63482d59eb0ada365af9950409ad7cea43258"
+    },
+    {
+      "path": "room-code-generator/appsscript.json",
+      "bytes": 97,
+      "sha256": "a886e52a033e6d9f29678875c0eac33e04b8f1bf2ab174b89300f2b7b8ea60c4"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/.gitignore",
+      "bytes": 165,
+      "sha256": "d342b8c892da97f575025cf4b4000d257e83ed2c4d6196a973e23aa9c3a039f2"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/MIGRATION.md",
+      "bytes": 3451,
+      "sha256": "b62f247965a161fec0149f68a693ea58388db8b854bc74413ebba23f4e543cf1"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/README.txt",
+      "bytes": 1353,
+      "sha256": "0eff4271d1ad2e1b80bde3f6bb15da591b420a15581aa262c9810e8cc204456c"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/config.example.json",
+      "bytes": 674,
+      "sha256": "ad2de4bfc2731219a32b2c0ce250e6068c3cd5943c0dd548e60ab26871fe5081"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/install.bat",
+      "bytes": 134,
+      "sha256": "c24ae85996e8ec80a4d0a4a671078221ebae80d2893395bb56ff57e80ccdc0ae"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/install_daily_1255_task.bat",
+      "bytes": 131,
+      "sha256": "c63f3fee5cda510d44455d3639777db127f3cce1439ab97b285dfce55d7dfff4"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/requirements.txt",
+      "bytes": 17,
+      "sha256": "e0bdf5ddf23c7ba90da192c9c22293895d039509a7d54742d705225f45dc8367"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/run_auto_silent.bat",
+      "bytes": 45,
+      "sha256": "7241a6b82086c1f19664227f58b32f9f1301a38c55604cf85cdddcfde6399e80"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/run_auto_test.bat",
+      "bytes": 51,
+      "sha256": "8b507f334e023815ddc9037999aeb5b2c402e8ca8ad427a939b21b1df1722d03"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/run_cloudbeds.bat",
+      "bytes": 56,
+      "sha256": "a1d0fd0eacfee51af0510925305482434ab14d9dcaa88bbe5b48456f93ecf8dd"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/run_login_setup.bat",
+      "bytes": 58,
+      "sha256": "23688a21f885aff45c385f0f833f3e94abc15b7c7877b2bc7221164618a2f9c0"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/run_zkaccess_test.bat",
+      "bytes": 60,
+      "sha256": "3c1f3d7f995845962e51c5aa33fa21d54944a40b5f448b47033259be5c8be6ed"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/app.py",
+      "bytes": 662,
+      "sha256": "e0da7277e95571e5af73ba00ec686e623336eda23df2e816e031cbdfe875d2e5"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/browser.py",
+      "bytes": 434,
+      "sha256": "de488f164746e6a7a79ae55ab4b47a640eddb634fc362ac114964e8a497c38f9"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/cloudbeds.py",
+      "bytes": 8248,
+      "sha256": "8f49a841c8eae75d7a7e0a3c3f14f2f426fd794e2474de294bd0019265430597"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/config.py",
+      "bytes": 229,
+      "sha256": "ad453d5dc11064752cf995610149032a6b886628f1a888bc6c3b0b6e90082b24"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/logger.py",
+      "bytes": 495,
+      "sha256": "c5548709413478ae139a20d4a61301cb00d07cf3cedf71b8f0b9f6a9b154956b"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/utils.py",
+      "bytes": 3435,
+      "sha256": "be3a73ecc0d94531ab4d5b91b8819db4874d17057b5da0167a5fe841c6da6c74"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/workflow.py",
+      "bytes": 2422,
+      "sha256": "0d169fa12c63ffae3044b9f113dd2806f8c061f1bdfb612f9cbed73c48a850b7"
+    },
+    {
+      "path": "zkcloudbeds-v5.0/src/zkaccess.py",
+      "bytes": 14022,
+      "sha256": "74fb405b40c97b74c5a8e7721d84b2ac0fadc9220b62bbb350b57822ff826934"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/.gitignore",
+      "bytes": 165,
+      "sha256": "d342b8c892da97f575025cf4b4000d257e83ed2c4d6196a973e23aa9c3a039f2"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/MIGRATION.md",
+      "bytes": 3451,
+      "sha256": "2120dcf11cd064a58f6bd2032b9cb102682c1afac04ceb1e657565ccbbc335b2"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/README.txt",
+      "bytes": 1353,
+      "sha256": "0eff4271d1ad2e1b80bde3f6bb15da591b420a15581aa262c9810e8cc204456c"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/config.example.json",
+      "bytes": 674,
+      "sha256": "ad2de4bfc2731219a32b2c0ce250e6068c3cd5943c0dd548e60ab26871fe5081"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/install.bat",
+      "bytes": 134,
+      "sha256": "c24ae85996e8ec80a4d0a4a671078221ebae80d2893395bb56ff57e80ccdc0ae"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/install_daily_1255_task.bat",
+      "bytes": 131,
+      "sha256": "c63f3fee5cda510d44455d3639777db127f3cce1439ab97b285dfce55d7dfff4"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/requirements.txt",
+      "bytes": 17,
+      "sha256": "e0bdf5ddf23c7ba90da192c9c22293895d039509a7d54742d705225f45dc8367"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/run_auto_silent.bat",
+      "bytes": 45,
+      "sha256": "7241a6b82086c1f19664227f58b32f9f1301a38c55604cf85cdddcfde6399e80"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/run_auto_test.bat",
+      "bytes": 51,
+      "sha256": "8b507f334e023815ddc9037999aeb5b2c402e8ca8ad427a939b21b1df1722d03"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/run_cloudbeds.bat",
+      "bytes": 56,
+      "sha256": "a1d0fd0eacfee51af0510925305482434ab14d9dcaa88bbe5b48456f93ecf8dd"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/run_login_setup.bat",
+      "bytes": 58,
+      "sha256": "23688a21f885aff45c385f0f833f3e94abc15b7c7877b2bc7221164618a2f9c0"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/run_zkaccess_test.bat",
+      "bytes": 60,
+      "sha256": "3c1f3d7f995845962e51c5aa33fa21d54944a40b5f448b47033259be5c8be6ed"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/app.py",
+      "bytes": 662,
+      "sha256": "e0da7277e95571e5af73ba00ec686e623336eda23df2e816e031cbdfe875d2e5"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/browser.py",
+      "bytes": 434,
+      "sha256": "de488f164746e6a7a79ae55ab4b47a640eddb634fc362ac114964e8a497c38f9"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/cloudbeds.py",
+      "bytes": 8248,
+      "sha256": "8f49a841c8eae75d7a7e0a3c3f14f2f426fd794e2474de294bd0019265430597"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/config.py",
+      "bytes": 229,
+      "sha256": "ad453d5dc11064752cf995610149032a6b886628f1a888bc6c3b0b6e90082b24"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/logger.py",
+      "bytes": 495,
+      "sha256": "c5548709413478ae139a20d4a61301cb00d07cf3cedf71b8f0b9f6a9b154956b"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/utils.py",
+      "bytes": 3435,
+      "sha256": "be3a73ecc0d94531ab4d5b91b8819db4874d17057b5da0167a5fe841c6da6c74"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/workflow.py",
+      "bytes": 2422,
+      "sha256": "0d169fa12c63ffae3044b9f113dd2806f8c061f1bdfb612f9cbed73c48a850b7"
+    },
+    {
+      "path": "zkcloudbeds-v5.1/src/zkaccess.py",
+      "bytes": 18080,
+      "sha256": "3d14cf25485879304a71dd70b031dc6e1ab0025e09aab2a9658b5fb6ba5d316e"
+    },
+    {
+      "path": "zkteco-codec/decode-password.user.js",
+      "bytes": 4384,
+      "sha256": "a8ae11d8193caf0862dcec579293c1fe298f4be15a6277eaedc629543f93be2c"
+    }
+  ]
+}
