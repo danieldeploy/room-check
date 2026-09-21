@@ -25,10 +25,8 @@ try {
         if ($LASTEXITCODE -eq 0) { throw 'Publicly readable data directory was accepted.' }
         Write-Host 'DPAPI and private-directory permission checks passed.'
     } else {
-        $OutputEncoding = New-Object Text.UTF8Encoding($false)
-        $input = @{ action='preflight'; privateDir=$root; runtime=@{} } | ConvertTo-Json -Compress
-        $output = $input | node (Join-Path $repo 'invoice-runner\runner.mjs')
-        if ($LASTEXITCODE -ne 0 -or ($output | ConvertFrom-Json).code -ne 'ok') { throw 'Sandboxed Chrome preflight failed.' }
+        & node (Join-Path $repo 'tests\invoice-browser-windows.mjs') $root
+        if ($LASTEXITCODE -ne 0) { throw 'Sandboxed Chrome preflight failed.' }
         if (Get-ChildItem -LiteralPath $root -Force | Where-Object { $_.Name -like '.browser-*' }) { throw 'Browser profile was not removed.' }
         Write-Host 'Real Windows Chrome preflight and profile cleanup passed.'
     }
