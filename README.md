@@ -29,7 +29,9 @@ Esta branch é de desenvolvimento. O conteúdo só deve ser publicado depois de 
 
 ### Tradução automática
 
-As instruções dinâmicas são traduzidas entre português de Portugal e inglês quando são criadas ou alteradas. A aplicação usa Google Cloud Translation Basic, sem chamadas durante a simples navegação. As duas versões ficam guardadas nas colunas bilingues criadas pela migração `017_bilingual_content.sql`.
+A tradução PT/EN é transversal a todo o Management Hub. A interface estática de todos os módulos usa o catálogo comum; mensagens e erros das APIs passam pela mesma fronteira localizada. Conteúdo natural criado pelos utilizadores — nomes de áreas, listas, itens, intervalos, descrições e instruções — é traduzido entre português de Portugal e inglês quando é criado ou alterado. Identificadores, nomes de pessoas, credenciais, estados técnicos, datas e códigos nunca são traduzidos.
+
+A aplicação usa Google Cloud Translation Basic para conteúdo dinâmico, sem chamadas durante a simples navegação. As duas versões ficam guardadas em colunas bilingues. Um termo técnico colocado entre aspas é tratado transversalmente como literal e conservado exatamente no Google, na cache, no DOM e nas mensagens da aplicação; URLs, emails e placeholders são reconhecidos automaticamente. Não é necessário criar vocabulários de marcas. Os testes de CI examinam também módulos novos e bloqueiam páginas sem o arranque comum, APIs que devolvam mensagens fora da fronteira localizada, escritas incompletas de pares PT/EN e o reaparecimento de validadores locais ou vocabulários manuais.
 
 Ative a Cloud Translation API e guarde a chave fora de `public_html`, por exemplo em `/home/CPANEL_USER/room-check-private/google-translation.json`:
 

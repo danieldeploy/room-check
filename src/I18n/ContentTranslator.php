@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/TranslationQuotaManager.php';
 require_once __DIR__ . '/TranslationServiceException.php';
+require_once __DIR__ . '/TranslationProtection.php';
 
 final class ContentTranslator
 {
@@ -223,62 +224,23 @@ final class ContentTranslator
     /** @return array{text:string,protected:array<string,string>} */
     private function prepareTranslationInput(string $text): array
     {
-        $protected = [];
-        $counter = 0;
-        $placeholder = static function (string $value) use (&$protected, &$counter): string {
-            $token = 'RoomCheckKeep' . self::alphabeticCounter($counter++) . 'Token';
-            $protected[$token] = $value;
-            return $token;
-        };
-
-        $working = preg_replace_callback(
-            '/"[^"\r\n]*"|“[^”\r\n]*”/u',
-            static fn(array $match): string => $placeholder((string) $match[0]),
-            $text
-        );
-        if (!is_string($working)) {
-            $working = $text;
-        }
-
-        $withNumbers = preg_replace_callback(
-            '/\p{N}+(?:[.,:\/\-]\p{N}+)*/u',
-            static fn(array $match): string => $placeholder((string) $match[0]),
-            $working
-        );
-        if (is_string($withNumbers)) {
-            $working = $withNumbers;
-        }
-
-        return ['text' => $working, 'protected' => $protected];
-    }
-
-    private static function alphabeticCounter(int $value): string
-    {
-        $result = '';
-        do {
-            $result = chr(65 + ($value % 26)) . $result;
-            $value = intdiv($value, 26) - 1;
-        } while ($value >= 0);
-        return $result;
+        return TranslationProtection::prepare($text);
     }
 
     /** @param array{text:string,protected:array<string,string>} $prepared */
     private function translatePrepared(array $prepared, string $source, string $target): string
     {
         $translated = $this->translateKeepingLineBreaks($prepared['text'], $source, $target);
-        foreach ($prepared['protected'] as $token => $original) {
-            $count = 0;
-            $translated = str_ireplace($token, $original, $translated, $count);
-            if ($count < 1) {
-                throw new TranslationServiceException(
-                    $source === 'en'
-                        ? 'Not saved: automatic translation changed protected content.'
-                        : 'Não guardado: a tradução automática alterou conteúdo protegido.',
-                    false
-                );
-            }
+        $restored = TranslationProtection::restore($translated, $prepared['protected']);
+        if ($restored === null) {
+            throw new TranslationServiceException(
+                $source === 'en'
+                    ? 'Not saved: automatic translation changed protected content.'
+                    : 'Não guardado: a tradução automática alterou conteúdo protegido.',
+                false
+            );
         }
-        return trim($translated);
+        return trim($restored);
     }
 
     private function translateKeepingLineBreaks(string $text, string $source, string $target): string
@@ -509,13 +471,7 @@ final class ContentTranslator
 
     private function preservesProtectedSource(string $source, string $translated): bool
     {
-        preg_match_all('/"[^"\r\n]*"|“[^”\r\n]*”|\p{N}+(?:[.,:\/\-]\p{N}+)*/u', $source, $matches);
-        foreach (($matches[0] ?? []) as $protected) {
-            if (!str_contains($translated, (string) $protected)) {
-                return false;
-            }
-        }
-        return true;
+        return TranslationProtection::preserves($source, $translated);
     }
 
     /** @return array{pt:string,en:string,status:string,message:string} */

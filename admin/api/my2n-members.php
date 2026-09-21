@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 $config = require $root . '/config.php';
+require_once $root . '/lib.php';
 require_once $root . '/src/Auth/AdminGuard.php';
 require_once $root . '/src/Security/Csrf.php';
 require_once $root . '/src/My2N/My2NClient.php';
@@ -159,8 +160,4 @@ try {
     }
 }
 
-http_response_code($status);
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
-header('X-Content-Type-Options: nosniff');
-echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+jsonResponse($response, $status);

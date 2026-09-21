@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/src/UI/PortalBrand.php';
 require_once __DIR__ . '/src/Checklists/VerificationCategoryRepository.php';
+require_once __DIR__ . '/src/I18n/SiteTranslations.php';
 
 const PROPERTIES = [
     'City Center Guest House' => 6,
@@ -140,6 +141,10 @@ function jsonResponse(array $payload, int $status = 200): never
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    header('X-Content-Type-Options: nosniff');
+    echo json_encode(
+        SiteTranslations::localizePayload($payload),
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
     exit;
 }

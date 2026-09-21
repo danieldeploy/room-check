@@ -15,12 +15,66 @@ function assertI18n(bool $condition, string $message): void
 $root = dirname(__DIR__);
 $catalog = SiteTranslations::catalog();
 assertI18n(($catalog['Controlo My2N'] ?? null) === 'My2N Control', 'static UI keeps the shared PT/EN catalogue');
+$unprotectedCatalogEntries = [];
+$missingEnglishEntries = [];
+$unexpectedIdenticalEntries = [];
+$intentionalIdenticalEntries = array_fill_keys(['Google Authenticator (TOTP)', 'TOConline', 'Site'], true);
+foreach ($catalog as $portuguese => $english) {
+    if (trim((string) $english) === '') {
+        $missingEnglishEntries[] = (string) $portuguese;
+    }
+    if ((string) $portuguese === (string) $english && !isset($intentionalIdenticalEntries[(string) $portuguese])) {
+        $unexpectedIdenticalEntries[] = (string) $portuguese;
+    }
+    if (!TranslationProtection::preserves((string) $portuguese, (string) $english, false)) {
+        $unprotectedCatalogEntries[] = (string) $portuguese;
+    }
+}
+assertI18n($missingEnglishEntries === [], 'static catalogue has no missing English translation');
+assertI18n(
+    $unexpectedIdenticalEntries === [],
+    'only language-neutral technical labels are intentionally identical in PT and EN'
+);
+assertI18n(
+    $unprotectedCatalogEntries === [],
+    'static catalogue preserves all technical literals'
+        . ($unprotectedCatalogEntries === [] ? '' : ': ' . implode(' | ', $unprotectedCatalogEntries))
+);
 
 $_SESSION = [];
 Translator::setLocale('pt', false);
 assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Verificação da cozinha', 'PT locale reads the PT column');
 Translator::setLocale('en', false);
 assertI18n(Translator::localized('Verificação da cozinha', 'Kitchen Check') === 'Kitchen Check', 'EN locale reads the EN column');
+assertI18n(
+    SiteTranslations::localizeMessage('Método não permitido.') === 'Method not allowed.',
+    'JSON/server messages use the shared catalogue in EN'
+);
+assertI18n(
+    SiteTranslations::localizeMessage(
+        'O intervalo tem itens atribuídos entre 2026-09-20 e 2026-09-22. As novas datas têm de incluir todo esse período.'
+    ) === 'The period has items assigned between 2026-09-20 and 2026-09-22. The new dates must include that entire range.',
+    'JSON/server messages preserve values in catalogue templates'
+);
+assertI18n(
+    SiteTranslations::localizeMessage('Quer apagar a área “My2N”?') === 'Do you want to delete the “My2N” area?',
+    'API templates preserve quoted technical values'
+);
+assertI18n(
+    SiteTranslations::localizeMessage('provider_error: quota') === 'provider_error: quota',
+    'unknown provider diagnostics remain literal'
+);
+$localizedPayload = SiteTranslations::localizePayload([
+    'ok' => false,
+    'error' => 'Método não permitido.',
+    'data' => ['name' => 'Quarto', 'status' => 'pending'],
+]);
+assertI18n(
+    $localizedPayload['error'] === 'Method not allowed.'
+        && $localizedPayload['data']['name'] === 'Quarto'
+        && $localizedPayload['data']['status'] === 'pending',
+    'only human-readable JSON message fields are localized'
+);
 
 $pdo = (new ReflectionClass(PDO::class))->newInstanceWithoutConstructor();
 $translator = new ContentTranslator($pdo, ['enabled' => false]);
@@ -30,6 +84,56 @@ assertI18n($reusedEn['status'] === 'reused', 'unchanged pair reports reuse');
 $reusedPt = $translator->versions('Verificação da cozinha', 'pt', 'Verificação da cozinha', 'Kitchen Check');
 assertI18n($reusedPt['status'] === 'reused', 'unchanged PT value reuses the persisted pair');
 assertI18n($translator->versions('', 'pt')['status'] === 'empty', 'empty text does not call the provider');
+
+$cache = new PDO('sqlite::memory:');
+$cache->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$cache->exec(
+    'CREATE TABLE translation_cache (
+        engine_key TEXT NOT NULL,
+        source_language TEXT NOT NULL,
+        target_language TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        source_text TEXT NOT NULL,
+        translated_text TEXT NOT NULL,
+        updated_at TEXT,
+        PRIMARY KEY (engine_key, source_language, target_language, source_hash)
+    )'
+);
+$insertCached = $cache->prepare(
+    'INSERT INTO translation_cache
+        (engine_key, source_language, target_language, source_hash, source_text, translated_text)
+     VALUES
+        (:engine, :source_language, :target_language, :source_hash, :source_text, :translated_text)'
+);
+$cachedPairs = [
+    ['pt', 'en', 'Verifique "ZKTeco" no quarto 12.', 'Check "ZKTeco" in room 12.'],
+    ['en', 'pt', 'Replace "SIP" at 08:30.', 'Substitua "SIP" às 08:30.'],
+];
+foreach ($cachedPairs as [$sourceLanguage, $targetLanguage, $sourceText, $translatedText]) {
+    $insertCached->execute([
+        'engine' => 'google-basic-nmt-v2',
+        'source_language' => $sourceLanguage,
+        'target_language' => $targetLanguage,
+        'source_hash' => hash('sha256', $sourceText),
+        'source_text' => $sourceText,
+        'translated_text' => $translatedText,
+    ]);
+}
+$bidirectional = new ContentTranslator($cache, ['enabled' => false]);
+$fromPortuguese = $bidirectional->versions('Verifique "ZKTeco" no quarto 12.', 'pt');
+assertI18n(
+    $fromPortuguese['pt'] === 'Verifique "ZKTeco" no quarto 12.'
+        && $fromPortuguese['en'] === 'Check "ZKTeco" in room 12.'
+        && $fromPortuguese['status'] === 'cached',
+    'PT to EN stores the source and translated versions in the correct columns'
+);
+$fromEnglish = $bidirectional->versions('Replace "SIP" at 08:30.', 'en');
+assertI18n(
+    $fromEnglish['pt'] === 'Substitua "SIP" às 08:30.'
+        && $fromEnglish['en'] === 'Replace "SIP" at 08:30.'
+        && $fromEnglish['status'] === 'cached',
+    'EN to PT stores the translated and source versions in the correct columns'
+);
 
 $source = file_get_contents($root . '/src/I18n/ContentTranslator.php');
 $config = file_get_contents($root . '/config.php');

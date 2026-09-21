@@ -69,6 +69,7 @@ jobs:
           php tests/invoice-drive.php
           php tests/run.php
           php tests/i18n.php
+          php tests/transversal-i18n-contract.php
           php tests/static-i18n-audit.php
           php tests/persistent-i18n-boundaries.php
           php tests/bilingual-write-audit.php

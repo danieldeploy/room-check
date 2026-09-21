@@ -8,6 +8,10 @@ require_once __DIR__ . '/src/Security/Csrf.php';
 require_once __DIR__ . '/src/I18n/ContentTranslator.php';
 require_once __DIR__ . '/src/I18n/PendingTranslationQueue.php';
 
+// Establish the preferred locale before parsing the request so even malformed
+// or unsupported API calls receive a response in the user's active language.
+Auth::startSession($config);
+
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $property = trim((string) ($_GET['property'] ?? ''));

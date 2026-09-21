@@ -43,6 +43,120 @@ final class SiteTranslations
         return $replacements === [] ? $text : strtr($text, $replacements);
     }
 
+    /**
+     * Localize a server message that was raised from an existing Portuguese
+     * application boundary (for example an exception returned by a JSON API).
+     *
+     * Static UI should still prefer text()/format(). This method exists so a
+     * shared response boundary can localize legacy exceptions without trying
+     * to translate arbitrary business data, identifiers or complete payloads.
+     */
+    public static function localizeMessage(string $message): string
+    {
+        if ($message === '' || Translator::locale() !== 'en') {
+            return $message;
+        }
+
+        $catalog = self::catalog();
+        if (isset($catalog[$message])) {
+            return (string) $catalog[$message];
+        }
+
+        foreach ($catalog as $portuguese => $english) {
+            if (!str_contains((string) $portuguese, '{')) {
+                continue;
+            }
+            $translated = self::matchTemplate($message, (string) $portuguese, (string) $english);
+            if ($translated !== null) {
+                return $translated;
+            }
+        }
+
+        // Unknown messages may be technical/provider diagnostics or already
+        // localized English. They must remain literal rather than being sent
+        // to Google or partially rewritten.
+        return $message;
+    }
+
+    /**
+     * Localize only human-readable response fields. Other JSON values remain
+     * canonical so IDs, status keys, dates and user-authored content cannot be
+     * changed accidentally.
+     */
+    public static function localizePayload(array $payload): array
+    {
+        foreach ($payload as $key => $value) {
+            $messageField = in_array((string) $key, [
+                'error', 'errors', 'message', 'messages', 'notice', 'warning',
+            ], true);
+
+            if (is_string($value) && $messageField) {
+                $payload[$key] = self::localizeMessage($value);
+                continue;
+            }
+            if (is_array($value) && $messageField) {
+                $payload[$key] = self::localizeMessageList($value);
+            }
+        }
+        return $payload;
+    }
+
+    private static function localizeMessageList(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if (is_string($value)) {
+                $values[$key] = self::localizeMessage($value);
+            } elseif (is_array($value)) {
+                $values[$key] = self::localizeMessageList($value);
+            }
+        }
+        return $values;
+    }
+
+    private static function matchTemplate(string $message, string $source, string $target): ?string
+    {
+        $parts = preg_split(
+            '/(\{[A-Za-z0-9_.-]+\})/',
+            $source,
+            -1,
+            PREG_SPLIT_DELIM_CAPTURE
+        );
+        if (!is_array($parts)) {
+            return null;
+        }
+
+        $placeholderNames = [];
+        $pattern = '';
+        foreach ($parts as $part) {
+            if (preg_match('/^\{([A-Za-z0-9_.-]+)\}$/', $part, $placeholder) === 1) {
+                $placeholderNames[] = (string) $placeholder[1];
+                $pattern .= '(.*?)';
+            } else {
+                $pattern .= preg_quote($part, '/');
+            }
+        }
+        if ($placeholderNames === [] || preg_match('/^' . $pattern . '$/usD', $message, $matches) !== 1) {
+            return null;
+        }
+
+        array_shift($matches);
+        $captured = [];
+        foreach ($placeholderNames as $index => $name) {
+            $captured[$name][] = (string) ($matches[$index] ?? '');
+        }
+        $positions = [];
+        return preg_replace_callback(
+            '/\{([A-Za-z0-9_.-]+)\}/',
+            static function (array $placeholder) use ($captured, &$positions): string {
+                $name = (string) $placeholder[1];
+                $position = (int) ($positions[$name] ?? 0);
+                $positions[$name] = $position + 1;
+                return (string) ($captured[$name][$position] ?? $placeholder[0]);
+            },
+            $target
+        );
+    }
+
     public static function catalog(): array
     {
         $catalog = [

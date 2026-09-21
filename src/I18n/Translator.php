@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/TranslationProtection.php';
+
 final class Translator
 {
     private static bool $started = false;
@@ -78,10 +80,15 @@ final class Translator
 
         $dictionary = self::dictionary();
         $json = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
+        $technicalPattern = json_encode(
+            TranslationProtection::literalPatternBody(false),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
         $script = <<<'HTML'
 <script>
 (() => {
     const dictionary = __DICTIONARY__;
+    const technicalLiteralPattern = new RegExp(__TECHNICAL_LITERAL_PATTERN__, 'gu');
     const keys = Object.keys(dictionary).sort((a, b) => b.length - a.length);
     const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const templateKeys = keys.filter(key => key.includes('{value}'));
@@ -98,6 +105,24 @@ final class Translator
         let index = 0;
         return template.replace(/\{value\}/g, () => values[index++] ?? '');
     };
+    const translateOutsideTechnicalLiterals = value => {
+        if (!partialPattern) return value;
+        const protectedLiterals = [];
+        let markerIndex = 0;
+        const masked = value.replace(technicalLiteralPattern, literal => {
+            let marker = '';
+            do {
+                marker = `\uE000${markerIndex++}\uE001`;
+            } while (value.includes(marker));
+            protectedLiterals.push([marker, literal]);
+            return marker;
+        });
+        let translated = masked.replace(partialPattern, match => dictionary[match] ?? match);
+        protectedLiterals.forEach(([marker, literal]) => {
+            translated = translated.split(marker).join(literal);
+        });
+        return translated;
+    };
     const translate = value => {
         if (typeof value !== 'string' || value === '') return value;
         const trimmed = value.trim();
@@ -110,9 +135,7 @@ final class Translator
             const translated = fillTemplate(dictionary[template.key], match.slice(1));
             return value.replace(trimmed, translated);
         }
-        return partialPattern
-            ? value.replace(partialPattern, match => dictionary[match] ?? match)
-            : value;
+        return translateOutsideTechnicalLiterals(value);
     };
     const skippedTags = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE', 'KBD', 'SAMP']);
     const isSkippedElement = element => Boolean(
@@ -161,7 +184,11 @@ final class Translator
 })();
 </script>
 HTML;
-        $script = str_replace('__DICTIONARY__', $json ?: '{}', $script);
+        $script = str_replace(
+            ['__DICTIONARY__', '__TECHNICAL_LITERAL_PATTERN__'],
+            [$json ?: '{}', $technicalPattern ?: '"(?!)"'],
+            $script
+        );
         return str_ireplace('</body>', $script . "\n</body>", $output);
     }
 
