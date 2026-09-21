@@ -118,7 +118,9 @@ jobs:
         run: node --test invoice-runner/tests/*.test.mjs
       - name: Install locked runner and Chrome
         working-directory: invoice-runner
-        run: npm ci --no-audit --no-fund
+        run: |
+          npm ci --no-audit --no-fund
+          npm run install-chrome
       - name: Verify real Windows Chrome with sandbox enabled
         shell: powershell
         run: |

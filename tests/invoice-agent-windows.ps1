@@ -1,7 +1,7 @@
 param([switch]$Browser)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
-$root = Join-Path $env:TEMP ('invoice-agent-test-' + [Guid]::NewGuid().ToString('N'))
+$root = Join-Path $env:TEMP ('invoice-agent-test-' + [char]0xE3 + '-' + [Guid]::NewGuid().ToString('N'))
 $repo = Split-Path $PSScriptRoot -Parent
 try {
     [IO.Directory]::CreateDirectory($root) | Out-Null
@@ -25,6 +25,7 @@ try {
         if ($LASTEXITCODE -eq 0) { throw 'Publicly readable data directory was accepted.' }
         Write-Host 'DPAPI and private-directory permission checks passed.'
     } else {
+        $OutputEncoding = New-Object Text.UTF8Encoding($false)
         $input = @{ action='preflight'; privateDir=$root; runtime=@{} } | ConvertTo-Json -Compress
         $output = $input | node (Join-Path $repo 'invoice-runner\runner.mjs')
         if ($LASTEXITCODE -ne 0 -or ($output | ConvertFrom-Json).code -ne 'ok') { throw 'Sandboxed Chrome preflight failed.' }

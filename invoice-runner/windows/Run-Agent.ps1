@@ -22,6 +22,7 @@ try {
     $info.Arguments = '"' + (Join-Path (Split-Path $PSScriptRoot -Parent) 'windows-agent.mjs') + '"'
     $info.WorkingDirectory = Split-Path $PSScriptRoot -Parent
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true; $info.RedirectStandardInput = $true
+    $info.StandardInputEncoding = New-Object Text.UTF8Encoding($false)
     $process = [Diagnostics.Process]::Start($info)
     $process.StandardInput.Write(($payload | ConvertTo-Json -Compress)); $process.StandardInput.Close()
     $payload.token = $null; $config.token = $null
