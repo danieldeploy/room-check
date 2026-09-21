@@ -1,0 +1,23 @@
+ROOM CODE GENERATOR — CURRENT PRODUCTION FILES
+
+Code.gs
+- Stable 30-day manual-code validation.
+- Auto and manual usage recorded in UsedCodes.
+- Does not include optional 29/31-day test helpers.
+
+Index.html
+- Latest desktop and mobile interface.
+- Mobile room-card layout.
+- Room number: 40px.
+- Actual code label: 30px.
+- Actual code PIN: 40px.
+- Mobile Copy/Copied button text: 30px.
+- Copy button is 80% wider, becomes green, and only one room remains
+  marked Copied at a time.
+- Red/green 30-day warning popup.
+
+appsscript.json
+- Europe/Lisbon timezone.
+- V8 runtime.
+
+These are the recommended files to upload to the ChatGPT Project.

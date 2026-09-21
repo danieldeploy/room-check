@@ -2,6 +2,7 @@
 
 ## Começar aqui
 Leia `docs/CODEX_HANDOFF.md`, `README.md` e os documentos do módulo a alterar.
+Leia também `docs/PROJECT_CONTINUITY.md`. As fontes anteriores do gerador e Cloudbeds/ZKAccess estão em `docs/reference-sources/`; são referências de desenvolvimento com dados privados removidos, não instalações ativas.
 O projeto é uma aplicação PHP/MySQL existente. Preserve a arquitetura e as funcionalidades atuais.
 Responda ao proprietário em português de Portugal, com explicações curtas e claras.
 
@@ -24,5 +25,7 @@ Responda ao proprietário em português de Portugal, com explicações curtas e 
 - O Hub permanece no cPanel. O Chrome de recolha de faturas será executado no Windows com sandbox ativo.
 - Não interferir com a instalação ZKTeco existente. O executor de faturas é independente.
 - Testes que escrevem na base de dados usam apenas bases descartáveis.
+- Não executar instaladores, tarefas agendadas ou automações de `docs/reference-sources/` durante a leitura inicial. Não copiar essas referências para `public_html` nem substituir a instalação existente. Ler as notas de migração antes de adaptar os fontes.
+- Configurações de exemplo exigem preenchimento privado. Não pedir credenciais, PINs reais ou sessões no chat nem voltar a colocá-los no Git.
 - Fonte dos comandos de validação: `.github/workflows/ci.yml`.
 - Distinga código implementado, testes automáticos aprovados, instalação real e ativação em produção.

@@ -12,3 +12,13 @@ booking-map.json
 invoice-runtime.json
 
 account-*-map.json
+
+# Imported development references: keep operational data outside Git.
+docs/reference-sources/**/config.json
+docs/reference-sources/**/__pycache__/
+docs/reference-sources/**/*.pyc
+docs/reference-sources/**/logs/
+docs/reference-sources/**/reports/
+docs/reference-sources/**/profiles/
+docs/reference-sources/**/storage_state*.json
+docs/reference-sources/**/cookies*.json

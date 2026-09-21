@@ -1,0 +1,19 @@
+{
+  "cloudbeds_dashboard_url": "https://cloudbeds.example.invalid/connect/PROPERTY_ID#/dashboard",
+  "zkaccess_url": "http://zkaccess.example.invalid",
+  "zkaccess_username": "",
+  "zkaccess_password": "",
+  "dry_run": true,
+  "headless": false,
+  "pin_regex": "(?i)\\bpin\\s*[:=\\-]?\\s*(\\d{4,6})\\b",
+  "timeouts": {
+    "page": 60000,
+    "element": 30000
+  },
+  "cloudbeds_block_static_resources": true,
+  "screenshots_on_success": false,
+  "zkaccess_batch_lookup": true,
+  "zkaccess_room_search_term": "Room",
+  "scheduler_time": "12:55",
+  "cloudbeds_reservation_url_template": "https://cloudbeds.example.invalid/connect/PROPERTY_ID#/reservations/{reservation_id}"
+}
