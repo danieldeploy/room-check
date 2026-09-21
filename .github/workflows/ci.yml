@@ -60,11 +60,13 @@ jobs:
         run: |
           node --check invoice-runner/runner.mjs
           node --check invoice-runner/booking.mjs
+          node --check invoice-runner/windows-agent.mjs
           node --test invoice-runner/tests/*.test.mjs
 
       - name: Run PHP tests
         run: |
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
+          TEST_NODE_BINARY=$(command -v node) php tests/invoice-agent.php
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
           php tests/run.php
@@ -94,3 +96,31 @@ jobs:
           INVOICES_TEST_USER: root
           INVOICES_TEST_PASSWORD: test-only-ci-password
         run: php tests/invoices-mysql.php
+
+  windows-agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate PowerShell and Windows security primitives
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem invoice-runner/windows/*.ps1 | ForEach-Object {
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors) | Out-Null
+            if ($parseErrors) { throw ($parseErrors | Out-String) }
+          }
+          & tests/invoice-agent-windows.ps1
+      - name: Test agent protocol
+        run: node --test invoice-runner/tests/*.test.mjs
+      - name: Install locked runner and Chrome
+        working-directory: invoice-runner
+        run: npm ci --no-audit --no-fund
+      - name: Verify real Windows Chrome with sandbox enabled
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & tests/invoice-agent-windows.ps1 -Browser

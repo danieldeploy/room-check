@@ -6,6 +6,8 @@ DirectoryIndex index.php
 </FilesMatch>
 
 RewriteEngine On
+# Preserve device authentication when PHP runs through CGI/FastCGI.
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 RewriteRule ^(?:src|tests|migrations|invoice-runner|deploy|cron)/ - [F,L,NC]
 
 <IfModule mod_headers.c>

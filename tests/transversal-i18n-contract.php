@@ -22,6 +22,8 @@ $machineJsonExceptions = [
     // Authenticated by a device bearer token and consumed only by the Android
     // SMS forwarder. Its response is a boolean protocol, not human UI text.
     'invoice-auth.php' => true,
+    // Windows agent: fixed machine protocol, no user-facing translated text.
+    'invoice-agent.php' => true,
 ];
 
 function emitsHtmlDocument(string $source): bool

@@ -6,6 +6,7 @@ require_once $root.'/src/UI/SessionBar.php';
 require_once $root.'/src/Invoices/InvoiceWorkspace.php';
 require_once $root.'/src/Invoices/InvoiceAuth.php';
 require_once $root.'/src/Invoices/InvoiceDrive.php';
+require_once $root.'/src/Invoices/InvoiceRemoteAgent.php';
 require_once $root.'/src/I18n/InvoiceText.php';
 $config=require $root.'/config.php';
 try {
@@ -79,11 +80,24 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } else {
             InvoiceService::assertGerente($currentUser);
             // Match the worker lock for changes to access, account membership and private files.
-            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','sms_token','schedule','drive_settings','drive_test','drive_retry'],true)) {
+            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','sms_token','schedule','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
                 if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
                 $locked=true;
+                if ($vault && $vault->has('windows-agent.enc')) {
+                    $remoteGuard=new InvoiceRemoteAgent($pdo,$config['invoices']);
+                    $remoteGuard->maintenance();
+                    if ($action!=='agent_revoke') $remoteGuard->assertIdle();
+                }
             }
-            if ($action==='create_account' || $action==='account_details') {
+            if (in_array($action,['agent_pair','agent_mode','agent_revoke'],true)) {
+                if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');
+                if (!$vault) throw new RuntimeException('private_storage_unavailable');
+                $agent=new InvoiceRemoteAgent($pdo,$config['invoices']);
+                if ($action==='agent_pair') $_SESSION['invoice_agent_token']=$agent->pair();
+                elseif ($action==='agent_revoke') $agent->revoke();
+                else $agent->setMode((string)($_POST['agent_mode'] ?? ''));
+                $returnTab='settings'; $returnEdit=0;
+            } elseif ($action==='create_account' || $action==='account_details') {
                 $portal=$action==='create_account' ? (string)($_POST['portal'] ?? '') : $repository->get($id)['portal'];
                 $label=trim((string)($_POST['label'] ?? ''));
                 $props=InvoiceWorkspace::propertiesFromInput($_POST,$portal);
@@ -147,6 +161,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 $flash=$_SESSION['invoice_flash'] ?? null; unset($_SESSION['invoice_flash']);
 $device=$isGerente ? ($_SESSION['invoice_device_token'] ?? null) : null; unset($_SESSION['invoice_device_token']);
+$agentToken=$isGerente ? ($_SESSION['invoice_agent_token'] ?? null) : null; unset($_SESSION['invoice_agent_token']);
+$agentStatus=['mode'=>'local','paired'=>false];
+if ($isGerente && $vault) {
+    try { $agentStatus=(new InvoiceRemoteAgent($pdo,$config['invoices']))->status(); }
+    catch (Throwable) { $agentStatus=['mode'=>'paused','paired'=>false]; }
+}
 $documents=[]; $batches=[]; $legacyTasks=[]; $stats=[]; $alerts=[]; $driveAlerts=[];
 if ($settings) {
     if (in_array($tab,['overview','documents'],true)) $stats=$workspace->stats($filters);
@@ -173,6 +193,7 @@ $viewRoot=__DIR__.'/partials/invoices'; define('INVOICE_VIEW',true);
 <?php if ($error): ?><div class="alert" role="alert" data-save-feedback="error"><?= it($error) ?></div><?php endif; ?>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= it($flash) ?></div><?php endif; ?>
 <?php if ($device): ?><div class="notice"><p><?= it('token_once') ?> <?= (int)$device['account'] ?></p><code class="invoice-secret"><?= ie($device['token']) ?></code></div><?php endif; ?>
+<?php if ($agentToken): ?><div class="notice"><p><?= it('agent_token_once') ?></p><code class="invoice-secret" translate="no"><?= ie($agentToken) ?></code></div><?php endif; ?>
 <?php if ($settings): ?>
 <?php if (strtotime(($settings['worker_seen_at'] ?? '').' UTC')<time()-300): ?><div class="notice"><?= it('worker_stale') ?></div><?php endif; ?>
 <?php require $viewRoot.'/'.$tab.'.php'; ?>

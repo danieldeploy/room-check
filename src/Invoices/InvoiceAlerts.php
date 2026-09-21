@@ -59,7 +59,7 @@ final class InvoiceAlerts
             'drive_verify' => 'Não foi possível confirmar a integridade do ficheiro no Drive.',
             'drive_local_missing' => 'A cópia local não está disponível ou não passou a verificação.',
             'needs_auth', 'auth_invalid', 'auth_timeout' => 'A autenticação na plataforma não terminou.',
-            'browser_unavailable' => 'O browser no servidor está indisponível.',
+            'browser_unavailable' => 'O Chrome da recolha está indisponível.',
             'connector_unconfigured', 'portal_changed' => 'O procedimento da plataforma requer configuração.',
             default => 'O processamento não terminou com sucesso.'
         };
@@ -72,7 +72,7 @@ final class InvoiceAlerts
             'drive_not_configured', 'drive_invalid_id', 'drive_account_mismatch', 'drive_permission', 'drive_not_found' => 'Verifique a ligação e a pasta da conta daniel.ciorcas@welcomehostel.pt e clique em Tentar novamente.',
             'drive_local_missing', 'drive_verify' => 'Peça a verificação dos ficheiros ao suporte antes de repetir. Não elimine a cópia do servidor.',
             'needs_auth', 'auth_invalid', 'auth_timeout' => 'Verifique o acesso e o método 2FA da conta no módulo e teste novamente.',
-            'browser_unavailable' => 'Peça ao suporte para corrigir o browser no servidor e volte a testar o acesso.',
+            'browser_unavailable' => 'Verifique o Chrome no computador de recolha e volte a testar o acesso.',
             'connector_unconfigured', 'portal_changed' => 'Peça ao suporte para validar o procedimento de acesso e recolha desta conta.',
             default => 'Abra Faturas e Portais, consulte os documentos pendentes e clique em Tentar novamente após verificar a ligação.'
         };
