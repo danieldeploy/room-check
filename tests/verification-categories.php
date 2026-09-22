@@ -20,6 +20,9 @@ $lists = file_get_contents($root . '/item-lists.php');
 $dialog = file_get_contents($root . '/assets/app-dialog.js');
 $categoryDialog = file_get_contents($root . '/assets/verification-categories.js');
 $deployment = file_get_contents($root . '/.cpanel.yml');
+if (preg_match('/^\s*-\s+\/bin\/bash deploy\/release\.sh\s*$/m', $deployment)) {
+    $deployment .= "\n" . file_get_contents($root . '/deploy/release.sh');
+}
 $permissionsPage = file_get_contents($root . '/admin/permissions.php');
 $globalCrud = file_get_contents($root . '/assets/global-crud.js');
 $sessionBar = file_get_contents($root . '/src/UI/SessionBar.php');

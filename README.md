@@ -47,6 +47,19 @@ Se o serviço estiver temporariamente indisponível, o texto não é guardado co
 
 O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment. Para esta funcionalidade, siga `docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md`, incluindo o backup prévio e a ordem das migrações.
 
+O cliente opcional `deploy/cpanel_api.py` permite consultar, atualizar e publicar
+este repositório pela UAPI, diretamente no cPanel ou através do WHM (`--transport
+whm`), com verificações de branch/commit e acompanhamento da tarefa. O comando
+`doctor` verifica funcionalidades, privilégios MySQL e estado Git sem alterar a
+conta. O transporte WHM fixa o revendedor `fazenda` e o destino `welcome` no
+cliente, mas o token do revendedor não fica limitado a essa conta no servidor.
+A configuração de tokens e a ligação real ainda precisam de ser validadas.
+Consulte `docs/CPANEL_API_DEPLOYMENT.md`, incluindo os limites das migrações e backups.
+
+A publicação automática após CI está preparada, com ambiente GitHub separado,
+backup privado obrigatório e verificação HTTPS. Fica desligada até configurar a
+credencial e `HUB_DEPLOY_ENABLED=true`. Consulte `docs/AUTOMATED_DEPLOYMENT.md`.
+
 ## Login e portal
 
 - `/login.php` é a entrada pública da aplicação.
