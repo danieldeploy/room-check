@@ -32,17 +32,20 @@ export function openPairing(pending, sealed) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     let raw = '';
+    process.stdin.setEncoding('utf8');
     for await (const chunk of process.stdin) {
       raw += chunk;
       if (raw.length > 32768) throw new Error('pairing_invalid');
     }
-    const input = JSON.parse(raw);
+    const input = JSON.parse(raw.replace(/^\uFEFF/, ''));
     const result = input.action === 'prepare' ? preparePairing()
       : input.action === 'open' ? openPairing(input.pending, input.sealed) : null;
     if (!result) throw new Error('pairing_invalid');
     process.stdout.write(JSON.stringify(result));
-  } catch {
-    process.stderr.write('pairing_invalid\n');
+  } catch (error) {
+    const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code
+      : ['TypeError','SyntaxError','RangeError'].includes(error?.name) ? error.name : 'Error';
+    process.stderr.write(`pairing_invalid:${code}\n`);
     process.exitCode = 1;
   }
 }

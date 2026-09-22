@@ -152,10 +152,11 @@ async function main() {
   if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') throw new AgentError('invalid_configuration');
   process.umask(0o077);
   let raw = '';
+  process.stdin.setEncoding('utf8');
   for await (const chunk of process.stdin) {
     raw += chunk; if (raw.length > 16384) throw new AgentError('invalid_configuration');
   }
-  const config = JSON.parse(raw); raw = '';
+  const config = JSON.parse(raw.replace(/^\uFEFF/, '')); raw = '';
   const client = new AgentClient(config.endpoint, config.token);
   const root = await assertPrivateDirectory(config.privateDir);
   const runtime = { executablePath: config.executablePath || undefined };

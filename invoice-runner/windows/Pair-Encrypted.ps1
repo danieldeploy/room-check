@@ -12,13 +12,17 @@ function Invoke-PairingHelper($Payload, [string]$Node) {
     $info.Arguments = '"' + (Join-Path (Split-Path $PSScriptRoot -Parent) 'pairing-crypto.mjs') + '"'
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true
     $info.RedirectStandardInput = $true; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
-    $info.StandardInputEncoding = New-Object Text.UTF8Encoding($false)
     $process = [Diagnostics.Process]::Start($info)
     try {
-        $process.StandardInput.Write(($Payload | ConvertTo-Json -Compress -Depth 8)); $process.StandardInput.Close()
+        $bytes = [Text.Encoding]::UTF8.GetBytes(($Payload | ConvertTo-Json -Compress -Depth 8))
+        try { $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length); $process.StandardInput.BaseStream.Close() }
+        finally { [Array]::Clear($bytes,0,$bytes.Length) }
         $output = $process.StandardOutput.ReadToEnd()
-        $null = $process.StandardError.ReadToEnd(); $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw 'Pairing helper rejected the request.' }
+        $diagnostic = $process.StandardError.ReadToEnd().Trim(); $process.WaitForExit()
+        if ($process.ExitCode -ne 0) {
+            if ($diagnostic -match '^pairing_invalid:[A-Za-z0-9_]+$') { Write-Host $diagnostic }
+            throw 'Pairing helper rejected the request.'
+        }
         return ($output | ConvertFrom-Json)
     } finally { $process.Dispose(); $output=$null }
 }
@@ -71,6 +75,7 @@ try {
     }
     $pending.privateKey=$null
 } catch {
+    Write-Host ('Pairing diagnostic: ' + $_.Exception.GetType().FullName + '; line ' + $_.InvocationInfo.ScriptLineNumber)
     Write-Host 'Encrypted pairing failed. Keep collection paused and check the request, package and private directory.'
     exit 1
 } finally {
