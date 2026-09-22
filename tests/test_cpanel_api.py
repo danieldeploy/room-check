@@ -11,6 +11,7 @@ import sys
 import unittest
 from unittest.mock import patch
 import urllib.error
+import urllib.parse
 
 SPEC = importlib.util.spec_from_file_location("cpanel_api", Path(__file__).parents[1] / "deploy/cpanel_api.py")
 cpanel = importlib.util.module_from_spec(SPEC)
@@ -250,6 +251,180 @@ class Contracts(unittest.TestCase):
         with patch.object(cpanel, "CpanelAPI") as constructor, contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(cpanel.main(["deploy"]), 1)
         constructor.assert_not_called()
+
+
+def whm_payload(data, outer_status=1, inner_status=1, errors=None):
+    return {"metadata": {"result": outer_status, "reason": "OK", "command": "uapi_cpanel", "version": 1},
+            "data": {"uapi": {"status": inner_status, "errors": errors, "data": data}}}
+
+
+class WhmTransport(unittest.TestCase):
+    def config(self, **changes):
+        values = {"transport": "whm", "origin": cpanel.WHM_ORIGIN}
+        values.update(changes)
+        return cpanel.Config(TOKEN, **values)
+
+    def test_documented_wrapper_header_and_query_target_exact_account(self):
+        api = cpanel.CpanelAPI(self.config())
+        def respond(request, timeout):
+            self.assertEqual(request.get_header("Authorization"), "whm fazenda:" + TOKEN)
+            self.assertNotIn(TOKEN, request.full_url)
+            url = urllib.parse.urlsplit(request.full_url)
+            self.assertEqual(url.scheme + "://" + url.netloc, cpanel.WHM_ORIGIN)
+            self.assertEqual(url.path, "/json-api/uapi_cpanel")
+            self.assertEqual(urllib.parse.parse_qs(url.query), {
+                "api.version": ["1"], "cpanel.user": ["welcome"], "cpanel.module": ["VersionControl"],
+                "cpanel.function": ["retrieve"], "fields": [cpanel.FIELDS]})
+            return Response(whm_payload([repository()]), request.full_url)
+        with patch.object(api.opener, "open", side_effect=respond) as opened:
+            self.assertEqual(api.call("VersionControl", "retrieve", fields=cpanel.FIELDS), [repository()])
+        self.assertEqual(opened.call_count, 1)
+
+    def test_outer_success_does_not_hide_inner_failure_or_errors(self):
+        api = cpanel.CpanelAPI(self.config())
+        payloads = [whm_payload([], inner_status=0, errors=[TOKEN]),
+                    whm_payload([], inner_status=1, errors=[TOKEN]),
+                    whm_payload([], inner_status=True), whm_payload([], inner_status="1")]
+        for payload in payloads:
+            with self.subTest(payload_status=payload["data"]["uapi"]["status"]):
+                with patch.object(api.opener, "open", side_effect=lambda request, timeout: Response(payload, request.full_url)) as opened:
+                    with self.assertRaisesRegex(cpanel.DeploymentError, "api_operation_failed") as caught:
+                        api.call("VersionControl", "retrieve")
+                    self.assertNotIn(TOKEN, str(caught.exception))
+                self.assertEqual(opened.call_count, 1)
+
+    def test_inner_success_cannot_override_whm_failure(self):
+        api = cpanel.CpanelAPI(self.config())
+        for outer_status in (0, None, "1", True):
+            payload = whm_payload([], outer_status=outer_status)
+            payload["metadata"]["reason"] = TOKEN
+            with self.subTest(outer_status=outer_status), \
+                    patch.object(api.opener, "open", side_effect=lambda request, timeout: Response(payload, request.full_url)):
+                with self.assertRaisesRegex(cpanel.DeploymentError, "whm_operation_failed") as caught:
+                    api.call("VersionControl", "retrieve")
+                self.assertNotIn(TOKEN, str(caught.exception))
+
+    def test_undocumented_or_missing_whm_envelope_is_not_success(self):
+        api = cpanel.CpanelAPI(self.config())
+        for payload in ({"status": 1, "data": []}, {"result": {"status": 1, "data": []}},
+                        {"metadata": {"result": 1}, "data": {"cpanelresult": {"status": 1}}},
+                        {"metadata": {"result": 1}, "data": None},
+                        {"metadata": {"result": 1}, "data": {"uapi": []}}):
+            with self.subTest(payload=payload), \
+                    patch.object(api.opener, "open", side_effect=lambda request, timeout: Response(payload, request.full_url)):
+                with self.assertRaisesRegex(cpanel.DeploymentError, "invalid_whm"):
+                    api.call("VersionControl", "retrieve")
+
+    def test_target_reseller_transport_and_origin_spoofing_rejected(self):
+        for changes in ({"user": "other", "repository": "/home/other/repo"},
+                        {"whm_user": "root"}, {"whm_user": "other"},
+                        {"origin": cpanel.ORIGIN}, {"origin": cpanel.WHM_ORIGIN + "/"},
+                        {"origin": "http://server50.romania-webhosting.com:2087"},
+                        {"origin": "https://server50.romania-webhosting.com.evil.example:2087"},
+                        {"transport": "other"}):
+            with self.subTest(changes=changes), self.assertRaises(cpanel.DeploymentError):
+                self.config(**changes)
+
+    def test_routing_and_extra_operation_parameters_are_rejected_before_network(self):
+        api = cpanel.CpanelAPI(self.config())
+        attempts = [("VersionControl", "retrieve", {"cpanel.user": "other"}),
+                    ("VersionControl", "retrieve", {"api.version": 0}),
+                    ("VersionControl", "retrieve", {"cpanel.function": "update"}),
+                    ("VersionControl", "update", {"repository_root": cpanel.DEFAULT_REPOSITORY, "branch": "main"}),
+                    ("VersionControlDeployment", "create", {"repository_root": "/home/other/repo"}),
+                    ("Mysql", "get_privileges_on_database", {"user": "other", "database": "other"}),
+                    ("Mysql", "set_privileges_on_database", {"user": cpanel.DATABASE, "database": cpanel.DATABASE}),
+                    ("Fileman", "upload_files", {}), ("Tokens", "create_full_access", {}),
+                    ("Cron", "add_line", {})]
+        with patch.object(api.opener, "open") as opened:
+            for module, function, parameters in attempts:
+                with self.subTest(operation=(module, function), parameters=parameters), self.assertRaises(cpanel.DeploymentError):
+                    api.call(module, function, **parameters)
+        opened.assert_not_called()
+
+    def test_whm_cli_selects_only_whm_secret_and_defaults_to_read_only_status(self):
+        fake = FakeAPI([(('VersionControl', 'retrieve'), [repository()]),
+                        (('VersionControlDeployment', 'retrieve'), [])])
+        output = io.StringIO()
+        with patch.dict(os.environ, {"WHM_API_TOKEN": TOKEN, "CPANEL_API_TOKEN": "unused"}, clear=True), \
+                patch.object(cpanel, "CpanelAPI", return_value=fake) as constructor, contextlib.redirect_stdout(output):
+            self.assertEqual(cpanel.main(["--transport", "whm"]), 0)
+        config = constructor.call_args.args[0]
+        self.assertEqual((config.token, config.origin, config.user, config.whm_user),
+                         (TOKEN, cpanel.WHM_ORIGIN, "welcome", "fazenda"))
+        self.assertEqual(json.loads(output.getvalue())["command"], "status")
+        self.assertNotIn(TOKEN, output.getvalue())
+        self.assertTrue(all(function == "retrieve" for _, function, _ in fake.calls))
+
+    def test_whm_does_not_fall_back_to_cpanel_secret(self):
+        output = io.StringIO()
+        with patch.dict(os.environ, {"CPANEL_API_TOKEN": TOKEN}, clear=True), \
+                patch.object(cpanel, "CpanelAPI") as constructor, contextlib.redirect_stderr(output):
+            self.assertEqual(cpanel.main(["--transport", "whm"]), 1)
+        constructor.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())["error"], "missing_or_invalid_token")
+        self.assertNotIn(TOKEN, output.getvalue())
+
+    def test_whm_update_and_deployment_preserve_sha_and_task_verification(self):
+        config = self.config()
+        api = cpanel.CpanelAPI(config)
+        runner = cpanel.Deployment(api, config)
+        responses = [[], [repository()], None, [repository(last_update={"identifier": NEW})],
+                     [], [repository(last_update={"identifier": NEW})],
+                     {"deploy_id": "17", "repository_root": cpanel.DEFAULT_REPOSITORY},
+                     [deployment("succeeded", NEW)], [repository(last_update={"identifier": NEW})]]
+        calls = []
+        def respond(request, timeout):
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)
+            calls.append(query)
+            self.assertEqual(query["cpanel.user"], ["welcome"])
+            self.assertEqual(request.get_header("Authorization"), "whm fazenda:" + TOKEN)
+            return Response(whm_payload(responses.pop(0)), request.full_url)
+        with patch.object(api.opener, "open", side_effect=respond):
+            self.assertEqual(runner.update(OLD, NEW)["commit"], NEW)
+            self.assertEqual(runner.deploy(NEW)["state"], "succeeded")
+        self.assertEqual(calls[2]["branch"], [cpanel.BRANCH])
+        self.assertEqual(calls[2]["repository_root"], [cpanel.DEFAULT_REPOSITORY])
+        self.assertEqual(sum(query["cpanel.function"] == ["create"] for query in calls), 1)
+        self.assertEqual(responses, [])
+
+    def test_doctor_only_queries_existing_features_privileges_and_git(self):
+        fake = FakeAPI([(('Features', 'list_features_like'), ["version_control", "api_tokens"]),
+                        (('Mysql', 'get_privileges_on_database'), ["ALL PRIVILEGES"]),
+                        (('VersionControl', 'retrieve'), [repository()]),
+                        (('VersionControlDeployment', 'retrieve'), [])])
+        output = io.StringIO()
+        with patch.dict(os.environ, {"WHM_API_TOKEN": TOKEN}, clear=True), \
+                patch.object(cpanel, "CpanelAPI", return_value=fake), contextlib.redirect_stdout(output):
+            self.assertEqual(cpanel.main(["doctor", "--transport", "whm"]), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["mysql_permissions"], {"ALTER": True, "CREATE": True, "UPDATE": True})
+        self.assertFalse(result["write_operations_validated"])
+        self.assertEqual(fake.calls[0][2], {"pattern": ".*", "is_regex": 1})
+        self.assertEqual(fake.calls[1][2], {"user": cpanel.DATABASE, "database": cpanel.DATABASE})
+        self.assertEqual(len(fake.calls), 4)
+        self.assertNotIn(TOKEN, output.getvalue())
+
+    def test_doctor_reports_missing_privileges_without_granting_them(self):
+        fake = FakeAPI([(('Features', 'list_features_like'), []),
+                        (('Mysql', 'get_privileges_on_database'), ["SELECT", "UPDATE"]),
+                        (('VersionControl', 'retrieve'), [repository()]),
+                        (('VersionControlDeployment', 'retrieve'), [])])
+        result = cpanel.Deployment(fake, self.config()).doctor()
+        self.assertEqual(result["mysql_permissions"], {"ALTER": False, "CREATE": False, "UPDATE": True})
+        self.assertFalse(result["write_operations_validated"])
+        self.assertEqual(len(fake.calls), 4)
+
+    def test_doctor_rejects_unexpected_payloads_without_printing_server_text(self):
+        for features, privileges in ((["invalid\n" + TOKEN], []),
+                                     (["version_control"], [TOKEN]),
+                                     (["version_control"], {"privileges": ["ALL PRIVILEGES"]})):
+            fake = FakeAPI([(('Features', 'list_features_like'), features),
+                            (('Mysql', 'get_privileges_on_database'), privileges)])
+            with self.subTest(features=features, privileges=privileges):
+                with self.assertRaises(cpanel.DeploymentError) as caught:
+                    cpanel.Deployment(fake, self.config()).doctor()
+                self.assertNotIn(TOKEN, str(caught.exception))
 
 
 if __name__ == "__main__":

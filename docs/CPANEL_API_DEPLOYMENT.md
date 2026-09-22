@@ -1,7 +1,9 @@
-# Management Hub — publicação controlada pela API do cPanel
+# Management Hub — publicação controlada pela UAPI, através do WHM ou cPanel
 
-O cliente `deploy/cpanel_api.py` permite consultar o repositório, executar **Update
-from Remote** e pedir **Deploy HEAD Commit** através da UAPI. Corre no computador
+O cliente `deploy/cpanel_api.py` permite consultar o repositório, verificar as
+funcionalidades e os privilégios MySQL, executar **Update from Remote** e pedir
+**Deploy HEAD Commit** através da UAPI. Pode autenticar diretamente no cPanel ou
+encaminhar as operações pelo WHM do revendedor. Corre no computador
 de desenvolvimento ou num executor autorizado com Python 3.9+, sem bibliotecas
 adicionais. Não é instalado em `public_html`, não cria endpoints HTTP no Hub e não
 ativa publicações automáticas do GitHub.
@@ -19,6 +21,11 @@ ativa publicações automáticas do GitHub.
 - A base de dados e o utilizador MySQL da aplicação têm ambos o nome
   `welcome_roomcheck`. O utilizador já tem **ALL PRIVILEGES**, incluindo `ALTER`,
   `CREATE` e `UPDATE`; não foi necessário aumentar privilégios.
+- O formulário de criação de tokens do WHM, que só apresenta os privilégios
+  possuídos pelo utilizador, mostrou `cpanel-api`, `list-accts` e
+  `manage-api-tokens` para `fazenda`. Não mostrou `edit-account` nem `all`.
+  O formulário foi cancelado sem criar um token. A listagem do revendedor tinha
+  17 contas. Estes dados são uma observação da interface, não um teste de UAPI.
 - Ainda não foi criado um token nem validada uma ligação HTTPS autenticada por
   token. O cliente foi testado apenas com respostas simuladas. Não houve update,
   deployment ou migração em produção por este cliente.
@@ -27,25 +34,67 @@ ativa publicações automáticas do GitHub.
   removido. Isso não comprova uma falha da UAPI HTTPS; é uma limitação observada do
   ambiente local da conta.
 
-Para concluir a configuração, é necessária uma cópia exata da lista `default`
-com **API Tokens** acrescentado, ou a ativação equivalente feita pela Claus Web.
-Preservar as restantes funcionalidades da conta. Depois, criar o token próprio de
-`welcome`, guardá-lo por um meio protegido e começar pela consulta `status`.
+O transporte WHM usa um token do revendedor, pelo que a ausência da opção de
+criar tokens próprios no cPanel de `welcome` não impede, por si só, este caminho.
+A disponibilidade real das funções continua sujeita às permissões e restrições
+do servidor. Não modifica a lista `default`, não concede `edit-account` e não
+contorna funcionalidades desativadas ou restrições do sistema operativo.
+
+Para utilizar o transporte direto do cPanel, continua a ser necessário ativar
+**API Tokens** em `welcome`: pedir à Claus Web uma cópia exata da lista `default`
+com essa opção acrescentada, ou uma ativação equivalente que preserve as restantes
+funcionalidades. O token direto pertence apenas à conta `welcome`.
 
 ## Credencial e configuração
 
-Usar um **token cPanel da conta `welcome`**, nunca o token administrativo do WHM.
-O token permite operar com os privilégios da conta; tratá-lo como uma password.
-Injetá-lo na variável de ambiente `CPANEL_API_TOKEN` a partir de um gestor de
-segredos ou formulário privado do executor. Não o colocar em argumentos, URLs,
-ficheiros do repositório, logs, mensagens ou histórico de comandos.
+### Opção WHM para a configuração atual
+
+Usar um token de `fazenda` com os privilégios **`cpanel-api` e `list-accts`**.
+O quadro oficial associa `uapi_cpanel` a `list-accts`; `cpanel-api` permite executar
+as APIs do cPanel através do WHM. Esta combinação ainda precisa de ser testada no
+servidor. Não acrescentar `all`, `manage-api-tokens`, `create-user-session`,
+`passwd` ou `edit-account`. O diagnóstico implementado não precisa de
+`basic-whm-functions`.
+
+**O token WHM não tem uma restrição documentada por conta cPanel.** A API de
+criação permite selecionar ACLs, validade e IPs de origem, mas não uma conta de
+destino. `cpanel.user=welcome` escolhe o destino de um pedido; não limita a
+credencial no servidor. Tratar este token como capaz de atuar nas contas
+pertencentes ao revendedor, que eram 17 na verificação. A proteção no cliente
+contra outras contas não substitui essa restrição no servidor.
+
+Para a primeira validação, preparar `management_hub_uapi_validation` com apenas
+as duas ACLs acima e validade curta. Se criado em 22 de setembro de 2026, a data
+proposta é 23 de setembro de 2026; confirmar a hora do servidor. Se existir um IP
+fixo do executor, restringir a esse IP depois de o confirmar. A ativação deve
+identificar expressamente o alcance da credencial e a sua validade.
+
+Guardar o token exclusivamente no gestor de segredos do executor e injetá-lo
+como `WHM_API_TOKEN`. Não o instalar na aplicação Hub nem no seu
+`config.local.php`. Não o colocar em argumentos, URLs, ficheiros do repositório,
+logs, mensagens ou histórico de comandos.
+
+O cliente usa `GET /json-api/uapi_cpanel` em HTTPS/2087, autenticação no cabeçalho
+`Authorization: whm fazenda:TOKEN` e os parâmetros fixos `api.version=1` e
+`cpanel.user=welcome`. O módulo e a função vêm de uma lista fechada de operações.
+Os argumentos UAPI mantêm os nomes normais. O cliente exige sucesso nas duas
+camadas: `metadata.result=1` e `data.uapi.status=1`, sem erros UAPI.
+
+### Opção direta cPanel
+
+Usar um token cPanel da conta `welcome`, injetado como `CPANEL_API_TOKEN` a partir
+do mesmo tipo de armazenamento protegido. Esta é a opção por defeito; selecionar
+WHM explicitamente com `--transport whm`. Os tokens dos dois transportes não são
+intercambiáveis e não existe fallback automático entre eles.
 
 As restantes variáveis não são segredos:
 
 | Variável | Valor por defeito / regra |
 | --- | --- |
-| `CPANEL_ORIGIN` | `https://server50.romania-webhosting.com:2083`; é a única origem permitida nesta versão. |
-| `CPANEL_USER` | `welcome`; tem de corresponder ao dono do token. |
+| `WHM_ORIGIN` | `https://server50.romania-webhosting.com:2087`; única origem permitida no transporte WHM. |
+| `WHM_USER` | `fazenda`; único revendedor permitido pelo cliente. |
+| `CPANEL_ORIGIN` | `https://server50.romania-webhosting.com:2083`; única origem permitida no transporte direto. |
+| `CPANEL_USER` | `welcome`; destino fixo no transporte WHM. No direto, tem de corresponder ao dono do token. |
 | `CPANEL_REPOSITORY_ROOT` | `/home/welcome//home/welcome/repositories/room-check`, conforme o caminho devolvido pelo cPanel. |
 
 O caminho invulgar acima é deliberado. Confirmar na conta; não o corrigir por
@@ -56,7 +105,34 @@ A origem é fixada no código para impedir envio acidental da credencial para ou
 servidor. Uma migração de alojamento exige rever esse destino. TLS e certificado
 são verificados; não existe opção de desativar essa verificação. Redirecionamentos
 e proxies definidos no ambiente não são seguidos. O executor tem de alcançar
-diretamente o servidor na porta 2083.
+diretamente o servidor na porta 2087 (WHM) ou 2083 (cPanel).
+
+## Alcance das operações
+
+Os comandos implementados são `doctor`, `status`, `update`, `deploy` e `wait`.
+O cliente não é um encaminhador genérico: recusa outros módulos/funções e
+parâmetros de alteração do destino. As restantes funções abaixo documentam
+possibilidades da plataforma, sujeitas à versão e às funcionalidades ativas;
+não são comandos já implementados ou validados neste cliente.
+
+| Necessidade | Caminho e limite |
+| --- | --- |
+| Diagnóstico | Implementado: `Features/list_features_like`, `Mysql/get_privileges_on_database` e consultas Git/deploy. Só leitura. |
+| Atualização e publicação de código | Implementado: `VersionControl/update`, `VersionControlDeployment/create` e `retrieve`. O código chega pelo Git; não é necessário upload UAPI. |
+| Alterações SQL | Migrações privadas e versionadas executadas pelo deployment. A UAPI MySQL gere bases, utilizadores e privilégios; não executa SQL arbitrário. |
+| Gestão de privilégios MySQL | `Mysql/set_privileges_on_database` existe, mas substitui a lista de privilégios. Não implementado nem necessário: `welcome_roomcheck` já tinha todos os privilégios. |
+| Edição de ficheiros de texto | `Fileman/get_file_content` e `save_file_content` existem. Não implementados; manter alterações de código no Git. |
+| Envio de ficheiros | `Fileman/upload_files` é explicitamente incompatível com `uapi_cpanel`. Exige um transporte separado, como a UAPI direta do cPanel com autenticação própria. |
+| Cron | `Cron` pertence à API 2, sem equivalente UAPI para `add_line`. Exige o encaminhamento API 2 separado. Não implementado; conservar os três agendamentos atuais. |
+| Backups | `Backup/fullbackup_to_homedir` inicia um backup e devolve um PID; não comprova conclusão. Não implementado; validar existência e recuperação antes de usar como proteção de uma migração. |
+| PHP | `LangPHP/php_get_vhost_versions` e `php_set_vhost_versions` consultam/selecionam versões já instaladas. Não instalam bibliotecas de sistema. Não implementado. |
+| SSL | Consultas e início de AutoSSL existem, sujeitos às funcionalidades disponíveis. Iniciar a tarefa não comprova emissão do certificado. Não implementado. |
+| Quotas | `Quota/get_quota_info` consulta utilização/limites. Aumentar quotas exige permissões WHM diferentes. Não implementado. |
+| Chrome, sandbox e Windows | Não são resolvidos por UAPI. Mantêm-se a recusa da Claus Web para o sandbox no shared hosting e a validação pendente do worker Windows. |
+
+O âmbito preparado cobre publicação por Git e migrações integradas num deployment
+revisto. Não representa administração irrestrita do servidor nem valida todas as
+operações futuras do Management Hub.
 
 ## Operações
 
@@ -67,12 +143,20 @@ de uma versão do Hub continua necessária conforme o README e o pedido em curso
 ### 1. Consultar — não altera o servidor
 
 ```sh
-python3 deploy/cpanel_api.py
+python3 deploy/cpanel_api.py doctor --transport whm
+python3 deploy/cpanel_api.py status --transport whm
 ```
 
-Equivale a `status`. Mostra branch, HEAD do repositório cPanel, último commit
+`doctor` consulta os identificadores das funcionalidades habilitadas, os
+privilégios do utilizador `welcome_roomcheck` na base com o mesmo nome e o estado
+Git/deploy. Não cria tokens nem altera permissões. A saída limita-se a campos
+selecionados e assinala `write_operations_validated: false`.
+
+`status` mostra branch, HEAD do repositório cPanel, último commit
 publicado, indicador de possibilidade de deployment e estados das tarefas.
-O token tem de estar no ambiente. A saída é JSON; `ok: true` aqui significa
+O token tem de estar no ambiente. Para usar o transporte direto, omitir
+`--transport whm` e fornecer `CPANEL_API_TOKEN`. Sem comando, o cliente executa
+`status`. A saída é JSON; `ok: true` aqui significa
 consulta concluída, não aprovação da versão nem teste funcional do Hub.
 
 ### 2. Atualizar a cópia Git — não publica a aplicação
@@ -80,7 +164,7 @@ consulta concluída, não aprovação da versão nem teste funcional do Hub.
 Substituir `SHA_ATUAL` e `SHA_APROVADO` pelos hashes completos, de 40 caracteres:
 
 ```sh
-python3 deploy/cpanel_api.py update --expected-current-commit SHA_ATUAL --expected-commit SHA_APROVADO
+python3 deploy/cpanel_api.py update --transport whm --expected-current-commit SHA_ATUAL --expected-commit SHA_APROVADO
 ```
 
 O cliente confirma a branch `agent/room-item-assignments`, a origem GitHub
@@ -95,7 +179,7 @@ com erro e não faz deploy. Não corrige automaticamente a branch nem faz reset.
 ### 3. Publicar o commit aprovado
 
 ```sh
-python3 deploy/cpanel_api.py deploy --expected-commit SHA_APROVADO
+python3 deploy/cpanel_api.py deploy --transport whm --expected-commit SHA_APROVADO
 ```
 
 Faz novas verificações, chama `VersionControlDeployment/create` e acompanha o ID
@@ -118,7 +202,7 @@ pushes/updates/deploys. O cliente não tenta rollback automático de código ou 
 ### 4. Acompanhar uma tarefa existente
 
 ```sh
-python3 deploy/cpanel_api.py wait --deploy-id ID_DA_TAREFA --expected-commit SHA_APROVADO
+python3 deploy/cpanel_api.py wait --transport whm --deploy-id ID_DA_TAREFA --expected-commit SHA_APROVADO
 ```
 
 `wait` é apenas de leitura e não cria uma segunda publicação. O tempo máximo de
@@ -139,7 +223,7 @@ autenticado, sem publicar o seu conteúdo bruto.
 
 ## Alterações da base de dados
 
-O token cPanel não é uma credencial MySQL. A API MySQL do painel gere bases,
+O token do painel não é uma credencial MySQL. A API MySQL do painel gere bases,
 utilizadores e privilégios; não oferece, neste fluxo, um endpoint para enviar
 SQL arbitrário. Não abrir acesso remoto à base nem criar um endpoint público para
 receber comandos SQL.
@@ -181,15 +265,30 @@ Este trabalho acrescenta apenas o cliente e documentação; não altera a
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
 ```
 
-Os testes simulam as respostas UAPI e não fazem ligações de rede. Cobrem rejeição
+Os testes simulam as respostas UAPI e WHM e não fazem ligações de rede. Cobrem rejeição
 de branch/commit/origem incorretos, repositório não publicável, tarefas pendentes,
 update para commit inesperado, conclusão assíncrona pelo ID certo, falha,
-cancelamento, timeout, recusa de redirects e proteção da credencial. Aprovação
+cancelamento, timeout, recusa de redirects, proteção da credencial, destino WHM
+fixo, validação dos dois níveis da resposta, recusa de operações/parâmetros fora
+da lista permitida e diagnóstico sem escrita. Aprovação
 destes testes não substitui a validação HTTPS real depois de ativar os tokens.
 
 ## Documentação oficial consultada
 
 - [Autenticação por token cPanel](https://docs.cpanel.net/knowledge-base/security/how-to-use-cpanel-api-tokens/)
+- [Encaminhamento WHM para cPanel API e UAPI](https://api.docs.cpanel.net/whm/use-whm-api-to-call-cpanel-api-and-uapi)
+- [Contrato de uapi_cpanel](https://api.docs.cpanel.net/specifications/whm.openapi/api-execution/cpanel-uapi_cpanel)
+- [Autenticação por token WHM](https://api.docs.cpanel.net/guides/guide-to-api-authentication/guide-to-api-authentication-api-tokens-in-whm)
+- [ACLs das funções WHM](https://api.docs.cpanel.net/guides/guide-to-whm-plugins/guide-to-whm-plugins-acl-reference-chart)
+- [Criação e alcance do token WHM](https://api.docs.cpanel.net/specifications/whm.openapi/api-token-management/tokens-api_token_create)
+- [Gestão de tokens e restrições de privilégios](https://docs.cpanel.net/whm/development/manage-api-tokens-in-whm/)
+- [Fileman/upload_files e incompatibilidade com uapi_cpanel](https://api.docs.cpanel.net/specifications/cpanel.openapi/manage-files/fileman-upload_files)
+- [Cron/add_line e ausência de equivalente UAPI](https://api.docs.cpanel.net/cpanel-api-2/cpanel-api-2-modules-cron/cpanel-api-2-functions-cron-add_line)
+- [Substituição dos privilégios MySQL](https://api.docs.cpanel.net/specifications/cpanel.openapi/user-management/mysql-set_privileges_on_database)
+- [Início de backup da conta](https://api.docs.cpanel.net/specifications/cpanel.openapi/backup/backup-fullbackup_to_homedir)
+- [Seleção de versão PHP instalada](https://api.docs.cpanel.net/specifications/cpanel.openapi/php-settings/langphp-php_set_vhost_versions)
+- [Início da verificação AutoSSL](https://api.docs.cpanel.net/specifications/cpanel.openapi/auto-generated-ssl-certificates/ssl-start_autossl_check)
+- [Consulta de quotas](https://api.docs.cpanel.net/specifications/cpanel.openapi/disk-quotas/quota-get_quota_info)
 - [VersionControl/retrieve](https://api.docs.cpanel.net/specifications/cpanel.openapi/repository-management/versioncontrol-retrieve)
 - [VersionControl/update](https://api.docs.cpanel.net/specifications/cpanel.openapi/repository-management/versioncontrol-update)
 - [VersionControlDeployment/create](https://api.docs.cpanel.net/specifications/cpanel.openapi/deployment-settings/versioncontroldeployment-create)

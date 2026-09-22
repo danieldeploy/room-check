@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Explicit, guarded cPanel UAPI operations; Python 3.9+ standard library only."""
+"""Guarded UAPI operations, directly or through WHM; Python 3.9+ stdlib only."""
 
 import argparse
 import json
@@ -18,6 +18,10 @@ from dataclasses import dataclass, field
 
 BRANCH = "agent/room-item-assignments"
 ORIGIN = "https://server50.romania-webhosting.com:2083"
+WHM_ORIGIN = "https://server50.romania-webhosting.com:2087"
+WHM_USER = "fazenda"
+CPANEL_USER = "welcome"
+DATABASE = "welcome_roomcheck"
 SOURCE_URLS = {
     "https://github.com/danieldeploy/room-check",
     "https://github.com/danieldeploy/room-check.git",
@@ -27,10 +31,17 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 MAX_RESPONSE = 2 * 1024 * 1024
 FIELDS = "type,repository_root,branch,last_update,last_deployment,deployable,source_repository,tasks"
 OPERATIONS = {
-    ("VersionControl", "retrieve"),
-    ("VersionControl", "update"),
-    ("VersionControlDeployment", "create"),
-    ("VersionControlDeployment", "retrieve"),
+    ("VersionControl", "retrieve"): {"fields"},
+    ("VersionControl", "update"): {"repository_root", "branch"},
+    ("VersionControlDeployment", "create"): {"repository_root"},
+    ("VersionControlDeployment", "retrieve"): set(),
+    ("Features", "list_features_like"): {"pattern", "is_regex"},
+    ("Mysql", "get_privileges_on_database"): {"user", "database"},
+}
+MYSQL_PRIVILEGES = {
+    "ALL PRIVILEGES", "ALTER", "ALTER ROUTINE", "CREATE", "CREATE ROUTINE",
+    "CREATE TEMPORARY TABLES", "CREATE VIEW", "DELETE", "DROP", "EVENT", "EXECUTE",
+    "INDEX", "INSERT", "LOCK TABLES", "REFERENCES", "SELECT", "SHOW VIEW", "TRIGGER", "UPDATE",
 }
 
 
@@ -68,11 +79,19 @@ class Config:
     request_timeout: float = 20.0
     wait_timeout: float = 180.0
     poll_interval: float = 2.0
+    transport: str = "cpanel"
+    whm_user: str = WHM_USER
 
     def __post_init__(self):
         # A protected environment cannot silently send this token to another host.
-        require(self.origin == ORIGIN, "origin_not_allowed")
-        require(re.fullmatch(r"[a-z][a-z0-9_]{0,31}", self.user), "invalid_cpanel_user")
+        require(self.transport in ("cpanel", "whm"), "transport_not_allowed")
+        require(self.origin == (WHM_ORIGIN if self.transport == "whm" else ORIGIN),
+                "origin_not_allowed")
+        require(isinstance(self.user, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,31}", self.user),
+                "invalid_cpanel_user")
+        if self.transport == "whm":
+            require(self.user == CPANEL_USER, "whm_target_account_not_allowed")
+            require(self.whm_user == WHM_USER, "whm_reseller_not_allowed")
         require(isinstance(self.token, str) and self.token and len(self.token) <= 4096,
                 "missing_or_invalid_token")
         require(all(33 <= ord(c) <= 126 for c in self.token), "missing_or_invalid_token")
@@ -85,13 +104,16 @@ class Config:
 
     @classmethod
     def from_environment(cls, args):
+        whm = args.transport == "whm"
         return cls(
-            token=os.environ.get("CPANEL_API_TOKEN", ""),
+            token=os.environ.get("WHM_API_TOKEN" if whm else "CPANEL_API_TOKEN", ""),
             user=os.environ.get("CPANEL_USER", "welcome"),
             repository=os.environ.get("CPANEL_REPOSITORY_ROOT", DEFAULT_REPOSITORY),
-            origin=os.environ.get("CPANEL_ORIGIN", ORIGIN),
+            origin=os.environ.get("WHM_ORIGIN" if whm else "CPANEL_ORIGIN", WHM_ORIGIN if whm else ORIGIN),
             request_timeout=args.request_timeout,
             wait_timeout=args.wait_timeout,
+            transport=args.transport,
+            whm_user=os.environ.get("WHM_USER", WHM_USER),
         )
 
 
@@ -111,13 +133,34 @@ class CpanelAPI:
 
     def call(self, module, function, **parameters):
         require((module, function) in OPERATIONS, "operation_not_allowed")
-        query = urllib.parse.urlencode(parameters)
-        url = self.config.origin + "/execute/" + module + "/" + function
+        # Reject routing/impersonation overrides, including cpanel.user and api.version.
+        require(set(parameters) <= OPERATIONS[(module, function)], "parameter_not_allowed")
+        if (module, function) == ("VersionControl", "update"):
+            require(parameters == {"repository_root": self.config.repository, "branch": BRANCH},
+                    "update_parameters_not_allowed")
+        if (module, function) == ("VersionControlDeployment", "create"):
+            require(parameters == {"repository_root": self.config.repository},
+                    "deploy_parameters_not_allowed")
+        if (module, function) == ("Features", "list_features_like"):
+            require(parameters == {"pattern": ".*", "is_regex": 1}, "feature_query_not_allowed")
+        if (module, function) == ("Mysql", "get_privileges_on_database"):
+            require(parameters == {"user": DATABASE, "database": DATABASE},
+                    "database_not_allowed")
+        if self.config.transport == "whm":
+            query = urllib.parse.urlencode({"api.version": 1, "cpanel.user": CPANEL_USER,
+                                           "cpanel.module": module, "cpanel.function": function,
+                                           **parameters})
+            url = self.config.origin + "/json-api/uapi_cpanel"
+            authorization = "whm " + self.config.whm_user + ":" + self.config.token
+        else:
+            query = urllib.parse.urlencode(parameters)
+            url = self.config.origin + "/execute/" + module + "/" + function
+            authorization = "cpanel " + self.config.user + ":" + self.config.token
         if query:
             url += "?" + query
-        # cPanel documents these UAPI operations as GET. Token is only in the header.
+        # Both official interfaces document GET. The token is only in the header.
         request = urllib.request.Request(url, headers={
-            "Authorization": "cpanel " + self.config.user + ":" + self.config.token,
+            "Authorization": authorization,
             "Accept": "application/json",
             "Cache-Control": "no-store",
             "User-Agent": "Management-Hub-cPanel-Deployment/1",
@@ -135,10 +178,21 @@ class CpanelAPI:
             # Never expose an exception/body that might echo an Authorization header.
             raise DeploymentError("request_failed_no_automatic_retry") from None
         require(isinstance(payload, dict), "invalid_api_response")
-        # HTTPS /execute responses may omit the UAPI CLI wrapper.
-        result = payload.get("result", payload)
+        if self.config.transport == "whm":
+            metadata = payload.get("metadata")
+            require(isinstance(metadata, dict), "invalid_whm_response")
+            require(type(metadata.get("result")) is int and metadata["result"] == 1,
+                    "whm_operation_failed")
+            data = payload.get("data")
+            require(isinstance(data, dict) and isinstance(data.get("uapi"), dict),
+                    "invalid_whm_uapi_response")
+            result = data["uapi"]
+        else:
+            # HTTPS /execute responses may omit the UAPI CLI wrapper.
+            result = payload.get("result", payload)
         require(isinstance(result, dict), "invalid_api_response")
-        require(result.get("status") == 1 and not result.get("errors"), "api_operation_failed")
+        require(type(result.get("status")) is int and result["status"] == 1
+                and result.get("errors") in (None, []), "api_operation_failed")
         return result.get("data")
 
 
@@ -225,6 +279,28 @@ class Deployment:
                 "deployments": [{"deploy_id": self.task_id(item),
                                  "state": self.task_state(item)} for item in tasks]}
 
+    def doctor(self):
+        require(self.config.user == CPANEL_USER, "doctor_account_not_allowed")
+        features = self.api.call("Features", "list_features_like", pattern=".*", is_regex=1)
+        require(isinstance(features, list) and all(
+            isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,160}", value)
+            for value in features), "invalid_features_response")
+        privileges = self.api.call("Mysql", "get_privileges_on_database",
+                                   user=DATABASE, database=DATABASE)
+        require(isinstance(privileges, list) and all(
+            isinstance(value, str) and value in MYSQL_PRIVILEGES for value in privileges),
+            "invalid_privileges_response")
+        status = self.status()
+        # Capability evidence only: reads cannot prove permission to mutate or deploy.
+        return {"command": "doctor", "transport": self.config.transport,
+                "cpanel_user": self.config.user,
+                "enabled_feature_ids": sorted(set(features)),
+                "database": DATABASE, "database_user": DATABASE,
+                "mysql_privileges": sorted(set(privileges)),
+                "mysql_permissions": {name: name in privileges or "ALL PRIVILEGES" in privileges
+                                      for name in ("ALTER", "CREATE", "UPDATE")},
+                "repository": status, "write_operations_validated": False}
+
     def update(self, current_commit, target_commit):
         commit(current_commit)
         commit(target_commit)
@@ -286,8 +362,10 @@ class Deployment:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Management Hub: cPanel UAPI controlado; estado por defeito.")
-    parser.add_argument("command", choices=("status", "update", "deploy", "wait"), nargs="?", default="status")
+    parser = argparse.ArgumentParser(description="Management Hub: UAPI por cPanel ou WHM; estado por defeito.")
+    parser.add_argument("command", choices=("status", "doctor", "update", "deploy", "wait"), nargs="?", default="status")
+    parser.add_argument("--transport", choices=("cpanel", "whm"), default="cpanel",
+                        help="cpanel: token da conta, porta 2083; whm: token fazenda, porta 2087")
     parser.add_argument("--expected-commit", help="SHA completo revisto: destino do update ou HEAD a publicar")
     parser.add_argument("--expected-current-commit", help="SHA atual no cPanel, obrigatório para update")
     parser.add_argument("--deploy-id", help="ID existente; wait apenas consulta, sem criar novo deployment")
@@ -296,13 +374,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
     config = None
     try:
-        require(args.command == "status" or args.expected_commit, "expected_commit_required")
+        require(args.command in ("status", "doctor") or args.expected_commit, "expected_commit_required")
         require(args.command != "update" or args.expected_current_commit, "expected_current_commit_required")
         require(args.command != "wait" or args.deploy_id, "deploy_id_required")
         config = Config.from_environment(args)
         runner = Deployment(CpanelAPI(config), config)
         if args.command == "status":
             result = runner.status()
+        elif args.command == "doctor":
+            result = runner.doctor()
         elif args.command == "update":
             result = runner.update(args.expected_current_commit, args.expected_commit)
         elif args.command == "deploy":
