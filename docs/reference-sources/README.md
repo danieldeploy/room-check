@@ -10,6 +10,7 @@ Estas fontes acompanham o Management Hub para dar continuidade no Codex às auto
 | `ZKCloudbedsAuto_v5_1_direct_post_save.zip` | [`zkcloudbeds-v5.1/`](zkcloudbeds-v5.1/) | Fonte principal fornecida para Cloudbeds → ZKAccess, incluindo Direct POST e fallback visual. |
 | `ZKCloudbedsAuto_v5_0_enterprise.zip` | [`zkcloudbeds-v5.0/`](zkcloudbeds-v5.0/) | Versão anterior para comparação e recuperação de decisões. |
 | `zkteco%20decript(1).txt` | [`zkteco-codec/decode-password.user.js`](zkteco-codec/decode-password.user.js) | Userscript de referência; endereço privado substituído por placeholder. |
+| `Invoicees(1).html` | [`Invoicees.html`](Invoicees.html) | Proposta visual móvel Faturas e Portais; nome/email pessoais substituídos por exemplos. Ler [INVOICEES_MIGRATION_NOTES.md](INVOICEES_MIGRATION_NOTES.md). |
 
 Antes de alterar ou preparar a instalação, ler [GENERATOR_MIGRATION_NOTES.md](GENERATOR_MIGRATION_NOTES.md), [ZK_MIGRATION_NOTES.md](ZK_MIGRATION_NOTES.md) e o `MIGRATION.md` da versão pretendida. Aí estão os hashes dos originais, as transformações mínimas e os limites de validação.
 
@@ -24,4 +25,4 @@ Antes de alterar ou preparar a instalação, ler [GENERATOR_MIGRATION_NOTES.md](
 
 ## Continuidade
 
-Consultar [PROJECT_CONTINUITY.md](../PROJECT_CONTINUITY.md) e [CODEX_HANDOFF.md](../CODEX_HANDOFF.md). A proposta visual `Invoicees.html` permanece pendente de recuperação; não está incluída nesta pasta. Os arquivos originais e o histórico completo das conversas continuam no projeto ChatGPT original.
+Consultar [PROJECT_CONTINUITY.md](../PROJECT_CONTINUITY.md) e [CODEX_HANDOFF.md](../CODEX_HANDOFF.md). A proposta visual `Invoicees.html` foi recuperada e incluída nesta pasta em 22 de setembro de 2026. A transferência dos cinco anexos disponíveis está concluída; a implementação da proposta permanece por validar. Os arquivos originais e o histórico completo das conversas continuam no projeto ChatGPT original.

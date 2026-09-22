@@ -1,7 +1,7 @@
 {
-  "prepared_on": "2026-09-21",
-  "purpose": "Development references imported from four project attachments; operational private values excluded. Not a runtime backup or deployment.",
-  "file_count": 50,
+  "prepared_on": "2026-09-22",
+  "purpose": "Development references imported from five project attachments; operational private values and personal identifiers excluded where documented. Not a runtime backup or deployment.",
+  "file_count": 52,
   "files": [
     {
       "path": "GENERATOR_MIGRATION_NOTES.md",
@@ -9,9 +9,19 @@
       "sha256": "fc6673bff35321fd9b2bd267cc0252aedc3196e9e3ffc8228762d7fa76ce5dd8"
     },
     {
+      "path": "INVOICEES_MIGRATION_NOTES.md",
+      "bytes": 3245,
+      "sha256": "17b56837cade847d87b4e8ea6de38af721cbce0889e7e2acc91b173ba59641c9"
+    },
+    {
+      "path": "Invoicees.html",
+      "bytes": 130138,
+      "sha256": "be09588a7a65353e74a698058cefa8408f72680cb909aa457b9bd4682ff217b8"
+    },
+    {
       "path": "README.md",
-      "bytes": 2796,
-      "sha256": "0efc620c72a778141e6e18929290d289562b511d5b75a754b8b7bbd5854f8a35"
+      "bytes": 3128,
+      "sha256": "2a999c910c355424a23b3a19dcd778254c9330cc78a74e8a62c251d4761e2dad"
     },
     {
       "path": "ZK_MIGRATION_NOTES.md",
