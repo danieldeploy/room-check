@@ -24,71 +24,53 @@ portas abertas no router, IP fixo, acesso remoto à base de dados ou password do
 
 ## Instalar e testar
 
-É possível preparar as dependências e testar apenas o Chrome antes do login no Hub:
-
-```powershell
-.\invoice-runner\windows\Install.ps1 -PrepareOnly
-```
-
-Este modo não pede nem guarda uma chave, não cria uma tarefa agendada e não acede
-a portais. Depois de obter a chave pelo procedimento normal, usar `Pair-Agent.ps1`
-na pasta instalada e `Run-Agent.ps1 -TestOnly`. O teste de preparação não substitui
-a validação da ligação HTTPS autenticada. No Toshiba do projeto, validar também
-o Windows 10 real; os testes de CI em Windows não confirmam por si só esse PC.
-
-Se a política padrão bloquear scripts e o proprietário autorizar a execução,
-usar `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File <script>`.
-A opção aplica-se apenas ao processo e não altera políticas globais nem ultrapassa
-políticas definidas pela organização. Os scripts da revisão aprovada devem ser
-verificados antes de os executar.
-
-1. Depois de publicar, abrir **Faturas → Definições → Computador de automação →
-   Ligação e chave do computador**. Criar a chave. A recolha fica **em pausa**.
-   Guardar a chave diretamente no instalador; nunca no chat, num URL ou no Git.
-2. Descarregar o código da branch/revisão aprovada no Windows e extrair o ZIP.
-   Se o Windows marcar o ZIP como proveniente da Internet, verificar a origem e usar
-   **Propriedades → Desbloquear** nesse ZIP antes de extrair. Não desativar políticas
-   de execução globalmente. Se uma política da organização bloquear o script, pedir
-   ao administrador que o aprove.
-3. Em PowerShell, na pasta extraída, executar:
+1. Descarregar a revisão aprovada, verificar a origem e executar no Windows:
 
    ```powershell
-   .\invoice-runner\windows\Install.ps1
+   powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\invoice-runner\windows\Install.ps1 -PrepareOnly
    ```
 
-   O script instala dependências fixadas pelo lockfile e o Chrome para esta conta;
-   pede a chave num campo protegido; guarda-a com DPAPI e permissões privadas; testa
-   HTTPS autenticado e o arranque/renderização do Chrome com sandbox.
-   A instalação fica em `%LOCALAPPDATA%\ManagementHub\Invoices`.
-4. Se o teste passar, executar o script instalado para criar o arranque automático:
+   O modo de preparação instala dependências fixadas e testa o Chrome com sandbox,
+   sem credenciais, tarefa agendada ou recolha. RemoteSigned aplica-se apenas ao
+   processo; políticas da organização continuam a ter precedência. No Toshiba do
+   projeto, validar o Windows 10 real, além dos testes de CI em Windows.
+2. Na instalação em `%LOCALAPPDATA%\ManagementHub\Invoices`, executar
+   `app\windows\Pair-Encrypted.ps1 -Prepare` com a mesma opção de processo.
+   Copiar apenas o pedido público apresentado. A chave privada fica protegida por
+   DPAPI CurrentUser na pasta privada do agente; não é enviada ao Hub nem ao chat.
+3. No Hub, abrir **Faturas → Definições → Computador de automação → Ligação e chave
+   do computador**. Colar o pedido público e criar a chave. Esta ação mantém a recolha
+   em pausa. O Hub apresenta apenas uma resposta cifrada RSA-OAEP, destinada ao PC.
+4. Guardar a resposta cifrada num ficheiro JSON e executar no PC:
 
    ```powershell
-   & "$env:LOCALAPPDATA\ManagementHub\Invoices\app\windows\Register-Task.ps1"
+   powershell.exe -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$env:LOCALAPPDATA\ManagementHub\Invoices\app\windows\Pair-Encrypted.ps1" -PackageFile <resposta.json>
    ```
 
-   O Windows pede a password da conta Windows, **não o PIN do Windows Hello**.
-   Só o Agendador de Tarefas recebe essa password; não é gravada num script ou enviada
-   ao Hub. Pode ser necessário executar o registo como administrador, sempre com a
-   conta que instalou o agente. A tarefa usa permissões normais, arranca no início do
-   Windows mesmo sem sessão interativa e reinicia após uma falha. Não usar S4U, que
-   não disponibiliza o mesmo acesso a credenciais protegidas.
+   O pedido expira após 24 horas. A importação confirma o destinatário, decifra a
+   chave apenas no processo local e guarda a configuração com DPAPI. Elimina a chave
+   privada temporária após importar. O endpoint HTTPS é o escolhido localmente na
+   preparação, não pode ser substituído pela resposta recebida. Uma resposta inválida
+   não substitui a configuração do agente.
+5. Executar `app\windows\Run-Agent.ps1 -TestOnly` com RemoteSigned no processo.
+   Só depois de testar HTTPS autenticado e Chrome, registar `Register-Task.ps1`.
+   O modo padrão pede a password Windows ao Agendador para arrancar sem sessão.
+   Num PC com sessão automática já configurada, usar `Register-Task.ps1 -AtLogon`:
+   não pede password e não altera o login Windows. Depende de existir sessão após
+   reinício. A tarefa usa permissões normais e reinicia após falha.
+6. No Hub, confirmar ligação recente e teste aprovado, escolher **Computador Windows**
+   e guardar. Rever tarefas pendentes antes de ativar: poderão ser executadas. Os
+   agendamentos mensais existentes mantêm os seus valores.
+7. Testar uma conta e um período conhecido: acesso/2FA, alojamento, documento, data,
+   arquivo e repetição sem duplicados. O teste de Chrome não valida o conector Booking.
+   Reiniciar o PC apenas quando autorizado e confirmar o arranque automático e ZKTeco.
 
-   Num PC que já inicia sessão automaticamente, é possível acrescentar `-AtLogon`.
-   Este modo usa a sessão existente, não pede password e não configura o login
-   automático do Windows. Se ninguém iniciar sessão após um reinício, o agente
-   não arranca. A ação agendada usa `RemoteSigned` apenas no respetivo processo.
-5. No Hub, confirmar ligação recente e teste aprovado. Selecionar **Computador Windows**
-   e guardar. Os agendamentos mensais de cada conta mantêm os seus valores anteriores;
-   rever esses valores antes de ativar. Tarefas já pendentes serão processadas.
-6. Testar uma conta e um período conhecido, confirmar fatura, alojamento, data e
-   repetição sem duplicados. Os mapas de cada portal e a autenticação/2FA ainda precisam
-  de validação real. O teste de Chrome não valida um conector Booking/Airbnb/Hostelworld.
-7. Reiniciar o Windows, confirmar ligação no Hub e funcionamento do ZKTeco. Só concluir
-   a instalação depois deste teste no computador real.
+O instalador original com entrada manual protegida e `Pair-Agent.ps1` continuam
+compatíveis para instalações locais existentes. O Hub deixa de apresentar chaves
+novas em texto simples. Não guardar chaves, cookies ou credenciais no Git nem no chat.
 
-O botão de diagnóstico existente no Hub passa a executar no Windows quando este modo
-está ativo. Um computador desligado deixa as tarefas na fila; uma tarefa interrompida
-recupera pelo orçamento de tentativas já existente, após expirar a reserva de 20 minutos.
+Um PC desligado mantém tarefas na fila. Uma execução interrompida recupera depois
+ de expirar a reserva de 20 minutos, respeitando o orçamento de tentativas existente.
 
 ## Protocolo e preservação
 

@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
                 $agent=new InvoiceRemoteAgent($pdo,$config['invoices']);
-                if ($action==='agent_pair') $_SESSION['invoice_agent_token']=$agent->pair();
+                if ($action==='agent_pair') $_SESSION['invoice_agent_package']=$agent->pairEncrypted(trim((string)($_POST['agent_public_key'] ?? '')));
                 elseif ($action==='agent_revoke') $agent->revoke();
                 else $agent->setMode((string)($_POST['agent_mode'] ?? ''));
                 $returnTab='settings'; $returnEdit=0;
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 $flash=$_SESSION['invoice_flash'] ?? null; unset($_SESSION['invoice_flash']);
 $device=$isGerente ? ($_SESSION['invoice_device_token'] ?? null) : null; unset($_SESSION['invoice_device_token']);
-$agentToken=$isGerente ? ($_SESSION['invoice_agent_token'] ?? null) : null; unset($_SESSION['invoice_agent_token']);
+$agentPackage=$isGerente ? ($_SESSION['invoice_agent_package'] ?? null) : null; unset($_SESSION['invoice_agent_package'],$_SESSION['invoice_agent_token']);
 $agentStatus=['mode'=>'local','paired'=>false];
 if ($isGerente && $vault) {
     try { $agentStatus=(new InvoiceRemoteAgent($pdo,$config['invoices']))->status(); }
@@ -193,7 +193,7 @@ $viewRoot=__DIR__.'/partials/invoices'; define('INVOICE_VIEW',true);
 <?php if ($error): ?><div class="alert" role="alert" data-save-feedback="error"><?= it($error) ?></div><?php endif; ?>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= it($flash) ?></div><?php endif; ?>
 <?php if ($device): ?><div class="notice"><p><?= it('token_once') ?> <?= (int)$device['account'] ?></p><code class="invoice-secret"><?= ie($device['token']) ?></code></div><?php endif; ?>
-<?php if ($agentToken): ?><div class="notice"><p><?= it('agent_token_once') ?></p><code class="invoice-secret" translate="no"><?= ie($agentToken) ?></code></div><?php endif; ?>
+<?php if ($agentPackage): ?><div class="notice"><label class="field"><span><?= it('agent_package') ?></span><textarea name="agent_encrypted_package" rows="6" readonly translate="no"><?= ie(json_encode($agentPackage,JSON_THROW_ON_ERROR)) ?></textarea></label><p><?= it('agent_package_note') ?></p></div><?php endif; ?>
 <?php if ($settings): ?>
 <?php if (strtotime(($settings['worker_seen_at'] ?? '').' UTC')<time()-300): ?><div class="notice"><?= it('worker_stale') ?></div><?php endif; ?>
 <?php require $viewRoot.'/'.$tab.'.php'; ?>
