@@ -136,6 +136,49 @@ class Contracts(unittest.TestCase):
         self.assertEqual(api.calls[2][2]["branch"], cpanel.BRANCH)
         self.assertFalse(any(function == "create" for _, function, _ in api.calls))
 
+    def test_update_accepts_exact_ready_encodings_before_and_after_pull(self):
+        for value in (1, True, "1"):
+            with self.subTest(value=value, value_type=type(value).__name__):
+                runner, api = self.runner(self.preflight(repository(deployable=value)) + [
+                    (('VersionControl', 'update'), {}),
+                    (('VersionControl', 'retrieve'), [repository(
+                        deployable=value, last_update={"identifier": NEW})]),
+                ])
+                result = runner.update(OLD, NEW)
+                self.assertEqual(result["state"], "verified")
+                self.assertEqual(result["commit"], NEW)
+                self.assertFalse(result["deployed"])
+                writes = [(module, function, parameters) for module, function, parameters
+                          in api.calls if function != "retrieve"]
+                self.assertEqual(writes, [("VersionControl", "update", {
+                    "repository_root": cpanel.DEFAULT_REPOSITORY, "branch": cpanel.BRANCH})])
+
+    def test_not_ready_and_malformed_flags_block_update_and_deploy_before_writes(self):
+        for value in (0, False, 1.0, "0", "01", "true", " 1", "1 ", "", {},
+                      {"status": 1}, [], [1], None):
+            for operation in ("update", "deploy"):
+                with self.subTest(value=value, value_type=type(value).__name__, operation=operation):
+                    runner, api = self.runner(self.preflight(repository(deployable=value)))
+                    with self.assertRaisesRegex(cpanel.DeploymentError, "repository_not_deployable"):
+                        if operation == "update":
+                            runner.update(OLD, NEW)
+                        else:
+                            runner.deploy(OLD)
+                    self.assertEqual(len(api.calls), 2)
+                    self.assertTrue(all(function == "retrieve" for _, function, _ in api.calls))
+
+    def test_status_normalizes_only_exact_ready_flags(self):
+        for value, expected in ((1, True), (True, True), ("1", True), (1.0, False),
+                                ("0", False), ("01", False), ("true", False),
+                                ({"status": 1}, False), (None, False)):
+            with self.subTest(value=value, value_type=type(value).__name__):
+                runner, api = self.runner([
+                    (('VersionControl', 'retrieve'), [repository(deployable=value)]),
+                    (('VersionControlDeployment', 'retrieve'), []),
+                ])
+                self.assertIs(runner.status()["deployable"], expected)
+                self.assertTrue(all(function == "retrieve" for _, function, _ in api.calls))
+
     def test_update_to_unreviewed_target_never_deploys(self):
         runner, api = self.runner(self.preflight(repository()) + [
             (('VersionControl', 'update'), {}),

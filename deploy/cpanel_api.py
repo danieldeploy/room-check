@@ -211,6 +211,14 @@ class Deployment:
         require(len(matches) == 1, "repository_missing_or_ambiguous")
         return matches[0]
 
+    @staticmethod
+    def is_deployable(row):
+        # Some cPanel responses encode the documented flag as the string "1".
+        # Accept only exact ready encodings; truthiness would also admit "0".
+        value = row.get("deployable")
+        return (type(value) is int and value == 1) or value is True or (
+            type(value) is str and value == "1")
+
     def inspect(self, row, expected_commit=None, idle=True):
         require(row.get("type") == "git", "unexpected_repository_type")
         require(self.same_path(row.get("repository_root")), "unexpected_repository_path")
@@ -228,7 +236,7 @@ class Deployment:
         if idle:
             require(not tasks, "repository_busy")
             # This is cPanel's combined clean-tree / branch / .cpanel.yml check.
-            require(row.get("deployable") == 1, "repository_not_deployable")
+            require(self.is_deployable(row), "repository_not_deployable")
         return sha
 
     def tasks(self):
@@ -274,7 +282,7 @@ class Deployment:
                 "branch": row.get("branch"), "expected_branch": BRANCH,
                 "current_commit": commit(sha) if sha else None,
                 "last_deployed_commit": commit(previous) if previous else None,
-                "deployable": row.get("deployable") == 1,
+                "deployable": self.is_deployable(row),
                 "deployment_readiness": self.readiness(row),
                 "repository_busy": bool(row.get("tasks")),
                 "deployments": [{"deploy_id": self.task_id(item),
