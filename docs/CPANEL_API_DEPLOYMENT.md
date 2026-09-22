@@ -5,34 +5,19 @@ funcionalidades e os privilégios MySQL, executar **Update from Remote** e pedir
 **Deploy HEAD Commit** através da UAPI. Pode autenticar diretamente no cPanel ou
 encaminhar as operações pelo WHM do revendedor. Corre no computador
 de desenvolvimento ou num executor autorizado com Python 3.9+, sem bibliotecas
-adicionais. Não é instalado em `public_html`, não cria endpoints HTTP no Hub e não
-ativa publicações automáticas do GitHub.
+adicionais. Não é instalado em `public_html` e não cria endpoints HTTP no Hub.
+A automação opcional do GitHub tem configuração própria em `AUTOMATED_DEPLOYMENT.md`.
 
-## Estado verificado em 22 de setembro de 2026
+## Requisitos
 
-- A base de produção/desenvolvimento é `agent/room-item-assignments`, com HEAD remoto
-  `9a3cc9be6ffe01cacf9703eb9f4156caf65f5c0b` nesta verificação. Confirmar novamente
-  antes de cada operação. `main` é antiga; `codex/management-hub` contém também o
-  trabalho Windows ainda em validação. Este cliente não troca essas branches.
-- O pacote `fazenda_welcome` usa a lista `default`, que a conta revendedora `fazenda`
-  não consegue consultar ou editar. A lista de teste criada no WHM apresenta a opção
-  **API Tokens**, mas está vazia e não está associada à conta. Não a atribuir a
-  `welcome`: retiraria as funcionalidades atuais.
-- A base de dados e o utilizador MySQL da aplicação têm ambos o nome
-  `welcome_roomcheck`. O utilizador já tem **ALL PRIVILEGES**, incluindo `ALTER`,
-  `CREATE` e `UPDATE`; não foi necessário aumentar privilégios.
-- O formulário de criação de tokens do WHM, que só apresenta os privilégios
-  possuídos pelo utilizador, mostrou `cpanel-api`, `list-accts` e
-  `manage-api-tokens` para `fazenda`. Não mostrou `edit-account` nem `all`.
-  O formulário foi cancelado sem criar um token. A listagem do revendedor tinha
-  17 contas. Estes dados são uma observação da interface, não um teste de UAPI.
-- Ainda não foi criado um token nem validada uma ligação HTTPS autenticada por
-  token. O cliente foi testado apenas com respostas simuladas. Não houve update,
-  deployment ou migração em produção por este cliente.
-- A tentativa de consultar a configuração com o UAPI local do alojamento falhou
-  por falta do executável interno `/usr/local/cpanel/cpanel`. O cron temporário foi
-  removido. Isso não comprova uma falha da UAPI HTTPS; é uma limitação observada do
-  ambiente local da conta.
+A base de produção é `agent/room-item-assignments`. Confirmar o seu HEAD antes de
+cada operação. O cliente não muda de branch. Não atribuir uma lista de
+funcionalidades de teste à conta: preservar as funcionalidades atuais.
+
+O diagnóstico consulta os privilégios MySQL, sem os aumentar. A existência de
+uma opção na interface não comprova uma chamada UAPI autenticada. Validar
+conectividade, autenticação, leituras e publicação separadamente. Não registar
+valores de credenciais nem detalhes operacionais de tokens neste repositório.
 
 O transporte WHM usa um token do revendedor, pelo que a ausência da opção de
 criar tokens próprios no cPanel de `welcome` não impede, por si só, este caminho.
@@ -60,12 +45,11 @@ servidor. Não acrescentar `all`, `manage-api-tokens`, `create-user-session`,
 criação permite selecionar ACLs, validade e IPs de origem, mas não uma conta de
 destino. `cpanel.user=welcome` escolhe o destino de um pedido; não limita a
 credencial no servidor. Tratar este token como capaz de atuar nas contas
-pertencentes ao revendedor, que eram 17 na verificação. A proteção no cliente
+pertencentes ao revendedor. A proteção no cliente
 contra outras contas não substitui essa restrição no servidor.
 
-Para a primeira validação, preparar `management_hub_uapi_validation` com apenas
-as duas ACLs acima e validade curta. Se criado em 22 de setembro de 2026, a data
-proposta é 23 de setembro de 2026; confirmar a hora do servidor. Se existir um IP
+Para a primeira validação, preparar um token com apenas
+as duas ACLs acima e validade curta, confirmando a hora do servidor. Se existir um IP
 fixo do executor, restringir a esse IP depois de o confirmar. A ativação deve
 identificar expressamente o alcance da credencial e a sua validade.
 
@@ -256,8 +240,10 @@ Para uma alteração futura com `ALTER TABLE` ou atualização de dados:
    depende dela. A execução via API desencadeia essa publicação; não recebe SQL.
 5. Validar o estado da base e a aplicação depois do deployment.
 
-Este trabalho acrescenta apenas o cliente e documentação; não altera a
-`.cpanel.yml`, o helper 029, privilégios MySQL ou qualquer tabela.
+O fluxo automático usa uma tarefa única `release.sh` na `.cpanel.yml`, que chama
+`prepare_release_backup.php` antes das migrações e cópias. O helper 029,
+os privilégios MySQL e as tabelas não são alterados por esta preparação. Consultar
+`AUTOMATED_DEPLOYMENT.md` para requisitos, limites e recuperação.
 
 ## Validação local
 

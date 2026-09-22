@@ -56,6 +56,10 @@ cliente, mas o token do revendedor não fica limitado a essa conta no servidor.
 A configuração de tokens e a ligação real ainda precisam de ser validadas.
 Consulte `docs/CPANEL_API_DEPLOYMENT.md`, incluindo os limites das migrações e backups.
 
+A publicação automática após CI está preparada, com ambiente GitHub separado,
+backup privado obrigatório e verificação HTTPS. Fica desligada até configurar a
+credencial e `HUB_DEPLOY_ENABLED=true`. Consulte `docs/AUTOMATED_DEPLOYMENT.md`.
+
 ## Login e portal
 
 - `/login.php` é a entrada pública da aplicação.

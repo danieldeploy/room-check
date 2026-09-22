@@ -27,10 +27,15 @@ jobs:
           --health-retries=10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
 
-      - name: Validate cPanel API deployment client
-        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
+      - name: Validate hosting deployment tools
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
 
       - name: Configure PHP
         uses: shivammathur/setup-php@v2
@@ -67,6 +72,7 @@ jobs:
 
       - name: Run PHP tests
         run: |
+          php tests/release-backup.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
@@ -97,3 +103,38 @@ jobs:
           INVOICES_TEST_USER: root
           INVOICES_TEST_PASSWORD: test-only-ci-password
         run: php tests/invoices-mysql.php
+
+  deploy:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check' &&
+      (vars.HUB_DEPLOY_ENABLED == 'true' || vars.HUB_DIAGNOSTIC_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout the validated commit
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Release the exact production commit through WHM
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+          DIAGNOSTIC_ONLY: ${{ vars.HUB_DEPLOY_ENABLED != 'true' }}
+        run: |
+          if [ "$DIAGNOSTIC_ONLY" = 'true' ]; then
+            python3 deploy/automated_release.py --diagnostic
+          else
+            python3 deploy/automated_release.py --expected-commit "$GITHUB_SHA"
+          fi
