@@ -81,6 +81,15 @@ class Response:
 
 
 class Contracts(unittest.TestCase):
+    def test_readiness_classifies_without_returning_server_text(self):
+        self.assertEqual(cpanel.Deployment.readiness({}), 'missing')
+        for value, expected in ((1, 'integer_ready'), (0, 'integer_not_ready'),
+                                (True, 'boolean_ready'), (False, 'boolean_not_ready'),
+                                ('1', 'string_ready'), ('0', 'string_not_ready'),
+                                ('private-server-text', 'unsupported_format'),
+                                ({'status': 1}, 'unsupported_format')):
+            self.assertEqual(cpanel.Deployment.readiness({'deployable': value}), expected)
+
     def runner(self, responses):
         api = FakeAPI(responses)
         clock = Clock()
