@@ -52,6 +52,14 @@ class Runner:
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_deployment_summary_optional_branch_keeps_sha_and_conflict_checks(self):
+        row = {'last_deployment': {'repository_state': {'identifier': OLD}}}
+        self.assertEqual(release.deployed_commit(row), OLD)
+        row['last_deployment']['repository_state']['branch'] = 'other-branch'
+        with self.assertRaises(release.DeploymentError): release.deployed_commit(row)
+        row = {'last_deployment': {'repository_state': {'identifier': 'invalid'}}}
+        with self.assertRaises(release.DeploymentError): release.deployed_commit(row)
+
     def run_release(self, runner, github=None, **changes):
         return release.release(runner, github or Mock(), NEW,
                                check_health=lambda: {'https_login': 'passed'},

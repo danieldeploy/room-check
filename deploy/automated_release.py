@@ -195,7 +195,10 @@ def deployed_commit(row):
         return None
     require(isinstance(last, dict), "invalid_last_deployment")
     state = last.get("repository_state")
-    require(isinstance(state, dict) and state.get("branch") == BRANCH, "invalid_last_deployment")
+    # VersionControl's summary does not promise a branch; deployment tasks do.
+    # The caller still verifies the task branch and its SHA against this summary.
+    require(isinstance(state, dict) and ("branch" not in state or state["branch"] == BRANCH),
+            "invalid_last_deployment")
     return commit(state.get("identifier"))
 
 
