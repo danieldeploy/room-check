@@ -56,6 +56,7 @@ function hubMigrationEnsureLedger(PDO $pdo): void {
 /** @param array<int, array{version:int,name:string,path:string,checksum:string}> $files */
 function hubMigrationRun(PDO $pdo, array $files, array $baseline): array {
     hubMigrationValidateBaseline($files, $baseline);
+    hubMigrationRequire(!$pdo->inTransaction(), 'migration_open_transaction');
     hubMigrationRequire((int)$pdo->query("SELECT GET_LOCK('" . HUB_MIGRATION_LOCK . "', 30)")->fetchColumn() === 1, 'migration_busy');
     try {
         hubMigrationEnsureLedger($pdo);
@@ -111,12 +112,14 @@ function hubMigrationRun(PDO $pdo, array $files, array $baseline): array {
                 hubMigrationRequire(is_string($sql) && trim($sql) !== '', 'migration_empty');
                 hubMigrationRequire(hash_equals($migration['checksum'], hash('sha256', $sql)), 'migration_changed_during_run');
                 $pdo->exec($sql);
+                hubMigrationRequire(!$pdo->inTransaction(), 'migration_unclosed_transaction');
                 $elapsed = max(0, (int)round((hrtime(true) - $started) / 1_000_000));
                 $done = $pdo->prepare("UPDATE schema_migrations SET status='applied', applied_at=UTC_TIMESTAMP(), execution_ms=:ms WHERE version=:version AND status='running'");
                 $done->execute(['ms' => $elapsed, 'version' => $version]);
                 hubMigrationRequire($done->rowCount() === 1, 'migration_state');
                 $applied[] = $migration['name'];
             } catch (Throwable $error) {
+                if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 $failed = $pdo->prepare("UPDATE schema_migrations SET status='failed' WHERE version=:version AND status='running'");
                 $failed->execute(['version' => $version]);
                 throw $error;

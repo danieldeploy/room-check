@@ -51,6 +51,13 @@ try {
 
     $pdo->exec('DELETE FROM schema_migrations WHERE version=31');
     unlink($directory . '/031_partial_failure.sql');
+    file_put_contents($directory . '/031_unclosed_transaction.sql', 'START TRANSACTION; INSERT INTO hub_migration_test VALUES (2);');
+    try { hubMigrationRun($pdo, hubMigrationFiles($directory), $baseline); throw new LogicException('open transaction accepted'); }
+    catch (HubMigrationError $e) { migrationAssert($e->getMessage() === 'migration_unclosed_transaction', 'wrong transaction guard'); }
+    migrationAssert(!$pdo->inTransaction() && (int)$pdo->query('SELECT COUNT(*) FROM hub_migration_test')->fetchColumn() === 1, 'uncommitted DML leaked');
+    migrationAssert($pdo->query('SELECT status FROM schema_migrations WHERE version=31')->fetchColumn() === 'failed', 'failed transaction state lost');
+    $pdo->exec('DELETE FROM schema_migrations WHERE version=31');
+    unlink($directory . '/031_unclosed_transaction.sql');
     file_put_contents($directory . '/002_legacy.sql', 'SELECT 1;');
     try { hubMigrationRun($pdo, hubMigrationFiles($directory), $baseline); throw new LogicException('legacy edited'); }
     catch (HubMigrationError $e) { migrationAssert($e->getMessage() === 'migration_baseline_changed', 'wrong baseline block'); }
