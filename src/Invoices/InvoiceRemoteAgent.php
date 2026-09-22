@@ -56,6 +56,29 @@ final class InvoiceRemoteAgent
         return $token;
     }
 
+    /** Seal the new key to the computer; browser/operator never receives a plaintext secret. */
+    public function pairEncrypted(string $publicKey): array
+    {
+        if (strlen($publicKey)>8192 || !str_starts_with($publicKey,'-----BEGIN PUBLIC KEY-----')) {
+            throw new RuntimeException('agent_pair_invalid');
+        }
+        $key=openssl_pkey_get_public($publicKey);
+        $details=$key ? openssl_pkey_get_details($key) : false;
+        if (!$details || $details['type']!==OPENSSL_KEYTYPE_RSA || $details['bits']!==3072) {
+            throw new RuntimeException('agent_pair_invalid');
+        }
+        $this->assertIdle();
+        $token=bin2hex(random_bytes(32));
+        if (!openssl_public_encrypt($token,$cipher,$key,OPENSSL_PKCS1_OAEP_PADDING)) {
+            throw new RuntimeException('agent_pair_invalid');
+        }
+        $der=base64_decode(preg_replace('~-----[^-]+-----|\s~','',$details['key']),true);
+        if ($der===false) throw new RuntimeException('agent_pair_invalid');
+        $this->vault->save(self::CONFIG,['mode'=>'paused','token_hash'=>hash('sha256',$token)]);
+        $this->pdo->exec('UPDATE invoice_settings SET browser_ready=0,browser_checked_at=NULL WHERE id=1');
+        return ['version'=>1,'algorithm'=>'RSA-OAEP-SHA1','fingerprint'=>hash('sha256',$der),'ciphertext'=>base64_encode($cipher)];
+    }
+
     public function setMode(string $mode): void
     {
         $this->assertIdle();

@@ -25,6 +25,16 @@ function runInvoiceAgentCases(PDO $pdo): void
         $check($agent->mode()==='paused','Pairing cannot automatically activate collection');
         $check($vault->read('windows-agent.enc')['token_hash']===hash('sha256',$token),'Only the token hash is persisted');
         $check(!str_contains(file_get_contents($tmp.'/windows-agent.enc'),$token),'Pairing secret is absent from disk');
+        $rsa=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>3072]);
+        $public=openssl_pkey_get_details($rsa)['key'];
+        $sealed=$agent->pairEncrypted($public);
+        $check(openssl_private_decrypt(base64_decode($sealed['ciphertext']),$token,$rsa,OPENSSL_PKCS1_OAEP_PADDING),'Computer decrypts the pairing response');
+        $check(strlen($token)===64 && !str_contains(json_encode($sealed),$token),'Encrypted response does not expose the access key');
+        $check($vault->read('windows-agent.enc')['token_hash']===hash('sha256',$token),'Encrypted pairing persists only a token hash');
+        $reject(fn()=>$agent->pairEncrypted('not-a-key'),'agent_pair_invalid');
+        $weak=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
+        $reject(fn()=>$agent->pairEncrypted(openssl_pkey_get_details($weak)['key']),'agent_pair_invalid');
+        $check($send(['action'=>'ping'])['protocol']===1,'Invalid pairing input preserves the existing key');
         $reject(fn()=>$agent->handle(str_repeat('0',64),['action'=>'ping']),'forbidden');
         $reject(fn()=>$agent->setMode('windows'),'agent_test_required');
         $check($send(['action'=>'claim','claim_id'=>str_repeat('1',32)])['job']===null,'Paused agent cannot fetch a task');
