@@ -159,6 +159,13 @@ trocar o remoto usado pelo cPanel.
 5. Verificar que o plano GitHub suporta o ambiente protegido e os seus segredos em
    repositórios privados. Nunca mover o token WHM para um segredo de PR.
 
+A conta `danieldeploy` foi confirmada como **GitHub Free** na página Licensing
+em 22/09/2026. Neste plano, converter o repositório em privado faria o GitHub
+ignorar os environment secrets e as regras do ambiente. Para manter esta
+arquitetura numa conta pessoal privada é necessário GitHub Pro; a mudança de
+plano implica uma decisão de subscrição do proprietário. Não foi efetuada nenhuma
+subscrição nem alteração de visibilidade durante esta preparação.
+
 O objetivo é restringir o acesso futuro. Tornar privado não apaga clones ou forks
 públicos anteriores. O procedimento está descrito na
 [documentação cPanel](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-access-to-private-repositories/)
