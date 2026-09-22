@@ -15,7 +15,7 @@ Este registo reúne decisões disponíveis do projeto Management Hub em 21 de se
 | Automação Cloudbeds → ZKAccess | Configuração no Hub; fonte V5.1 agora disponível em `reference-sources/`. | Fonte anterior não significa integração operacional; verificar versão instalada antes de substituições. V5.0 é referência histórica. |
 | Gerador de códigos | Google Apps Script e interface agora disponíveis em `reference-sources/`. | Código mantém aplicação independente. Configurar Sheets/propriedades privadamente; não fundir automaticamente no Hub. |
 | Referência ZKTeco | Código técnico fornecido pelo proprietário, com endereço privado removido. | Ler as notas antes de adaptar; a importação não valida o sistema de controlo de acesso. |
-| Proposta Invoicees | Decisão de preservar uma proposta visual móvel para retomar o módulo. | O HTML original ainda não está disponível nesta branch. Não substituir por uma recriação presumida. |
+| Proposta Invoicees | Proposta móvel recuperada em `reference-sources/Invoicees.html`, com cinco áreas e decisões guardadas. | Ler `INVOICEES_MIGRATION_NOTES.md`; dados são de demonstração e implementação/validação continuam pendentes. |
 
 ## Decisões transversais
 
@@ -45,6 +45,6 @@ O módulo deve permitir recolha programada e apresentar estado, última execuç�
 
 ## Limites da passagem
 
-O repositório reúne código, documentação e cópias das fontes anteriores adequadas ao desenvolvimento. O histórico completo de chats, as credenciais/configurações reais e a instalação Windows não são transferidos por um commit. O contexto privado complementar fica na conversa Codex. A proposta visual Invoicees permanece assinalada como pendente até ser recuperada.
+O repositório reúne código, documentação e cópias das fontes anteriores adequadas ao desenvolvimento. O histórico completo de chats, as credenciais/configurações reais e a instalação Windows não são transferidos por um commit. O contexto privado complementar fica na conversa Codex. A proposta visual Invoicees foi recuperada em 22 de setembro de 2026 e incluída como referência de desenvolvimento, com identificação pessoal substituída. Os cinco anexos disponibilizados estão agora representados no repositório; isso não implementa a proposta visual nem valida a operação real.
 
 Antes de comunicar que um ficheiro ou funcionalidade existe, confirmar diretamente a sua presença ou estado. Quando o acesso remoto estiver indisponível, informar a limitação e trabalhar apenas sobre a revisão identificada na tarefa.

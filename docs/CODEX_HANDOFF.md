@@ -31,9 +31,9 @@ A PR #72 continua como trabalho pendente: https://github.com/danieldeploy/room-c
 - Esta preparação não cria por si só um ambiente na conta Codex. A criação/seleção deve ser confirmada na interface.
 
 ## Contexto complementar
-O proprietário dispõe de um documento privado, `Management_Hub_Continuidade_Codex.md`, com o estado detalhado e os próximos passos. O contexto privado é fornecido na conversa Codex e não deve ser publicado neste repositório. As fontes dos quatro anexos foram incorporadas em `docs/reference-sources/`, com configurações de exemplo e remoção dos valores operacionais privados. Os arquivos originais, com as configurações reais, permanecem privados. Consulte o inventário antes de trabalhar numa automação.
+O proprietário dispõe de um documento privado, `Management_Hub_Continuidade_Codex.md`, com o estado detalhado e os próximos passos. O contexto privado é fornecido na conversa Codex e não deve ser publicado neste repositório. As fontes dos quatro anexos de automação foram incorporadas em `docs/reference-sources/`, com configurações de exemplo e remoção dos valores operacionais privados. Os arquivos originais, com as configurações reais, permanecem privados. Consulte o inventário antes de trabalhar numa automação.
 
-A proposta visual `Invoicees.html` permanece pendente de recuperação. Não a reconstruir nem afirmar que foi lida a partir de uma descrição. As conversas antigas não foram copiadas integralmente: as decisões recuperadas estão resumidas neste repositório e no contexto privado da conversa.
+A proposta visual foi recuperada do anexo `Invoicees(1).html` em 22 de setembro de 2026 e está em `docs/reference-sources/Invoicees.html`, com nome/email pessoais substituídos por dados de demonstração. Ler `docs/reference-sources/INVOICEES_MIGRATION_NOTES.md` e a proposta antes de continuar o módulo. A transferência deste quinto anexo está concluída; a implementação da proposta e as validações reais continuam pendentes. As conversas antigas não foram copiadas integralmente: as decisões recuperadas estão resumidas neste repositório e no contexto privado da conversa.
 
 ## Pedido inicial
 “Continuar o Management Hub nesta branch. Lê AGENTS.md, docs/CODEX_HANDOFF.md e o contexto privado disponibilizado. Verifica as branches e a PR #72 e apresenta os próximos passos, preservando os módulos e as regras comuns.”
