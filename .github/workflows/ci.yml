@@ -29,6 +29,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate cPanel API deployment client
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
+
       - name: Configure PHP
         uses: shivammathur/setup-php@v2
         with:

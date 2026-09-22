@@ -47,6 +47,11 @@ Se o serviço estiver temporariamente indisponível, o texto não é guardado co
 
 O ficheiro `.cpanel.yml` publica em `$HOME/public_html/check`, mas não deve ser executado até existir autorização de deployment. Para esta funcionalidade, siga `docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md`, incluindo o backup prévio e a ordem das migrações.
 
+O cliente opcional `deploy/cpanel_api.py` permite consultar, atualizar e publicar
+este repositório pela UAPI, com verificações de branch/commit e acompanhamento da
+tarefa. A configuração de tokens e a ligação real ainda precisam de ser validadas.
+Consulte `docs/CPANEL_API_DEPLOYMENT.md`, incluindo os limites das migrações e backups.
+
 ## Login e portal
 
 - `/login.php` é a entrada pública da aplicação.
