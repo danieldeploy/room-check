@@ -16,7 +16,7 @@ try {
     Set-Acl -LiteralPath $data -AclObject $acl
     $pair = Join-Path $repo 'invoice-runner\windows\Pair-Encrypted.ps1'
     $request = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File $pair -Prepare | Out-String
-    if ($LASTEXITCODE -ne 0) { throw 'Public pairing request failed.' }
+    if ($LASTEXITCODE -ne 0) { Write-Host $request; throw 'Public pairing request failed.' }
     $pem = [regex]::Match($request,'(?s)-----BEGIN PUBLIC KEY-----.*?-----END PUBLIC KEY-----').Value
     if (-not $pem -or $request.Contains('PRIVATE KEY')) { throw 'Invalid public request.' }
     $publicFile = Join-Path $root 'public.pem'

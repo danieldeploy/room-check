@@ -72,6 +72,7 @@ try {
     }
     $pending.privateKey=$null
 } catch {
+    Write-Host ('Pairing diagnostic: ' + $_.Exception.GetType().FullName + '; line ' + $_.InvocationInfo.ScriptLineNumber)
     Write-Host 'Encrypted pairing failed. Keep collection paused and check the request, package and private directory.'
     exit 1
 } finally {
