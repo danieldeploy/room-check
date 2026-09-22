@@ -10,8 +10,9 @@ if (process.argv[2] === 'seal') {
     ciphertext: publicEncrypt({key,padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha1'}, Buffer.from('a'.repeat(64))).toString('base64') };
   await fs.writeFile(process.argv[4], JSON.stringify(response));
 } else {
+  process.stdin.setEncoding('utf8');
   let input = ''; for await (const chunk of process.stdin) input += chunk;
-  const config = JSON.parse(input);
+  const config = JSON.parse(input.replace(/^\uFEFF/, ''));
   assert.equal(config.token, 'a'.repeat(64));
   assert.equal(config.endpoint, 'https://check.welcomehostel.pt/invoice-agent.php');
   assert.equal(config.probeOnly, true);

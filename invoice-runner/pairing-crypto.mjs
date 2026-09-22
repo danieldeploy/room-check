@@ -32,11 +32,12 @@ export function openPairing(pending, sealed) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     let raw = '';
+    process.stdin.setEncoding('utf8');
     for await (const chunk of process.stdin) {
       raw += chunk;
       if (raw.length > 32768) throw new Error('pairing_invalid');
     }
-    const input = JSON.parse(raw);
+    const input = JSON.parse(raw.replace(/^\uFEFF/, ''));
     const result = input.action === 'prepare' ? preparePairing()
       : input.action === 'open' ? openPairing(input.pending, input.sealed) : null;
     if (!result) throw new Error('pairing_invalid');
