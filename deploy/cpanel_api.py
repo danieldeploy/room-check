@@ -275,9 +275,24 @@ class Deployment:
                 "current_commit": commit(sha) if sha else None,
                 "last_deployed_commit": commit(previous) if previous else None,
                 "deployable": row.get("deployable") == 1,
+                "deployment_readiness": self.readiness(row),
                 "repository_busy": bool(row.get("tasks")),
                 "deployments": [{"deploy_id": self.task_id(item),
                                  "state": self.task_state(item)} for item in tasks]}
+
+    @staticmethod
+    def readiness(row):
+        # Report only fixed classifications, never arbitrary server data.
+        if "deployable" not in row:
+            return "missing"
+        value = row["deployable"]
+        if type(value) is int and value in (0, 1):
+            return "integer_ready" if value == 1 else "integer_not_ready"
+        if type(value) is bool:
+            return "boolean_ready" if value else "boolean_not_ready"
+        if type(value) is str and value in ("0", "1"):
+            return "string_ready" if value == "1" else "string_not_ready"
+        return "unsupported_format"
 
     def doctor(self):
         require(self.config.user == CPANEL_USER, "doctor_account_not_allowed")

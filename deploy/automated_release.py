@@ -262,8 +262,12 @@ def main(argv=None):
         config = Config(token=secrets[0], transport="whm", origin=WHM_ORIGIN, wait_timeout=600)
         runner = Deployment(CpanelAPI(config), config)
         if args.diagnostic:
-            runner.doctor()
-            output({'ok': True, 'mode': 'diagnostic', 'authenticated_reads': 'passed', 'writes': False})
+            diagnostic = runner.doctor()
+            readiness = diagnostic.get('repository', {}).get('deployment_readiness')
+            allowed = {'missing', 'integer_ready', 'integer_not_ready', 'boolean_ready',
+                       'boolean_not_ready', 'string_ready', 'string_not_ready', 'unsupported_format'}
+            output({'ok': True, 'mode': 'diagnostic', 'authenticated_reads': 'passed', 'writes': False,
+                    'deployment_readiness': readiness if readiness in allowed else 'unavailable'})
             return 0
         result = release(runner, GitHub(secrets[1]), args.expected_commit)
         output({"ok": True, **result})
