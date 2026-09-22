@@ -12,10 +12,11 @@ function Invoke-PairingHelper($Payload, [string]$Node) {
     $info.Arguments = '"' + (Join-Path (Split-Path $PSScriptRoot -Parent) 'pairing-crypto.mjs') + '"'
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true
     $info.RedirectStandardInput = $true; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
-    $info.StandardInputEncoding = New-Object Text.UTF8Encoding($false)
     $process = [Diagnostics.Process]::Start($info)
     try {
-        $process.StandardInput.Write(($Payload | ConvertTo-Json -Compress -Depth 8)); $process.StandardInput.Close()
+        $bytes = [Text.Encoding]::UTF8.GetBytes(($Payload | ConvertTo-Json -Compress -Depth 8))
+        try { $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length); $process.StandardInput.BaseStream.Close() }
+        finally { [Array]::Clear($bytes,0,$bytes.Length) }
         $output = $process.StandardOutput.ReadToEnd()
         $null = $process.StandardError.ReadToEnd(); $process.WaitForExit()
         if ($process.ExitCode -ne 0) { throw 'Pairing helper rejected the request.' }
