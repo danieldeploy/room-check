@@ -41,8 +41,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       : input.action === 'open' ? openPairing(input.pending, input.sealed) : null;
     if (!result) throw new Error('pairing_invalid');
     process.stdout.write(JSON.stringify(result));
-  } catch {
-    process.stderr.write('pairing_invalid\n');
+  } catch (error) {
+    const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code
+      : ['TypeError','SyntaxError','RangeError'].includes(error?.name) ? error.name : 'Error';
+    process.stderr.write(`pairing_invalid:${code}\n`);
     process.exitCode = 1;
   }
 }

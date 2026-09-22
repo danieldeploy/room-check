@@ -18,8 +18,11 @@ function Invoke-PairingHelper($Payload, [string]$Node) {
         try { $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length); $process.StandardInput.BaseStream.Close() }
         finally { [Array]::Clear($bytes,0,$bytes.Length) }
         $output = $process.StandardOutput.ReadToEnd()
-        $null = $process.StandardError.ReadToEnd(); $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw 'Pairing helper rejected the request.' }
+        $diagnostic = $process.StandardError.ReadToEnd().Trim(); $process.WaitForExit()
+        if ($process.ExitCode -ne 0) {
+            if ($diagnostic -match '^pairing_invalid:[A-Za-z0-9_]+$') { Write-Host $diagnostic }
+            throw 'Pairing helper rejected the request.'
+        }
         return ($output | ConvertFrom-Json)
     } finally { $process.Dispose(); $output=$null }
 }
