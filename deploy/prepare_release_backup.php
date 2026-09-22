@@ -34,7 +34,8 @@ function hubBackupBytes(string $directory): int {
 }
 
 function hubBackupSnapshot(string $app, string $private, string $root, string $sha,
-    array $database, int $databaseBytes, callable $run = 'hubBackupRun'): string {
+    array $database, int $databaseBytes, ?callable $run = null): string {
+    $run ??= 'hubBackupRun';
     hubBackupRequire((bool)preg_match('/^[a-f0-9]{40}$/D', $sha), 'backup_commit');
     hubBackupRequire(is_dir($app) && !is_link($app), 'backup_application');
     hubBackupRequire(!is_link($private) && !is_link($root), 'backup_symlink');
