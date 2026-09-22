@@ -18,9 +18,10 @@ try {
         $cipher = [Security.Cryptography.ProtectedData]::Protect($plain, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
         $decoded = [Security.Cryptography.ProtectedData]::Unprotect($cipher, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
         if ([Text.Encoding]::UTF8.GetString($decoded) -ne 'test-only-token') { throw 'DPAPI round trip failed.' }
-        $everyone = New-Object Security.Principal.SecurityIdentifier('S-1-1-0')
-        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($everyone, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
-        Set-Acl -LiteralPath $root -AclObject $acl
+        # Change only the DACL of this disposable fixture. Set-Acl can request
+        # SeSecurityPrivilege on the real non-elevated Windows account.
+        & icacls.exe $root /grant '*S-1-1-0:(OI)(CI)(RX)' /Q | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the permission-denial fixture.' }
         & powershell.exe -NoProfile -NonInteractive -File $guard -Directory $root
         if ($LASTEXITCODE -eq 0) { throw 'Publicly readable data directory was accepted.' }
         Write-Host 'DPAPI and private-directory permission checks passed.'
