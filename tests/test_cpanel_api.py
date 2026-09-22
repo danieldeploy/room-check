@@ -81,6 +81,17 @@ class Response:
 
 
 class Contracts(unittest.TestCase):
+    def test_ssh_source_is_restricted_to_the_same_repository(self):
+        runner, _ = self.runner([])
+        for url in ('git@github.com:danieldeploy/room-check.git',
+                    'ssh://git@github.com/danieldeploy/room-check.git'):
+            self.assertEqual(runner.inspect(repository(source_repository={'remote_name': 'origin', 'url': url})), OLD)
+        for url in ('git@github.com:someone/room-check.git',
+                    'git@other.example:danieldeploy/room-check.git',
+                    'ssh://git@github.com/danieldeploy/room-check-other.git'):
+            with self.assertRaisesRegex(cpanel.DeploymentError, 'unexpected_source_repository'):
+                runner.inspect(repository(source_repository={'remote_name': 'origin', 'url': url}))
+
     def test_readiness_classifies_without_returning_server_text(self):
         self.assertEqual(cpanel.Deployment.readiness({}), 'missing')
         for value, expected in ((1, 'integer_ready'), (0, 'integer_not_ready'),

@@ -25,6 +25,8 @@ DATABASE = "welcome_roomcheck"
 SOURCE_URLS = {
     "https://github.com/danieldeploy/room-check",
     "https://github.com/danieldeploy/room-check.git",
+    "git@github.com:danieldeploy/room-check.git",
+    "ssh://git@github.com/danieldeploy/room-check.git",
 }
 DEFAULT_REPOSITORY = "/home/welcome//home/welcome/repositories/room-check"
 SHA = re.compile(r"[0-9a-f]{40}\Z")

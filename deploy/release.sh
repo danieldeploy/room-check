@@ -11,13 +11,14 @@ test ! -L "$backup_root/deploy.lock"
 exec 9>>"$backup_root/deploy.lock"
 /usr/bin/flock -n 9
 
+/usr/local/bin/php deploy/sync_cron.php --check
 /usr/local/bin/php deploy/prepare_release_backup.php
 export DEPLOYPATH="$HOME/public_html/check/"
 export PRIVATEPATH="$HOME/room-check-private/"
 # Restrict private files while keeping newly deployed web assets readable.
 (umask 022; /bin/mkdir -p "$DEPLOYPATH")
 /bin/mkdir -p "$PRIVATEPATH"
-/usr/local/bin/php deploy/prepare_invoice_workspace.php "$DEPLOYPATH" "$HOME/room-check-backups"
+/usr/local/bin/php deploy/project_migrations.php "$DEPLOYPATH"
 (
     umask 022
     /bin/cp -R assets "$DEPLOYPATH"
@@ -32,3 +33,4 @@ export PRIVATEPATH="$HOME/room-check-private/"
 /bin/rm -f "$DEPLOYPATH/translation-validate.php" "$DEPLOYPATH/src/I18n/BilingualContentMaintenance.php" "$DEPLOYPATH/src/I18n/LanguageGuard.php" "$DEPLOYPATH/src/I18n/LexicalLanguageChecker.php"
 /bin/rm -rf "$DEPLOYPATH/resources/lexicon/full" "$DEPLOYPATH/src/ThirdParty/efficient-language-detector"
 /bin/cp -R migrations "$PRIVATEPATH"
+/usr/local/bin/php deploy/sync_cron.php --apply
