@@ -1,4 +1,12 @@
 <?php if (!defined('INVOICE_VIEW') || !$isGerente) { http_response_code(404); exit; } ?>
+<section class="card"><h2><?= it('agent_title') ?></h2><p><?= it('agent_description') ?></p>
+<p><?= it('agent_last_seen') ?>: <?= ie(invoiceTime($agentStatus['last_seen'] ?? null)) ?></p>
+<p><?= it('agent_last_probe') ?>: <?= ie(invoiceTime($agentStatus['probe_at'] ?? null)) ?> — <?= ($agentStatus['probe_code'] ?? '')==='ok' ? it('browser_ready') : it('preflight_required') ?></p>
+<form method="post"><?php invoiceHidden('agent_mode'); ?><label class="field"><span><?= it('agent_mode_label') ?></span><select name="agent_mode"><?php foreach (['local','paused','windows'] as $mode): ?><option value="<?= ie($mode) ?>" <?= $agentStatus['mode']===$mode?'selected':'' ?>><?= it('agent_mode_'.$mode) ?></option><?php endforeach; ?></select></label><button class="primary-button" <?= !$vault?'disabled':'' ?>><?= it('save') ?></button></form>
+<details class="invoice-options"><summary><?= it('agent_setup') ?></summary><p><?= it('agent_pair_note') ?></p>
+<form method="post"><?php invoiceHidden('agent_pair'); ?><button class="invoice-secondary" <?= !$vault?'disabled':'' ?>><?= it('agent_pair') ?></button></form>
+<?php if ($agentStatus['paired']): ?><form method="post"><?php invoiceHidden('agent_revoke'); ?><button class="invoice-secondary"><?= it('agent_revoke') ?></button></form><?php endif; ?>
+</details></section>
 <section class="card"><h2><?= it('drive') ?></h2><p class="invoice-destination">daniel.ciorcas@welcomehostel.pt</p><div class="invoice-status-line"><?php invoiceStatus($driveSettings['state'] ?? 'not_configured',match($driveSettings['state'] ?? ''){'ready'=>'drive_connection_ready','configured'=>'drive_connection_pending',default=>'drive_not_configured'}); ?></div>
 <?php $driveCanConnect=$vault && $vault->has('drive-oauth.enc'); if (!$driveCanConnect): ?><p><?= it('drive_setup_pending') ?></p><?php endif; ?>
 <form method="post" action="invoice-drive.php"><?php invoiceHidden('connect'); ?><button class="primary-button" <?= !$driveCanConnect?'disabled':'' ?>><?= it('drive_connect') ?></button></form>

@@ -28,3 +28,6 @@ echo "MySQL migration, queue idempotency, retry, advisory lock and schedule pass
 require __DIR__ . '/invoice-drive-cases.php';
 
 require __DIR__ . '/invoice-workspace-cases.php';
+
+require __DIR__ . '/invoice-agent-cases.php';
+runInvoiceAgentCases($pdo);

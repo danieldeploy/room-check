@@ -4,6 +4,7 @@ require_once __DIR__ . '/InvoiceService.php';
 require_once __DIR__ . '/InvoiceAuth.php';
 require_once __DIR__ . '/InvoiceAlerts.php';
 require_once __DIR__ . '/InvoiceDrive.php';
+require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 
 final class InvoiceRunner
 {
@@ -12,6 +13,14 @@ final class InvoiceRunner
     /** Caller holds the advisory lock. Individual account failures never break the queue. */
     public function run(): void
     {
+        require_once __DIR__ . '/InvoiceRemoteAgent.php';
+        $remote = new InvoiceRemoteAgent($this->pdo, $this->config);
+        if ($remote->mode() !== 'local') {
+            $remote->maintenance();
+            try { $this->archive(); } catch (Throwable) {}
+            try { (new InvoiceAlerts($this->pdo, $this->config['whatsapp'] ?? []))->dispatch(); } catch (Throwable) {}
+            return;
+        }
         $service = new InvoiceService($this->pdo);
         $accounts = new InvoiceAccounts($this->pdo);
         $alerts = new InvoiceAlerts($this->pdo, $this->config['whatsapp'] ?? []);
@@ -67,25 +76,7 @@ final class InvoiceRunner
                     $input['exchangeDir'] = $exchange;
                 }
                 $result = $this->execute($input, $job, $vault);
-                $code = (string) ($result['code'] ?? 'worker_failed');
-                if (!in_array($code, ['ok', 'no_invoices'], true)) throw new RuntimeException($code);
-                if ($job['kind'] === 'preflight') {
-                    $this->pdo->prepare('UPDATE invoice_settings SET browser_ready = 1, browser_checked_at = ? WHERE id = 1')->execute([InvoiceService::utcNow()]);
-                } else {
-                    if (isset($result['session']) && is_array($result['session'])) $vault->save($sessionName, $result['session']);
-                    if ($job['kind'] === 'collect') {
-                        $documents = $result['documents'] ?? null;
-                        if (!is_array($documents) || count($documents) > 100 || ($code === 'ok' && !$documents) || ($code === 'no_invoices' && $documents)) throw new RuntimeException('invalid_document');
-                        foreach ($documents as $document) {
-                            $column = $service->import($vault, $job, $document) ? 'imported_count' : 'duplicate_count';
-                            $this->pdo->prepare("UPDATE invoice_tasks SET $column = $column + 1 WHERE id = ?")->execute([$job['id']]);
-                        }
-                    }
-                    $this->pdo->prepare("UPDATE invoice_accounts SET status = 'ready', login_verified_at = ? WHERE id = ?")
-                        ->execute([InvoiceService::utcNow(), $account['id']]);
-                }
-                $this->pdo->prepare("UPDATE invoice_tasks SET state = 'completed', result_code = ?, active_key = NULL, finished_at = ? WHERE id = ?")
-                    ->execute([$code, InvoiceService::utcNow(), $job['id']]);
+                (new InvoiceTaskLifecycle($this->pdo))->complete($vault, $job, $result);
             } catch (Throwable $e) {
                 $allowed = ['private_storage_unavailable', 'private_storage_permissions', 'vault_key_unavailable', 'vault_read_failed',
                     'vault_write_failed', 'worker_timeout', 'worker_unavailable', 'invalid_document', 'invoice_conflict',
@@ -116,16 +107,7 @@ final class InvoiceRunner
 
     private function finishFailure(array $job, string $code, InvoiceAlerts $alerts): void
     {
-        $retry = (int) $job['attempts'] < 2 && in_array($code,
-            ['auth_timeout', 'auth_invalid', 'network_error', 'worker_timeout', 'worker_unavailable', 'browser_unavailable', 'interrupted'], true);
-        $state = $retry ? 'retry' : (in_array($code, ['needs_auth', 'auth_timeout', 'auth_invalid'], true) ? 'needs_auth' : 'failed');
-        $this->pdo->prepare('UPDATE invoice_tasks SET state = ?, result_code = ?, active_key = ?, next_attempt_at = ?, finished_at = ? WHERE id = ?')
-            ->execute([$state, $code, $retry ? $job['active_key'] : null, $retry ? gmdate('Y-m-d H:i:s', time() + 120) : null,
-                $retry ? null : InvoiceService::utcNow(), $job['id']]);
-        if ($job['kind'] !== 'preflight') {
-            $this->pdo->prepare('UPDATE invoice_accounts SET status = ? WHERE id = ?')->execute([$retry ? 'retry' : $state, $job['account_id']]);
-        }
-        if (!$retry) $alerts->queue($job, $code);
+        (new InvoiceTaskLifecycle($this->pdo))->fail($job, $code, $alerts);
     }
 
     private function execute(array $input, ?array $job = null, ?InvoiceVault $vault = null): array

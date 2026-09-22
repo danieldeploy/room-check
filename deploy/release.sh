@@ -27,7 +27,7 @@ export PRIVATEPATH="$HOME/room-check-private/"
 /bin/cp -R invoice-runner "$PRIVATEPATH"
 (
     umask 022
-    /bin/cp invoice-auth.php api.php config.php index.php rooms.php item-lists.php verification-categories.php tasks.php lib.php login.php logout.php setup.php database.sql config.local.example.php .htaccess "$DEPLOYPATH"
+    /bin/cp invoice-agent.php invoice-auth.php api.php config.php index.php rooms.php item-lists.php verification-categories.php tasks.php lib.php login.php logout.php setup.php database.sql config.local.example.php .htaccess "$DEPLOYPATH"
 )
 /bin/rm -f "$DEPLOYPATH/translation-validate.php" "$DEPLOYPATH/src/I18n/BilingualContentMaintenance.php" "$DEPLOYPATH/src/I18n/LanguageGuard.php" "$DEPLOYPATH/src/I18n/LexicalLanguageChecker.php"
 /bin/rm -rf "$DEPLOYPATH/resources/lexicon/full" "$DEPLOYPATH/src/ThirdParty/efficient-language-detector"

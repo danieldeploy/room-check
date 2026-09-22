@@ -26,6 +26,7 @@ foreach($accounts as $a){$properties[$a['id']]=$repository->properties((int)$a['
 $filters=InvoiceWorkspace::filters(['period'=>'2029-02']);$period=$filters['period'];$stats=$workspace->stats($filters);
 $documents=$workspace->documents($filters);$batches=$workspace->batches($filters);$legacyTasks=$workspace->tasks($filters,true);
 $settings=['browser_ready'=>0,'browser_checked_at'=>null,'worker_seen_at'=>null];$driveSettings=[];$notifications=[];$alerts=[];$driveAlerts=[];$vault=null;$managers=[];
+$agentStatus=['mode'=>'paused','paired'=>true,'last_seen'=>null,'probe_at'=>null];
 $newAccount=false;$showArchived=false;$editing=null;$editId=0;
 foreach (['pt','en'] as $locale) {
  $_SESSION['locale']=$locale;
