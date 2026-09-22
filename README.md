@@ -114,6 +114,13 @@ As categorias apresentadas no menu — por exemplo, Quartos e Corredores — sã
 
 O Gerente e a Governanta podem criar intervalos de verificação e escolher uma Empregada de Andares ativa para cada combinação de alojamento, quarto e item. Em cada intervalo, um item só pode ter uma data e uma empregada; a data tem obrigatoriamente de ficar entre o início e o fim do intervalo. Uma reatribuição para outra empregada volta a colocar o item como pendente. A empregada vê no seu portal apenas as próprias tarefas pendentes, pode abrir diretamente o quarto correspondente e marcar o item como concluído. Todas as atribuições e conclusões são validadas no servidor, protegidas por CSRF e registadas na auditoria.
 
+## Faturas no Windows
+
+O executor HTTPS opcional permite executar Chrome no Windows e manter o Hub no cPanel.
+A instalação existente conserva o modo local; o emparelhamento coloca a recolha em pausa
+até testar a ligação e o Chrome. Consulte `docs/WINDOWS_INVOICE_AGENT.md` para instalação,
+atualização, recuperação e validação real. Não altera o executor ZKAccess.
+
 ## Automação ZKAccess V5.1
 
 A página de configuração foi preparada a partir da versão existente **V5.1 Direct POST**:
