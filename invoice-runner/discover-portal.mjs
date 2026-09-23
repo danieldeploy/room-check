@@ -17,12 +17,24 @@ async function uniqueInput(page, predicate) {
   }
   return matches.length === 1 ? matches[0] : null;
 }
-async function submit(page, field, portal) {
+async function submit(page, field, portal, identifierStep = false) {
   if (!field.info.action) fail('auth_unconfigured');
   portalUrl(portal, field.info.action);
-  await field.input.press('Enter');
+  let method = 'enter';
+  if (portal === 'booking' && identifierStep) {
+    const buttons = await page.$$('form.nw-signin button:not([type]), form.nw-signin button[type="submit"], form.nw-signin input[type="submit"]');
+    const usable = [];
+    for (const button of buttons) {
+      const info = await button.evaluate(el => ({ visible: el.getClientRects().length > 0 && !el.disabled,
+        action: el.form?.action || null }));
+      if (info.visible && info.action === field.info.action) usable.push(button);
+    }
+    if (usable.length === 1) { await usable[0].click(); method = 'form_button'; }
+    else await field.input.press('Enter');
+  } else await field.input.press('Enter');
   await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
   portalUrl(portal, page.url());
+  return method;
 }
 export async function discoverPortal(page, input) {
   const { portal, credentials = {}, authMethod } = input;
@@ -33,6 +45,7 @@ export async function discoverPortal(page, input) {
   const snapshots = [];
   let identifierSent = false, passwordSent = false, otpSent = false;
   let stage = 'prepare';
+  let identifierSubmit = null;
   try {
     if (authMethod === 'sms') await broker.prepare();
     stage = 'navigate';
@@ -49,7 +62,7 @@ export async function discoverPortal(page, input) {
         if (!identifier.info.action) fail('auth_unconfigured');
         portalUrl(portal, identifier.info.action);
         await identifier.input.type(credentials.identifier); identifierSent = true;
-        await submit(page, identifier, portal);
+        identifierSubmit = await submit(page, identifier, portal, true);
         // Booking can temporarily remove the sign-in form while loading the password step.
         // Wait for an actionable next field instead of treating the loading state as a portal change.
         if (portal === 'booking') await page.waitForFunction(() =>
@@ -86,12 +99,12 @@ export async function discoverPortal(page, input) {
     const current = publicLocation(portal, page.url());
     // A structural diagnostic never establishes account identity or a validated map.
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
-      location: current, snapshots: snapshots.slice(0, 6) };
+      location: current, snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit };
   } catch (error) {
     let location;
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage };
+      failure_stage: stage, identifier_submit: identifierSubmit };
   } finally { await broker.close(); }
 }
