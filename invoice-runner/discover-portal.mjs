@@ -56,7 +56,14 @@ export async function discoverPortal(page, input) {
         : publicLocation(portal, response.url());
       const status = response.status();
       if (!Number.isInteger(status) || status < 100 || status > 599) return;
-      responses.push({ location, status, method: ['GET','POST'].includes(request.method()) ? request.method() : 'other' });
+      const entry = { location, status, method: ['GET','POST'].includes(request.method()) ? request.method() : 'other' };
+      if (url.hostname === 'account.booking.com' && url.pathname === '/account/sign-in/login_name') {
+        entry.resource_type = ['xhr','fetch','document'].includes(request.resourceType()) ? request.resourceType() : 'other';
+        const mime = String(request.headers()['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
+        entry.content_type = mime === 'application/json' ? 'json'
+          : mime === 'application/x-www-form-urlencoded' ? 'form' : 'other';
+      }
+      responses.push(entry);
       if (responses.length > 16) responses.shift();
     } catch { /* ignore foreign and malformed responses */ }
   });
@@ -67,6 +74,10 @@ export async function discoverPortal(page, input) {
     if (authMethod === 'sms') await broker.prepare();
     stage = 'navigate';
     await page.goto(start, { waitUntil: 'domcontentloaded' });
+    if (portal === 'booking') {
+      // Its identifier handler is installed by client-side scripts after DOMContentLoaded.
+      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });
+    }
     for (let step = 0; step < 6; step++) {
       portalUrl(portal, page.url());
       stage = 'inspect';
