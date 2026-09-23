@@ -5,6 +5,21 @@ import { PortalError } from './booking.mjs';
 import { navigateBookingInvoices } from './booking-discovery.mjs';
 
 const fail = code => { throw new PortalError(code); };
+function authenticatedBookingPage(page) {
+  try {
+    const url = new URL(page.url());
+    return url.protocol === 'https:' && url.hostname === 'admin.booking.com'
+      && url.pathname.startsWith('/hotel/');
+  } catch { return false; }
+}
+async function humanChallenge(page) {
+  const current = new URL(page.url());
+  if (current.searchParams.has('op_token') || current.pathname.includes('security_challenge')) return true;
+  return await page.evaluate(() => !!document.querySelector(
+    'iframe[src*="captcha"], [id*="captcha"], [class*="captcha"], [data-testid*="captcha"]')
+    || /let.s make sure you.re human|verify you are human|choose all the /i.test(
+      (document.body?.innerText || '').slice(0, 3000))) === true;
+}
 async function uniqueInput(page, predicate) {
   const inputs = await page.$$('input');
   const matches = [];
@@ -38,7 +53,7 @@ async function submit(page, field, portal, identifierStep = false) {
   return method;
 }
 export async function discoverPortal(page, input) {
-  const { portal, credentials = {}, authMethod } = input;
+  const { portal, credentials = {}, authMethod, loginOnly = false } = input;
   const start = portal === 'booking' ? 'https://admin.booking.com/' : input.map?.login?.url;
   if (!start) fail('connector_unconfigured');
   portalUrl(portal, start);
@@ -93,6 +108,8 @@ export async function discoverPortal(page, input) {
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
+        if (loginOnly) return { version: 1, portal, validated: false, login_attempted: false,
+          authenticated_session: true, location: publicLocation(portal, page.url()), snapshots: [], responses };
         if (verified.pathname.includes('/groups/home') && typeof page.waitForFunction === 'function') {
           await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
             .some(el => el.getClientRects().length > 0
@@ -122,6 +139,10 @@ export async function discoverPortal(page, input) {
       portalUrl(portal, page.url());
       stage = 'inspect';
       snapshots.push(await inspectPortalPage(page, portal));
+      if (portal === 'booking' && await humanChallenge(page)) {
+        stage = 'human_verification'; fail('human_verification');
+      }
+      if (loginOnly && authenticatedBookingPage(page)) break;
       const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email'
         || (portal === 'booking' && x.id === 'loginname' && x.type === 'text'));
       if (identifier && !identifierSent) {
@@ -134,7 +155,9 @@ export async function discoverPortal(page, input) {
         // Booking can temporarily remove the sign-in form while loading the password step.
         // Wait for an actionable next field instead of treating the loading state as a portal change.
         if (portal === 'booking') await page.waitForFunction(() =>
-          [...document.querySelectorAll('input')].some(el => {
+          location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
+          || !!document.querySelector('[id*="captcha"], [class*="captcha"]')
+          || [...document.querySelectorAll('input')].some(el => {
             const actionable = (el.type === 'password' && el.id !== 'hidden-password')
               || el.autocomplete === 'one-time-code' || (el.type === 'tel' && el.maxLength === 6);
             return actionable && el.getClientRects().length > 0 && !el.disabled;
@@ -150,6 +173,12 @@ export async function discoverPortal(page, input) {
         portalUrl(portal, password.info.action);
         await password.input.type(credentials.password); passwordSent = true;
         await submit(page, password, portal);
+        if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
+          location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
+          || !!document.querySelector('[id*="captcha"], [class*="captcha"]')
+          || [...document.querySelectorAll('input')].some(el => el.getClientRects().length > 0
+            && !el.disabled && (el.autocomplete === 'one-time-code' || el.type === 'tel')),
+        { timeout: 20000 }).catch(() => {});
         continue;
       }
       const otp = await uniqueInput(page, x => x.autocomplete === 'one-time-code' || (x.type === 'tel' && x.maxLength === 6));
@@ -159,9 +188,20 @@ export async function discoverPortal(page, input) {
         const code = await broker.value({ method: 'sms', digits: 6 });
         await otp.input.type(code); otpSent = true;
         await submit(page, otp, portal);
+        if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
+          location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
+          || !!document.querySelector('[id*="captcha"], [class*="captcha"]'),
+        { timeout: 20000 }).catch(() => {});
         continue;
       }
       break;
+    }
+    if (loginOnly) {
+      if (portal === 'booking' && await humanChallenge(page)) { stage = 'human_verification'; fail('human_verification'); }
+      if (!authenticatedBookingPage(page)) { stage = 'login_incomplete'; fail('portal_changed'); }
+      return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
+        authenticated_session: true, location: publicLocation(portal, page.url()),
+        snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit, responses };
     }
     if (!identifierSent || !passwordSent) { stage = 'login_incomplete'; fail('portal_changed'); }
     const current = publicLocation(portal, page.url());

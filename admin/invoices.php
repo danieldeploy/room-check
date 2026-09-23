@@ -114,6 +114,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 $props=$repository->collectionProperties($id);
                 if (!$props) throw new RuntimeException('properties_required');
                 if ($action==='discover' && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
+                if ($action==='login' && $repository->get($id)['portal']==='booking'
+                    && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
                 $service->enqueue($action,(string)array_key_first($props),$period,(int)$currentUser['id'],null,$id);
                 $returnTab='activity'; $returnEdit=0; $message='requested';
             } elseif ($action==='credentials' || $action==='sms_token') {

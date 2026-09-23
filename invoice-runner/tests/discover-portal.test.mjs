@@ -156,3 +156,44 @@ test('existing Booking extranet session is inspected without credential submissi
   assert.equal(diagnostic.login_attempted, false);
   assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
 });
+
+test('isolated Booking login confirms extranet only after submitting identifier and password', async () => {
+  let url = 'about:blank'; let step = 0;
+  const typed = [];
+  const field = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, autocomplete: '', maxLength: -1,
+      action: 'https://account.booking.com/sign-in' }),
+    type: async value => { typed.push(value); },
+    press: async () => { if (++step === 2) url = 'https://admin.booking.com/hotel/hoteladmin/'; },
+  });
+  const page = {
+    url: () => url,
+    goto: async () => { url = 'https://account.booking.com/sign-in'; },
+    waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    $$: async selector => selector !== 'input' ? [] : step === 0
+      ? [field('loginname', 'text')] : step === 1 ? [field('password', 'password')] : [],
+  };
+  const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' }, authMethod: 'password' });
+  assert.deepEqual(typed, ['private@example.com', 'sensitive-password']);
+  assert.equal(result.authenticated_session, true);
+  assert.equal(result.login_attempted, true);
+  assert.equal(result.validated, false);
+  assert.ok(!JSON.stringify(result).includes('private@example.com'));
+});
+
+test('human verification stops login before password and reports a distinct diagnostic', async () => {
+  let url = 'about:blank'; const typed = [];
+  const page = {
+    url: () => url,
+    goto: async () => { url = 'https://account.booking.com/sign-in?op_token=secret'; },
+    waitForFunction: async () => {}, evaluate: async () => [],
+    $$: async () => { throw new Error('credentials must not be requested'); },
+  };
+  const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' }, authMethod: 'password' });
+  assert.deepEqual(typed, []);
+  assert.equal(result.failure_code, 'human_verification');
+  assert.equal(result.login_attempted, false);
+  assert.ok(!JSON.stringify(result).includes('secret'));
+});

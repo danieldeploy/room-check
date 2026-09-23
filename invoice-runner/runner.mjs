@@ -10,12 +10,14 @@ let browser;
 let profile;
 let connected = false;
 let controlledPage;
+let isolatedContext;
 let closing;
 async function cleanup() {
   if (closing) return closing;
   closing = (async () => {
     if (browser) {
       if (connected) {
+        if (isolatedContext) await isolatedContext.close().catch(() => {});
         if (controlledPage) await controlledPage.close().catch(() => {});
         browser.disconnect();
       }
@@ -52,7 +54,7 @@ try {
     const runtime = input.runtime ?? JSON.parse(await fs.readFile(path.join(root, 'invoice-runtime.json'), 'utf8'));
     if (runtime.executablePath && !path.isAbsolute(runtime.executablePath)) throw new PortalError('browser_unavailable');
     const { default: puppeteer } = await import('puppeteer');
-    connected = input.action === 'discover' && input.portal === 'booking';
+    connected = ['discover', 'login'].includes(input.action) && input.portal === 'booking';
     if (connected) {
       browser = await puppeteer.connect({ browserWSEndpoint: await controlledBrowserEndpoint(root),
         defaultViewport: null });
@@ -61,20 +63,21 @@ try {
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
         userDataDir: profile, timeout: 30000, dumpio: false });
     }
-    const existing = connected ? (await browser.pages()).find(candidate => {
+    if (connected && input.action === 'login') isolatedContext = await browser.createBrowserContext();
+    const existing = connected && !isolatedContext ? (await browser.pages()).find(candidate => {
       try { const url = new URL(candidate.url()); return url.protocol === 'https:'
         && url.hostname === 'admin.booking.com' && url.pathname.startsWith('/hotel/'); }
       catch { return false; }
     }) : null;
-    const page = existing || await browser.newPage();
-    if (connected && !existing) controlledPage = page;
+    const page = isolatedContext ? await isolatedContext.newPage() : existing || await browser.newPage();
+    if (connected && !existing && !isolatedContext) controlledPage = page;
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
       if (await page.title() !== 'Invoice preflight') throw new PortalError('browser_unavailable');
       process.stdout.write(JSON.stringify({ code: 'ok' }));
     } else {
-      if (input.action === 'discover') {
+      if (input.action === 'discover' || (input.action === 'login' && input.portal === 'booking')) {
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
         await page.setRequestInterception(true);
         page.on('request', request => {
@@ -85,8 +88,10 @@ try {
           void request.continue().catch(() => {});
         });
         const { discoverPortal } = await import('./discover-portal.mjs');
-        const diagnostic = await discoverPortal(page, input);
-        process.stdout.write(JSON.stringify({ code: diagnostic.failure_code || 'ok', documents: [], diagnostic }));
+        const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' });
+        const code = diagnostic.failure_code || (input.action === 'login' && !diagnostic.authenticated_session
+          ? 'portal_changed' : 'ok');
+        process.stdout.write(JSON.stringify({ code, documents: [], diagnostic }));
       } else {
       const mapFile = path.join(root, `account-${input.accountId}-map.json`);
       let map;
@@ -125,7 +130,7 @@ try {
   }
 } catch (error) {
   // Never emit error.message from Chrome, the portal, network or filesystem.
-  const allowed = ['needs_auth', 'connector_unconfigured', 'portal_changed', 'browser_unavailable', 'document_limit', 'auth_unconfigured', 'auth_timeout', 'auth_invalid', 'account_mismatch', 'invalid_document', 'network_error'];
+  const allowed = ['needs_auth', 'human_verification', 'connector_unconfigured', 'portal_changed', 'browser_unavailable', 'document_limit', 'auth_unconfigured', 'auth_timeout', 'auth_invalid', 'account_mismatch', 'invalid_document', 'network_error'];
   const code = error instanceof PortalError && allowed.includes(error.message) ? error.message : 'browser_unavailable';
   process.stdout.write(JSON.stringify({ code }));
 } finally {
