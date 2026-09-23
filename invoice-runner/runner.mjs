@@ -27,7 +27,7 @@ try {
     if (raw.length > 2 * 1024 * 1024) throw new PortalError('browser_unavailable');
   }
   const input = JSON.parse(raw);
-  if (!['preflight', 'login', 'collect'].includes(input.action) || !path.isAbsolute(input.privateDir)
+  if (!['preflight', 'login', 'collect', 'discover'].includes(input.action) || !path.isAbsolute(input.privateDir)
       || input.privateDir.split(path.sep).some(part => ['public_html', '..', '.'].includes(part))) throw new PortalError('browser_unavailable');
   const root = await assertPrivateDirectory(input.privateDir);
   if (input.action !== 'preflight' && (!Number.isSafeInteger(input.accountId) || input.accountId < 1
@@ -53,6 +53,20 @@ try {
       if (await page.title() !== 'Invoice preflight') throw new PortalError('browser_unavailable');
       process.stdout.write(JSON.stringify({ code: 'ok' }));
     } else {
+      if (input.action === 'discover') {
+        if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
+        await page.setRequestInterception(true);
+        page.on('request', request => {
+          if (request.isInterceptResolutionHandled()) return;
+          if (request.isNavigationRequest() || !['GET', 'HEAD'].includes(request.method())) {
+            try { portalUrl(input.portal, request.url()); } catch { void request.abort().catch(() => {}); return; }
+          }
+          void request.continue().catch(() => {});
+        });
+        const { discoverPortal } = await import('./discover-portal.mjs');
+        const diagnostic = await discoverPortal(page, input);
+        process.stdout.write(JSON.stringify({ code: 'ok', documents: [], diagnostic }));
+      } else {
       const mapFile = path.join(root, `account-${input.accountId}-map.json`);
       let map;
       try { map = input.map ?? JSON.parse(await fs.readFile(mapFile, 'utf8')); }
@@ -85,6 +99,7 @@ try {
       }
       const session = { cookies: safeCookies(input.portal, await browser.cookies()) };
       process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok', documents, session }));
+      }
     }
   }
 } catch (error) {

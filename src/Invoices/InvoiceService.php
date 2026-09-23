@@ -28,7 +28,7 @@ final class InvoiceService
         $accounts = new InvoiceAccounts($this->pdo);
         $accounts->get($accountId);
         if ($kind !== 'preflight' && !$accounts->active($accountId)) throw new RuntimeException('account_inactive');
-        if (!in_array($kind, ['preflight', 'login', 'collect'], true) || !self::validPeriod($period)
+        if (!in_array($kind, ['preflight', 'login', 'collect', 'discover'], true) || !self::validPeriod($period)
             || !array_key_exists($property, $accounts->properties($accountId))) throw new RuntimeException('invalid_request');
         $active = $kind === 'preflight' ? 'preflight' : "$accountId:$property:$period:$kind";
         try {

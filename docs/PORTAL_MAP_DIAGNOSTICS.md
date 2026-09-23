@@ -12,17 +12,23 @@ além do `hotel_id` numérico do Booking. O resultado é apenas uma lista de
 candidatos; não é um mapa executável. Nunca atribuir `validated: true`
 automaticamente nem enviar um diagnóstico real para GitHub ou logs.
 
-## Integração de execução
+## Execução pelo agente Windows
 
-A chamada deve ocorrer no computador Windows, dentro da pasta privada do agente,
-depois de uma autenticação autorizada pelo Hub e antes de importar documentos.
-O resultado tem de ficar numa pasta privada e de ser revisto por um Gerente ou
-por um diagnóstico automatizado que comprove a conta, o alojamento, a emissão,
-a paginação, a transferência e os estados vazios. Cada portal pode exigir
-navegação própria, mantendo a captura e os limites comuns.
+O Gerente pode pedir **Observar portal e preparar mapa** em Portais e contas.
+A tarefa usa o agente Windows já emparelhado e as credenciais guardadas no cofre.
+Para Booking, começa em `https://admin.booking.com/`, aceita apenas destinos
+Booking, identifica um único campo de utilizador/password e um único campo SMS
+reconhecível. Se a estrutura for ambígua, pára com erro; não tenta CAPTCHA nem
+faz download de documentos. O rascunho fica cifrado no cofre e é mostrado apenas
+ao Gerente. Este diagnóstico não marca o acesso como validado nem liga a agenda.
 
-Esta alteração cria **o núcleo de inspeção e as suas regras permanentes**.
-Ainda não liga um comando remoto de diagnóstico ao Hub, não automatiza a descoberta
-do login inicial e não cria um mapa Booking validado. O mapa real continua privado
-e com `validated: false` até ao teste autenticado de ambas as propriedades.
-O agente de recolha existente não pode usar estas pistas como mapa de produção.
+A inspeção estrutural é comum aos portais permitidos, mas cada portal precisa
+de um URL de entrada observado ou configurado. Nesta versão, Booking é o único
+portal com endereço inicial configurado; os restantes param sem o respetivo
+mapa inicial. Não se envia o rascunho para logs, GitHub ou JavaScript público.
+
+O resultado ainda **não é o mapa executável**. Rever os seletores e os
+identificadores de conta e alojamento, observar a página de faturas e validar
+datas, paginação e PDF real de cada propriedade antes de criar um mapa privado
+com `validated: true`. O agente instalado no PC precisa de receber a revisão
+do código aprovada; o deploy do Hub não atualiza automaticamente o PC.

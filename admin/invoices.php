@@ -110,9 +110,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             } elseif ($action==='archive_account' || $action==='restore_account') {
                 $repository->setLifecycle($id,$action==='restore_account',$action==='archive_account');
                 $returnTab='accounts'; $returnEdit=0;
-            } elseif ($action==='preflight' || $action==='login') {
+            } elseif (in_array($action,['preflight','login','discover'],true)) {
                 $props=$repository->collectionProperties($id);
                 if (!$props) throw new RuntimeException('properties_required');
+                if ($action==='discover' && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
                 $service->enqueue($action,(string)array_key_first($props),$period,(int)$currentUser['id'],null,$id);
                 $returnTab='activity'; $returnEdit=0; $message='requested';
             } elseif ($action==='credentials' || $action==='sms_token') {

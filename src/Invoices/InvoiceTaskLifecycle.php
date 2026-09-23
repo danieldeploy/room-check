@@ -29,11 +29,13 @@ final class InvoiceTaskLifecycle
                 }
                 if ($count !== count($metadata)) throw new RuntimeException('invalid_document');
             }
-            if (isset($result['session']) && is_array($result['session'])) {
+            if ($job['kind']!=='discover' && isset($result['session']) && is_array($result['session'])) {
                 $vault->save(InvoiceAccounts::secretName((int)$job['account_id'], 'session'), $result['session']);
             }
-            $this->pdo->prepare("UPDATE invoice_accounts SET status='ready',login_verified_at=? WHERE id=?")
-                ->execute([InvoiceService::utcNow(), $job['account_id']]);
+            if ($job['kind']!=='discover') {
+                $this->pdo->prepare("UPDATE invoice_accounts SET status='ready',login_verified_at=? WHERE id=?")
+                    ->execute([InvoiceService::utcNow(), $job['account_id']]);
+            }
         }
         $this->pdo->prepare("UPDATE invoice_tasks SET state='completed',result_code=?,active_key=NULL,finished_at=? WHERE id=?")
             ->execute([$code, InvoiceService::utcNow(), $job['id']]);
@@ -54,7 +56,7 @@ final class InvoiceTaskLifecycle
                 $retry ? null : InvoiceService::utcNow(),$job['id']]);
         if ($job['kind'] === 'preflight') {
             $this->pdo->prepare('UPDATE invoice_settings SET browser_ready=0,browser_checked_at=? WHERE id=1')->execute([InvoiceService::utcNow()]);
-        } else {
+        } elseif ($job['kind']!=='discover') {
             $this->pdo->prepare('UPDATE invoice_accounts SET status=? WHERE id=?')->execute([$retry ? 'retry' : $state,$job['account_id']]);
         }
         if (!$retry) $alerts->queue($job, $code);
