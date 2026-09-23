@@ -1,14 +1,14 @@
 import { portalUrl } from './portal.mjs';
 
 const MAX = 80;
-const simple = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,48}$/.test(value);
+const simple = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,48}$/.test(value)\n  && !/^[a-f0-9]{16,}$/i.test(value);
 export function publicLocation(portal, value) {
   const url = portalUrl(portal, value);
   const allowed = new URLSearchParams();
   if (portal === 'booking' && /^\d{1,12}$/.test(url.searchParams.get('hotel_id') || '')) {
     allowed.set('hotel_id', url.searchParams.get('hotel_id'));
   }
-  return url.origin + url.pathname + (allowed.size ? '?' + allowed : '');
+  const pathname = url.pathname.split('/').map(segment => {\n    if (!segment) return '';\n    let decoded; try { decoded = decodeURIComponent(segment); } catch { return ':redacted'; }\n    return /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(decoded) ? segment : ':redacted';\n  }).join('/');\n  return url.origin + pathname + (allowed.size ? '?' + allowed : '');
 }
 export function candidateSelector(tag, id, classes = []) {
   const name = String(tag || '').toLowerCase();
