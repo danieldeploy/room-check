@@ -5,6 +5,9 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'discover_map' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
+        'map_diagnostic' => ['Diagnóstico privado do mapa', 'Private map diagnostic'],
+        'map_diagnostic_note' => ['Pistas estruturais por confirmar. Este resultado não ativa o conector nem valida o login ou as faturas.', 'Unverified structural hints. This result does not activate the connector or validate login or invoices.'],
         'agent_title' => ['Computador de automação', 'Automation computer'],
         'agent_description' => ['O Windows executa a recolha e comunica com o Hub por HTTPS. As faturas e o histórico continuam no Hub.', 'Windows runs collection and communicates with the Hub over HTTPS. Invoices and history remain in the Hub.'],
         'agent_mode_local' => ['Servidor do alojamento', 'Hosting server'],
