@@ -215,6 +215,8 @@ final class InvoiceText
         'collected' => ['Recolhido', 'Collected'],
         'awaiting_csv_processing' => ['CSV original — tratamento pendente', 'Original CSV — processing pending'],
         'airbnb_pipeline' => ['Airbnb: CSV original → organização dos dados → PDF → TOConline. O procedimento CSV/PDF será configurado e validado numa etapa própria.', 'Airbnb: original CSV → data processing → PDF → TOConline. The CSV/PDF procedure will be configured and validated separately.'],
+        'booking_invoice_links' => ['Ligações ale facturilor Booking', 'Booking invoice links'],
+        'booking_invoice_links_note' => ['O legătură HTTPS pentru fiecare proprietate. Pagina trebuie validată înainte de colectare.', 'One HTTPS link per property. The page must be validated before collection.'],
         'credentials_heading' => ['Acesso e autenticação', 'Access and authentication'],
         'secret_note' => ['Campos vazios mantêm os valores guardados. As credenciais ficam cifradas e não são apresentadas.', 'Blank fields retain stored values. Credentials are encrypted and never displayed.'],
         'hostel_number' => ['Número do hostel (Hostelworld)', 'Hostel number (Hostelworld)'],
