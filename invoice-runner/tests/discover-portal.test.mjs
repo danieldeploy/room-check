@@ -57,3 +57,27 @@ test('missing form action leaves a private diagnostic at the stopped step', asyn
   assert.equal(diagnostic.snapshots.length, 1);
   assert.deepEqual(page.typed, []);
 });
+
+test('Booking sign-in ignores hidden password and submits loginname first', async () => {
+  let step = 0;
+  const typed = [];
+  const make = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, name: id, autocomplete: '',
+      maxLength: -1, action: 'https://account.booking.com/sign-in' }),
+    type: async value => { typed.push([id, value]); },
+    press: async () => { step++; },
+  });
+  const page = {
+    url: () => 'https://account.booking.com/sign-in',
+    goto: async () => {}, waitForNavigation: async () => {}, evaluate: async () => [],
+    $$: async () => step === 0
+      ? [make('hidden-password', 'password'), make('loginname', 'text')]
+      : step === 1 ? [make('password', 'password')] : [],
+  };
+  const result = await discoverPortal(page, { portal: 'booking',
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
+    authMethod: 'password' });
+  assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
+  assert.equal(result.login_attempted, true);
+  assert.equal(result.failure_code, undefined);
+});
