@@ -131,3 +131,13 @@ test('Booking discovery accepts only a unique observed URL for the matched prope
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House',
     propertyEntryUrls: [url, url] }, async () => {}), 'invoices_visible');
 });
+
+test('Booking discovery rejects observed URL for another property', async () => {
+  const row = { evaluate: async () => true, [String.fromCharCode(36, 36)]: async () => [] };
+  const page = { url: () => 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html',
+    goto: async () => { throw new Error('Unexpected navigation'); },
+    [String.fromCharCode(36, 36)]: async selector => selector === 'tr,[role="row"]' ? [row] : [] };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House',
+    propertyEntryUrls: ['https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=539828'] },
+  async () => {}), 'property_link_missing');
+});
