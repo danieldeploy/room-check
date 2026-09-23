@@ -4,10 +4,10 @@ import { navigateBookingInvoices } from '../booking-discovery.mjs';
 
 test('Booking discovery stops before clicking an ambiguous property', async () => {
   let clicks = 0;
-  const row = { evaluate: async () => true };
+  const row = { evaluate: async () => true, $: async () => [] };
   const page = {
     url: () => 'https://admin.booking.com/hotel/hoteladmin/groups/home/',
-    $$: async selector => selector === 'tr' ? [row, row] : [],
+    $$: async selector => selector === 'tr,[role="row"]' ? [row, row] : [],
   };
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
     () => { clicks++; }), 'property_ambiguous');
@@ -27,7 +27,7 @@ test('Booking discovery follows a unique property, Finance and Invoices control'
     url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/'
       : 'https://admin.booking.com/hotel/hoteladmin/?hotel_id=1140306',
     waitForNavigation: async () => {},
-    $$: async selector => selector === 'tr' ? [row] : step === 1 ? [control('finance', 2)]
+    $$: async selector => selector === 'tr,[role="row"]' ? [row] : step === 1 ? [control('finance', 2)]
       : step === 2 ? [control('invoices', 3)] : [],
   };
   const stages = [];
