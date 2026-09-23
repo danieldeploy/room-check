@@ -131,6 +131,7 @@ async function execute(client, root, runtime, job) {
     }
     const payload = { code: result.code, documents: ids };
     if (result.session) payload.session = result.session;
+    if (job.input.action === 'discover' && result.diagnostic) payload.diagnostic = result.diagnostic;
     const reply = await request({ action: 'complete', result: payload });
     if (reply.accepted !== true) throw new AgentError('invalid_response');
   } catch (error) {
