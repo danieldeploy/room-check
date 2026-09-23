@@ -43,6 +43,28 @@ text validates the company; otherwise review is required. PDFs need pdftotext av
 
 ## SMS / email / TOTP
 
+### Booking implementation order (decision, 23 September 2026)
+
+1. Prove an automatic login with the Hub's saved credentials in an isolated context
+   of the controlled Windows Chrome. This context must not reuse the manager's
+   already authenticated tab, and the test must not require an invoice map.
+2. If Booking offers SMS 2FA, receive the code through the existing correlated
+   Android-to-Hub flow and finish the login automatically. A new isolated login
+   can request SMS, but Booking decides whether to present that challenge;
+   never claim that an SMS was tested unless it was actually requested and used.
+3. On an expired session, retry normal login first. Queue a manager WhatsApp
+   intervention notice only for an actual human-verification challenge. Do not
+   treat ordinary expiry as requiring a person, and do not try to bypass CAPTCHA.
+4. After an independently verified login, record the navigation to invoices and
+   validate collection for Welcome Guest House and City Center Guest House.
+   Monthly collection uses the previous month's **invoice issue date** in
+   Europe/Lisbon, on the configured day. A completed structural discovery alone
+   does not prove login or a downloaded invoice.
+
+The public Booking Connectivity API documentation does not establish an invoice
+download endpoint for this account; do not base the implementation on an
+unverified API assumption. Keep the login test separate from the invoice map.
+
 The per-account Android device token is displayed once and stored only as a hash.
 POST invoice-auth.php with Authorization: Bearer TOKEN;
 JSON fields account_id, sender, message, received_at (Unix seconds), optional sim. Only a single active

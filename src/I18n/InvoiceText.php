@@ -7,6 +7,7 @@ final class InvoiceText
     public const TEXT = [
         'discover_map' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
         'map_diagnostic' => ['Diagnóstico privado do mapa', 'Private map diagnostic'],
+        'login_diagnostic' => ['Diagnóstico privado do login', 'Private login diagnostic'],
         'map_diagnostic_note' => ['Pistas estruturais por confirmar. Este resultado não ativa o conector nem valida o login ou as faturas.', 'Unverified structural hints. This result does not activate the connector or validate login or invoices.'],
         'agent_title' => ['Computador de automação', 'Automation computer'],
         'agent_description' => ['O Windows executa a recolha e comunica com o Hub por HTTPS. As faturas e o histórico continuam no Hub.', 'Windows runs collection and communicates with the Hub over HTTPS. Invoices and history remain in the Hub.'],
@@ -157,6 +158,7 @@ final class InvoiceText
         'completed' => ['Concluída', 'Completed'],
         'failed' => ['Falhou', 'Failed'],
         'needs_auth' => ['A autenticação requer intervenção.', 'Authentication requires intervention.'],
+        'human_verification' => ['O Booking pediu verificação humana.', 'Booking requested human verification.'],
         'worker_busy' => ['Existe uma recolha em curso. Aguarde antes de alterar a configuração.', 'A collection is running. Wait before changing configuration.'],
         'login_required' => ['Teste primeiro o acesso à conta.', 'Test account access first.'],
         'settings' => ['Configuração das contas', 'Account settings'],
@@ -166,6 +168,7 @@ final class InvoiceText
         'sms_device_settings' => ['Configuração do dispositivo SMS', 'SMS device settings'],
         'preflight' => ['Testar serviço de recolha', 'Test collection service'],
         'login' => ['Testar acesso à conta', 'Test account access'],
+        'booking_login' => ['Testar login automático Booking', 'Test automatic Booking login'],
         'identifier' => ['Utilizador / email', 'Username / email'],
         'password' => ['Palavra-passe', 'Password'],
         'save_credentials' => ['Guardar credenciais cifradas', 'Save encrypted credentials'],

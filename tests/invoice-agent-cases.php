@@ -59,6 +59,18 @@ function runInvoiceAgentCases(PDO $pdo): void
         $check($service->browserReady(),'Remote Chrome updates Hub readiness');
 
         $vault->save('account-1-credentials.enc',['identifier'=>'test-user','password'=>'test-secret','sms_sender'=>'Booking','sms_keyword'=>'code']);
+        $login=$service->enqueue('login','1140306','2026-08',1);
+        $loginOffer=$send(['action'=>'claim','claim_id'=>str_repeat('b',32)])['job'];
+        $check($loginOffer['id']===$login && !isset($loginOffer['input']['map']),
+            'Booking login tests credentials without requiring an invoice map');
+        $loginIdentity=['task_id'=>$login,'lease'=>$loginOffer['lease']];
+        $loginDiagnostic=['version'=>1,'portal'=>'booking','validated'=>false,'login_attempted'=>true,
+            'authenticated_session'=>true,'location'=>'https://admin.booking.com/hotel/hoteladmin/groups/home/',
+            'snapshots'=>[]];
+        $check($send($loginIdentity+['action'=>'complete','result'=>['code'=>'ok','documents'=>[],
+            'diagnostic'=>$loginDiagnostic]])['state']==='completed','Verified isolated Booking login completes');
+        $check($vault->read('account-1-login-diagnostic.enc')['authenticated_session']===true,
+            'Private login diagnostic is stored separately from invoice map');
         InvoiceVault::atomicWrite($tmp.'/account-1-map.json','{"version":2,"validated":false}');
         $job=$service->enqueue('collect','1140306','2026-08',1);
         $offer=$send(['action'=>'claim','claim_id'=>str_repeat('4',32)])['job'];

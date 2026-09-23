@@ -45,12 +45,12 @@ final class InvoiceTaskLifecycle
     {
         $allowed = ['private_storage_unavailable','private_storage_permissions','vault_key_unavailable','vault_read_failed',
             'vault_write_failed','worker_timeout','worker_unavailable','invalid_document','invoice_conflict','connector_unconfigured',
-            'browser_unavailable','network_error','needs_auth','auth_unconfigured','auth_timeout','auth_invalid','portal_changed',
+            'browser_unavailable','network_error','needs_auth','human_verification','auth_unconfigured','auth_timeout','auth_invalid','portal_changed',
             'document_limit','account_mismatch','interrupted','worker_failed'];
         if (!in_array($code, $allowed, true)) $code = 'worker_failed';
         $retry = (int)$job['attempts'] < 2 && in_array($code,
             ['auth_timeout','auth_invalid','network_error','worker_timeout','worker_unavailable','browser_unavailable','interrupted'], true);
-        $state = $retry ? 'retry' : (in_array($code, ['needs_auth','auth_timeout','auth_invalid'], true) ? 'needs_auth' : 'failed');
+        $state = $retry ? 'retry' : (in_array($code, ['needs_auth','human_verification','auth_timeout','auth_invalid'], true) ? 'needs_auth' : 'failed');
         $this->pdo->prepare('UPDATE invoice_tasks SET state=?,result_code=?,active_key=?,next_attempt_at=?,finished_at=? WHERE id=?')
             ->execute([$state,$code,$retry ? $job['active_key'] : null,$retry ? gmdate('Y-m-d H:i:s',time()+120) : null,
                 $retry ? null : InvoiceService::utcNow(),$job['id']]);

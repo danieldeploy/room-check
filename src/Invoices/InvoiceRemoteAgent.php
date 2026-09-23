@@ -204,7 +204,8 @@ final class InvoiceRemoteAgent
                 $input['authMethod']=$account['auth_method'];
                 $session=InvoiceAccounts::secretName((int)$account['id'],'session');
                 $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];
-                if ($job['kind']!=='discover' && $account['portal']!=='email') {
+                if ($job['kind']!=='discover' && !($job['kind']==='login' && $account['portal']==='booking')
+                    && $account['portal']!=='email') {
                     $map='account-'.$account['id'].'-map.json';
                     if (!$this->vault->has($map) && (int)$account['id']===1 && $account['portal']==='booking') $map='booking-map.json';
                     $file=$this->vault->path($map);
@@ -320,17 +321,21 @@ final class InvoiceRemoteAgent
             $this->pdo->beginTransaction();
             try {
                 $code=$result['code'] ?? 'worker_failed';
-                if ($job['kind']==='discover' && isset($result['diagnostic'])) {
+                if (in_array($job['kind'],['discover','login'],true) && isset($result['diagnostic'])) {
                     $draft=$result['diagnostic'];
                     $encoded=is_array($draft) ? json_encode($draft,JSON_THROW_ON_ERROR) : false;
                     if (!$encoded || strlen($encoded)>65536 || ($draft['validated'] ?? null)!==false
                         || ($draft['portal'] ?? null)!==$this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()) {
                         throw new RuntimeException('invalid_document');
                     }
-                    $this->vault->save('account-'.$job['account_id'].'-map-diagnostic.enc',$draft);
+                    $suffix=$job['kind']==='login' ? 'login-diagnostic.enc' : 'map-diagnostic.enc';
+                    $this->vault->save('account-'.$job['account_id'].'-'.$suffix,$draft);
                 }
                 if (in_array($code,['ok','no_invoices'],true)) {
                     if ($job['kind']==='discover' && !isset($result['diagnostic'])) throw new RuntimeException('invalid_document');
+                    if ($job['kind']==='login' && $this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()==='booking'
+                        && (($result['diagnostic']['authenticated_session'] ?? null)!==true
+                            || ($result['diagnostic']['login_attempted'] ?? null)!==true)) throw new RuntimeException('invalid_document');
                     $ids=$result['documents'] ?? [];
                     if (!is_array($ids) || !array_is_list($ids) || count($ids)!==count(array_unique($ids,SORT_REGULAR))
                         || ($job['kind']==='collect' && count($ids)!==count($lease['uploads']))
