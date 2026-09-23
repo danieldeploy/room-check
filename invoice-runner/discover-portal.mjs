@@ -43,6 +43,18 @@ export async function discoverPortal(page, input) {
   portalUrl(portal, start);
   const broker = new SecondFactor(input, value => portalUrl(portal, value));
   const snapshots = [];
+  const responses = [];
+  if (typeof page.on === 'function') page.on('response', response => {
+    try {
+      const request = response.request();
+      if (!['document','xhr','fetch'].includes(request.resourceType())) return;
+      const location = publicLocation(portal, response.url());
+      const status = response.status();
+      if (!Number.isInteger(status) || status < 100 || status > 599) return;
+      responses.push({ location, status, method: ['GET','POST'].includes(request.method()) ? request.method() : 'other' });
+      if (responses.length > 12) responses.shift();
+    } catch { /* ignore foreign and malformed responses */ }
+  });
   let identifierSent = false, passwordSent = false, otpSent = false;
   let stage = 'prepare';
   let identifierSubmit = null;
@@ -99,7 +111,7 @@ export async function discoverPortal(page, input) {
     const current = publicLocation(portal, page.url());
     // A structural diagnostic never establishes account identity or a validated map.
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
-      location: current, snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit };
+      location: current, snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit, responses };
   } catch (error) {
     let location;
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
