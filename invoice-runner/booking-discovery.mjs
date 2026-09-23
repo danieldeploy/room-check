@@ -37,7 +37,7 @@ export async function navigateBookingInvoices(page, input, onStep) {
           && ((el.textContent || '').toLowerCase().includes(values.label.toLowerCase())
             || (el.textContent || '').includes(values.property)
             || el.getAttribute('data-hotel-id') === values.property)),
-      { label, property }, { timeout: 15000 }).catch(() => {});
+      { timeout: 15000 }, { label, property }).catch(() => {});
     }
     const rows = await page.$$('tr,[role="row"]');
     const matches = [];
