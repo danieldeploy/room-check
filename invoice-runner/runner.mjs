@@ -65,7 +65,7 @@ try {
         });
         const { discoverPortal } = await import('./discover-portal.mjs');
         const diagnostic = await discoverPortal(page, input);
-        process.stdout.write(JSON.stringify({ code: 'ok', documents: [], diagnostic }));
+        process.stdout.write(JSON.stringify({ code: diagnostic.failure_code || 'ok', documents: [], diagnostic }));
       } else {
       const mapFile = path.join(root, `account-${input.accountId}-map.json`);
       let map;
