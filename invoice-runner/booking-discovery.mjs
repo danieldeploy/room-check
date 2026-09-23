@@ -56,7 +56,7 @@ export async function navigateBookingInvoices(page, input, onStep) {
     }
     const entry = allowed.filter(item => {
       const u = new URL(item.href);
-      return u.hostname === 'admin.booking.com' && u.pathname === '/hotel/hoteladmin/'
+      return u.hostname === 'admin.booking.com' && u.pathname === '/hotel/hoteladmin/extranet_ng/manage/home.html'
         && u.searchParams.get('hotel_id') === property;
     });
     const exact = [...new Map(entry.map(item => [item.href, item])).values()];
