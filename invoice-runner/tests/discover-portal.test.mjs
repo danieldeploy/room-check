@@ -17,7 +17,7 @@ function fakePage(action = 'https://account.booking.com/login') {
     goto: async () => { url = 'https://account.booking.com/login'; },
     waitForNavigation: async () => {},
     waitForFunction: async () => {},
-    $: async selector => {
+    $$: async selector => {
       if (selector !== 'input') return [];
       if (stage === 0) return [field('email','username')];
       if (stage === 1) return [field('password','current-password')];
@@ -72,7 +72,7 @@ test('Booking sign-in ignores hidden password and submits loginname first', asyn
   const page = {
     url: () => 'https://account.booking.com/sign-in',
     goto: async () => {}, waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
-    $: async selector => selector !== 'input' ? [] : step === 0
+    $$: async selector => selector !== 'input' ? [] : step === 0
       ? [make('hidden-password', 'password'), make('loginname', 'text')]
       : step === 1 ? [make('password', 'password')] : [],
   };
@@ -98,7 +98,7 @@ test('waits through Booking loading state before inspecting password step', asyn
     url: () => 'https://account.booking.com/sign-in',
     goto: async () => {}, waitForNavigation: async () => {}, evaluate: async () => [],
     waitForFunction: async () => { waits++; if (stage === 1) stage = 2; },
-    $: async selector => selector !== 'input' ? [] : stage === 0 ? [field('loginname', 'text')]
+    $$: async selector => selector !== 'input' ? [] : stage === 0 ? [field('loginname', 'text')]
       : stage === 1 ? [] : stage === 2 ? [field('password', 'password')] : [],
   };
   const result = await discoverPortal(page, { portal: 'booking',
