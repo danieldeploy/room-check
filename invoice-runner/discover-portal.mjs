@@ -32,14 +32,18 @@ export async function discoverPortal(page, input) {
   const broker = new SecondFactor(input, value => portalUrl(portal, value));
   const snapshots = [];
   let identifierSent = false, passwordSent = false, otpSent = false;
+  let stage = 'prepare';
   try {
     if (authMethod === 'sms') await broker.prepare();
+    stage = 'navigate';
     await page.goto(start, { waitUntil: 'domcontentloaded' });
     for (let step = 0; step < 6; step++) {
       portalUrl(portal, page.url());
+      stage = 'inspect';
       snapshots.push(await inspectPortalPage(page, portal));
       const password = await uniqueInput(page, x => x.type === 'password');
       if (password && !passwordSent) {
+        stage = 'password';
         if (!credentials.password) fail('auth_unconfigured');
         if (!password.info.action) fail('auth_unconfigured');
         portalUrl(portal, password.info.action);
@@ -49,6 +53,7 @@ export async function discoverPortal(page, input) {
       }
       const otp = await uniqueInput(page, x => x.autocomplete === 'one-time-code' || (x.type === 'tel' && x.maxLength === 6));
       if (otp && !otpSent) {
+        stage = 'second_factor';
         if (authMethod !== 'sms') fail('needs_auth');
         const code = await broker.value({ method: 'sms', digits: 6 });
         await otp.input.type(code); otpSent = true;
@@ -57,6 +62,7 @@ export async function discoverPortal(page, input) {
       }
       const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email');
       if (identifier && !identifierSent) {
+        stage = 'identifier';
         if (!credentials.identifier) fail('auth_unconfigured');
         if (!identifier.info.action) fail('auth_unconfigured');
         portalUrl(portal, identifier.info.action);
@@ -70,5 +76,11 @@ export async function discoverPortal(page, input) {
     // A structural diagnostic never establishes account identity or a validated map.
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location: current, snapshots: snapshots.slice(0, 6) };
+  } catch (error) {
+    let location;
+    try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
+    return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
+      location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
+      failure_stage: stage };
   } finally { await broker.close(); }
 }
