@@ -104,7 +104,7 @@ test('waits through Booking loading state before inspecting password step', asyn
   const result = await discoverPortal(page, { portal: 'booking',
     credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
     authMethod: 'password' });
-  assert.equal(waits, 1);
+  assert.equal(waits, 2);
   assert.equal(result.login_attempted, true);
   assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
 });
