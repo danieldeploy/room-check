@@ -141,3 +141,21 @@ test('Booking discovery rejects observed URL for another property', async () => 
     propertyEntryUrls: ['https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=539828'] },
   async () => {}), 'property_link_missing');
 });
+
+test('Booking discovery uses visible navigation text instead of hidden submenu text', async () => {
+  let step = 0;
+  const control = (visibleLabel, next) => ({
+    evaluate: async fn => fn({ getClientRects: () => [1], disabled: false,
+      innerText: visibleLabel, textContent: visibleLabel + ' hidden submenu',
+      getAttribute: () => null, tagName: 'BUTTON' }),
+    click: async () => { step = next; },
+  });
+  const page = {
+    url: () => 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
+    waitForNavigation: async () => {},
+    [String.fromCharCode(36, 36)]: async () => step === 0 ? [control('Finance', 1)]
+      : step === 1 ? [control('Invoices', 2)] : [],
+  };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
+    async () => {}), 'invoices_visible');
+});

@@ -15,7 +15,7 @@ async function waitForControl(page, names) {
   if (typeof page.waitForFunction !== 'function') return;
   await page.waitForFunction(labels => [...document.querySelectorAll('a,button,[role="button"]')]
     .some(el => el.getClientRects().length > 0 && !el.disabled
-      && labels.includes((el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase())),
+      && labels.includes((el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase())),
   { timeout: 15000 }, names).catch(() => {});
 }
 async function uniqueControl(page, names) {
@@ -24,7 +24,7 @@ async function uniqueControl(page, names) {
   for (const control of controls) {
     const info = await control.evaluate(el => ({
       visible: el.getClientRects().length > 0 && !el.disabled,
-      label: (el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase(),
+      label: (el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase(),
       href: el.tagName === 'A' ? el.href : null,
     }));
     if (info.visible && names.includes(info.label)) matches.push({ control, info });
