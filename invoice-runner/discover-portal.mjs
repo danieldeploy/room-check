@@ -117,6 +117,6 @@ export async function discoverPortal(page, input) {
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, identifier_submit: identifierSubmit };
+      failure_stage: stage, identifier_submit: identifierSubmit, responses };
   } finally { await broker.close(); }
 }
