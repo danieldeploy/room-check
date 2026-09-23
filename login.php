@@ -52,6 +52,8 @@ header('Cache-Control: no-store');
     <meta name="robots" content="noindex,nofollow">
     <title>Entrar — <?= htmlspecialchars(PortalBrand::name(), ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars(PortalBrand::legalCompanyName(), ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="assets/auth.css?v=<?= (int) filemtime(__DIR__ . '/assets/auth.css') ?>">
+    <link rel="stylesheet" href="assets/password-visibility.css">
+    <script src="assets/password-visibility.js?v=<?= (int) filemtime(__DIR__ . '/assets/password-visibility.js') ?>" defer></script>
 </head>
 <body>
     <main class="auth-shell">

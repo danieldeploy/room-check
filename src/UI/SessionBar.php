@@ -28,6 +28,7 @@ final class SessionBar
         $validationFeedbackVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/validation-feedback.js');
         $globalMenusVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/global-menus.js');
         $globalCrudVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/global-crud.js');
+        $passwordVisibilityVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/password-visibility.js');
         $saveContextVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/save-context.js');
         $saveContextCssVersion = (int) @filemtime(dirname(__DIR__, 2) . '/assets/save-context.css');
         ?>
@@ -60,6 +61,8 @@ final class SessionBar
         <script src="<?= self::escape($prefix . 'assets/app-dialog.js?v=' . $appDialogVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/immediate-edit-decision.js?v=' . $immediateEditDecisionVersion) ?>"></script>
         <script src="<?= self::escape($prefix . 'assets/validation-feedback.js?v=' . $validationFeedbackVersion) ?>"></script>
+        <link rel="stylesheet" href="<?= self::escape($prefix . 'assets/password-visibility.css') ?>">
+        <script src="<?= self::escape($prefix . 'assets/password-visibility.js?v=' . $passwordVisibilityVersion) ?>" defer></script>
         <script src="<?= self::escape($prefix . 'assets/global-menus.js?v=' . $globalMenusVersion) ?>" defer></script>
         <script src="<?= self::escape($prefix . 'assets/global-crud.js?v=' . $globalCrudVersion) ?>" defer></script>
         <script src="<?= self::escape($prefix . 'assets/save-context.js?v=' . $saveContextVersion) ?>" data-user-id="<?= (int) ($user['id'] ?? 0) ?>" data-dismiss-label="<?= self::escape(SiteTranslations::text('Fechar', 'Close')) ?>" defer></script>
