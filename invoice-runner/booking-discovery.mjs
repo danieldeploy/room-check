@@ -54,7 +54,12 @@ export async function navigateBookingInvoices(page, input, onStep) {
         catch { /* reject foreign destination */ }
       }
     }
-    const exact = allowed.filter(item => item.href.includes(property));
+    const entry = allowed.filter(item => {
+      const u = new URL(item.href);
+      return u.hostname === 'admin.booking.com' && u.pathname === '/hotel/hoteladmin/'
+        && u.searchParams.get('hotel_id') === property;
+    });
+    const exact = [...new Map(entry.map(item => [item.href, item])).values()];
     const target = exact.length === 1 ? exact[0]
       : matches.length === 1 && allowed.length === 1 ? allowed[0] : null;
     if (!target) return matches.length === 0 && exact.length === 0 ? 'property_not_found'
