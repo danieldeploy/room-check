@@ -327,6 +327,8 @@ final class InvoiceText
         'notice_12' => ['Liberte espaço no Google Drive e clique em Tentar novamente no módulo.', 'Free space in Google Drive and select Try again in the module.'],
         'notice_13' => ['Verifique a ligação e a pasta da conta daniel.ciorcas@welcomehostel.pt e clique em Tentar novamente.', 'Check the connection and folder for daniel.ciorcas@welcomehostel.pt and select Try again.'],
         'notice_14' => ['Peça a verificação dos ficheiros ao suporte antes de repetir. Não elimine a cópia do servidor.', 'Ask support to verify the files before retrying. Do not remove the server copy.'],
+        'notice_human_verification' => ['O Booking pediu uma verificação humana para iniciar sessão.', 'Booking requires human verification to sign in.'],
+        'notice_human_verification_action' => ['Inicie sessão no Chrome de recolha e conclua a verificação humana no Booking. Depois volte a testar o login automático.', 'Sign in using the collection Chrome and complete Booking human verification. Then test automatic login again.'],
         'notice_15' => ['Verifique o acesso e o método 2FA da conta no módulo e teste novamente.', 'Check account access and the 2FA method in the module, then test again.'],
         'notice_16' => ['Verifique o Chrome no computador de recolha e volte a testar o acesso.', 'Check Chrome on the collection computer, then test access again.'],
         'notice_17' => ['Peça ao suporte para validar o procedimento de acesso e recolha desta conta.', 'Ask support to validate access and collection for this account.'],
