@@ -69,8 +69,24 @@ export async function navigateBookingInvoices(page, input, onStep) {
         && u.searchParams.get('hotel_id') === property;
     });
     const exact = [...new Map(entry.map(item => [item.href, item])).values()];
-    const target = exact.length === 1 ? exact[0]
+    let target = exact.length === 1 ? exact[0]
       : matches.length === 1 && allowed.length === 1 ? allowed[0] : null;
+    if (!target && matches.length === 1 && exact.length === 0) {
+      const controls = [];
+      for (const control of await matches[0][String.fromCharCode(36, 36)]('button,[role="button"],a')) {
+        const info = await control.evaluate(el => ({
+          visible: el.getClientRects().length > 0 && !el.disabled,
+          label: (el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase(),
+          href: el.tagName === 'A' ? el.href : null,
+        }));
+        if (!info.visible || ![label.toLowerCase(), property].includes(info.label)) continue;
+        if (info.href) {
+          try { portalUrl('booking', info.href); } catch { continue; }
+        }
+        controls.push(control);
+      }
+      if (controls.length === 1) target = { link: controls[0] };
+    }
     if (!target) return matches.length === 0 && exact.length === 0 ? 'property_not_found'
       : matches.length > 1 || exact.length > 1 ? 'property_ambiguous' : 'property_link_missing';
     await clickAndSettle(page, target.link);
