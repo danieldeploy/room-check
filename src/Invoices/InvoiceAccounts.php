@@ -176,20 +176,6 @@ final class InvoiceAccounts
         if (($method === 'email' || $account['portal'] === 'email') &&
             (empty($data['imap_host']) || empty($data['imap_user']) || empty($data['imap_password']))) throw new RuntimeException('auth_unconfigured');
         if ($method === 'email' && (empty($data['email_sender']) || empty($data['email_recipient']) || empty($data['email_subject']))) throw new RuntimeException('auth_unconfigured');
-        if ($account['portal'] === 'booking' && isset($input['invoice_urls'])) {
-            if (!is_array($input['invoice_urls'])) throw new RuntimeException('invalid_request');
-            $properties=$this->activeProperties($id);
-            foreach ($input['invoice_urls'] as $property=>$url) {
-                if (!is_string($property) || !isset($properties[$property]) || !is_string($url) || strlen($url)>2048) throw new RuntimeException('invalid_request');
-                $url=trim($url);
-                if ($url==='') continue;
-                $parsed=parse_url($url);
-                if ($parsed===false || ($parsed['scheme'] ?? '')!=='https' || !isset($parsed['host'])
-                    || !preg_match('/\A(?:[a-z0-9-]+\.)*booking\.com\z/i',$parsed['host'])
-                    || isset($parsed['user']) || isset($parsed['pass']) || isset($parsed['fragment']) || isset($parsed['port'])) throw new RuntimeException('invalid_request');
-                $data['invoice_urls'][$property]=$url;
-            }
-        }
         if ($data === $original && $method === $account['auth_method']) return;
         $vault->save(self::secretName($id, 'credentials'), $data);
         $vault->save(self::secretName($id, 'session'), ['cookies' => []]);
