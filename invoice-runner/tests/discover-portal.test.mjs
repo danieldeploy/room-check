@@ -40,5 +40,5 @@ test('credentials are never sent to a foreign form action', async () => {
   await assert.rejects(discoverPortal(page, { portal: 'booking',
     credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
     authMethod: 'password' }), /connector_unconfigured/);
-  assert.deepEqual(page.typed, ['private@example.com']);
+  assert.deepEqual(page.typed, []);
 });
