@@ -50,6 +50,14 @@ export async function discoverPortal(page, input) {
         portalUrl(portal, identifier.info.action);
         await identifier.input.type(credentials.identifier); identifierSent = true;
         await submit(page, identifier, portal);
+        // Booking can temporarily remove the sign-in form while loading the password step.
+        // Wait for an actionable next field instead of treating the loading state as a portal change.
+        if (portal === 'booking') await page.waitForFunction(() =>
+          [...document.querySelectorAll('input')].some(el => {
+            const actionable = (el.type === 'password' && el.id !== 'hidden-password')
+              || el.autocomplete === 'one-time-code' || (el.type === 'tel' && el.maxLength === 6);
+            return actionable && el.getClientRects().length > 0 && !el.disabled;
+          }), { timeout: 20000 }).catch(() => {});
         continue;
       }
       const password = await uniqueInput(page, x => x.type === 'password'
