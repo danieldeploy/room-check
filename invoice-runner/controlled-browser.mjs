@@ -9,7 +9,10 @@ export async function controlledBrowserEndpoint(root) {
   if (path.dirname(await fs.realpath(profile)) !== root) throw new Error('controlled_profile_invalid');
   await assertPrivateDirectory(profile);
   const data = await fs.readFile(path.join(profile, 'DevToolsActivePort'), 'utf8');
-  if (data.length > 256) throw new Error('controlled_endpoint_invalid');
+  return parseControlledEndpoint(data);
+}
+export function parseControlledEndpoint(data) {
+  if (typeof data !== 'string' || data.length > 256) throw new Error('controlled_endpoint_invalid');
   const [port, endpoint] = data.trim().split(/\r?\n/);
   if (!/^[1-9]\d{0,4}$/.test(port) || Number(port) > 65535
       || !/^\/devtools\/browser\/[a-zA-Z0-9-]{8,80}$/.test(endpoint))
