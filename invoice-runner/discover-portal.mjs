@@ -45,6 +45,8 @@ export async function discoverPortal(page, input) {
   const broker = new SecondFactor(input, value => portalUrl(portal, value));
   const snapshots = [];
   const responses = [];
+  const propertyUrls = [];
+  const propertyReads = [];
   if (typeof page.on === 'function') page.on('response', response => {
     try {
       const request = response.request();
@@ -66,6 +68,17 @@ export async function discoverPortal(page, input) {
       }
       responses.push(entry);
       if (responses.length > 16) responses.shift();
+      if (portal === 'booking' && url.hostname === 'admin.booking.com'
+          && url.pathname === '/dml/graphql.json' && status === 200) {
+        propertyReads.push(response.json().then(body => {
+          const properties = body?.data?.partnerProperty?.propertyListv2?.properties;
+          if (!Array.isArray(properties)) return;
+          for (const item of properties) {
+            if (String(item.id) === String(input.property) && typeof item.extranetUrl === 'string')
+              propertyUrls.push(item.extranetUrl);
+          }
+        }).catch(() => {}));
+      }
     } catch { /* ignore foreign and malformed responses */ }
   });
   let identifierSent = false, passwordSent = false, otpSent = false;
@@ -80,8 +93,17 @@ export async function discoverPortal(page, input) {
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
+        if (verified.pathname.includes('/groups/home')) {
+          await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
+            .some(el => el.getClientRects().length > 0
+              && ((el.textContent || '').toLowerCase().includes(values.label.toLowerCase())
+                || (el.textContent || '').includes(values.property))),
+          { timeout: 15000 }, { label: String(input.propertyLabel || ''), property: String(input.property || '') })
+            .catch(() => {});
+        }
+        await Promise.allSettled(propertyReads);
         snapshots.push(await inspectPortalPage(page, portal));
-        const navigationStage = await navigateBookingInvoices(page, input, async () => {
+        const navigationStage = await navigateBookingInvoices(page, { ...input, propertyEntryUrls: propertyUrls }, async () => {
           snapshots.push(await inspectPortalPage(page, portal));
         });
         return { version: 1, portal, validated: false, login_attempted: false,
