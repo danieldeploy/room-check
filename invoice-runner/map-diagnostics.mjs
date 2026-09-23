@@ -72,6 +72,9 @@ export async function inspectPortalPage(page, portal) {
     };
   });
   const signals = rawSignals && !Array.isArray(rawSignals) && ['loading','interactive','complete'].includes(rawSignals.ready_state)
-    ? rawSignals : null;
+    ? { ready_state: rawSignals.ready_state,
+      identifier: rawSignals.identifier === true, password: rawSignals.password === true,
+      otp: rawSignals.otp === true, form: rawSignals.form === true, alert: rawSignals.alert === true,
+      invalid_field: rawSignals.invalid_field === true, challenge: rawSignals.challenge === true } : null;
   return { version: 1, portal, validated: false, location, hints, signals };
 }
