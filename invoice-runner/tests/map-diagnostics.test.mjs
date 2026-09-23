@@ -40,3 +40,21 @@ test('inspection emits unvalidated structural hints and never serializes values 
     assert.ok(!JSON.stringify(snapshot).includes(forbidden));
   }
 });
+
+test('Booking navigation diagnostics retain booleans but discard page text', async () => {
+  let call = 0;
+  const page = { url: () => 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
+    evaluate: async () => {
+      call++;
+      if (call === 1) return [];
+      if (call === 2) return { ready_state: 'complete', identifier: false, password: false, otp: false,
+        form: false, alert: false, invalid_field: false, challenge: false };
+      return [{ top: true, visible: true, visible_finance: true, full_finance: true,
+        aria_finance: false, visible_invoices: false, full_invoices: true, aria_invoices: false,
+        visible_length: 7, full_length: 30, children: 2, text: 'private-navigation-label' }];
+    } };
+  const snapshot = await inspectPortalPage(page, 'booking');
+  assert.equal(snapshot.navigation[0].visible_finance, true);
+  assert.equal(snapshot.navigation[0].full_invoices, true);
+  assert.ok(!JSON.stringify(snapshot).includes('private-navigation-label'));
+});
