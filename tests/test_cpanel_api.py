@@ -288,6 +288,18 @@ class Contracts(unittest.TestCase):
                 api.call("VersionControl", "retrieve")
             self.assertNotIn(TOKEN, str(caught.exception))
 
+    def test_http_access_denied_retains_only_status_and_never_retries(self):
+        api = cpanel.CpanelAPI(cpanel.Config(TOKEN, transport="whm", origin=cpanel.WHM_ORIGIN))
+        calls = []
+        def denied(request, timeout):
+            calls.append(request)
+            raise urllib.error.HTTPError(request.full_url, 403, TOKEN, {}, None)
+        with patch.object(api.opener, "open", side_effect=denied):
+            with self.assertRaisesRegex(cpanel.DeploymentError, "api_http_access_denied_403") as caught:
+                api.call("VersionControl", "retrieve", fields=cpanel.FIELDS)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(TOKEN, str(caught.exception))
+
     def test_default_command_only_reads_status(self):
         fake = FakeAPI([(('VersionControl', 'retrieve'), [repository()]),
                         (('VersionControlDeployment', 'retrieve'), [])])
