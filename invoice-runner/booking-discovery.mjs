@@ -17,7 +17,7 @@ async function uniqueControl(page, names) {
   for (const control of controls) {
     const info = await control.evaluate(el => ({
       visible: el.getClientRects().length > 0 && !el.disabled,
-      label: (el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase(),
+      label: (el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase(),
       href: el.tagName === 'A' ? el.href : null,
     }));
     if (info.visible && names.includes(info.label)) matches.push({ control, info });
@@ -27,7 +27,7 @@ async function uniqueControl(page, names) {
 export async function navigateBookingInvoices(page, input, onStep) {
   const property = String(input.property || '');
   const label = String(input.propertyLabel || '').trim();
-  if (!/^\\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
+  if (!/^\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
   let url = portalUrl('booking', page.url());
   if (url.hostname === 'admin.booking.com' && url.pathname.includes('/groups/home')) {
     const rows = await page.$$('tr');
