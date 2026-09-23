@@ -41,6 +41,8 @@ export async function discoverPortal(page, input) {
       const password = await uniqueInput(page, x => x.type === 'password');
       if (password && !passwordSent) {
         if (!credentials.password) fail('auth_unconfigured');
+        if (!password.info.action) fail('auth_unconfigured');
+        portalUrl(portal, password.info.action);
         await password.input.type(credentials.password); passwordSent = true;
         await submit(page, password, portal);
         continue;
@@ -56,6 +58,8 @@ export async function discoverPortal(page, input) {
       const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email');
       if (identifier && !identifierSent) {
         if (!credentials.identifier) fail('auth_unconfigured');
+        if (!identifier.info.action) fail('auth_unconfigured');
+        portalUrl(portal, identifier.info.action);
         await identifier.input.type(credentials.identifier); identifierSent = true;
         await submit(page, identifier, portal);
         continue;
