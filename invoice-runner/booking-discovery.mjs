@@ -87,9 +87,25 @@ export async function navigateBookingInvoices(page, input, onStep) {
       }
       if (controls.length === 1) target = { link: controls[0] };
     }
-    if (!target) return matches.length === 0 && exact.length === 0 ? 'property_not_found'
+    let observedUrl = null;
+    if (!target && matches.length === 1 && Array.isArray(input.propertyEntryUrls)) {
+      const observed = new Set();
+      for (const candidate of input.propertyEntryUrls) {
+        try {
+          const u = portalUrl('booking', candidate);
+          if (u.hostname === 'admin.booking.com'
+              && u.pathname === '/hotel/hoteladmin/extranet_ng/manage/home.html'
+              && u.searchParams.get('hotel_id') === property) observed.add(candidate);
+        } catch { /* reject unexpected destination */ }
+      }
+      if (observed.size === 1) observedUrl = [...observed][0];
+    }
+    if (!target && !observedUrl) return matches.length === 0 && exact.length === 0 ? 'property_not_found'
       : matches.length > 1 || exact.length > 1 ? 'property_ambiguous' : 'property_link_missing';
-    await clickAndSettle(page, target.link);
+    if (observedUrl) {
+      await page.goto(observedUrl, { waitUntil: 'domcontentloaded' });
+      await pause(600);
+    } else await clickAndSettle(page, target.link);
     await onStep('property');
   }
   url = portalUrl('booking', page.url());
