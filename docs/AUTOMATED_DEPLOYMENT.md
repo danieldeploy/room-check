@@ -36,7 +36,9 @@ cPanel. Falhas interrompem o processo e ficam registadas no GitHub Actions.
    primeiro ciclo. Guardar a proteção de branch com PR e CI obrigatórios conforme
    a política escolhida para o projeto; o fluxo não deve receber pushes não revistos.
 
-Nota operacional: uma execução `pull_request` após a integração por API valida o código, mas o job `deploy` só corre com o evento `push` na branch de produção. Confirmar o tipo de evento na execução da CI antes de atribuir uma omissão de deploy às variáveis de configuração.\n\nNão basta guardar um token: a ativação só fica concluída depois de um diagnóstico
+Nota operacional: uma execução `pull_request` após a integração por API valida o código, mas o job `deploy` só corre com o evento `push` na branch de produção. Confirmar o tipo de evento na execução da CI antes de atribuir uma omissão de deploy às variáveis de configuração.
+
+Não basta guardar um token: a ativação só fica concluída depois de um diagnóstico
 autenticado e de uma publicação real verificada.
 
 ## Garantias do fluxo
