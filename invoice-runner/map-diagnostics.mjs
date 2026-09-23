@@ -76,5 +76,32 @@ export async function inspectPortalPage(page, portal) {
       identifier: rawSignals.identifier === true, password: rawSignals.password === true,
       otp: rawSignals.otp === true, form: rawSignals.form === true, alert: rawSignals.alert === true,
       invalid_field: rawSignals.invalid_field === true, challenge: rawSignals.challenge === true } : null;
-  return { version: 1, portal, validated: false, location, hints, signals };
+  let navigation = undefined;
+  if (portal === 'booking') {
+    const raw = await page.evaluate(() => [...document.querySelectorAll(
+      '.ext-navigation-top-item__link,.ext-navigation-submenu-item__link')].slice(0, 30).map(el => {
+      const visibleText = (el.innerText || '').trim().replace(/\\s+/g, ' ').toLowerCase();
+      const allText = (el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase();
+      const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+      const finance = /finance|finanças|financial/;
+      const invoices = /invoice|fatura/;
+      return { top: el.classList.contains('ext-navigation-top-item__link'),
+        visible: el.getClientRects().length > 0,
+        visible_finance: finance.test(visibleText), full_finance: finance.test(allText),
+        aria_finance: finance.test(aria), visible_invoices: invoices.test(visibleText),
+        full_invoices: invoices.test(allText), aria_invoices: invoices.test(aria),
+        visible_length: Math.min(visibleText.length, 200), full_length: Math.min(allText.length, 200),
+        children: Math.min(el.children.length, 40) };
+    }));
+    if (Array.isArray(raw)) navigation = raw.map(x => ({
+      top: x.top === true, visible: x.visible === true,
+      visible_finance: x.visible_finance === true, full_finance: x.full_finance === true,
+      aria_finance: x.aria_finance === true, visible_invoices: x.visible_invoices === true,
+      full_invoices: x.full_invoices === true, aria_invoices: x.aria_invoices === true,
+      visible_length: Number.isInteger(x.visible_length) ? x.visible_length : 0,
+      full_length: Number.isInteger(x.full_length) ? x.full_length : 0,
+      children: Number.isInteger(x.children) ? x.children : 0
+    }));
+  }
+  return { version: 1, portal, validated: false, location, hints, signals, navigation };
 }

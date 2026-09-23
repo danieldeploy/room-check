@@ -106,6 +106,7 @@ export async function discoverPortal(page, input) {
         const navigationStage = await navigateBookingInvoices(page, { ...input, propertyEntryUrls: propertyUrls }, async () => {
           snapshots.push(await inspectPortalPage(page, portal));
         });
+        if (navigationStage !== 'invoices_visible') snapshots.push(await inspectPortalPage(page, portal));
         return { version: 1, portal, validated: false, login_attempted: false,
           authenticated_session: true, navigation_stage: navigationStage,
           location: publicLocation(portal, page.url()), snapshots: snapshots.slice(0, 6), responses };
