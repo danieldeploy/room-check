@@ -3,15 +3,24 @@ import path from 'node:path';
 import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
 import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
+import { controlledBrowserEndpoint } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
 let profile;
+let connected = false;
+let controlledPage;
 let closing;
 async function cleanup() {
   if (closing) return closing;
   closing = (async () => {
-    if (browser) await browser.close().catch(() => {});
+    if (browser) {
+      if (connected) {
+        if (controlledPage) await controlledPage.close().catch(() => {});
+        browser.disconnect();
+      }
+      else await browser.close().catch(() => {});
+    }
     if (profile) await fs.rm(profile, { recursive: true, force: true });
   })();
   return closing;
@@ -43,10 +52,17 @@ try {
     const runtime = input.runtime ?? JSON.parse(await fs.readFile(path.join(root, 'invoice-runtime.json'), 'utf8'));
     if (runtime.executablePath && !path.isAbsolute(runtime.executablePath)) throw new PortalError('browser_unavailable');
     const { default: puppeteer } = await import('puppeteer');
-    profile = await fs.mkdtemp(path.join(root, '.browser-'));
-    browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
-      userDataDir: profile, timeout: 30000, dumpio: false });
+    connected = input.action === 'discover' && input.portal === 'booking';
+    if (connected) {
+      browser = await puppeteer.connect({ browserWSEndpoint: await controlledBrowserEndpoint(root),
+        defaultViewport: null });
+    } else {
+      profile = await fs.mkdtemp(path.join(root, '.browser-'));
+      browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
+        userDataDir: profile, timeout: 30000, dumpio: false });
+    }
     const page = await browser.newPage();
+    if (connected) controlledPage = page;
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
