@@ -11,6 +11,13 @@ async function clickAndSettle(page, element) {
   await navigation;
   await pause(600);
 }
+async function waitForControl(page, names) {
+  if (typeof page.waitForFunction !== 'function') return;
+  await page.waitForFunction(labels => [...document.querySelectorAll('a,button,[role="button"]')]
+    .some(el => el.getClientRects().length > 0 && !el.disabled
+      && labels.includes((el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase())),
+  { timeout: 15000 }, names).catch(() => {});
+}
 async function uniqueControl(page, names) {
   const controls = await page.$$('a,button,[role="button"]');
   const matches = [];
@@ -110,11 +117,13 @@ export async function navigateBookingInvoices(page, input, onStep) {
   }
   url = portalUrl('booking', page.url());
   if (url.hostname !== 'admin.booking.com') return 'property_navigation';
+  await waitForControl(page, labels.finance);
   const finance = await uniqueControl(page, labels.finance);
   if (!finance) return 'finance_missing';
   if (finance.info.href) portalUrl('booking', finance.info.href);
   await clickAndSettle(page, finance.control);
   await onStep('finance');
+  await waitForControl(page, labels.invoices);
   const invoices = await uniqueControl(page, labels.invoices);
   if (!invoices) return 'invoices_missing';
   if (invoices.info.href) portalUrl('booking', invoices.info.href);
