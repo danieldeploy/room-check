@@ -95,3 +95,22 @@ test('Booking discovery waits for asynchronously populated group rows', async ()
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
     async () => {}), 'invoices_visible');
 });
+
+test('Booking discovery follows a unique named control in its matched row', async () => {
+  let step = 0;
+  const propertyButton = { evaluate: async () => ({ visible: true, label: 'welcome guest house', href: null }),
+    click: async () => { step = 1; } };
+  const row = { evaluate: async () => true,
+    [String.fromCharCode(36, 36)]: async selector => selector === 'a[href]' ? [] : [propertyButton] };
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  const page = {
+    url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html'
+      : 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
+    waitForNavigation: async () => {},
+    [String.fromCharCode(36, 36)]: async selector => selector === 'tr,[role="row"]' ? [row]
+      : step === 1 ? [control('finance', 2)] : step === 2 ? [control('invoices', 3)] : [],
+  };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
+    async () => {}), 'invoices_visible');
+});
