@@ -10,6 +10,10 @@ try {
     if (-not $acquired) { Write-Host 'The invoice agent is already running.'; exit 0 }
     & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'Test-PrivateDirectory.ps1') -Directory $data
     if ($LASTEXITCODE -ne 0) { throw 'private_storage_permissions' }
+    if (-not $TestOnly -and (Test-Path (Join-Path $data 'controlled-booking-enabled'))) {
+        & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'Start-Booking-Chrome.ps1') -DataDirectory $data
+        if ($LASTEXITCODE -ne 0) { throw 'controlled_chrome_unavailable' }
+    }
     Add-Type -AssemblyName System.Security
     $encrypted = [IO.File]::ReadAllBytes((Join-Path $data 'agent.dpapi'))
     $plain = [Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
