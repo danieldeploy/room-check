@@ -15,7 +15,7 @@ async function waitForControl(page, names) {
   if (typeof page.waitForFunction !== 'function') return;
   await page.waitForFunction(labels => [...document.querySelectorAll('a,button,[role="button"]')]
     .some(el => el.getClientRects().length > 0 && !el.disabled
-      && labels.includes((el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase())),
+      && labels.includes((el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase())),
   { timeout: 15000 }, names).catch(() => {});
 }
 async function uniqueControl(page, names) {
