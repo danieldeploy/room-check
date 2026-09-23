@@ -10,7 +10,7 @@ async function uniqueInput(page, predicate) {
   for (const input of inputs) {
     const info = await input.evaluate(el => ({
       visible: el.getClientRects().length > 0 && !el.disabled,
-      type: el.type, autocomplete: el.autocomplete, maxLength: el.maxLength,
+      type: el.type, id: el.id, name: el.name, autocomplete: el.autocomplete, maxLength: el.maxLength,
       action: el.form?.action || null,
     }));
     if (info.visible && predicate(info)) matches.push({ input, info });
@@ -41,7 +41,19 @@ export async function discoverPortal(page, input) {
       portalUrl(portal, page.url());
       stage = 'inspect';
       snapshots.push(await inspectPortalPage(page, portal));
-      const password = await uniqueInput(page, x => x.type === 'password');
+      const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email'
+        || (portal === 'booking' && x.id === 'loginname' && x.type === 'text'));
+      if (identifier && !identifierSent) {
+        stage = 'identifier';
+        if (!credentials.identifier) fail('auth_unconfigured');
+        if (!identifier.info.action) fail('auth_unconfigured');
+        portalUrl(portal, identifier.info.action);
+        await identifier.input.type(credentials.identifier); identifierSent = true;
+        await submit(page, identifier, portal);
+        continue;
+      }
+      const password = await uniqueInput(page, x => x.type === 'password'
+        && !(portal === 'booking' && x.id === 'hidden-password'));
       if (password && !passwordSent) {
         stage = 'password';
         if (!credentials.password) fail('auth_unconfigured');
@@ -60,18 +72,9 @@ export async function discoverPortal(page, input) {
         await submit(page, otp, portal);
         continue;
       }
-      const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email');
-      if (identifier && !identifierSent) {
-        stage = 'identifier';
-        if (!credentials.identifier) fail('auth_unconfigured');
-        if (!identifier.info.action) fail('auth_unconfigured');
-        portalUrl(portal, identifier.info.action);
-        await identifier.input.type(credentials.identifier); identifierSent = true;
-        await submit(page, identifier, portal);
-        continue;
-      }
       break;
     }
+    if (!identifierSent || !passwordSent) { stage = 'login_incomplete'; fail('portal_changed'); }
     const current = publicLocation(portal, page.url());
     // A structural diagnostic never establishes account identity or a validated map.
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
