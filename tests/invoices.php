@@ -84,6 +84,8 @@ CREATE TABLE invoice_batch_tasks(batch_id INTEGER,task_id INTEGER,PRIMARY KEY(ba
     foreach (array_keys(Auth::ROLES) as $role) {
         if ($role !== 'gerente') rejectsInvoice(fn() => InvoiceService::assertGerente(['role' => $role]), 'Only gerente configures');
     }
+    $discovery = $service->enqueue('discover', '1140306', '2026-08', 1);
+    checkInvoice($pdo->query("SELECT kind FROM invoice_tasks WHERE id = $discovery")->fetchColumn() === 'discover', 'Portal discovery queues without enabling collection');
     checkInvoice(in_array(Auth::PERMISSION_INVOICES_VIEW, Auth::LOCKED_ROLE_PERMISSIONS['gerente'], true), 'Gerente access cannot be removed');
     checkInvoice(in_array(Auth::PERMISSION_INVOICES_VIEW, Auth::normalizePermissions([Auth::PERMISSION_INVOICES_RUN]), true), 'Run includes view');
     checkInvoice(!Auth::defaultRoleHasPermission('governanta', Auth::PERMISSION_INVOICES_VIEW), 'No new access granted to other profiles');
