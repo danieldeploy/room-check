@@ -195,6 +195,10 @@ final class InvoiceRemoteAgent
         try {
             $input=['action'=>$job['kind'],'accountId'=>(int)$account['id'],'portal'=>$account['portal'],
                 'property'=>$job['property_id'],'period'=>$job['period'],'periodBasis'=>$account['period_basis']];
+            if ($job['kind']==='discover' && $account['portal']==='booking') {
+                $properties=$accounts->collectionProperties((int)$account['id']);
+                $input['propertyLabel']=(string)($properties[$job['property_id']] ?? '');
+            }
             if ($job['kind']!=='preflight') {
                 $input['credentials']=$accounts->credentials($this->vault,(int)$account['id']);
                 $input['authMethod']=$account['auth_method'];

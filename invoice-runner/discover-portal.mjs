@@ -2,6 +2,7 @@ import { inspectPortalPage, publicLocation } from './map-diagnostics.mjs';
 import { portalUrl } from './portal.mjs';
 import { SecondFactor } from './second-factor.mjs';
 import { PortalError } from './booking.mjs';
+import { navigateBookingInvoices } from './booking-discovery.mjs';
 
 const fail = code => { throw new PortalError(code); };
 async function uniqueInput(page, predicate) {
@@ -80,9 +81,12 @@ export async function discoverPortal(page, input) {
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
         snapshots.push(await inspectPortalPage(page, portal));
+        const navigationStage = await navigateBookingInvoices(page, input, async () => {
+          snapshots.push(await inspectPortalPage(page, portal));
+        });
         return { version: 1, portal, validated: false, login_attempted: false,
-          authenticated_session: true, location: publicLocation(portal, page.url()),
-          snapshots, responses };
+          authenticated_session: true, navigation_stage: navigationStage,
+          location: publicLocation(portal, page.url()), snapshots: snapshots.slice(0, 6), responses };
       }
     }
     if (authMethod === 'sms') await broker.prepare();
