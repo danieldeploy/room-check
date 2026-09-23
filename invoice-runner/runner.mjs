@@ -9,12 +9,16 @@ process.umask(0o077);
 let browser;
 let profile;
 let connected = false;
+let controlledPage;
 let closing;
 async function cleanup() {
   if (closing) return closing;
   closing = (async () => {
     if (browser) {
-      if (connected) browser.disconnect();
+      if (connected) {
+        if (controlledPage) await controlledPage.close().catch(() => {});
+        browser.disconnect();
+      }
       else await browser.close().catch(() => {});
     }
     if (profile) await fs.rm(profile, { recursive: true, force: true });
@@ -58,6 +62,7 @@ try {
         userDataDir: profile, timeout: 30000, dumpio: false });
     }
     const page = await browser.newPage();
+    if (connected) controlledPage = page;
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
