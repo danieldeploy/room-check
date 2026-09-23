@@ -18,21 +18,25 @@ test('candidate selectors are restricted to simple stable identifiers', () => {
   assert.equal(candidateSelector('input', 'a1b2c3d4e5f6a7b8', []), 'input');
 });
 test('inspection emits unvalidated structural hints and never serializes values or text', async () => {
+  let calls = 0;
   const page = {
     url: () => 'https://admin.booking.com/invoices?hotel_id=1140306&auth=secret',
-    evaluate: async () => [
+    evaluate: async () => ++calls === 1 ? [
       { tag: 'input', id: 'user', classes: [], type: 'text', value: 'secret@example.com' },
       { tag: 'input', id: 'pass', classes: [], type: 'password', value: 'password-secret' },
       { tag: 'a', id: 'invoice', classes: [], href: 'https://admin.booking.com/pdf?token=private', text: 'invoice details' },
       { tag: 'a', id: 'foreign', classes: [], href: 'https://evil.example/private' },
-    ],
+    ] : { ready_state: 'complete', identifier: false, password: false, otp: false,
+      form: false, alert: true, invalid_field: false, challenge: true, text: 'private error message' },
   };
   const snapshot = await inspectPortalPage(page, 'booking');
   assert.equal(snapshot.validated, false);
   assert.equal(snapshot.location, 'https://admin.booking.com/invoices?hotel_id=1140306');
   assert.equal(snapshot.hints[2].href, 'https://admin.booking.com/pdf');
   assert.equal(snapshot.hints[3].href, undefined);
-  for (const forbidden of ['secret@example.com', 'password-secret', 'invoice details', 'token=private', 'auth=secret']) {
+  assert.equal(snapshot.signals.alert, true);
+  assert.equal(snapshot.signals.challenge, true);
+  for (const forbidden of ['secret@example.com', 'password-secret', 'invoice details', 'token=private', 'auth=secret', 'private error message']) {
     assert.ok(!JSON.stringify(snapshot).includes(forbidden));
   }
 });
