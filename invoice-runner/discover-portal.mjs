@@ -99,7 +99,7 @@ export async function discoverPortal(page, input) {
     const current = publicLocation(portal, page.url());
     // A structural diagnostic never establishes account identity or a validated map.
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
-      location: current, snapshots: snapshots.slice(0, 6) };
+      location: current, snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit };
   } catch (error) {
     let location;
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
