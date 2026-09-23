@@ -10,7 +10,7 @@ test('Booking discovery stops before clicking an ambiguous property', async () =
     $$: async selector => selector === 'tr' ? [row, row] : [],
   };
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
-    () => { clicks++; }), 'property_not_unique');
+    () => { clicks++; }), 'property_ambiguous');
   assert.equal(clicks, 0);
 });
 
@@ -34,4 +34,22 @@ test('Booking discovery follows a unique property, Finance and Invoices control'
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
     async stage => { stages.push(stage); }), 'invoices_visible');
   assert.deepEqual(stages, ['property', 'finance', 'invoices']);
+});
+
+test('Booking discovery can select the unique property ID without a matching label', async () => {
+  let step = 0;
+  const propertyLink = { evaluate: async () => 'https://admin.booking.com/hotel/hoteladmin/?hotel_id=1140306',
+    click: async () => { step = 1; } };
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  const page = {
+    url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/'
+      : 'https://admin.booking.com/hotel/hoteladmin/?hotel_id=1140306',
+    waitForNavigation: async () => {},
+    $$: async selector => selector === 'tr,[role="row"]' ? []
+      : selector === 'a[href]' ? [propertyLink]
+      : step === 1 ? [control('finance', 2)] : step === 2 ? [control('invoices', 3)] : [],
+  };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
+    async () => {}), 'invoices_visible');
 });
