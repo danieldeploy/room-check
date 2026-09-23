@@ -16,6 +16,7 @@ function fakePage(action = 'https://account.booking.com/login') {
     url: () => url,
     goto: async () => { url = 'https://account.booking.com/login'; },
     waitForNavigation: async () => {},
+    waitForFunction: async () => {},
     $$: async () => {
       if (stage === 0) return [field('email','username')];
       if (stage === 1) return [field('password','current-password')];
@@ -69,7 +70,7 @@ test('Booking sign-in ignores hidden password and submits loginname first', asyn
   });
   const page = {
     url: () => 'https://account.booking.com/sign-in',
-    goto: async () => {}, waitForNavigation: async () => {}, evaluate: async () => [],
+    goto: async () => {}, waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
     $$: async () => step === 0
       ? [make('hidden-password', 'password'), make('loginname', 'text')]
       : step === 1 ? [make('password', 'password')] : [],
@@ -80,4 +81,29 @@ test('Booking sign-in ignores hidden password and submits loginname first', asyn
   assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
   assert.equal(result.login_attempted, true);
   assert.equal(result.failure_code, undefined);
+});
+
+test('waits through Booking loading state before inspecting password step', async () => {
+  let stage = 0;
+  let waits = 0;
+  const typed = [];
+  const field = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, autocomplete: '', maxLength: -1,
+      action: 'https://account.booking.com/sign-in' }),
+    type: async value => { typed.push([id, value]); },
+    press: async () => { stage = id === 'loginname' ? 1 : 3; },
+  });
+  const page = {
+    url: () => 'https://account.booking.com/sign-in',
+    goto: async () => {}, waitForNavigation: async () => {}, evaluate: async () => [],
+    waitForFunction: async () => { waits++; if (stage === 1) stage = 2; },
+    $$: async () => stage === 0 ? [field('loginname', 'text')]
+      : stage === 1 ? [] : stage === 2 ? [field('password', 'password')] : [],
+  };
+  const result = await discoverPortal(page, { portal: 'booking',
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
+    authMethod: 'password' });
+  assert.equal(waits, 1);
+  assert.equal(result.login_attempted, true);
+  assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
 });
