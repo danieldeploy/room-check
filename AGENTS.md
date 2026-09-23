@@ -25,6 +25,13 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 - Reuse credentials configured in the encrypted Management Hub vault and the
   established 2FA channel. Do not ask the owner to enter portal passwords in
   chat, add credentials to URLs, or log in through a browser for each run.
+- Use one transversal portal-map diagnostic for Booking and future portals. Record
+  only structural selector hints and allowlisted URL components in private storage;
+  never capture field values, OTPs, cookies, response bodies, invoice contents or
+  raw URL query tokens. Diagnostic output is always an unvalidated draft. A map
+  becomes valid only after authenticated login, property/account checks, date
+  extraction, pagination and document retrieval have been tested on that portal.
+  Keep each portal's selectors and exceptions separate within the common workflow.
 
 ## Changes and review
 
