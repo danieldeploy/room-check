@@ -93,7 +93,7 @@ export async function discoverPortal(page, input) {
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
-        if (verified.pathname.includes('/groups/home')) {
+        if (verified.pathname.includes('/groups/home') && typeof page.waitForFunction === 'function') {
           await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
             .some(el => el.getClientRects().length > 0
               && ((el.textContent || '').toLowerCase().includes(values.label.toLowerCase())
