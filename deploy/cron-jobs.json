@@ -1,0 +1,24 @@
+{
+  "jobs": [
+    {
+      "id": "whatsapp-reminders",
+      "schedule": "* * * * *",
+      "command": "/usr/local/bin/php /home/welcome/room-check-private/cron/whatsapp-reminders.php >/dev/null 2>&1"
+    },
+    {
+      "id": "translation-pending",
+      "schedule": "* * * * *",
+      "command": "/usr/local/bin/php /home/welcome/room-check-private/cron/translation-pending.php >/dev/null 2>&1"
+    },
+    {
+      "id": "invoices",
+      "schedule": "* * * * *",
+      "command": "INVOICES_NODE_BINARY=/home/welcome/nodevenv/booking-vault-agent/22/bin/node /usr/local/bin/php /home/welcome/room-check-private/cron/invoices.php >/dev/null 2>&1"
+    }
+  ],
+  "adopt_lines": [
+    "* * * * * /usr/local/bin/php /home/welcome/room-check-private/cron/whatsapp-reminders.php >/dev/null 2>&1",
+    "* * * * * /usr/local/bin/php /home/welcome/room-check-private/cron/translation-pending.php >/dev/null 2>&1",
+    "* * * * * INVOICES_NODE_BINARY=/home/welcome/nodevenv/booking-vault-agent/22/bin/node /usr/local/bin/php /home/welcome/room-check-private/cron/invoices.php >/dev/null 2>&1"
+  ]
+}

@@ -74,6 +74,7 @@ jobs:
       - name: Run PHP tests
         run: |
           php tests/release-backup.php
+          php tests/project-cron.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoice-agent.php
           php tests/invoice-workspace.php
@@ -104,7 +105,9 @@ jobs:
           INVOICES_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=hub_invoice_test
           INVOICES_TEST_USER: root
           INVOICES_TEST_PASSWORD: test-only-ci-password
-        run: php tests/invoices-mysql.php
+        run: |
+          php tests/project-migrations-mysql.php
+          php tests/invoices-mysql.php
 
   deploy:
     needs: [validate, windows-agent]

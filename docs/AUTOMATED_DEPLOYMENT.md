@@ -90,10 +90,86 @@ processo para alterações destrutivas.
 
 ## Migrações e manutenção
 
-O fluxo mantém apenas a migração específica já integrada pelo projeto. Não executa
-automaticamente todos os ficheiros SQL antigos. Cada migração futura deve ser
-versionada, testada numa base descartável e adicionada explicitamente ao deployment.
+`deploy/project_migrations.php` gere todos os módulos através de `schema_migrations`.
+Na primeira execução regista `002–029` como `baseline`, **sem executar esse SQL**.
+Isto adota a instalação existente; não demonstra que cada migração histórica foi
+executada e não serve para instalar uma base vazia. O manifesto imutável
+`deploy/migration-baseline.json` fixa os nomes e hashes dessas migrações.
+
+As novas migrações começam em `030_nome.sql`, com número único e crescente. Depois
+dos testes e do backup, o runner executa apenas as pendentes, por ordem. Guarda
+checksum, estado e duração; rejeita alterações de ficheiros já registados,
+ficheiros desaparecidos, migrações fora de ordem e tentativas de repetição após
+falha/interrupção. Um bloqueio MySQL serializa runners de migração. Não editar nem
+eliminar migrações aplicadas; escrever uma nova migração corretiva após diagnóstico.
+
+DDL MySQL não permite rollback geral de uma migração: uma falha pode deixar
+alterações parciais. O deployment para antes da cópia de código e não tenta
+restaurar a base nem repetir o SQL automaticamente. Migrações devem manter
+compatibilidade com a aplicação e workers ainda em execução, terminar quaisquer
+transações abertas e ter teste de dados e recuperação específico quando necessário.
+O bloqueio das migrações não coloca a aplicação inteira em manutenção.
+
+O CI testa o runner e executa as migrações futuras numa base descartável construída
+com `database.sql` e os complementos históricos ainda ausentes desse esquema.
 Não existe endpoint público para SQL ou comandos arbitrários.
+
+## Cron jobs do projeto
+
+`deploy/cron-jobs.json` é o manifesto versionado: adicionar um worker privado,
+alterar o horário ou retirar um job desse manifesto produz a alteração no próximo
+deployment autorizado. `my2n-scheduler.php` permanece fora do manifesto: é apenas
+um esqueleto e não executa a agenda My2N.
+
+A auditoria da conta `welcome` em 22/09/2026 encontrou apenas três jobs, todos do
+Hub e executados a cada minuto: WhatsApp, traduções e faturas. O manifesto preserva
+o executável Node de faturas em `nodevenv/booking-vault-agent/22/bin/node`.
+Os horários de negócio permanecem nos módulos (Europe/Lisbon); estes três cron
+jobs apenas invocam os workers a cada minuto, sem alterar o timezone de outros jobs.
+
+`sync_cron.php --check` lê e calcula o resultado sem escrever. Corre antes do backup
+e das migrações. Após copiar os workers, `--apply` cria um backup privado `0600`
+do crontab, confirma que não mudou, instala o bloco delimitado do Hub e verifica
+a leitura final. Entradas fora desse bloco são preservadas byte a byte. Na adoção
+inicial, apenas as três linhas **exatas** auditadas são removidas dos locais antigos.
+Uma variante desconhecida que invoque o mesmo worker interrompe a sincronização
+para revisão, em vez de ser eliminada ou duplicada.
+
+O lock serializa este gestor; a comparação antes da escrita deteta muitas alterações
+concorrentes, mas `crontab` não oferece compare-and-swap. Não editar o crontab no
+cPanel durante o deployment. Uma falha de verificação exige inspeção: não há
+restauro automático que possa sobrescrever uma edição entretanto efetuada.
+
+## Preparação de repositório privado
+
+O cliente aceita apenas as origens HTTPS existentes e as duas formas SSH do mesmo
+repositório `danieldeploy/room-check`. Integrar e validar este suporte antes de
+trocar o remoto usado pelo cPanel.
+
+1. Disponibilizar SSH/Terminal para a conta `welcome`. Na auditoria de 22/09/2026,
+   o cPanel não apresentava essas ferramentas e o WHM mostrava `Shell Access`
+   desativado e não editável para a revenda. A disponibilização deve ser feita
+   pelo administrador do alojamento; não alterar o pacote das outras contas.
+2. Gerar uma chave dedicada no servidor, guardar a chave privada fora de
+   `public_html` e registar **apenas a pública** como Deploy Key sem escrita no GitHub.
+3. Configurar a identidade SSH apenas para este repositório, verificar a identidade
+   do host GitHub e testar leitura com `git ls-remote` usando essa chave.
+4. Atualizar o remoto cPanel, confirmar a branch e o SHA, e testar `Update from
+   Remote` sem publicar. Só depois tornar o repositório privado e repetir a leitura.
+5. Verificar que o plano GitHub suporta o ambiente protegido e os seus segredos em
+   repositórios privados. Nunca mover o token WHM para um segredo de PR.
+
+A conta `danieldeploy` foi confirmada como **GitHub Free** na página Licensing
+em 22/09/2026. Neste plano, converter o repositório em privado faria o GitHub
+ignorar os environment secrets e as regras do ambiente. Para manter esta
+arquitetura numa conta pessoal privada é necessário GitHub Pro; a mudança de
+plano implica uma decisão de subscrição do proprietário. Não foi efetuada nenhuma
+subscrição nem alteração de visibilidade durante esta preparação.
+
+O objetivo é restringir o acesso futuro. Tornar privado não apaga clones ou forks
+públicos anteriores. O procedimento está descrito na
+[documentação cPanel](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-access-to-private-repositories/)
+e os efeitos na [documentação GitHub](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility).
 
 Para suspender a automação, retirar `HUB_DEPLOY_ENABLED=true`; isso não cancela uma
 publicação já iniciada. A rotação da credencial é feita no WHM e no segredo do
