@@ -57,5 +57,21 @@ export async function inspectPortalPage(page, portal) {
     if (!hints.some(existing => existing.kind === hint.kind && existing.selector === selector)) hints.push(hint);
     if (hints.length === MAX) break;
   }
-  return { version: 1, portal, validated: false, location, hints };
+  const rawSignals = await page.evaluate(() => {
+    const visible = el => !!el && el.getClientRects().length > 0 && !el.disabled;
+    const inputs = [...document.querySelectorAll('input')].filter(visible);
+    return {
+      ready_state: document.readyState,
+      identifier: inputs.some(el => el.id === 'loginname' || el.type === 'email' || el.autocomplete === 'username'),
+      password: inputs.some(el => el.type === 'password' && el.id !== 'hidden-password'),
+      otp: inputs.some(el => el.autocomplete === 'one-time-code' || (el.type === 'tel' && el.maxLength === 6)),
+      form: [...document.querySelectorAll('form')].some(visible),
+      alert: [...document.querySelectorAll('[role="alert"], [aria-live="assertive"]')].some(visible),
+      invalid_field: inputs.some(el => el.getAttribute('aria-invalid') === 'true'),
+      challenge: !!document.querySelector('iframe[src*="captcha"], [id*="captcha"], [class*="captcha"]'),
+    };
+  });
+  const signals = rawSignals && !Array.isArray(rawSignals) && ['loading','interactive','complete'].includes(rawSignals.ready_state)
+    ? rawSignals : null;
+  return { version: 1, portal, validated: false, location, hints, signals };
 }
