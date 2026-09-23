@@ -22,7 +22,7 @@ async function submit(page, field, portal, identifierStep = false) {
   portalUrl(portal, field.info.action);
   let method = 'enter';
   if (portal === 'booking' && identifierStep) {
-    const buttons = await page.$('form.nw-signin button:not([type]), form.nw-signin button[type="submit"], form.nw-signin input[type="submit"]');
+    const buttons = await page.$$('form.nw-signin button:not([type]), form.nw-signin button[type="submit"], form.nw-signin input[type="submit"]');
     const usable = [];
     for (const button of buttons) {
       const info = await button.evaluate(el => ({ visible: el.getClientRects().length > 0 && !el.disabled,
