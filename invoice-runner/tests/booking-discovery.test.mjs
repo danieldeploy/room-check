@@ -54,3 +54,21 @@ test('Booking discovery can select the unique property ID without a matching lab
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
     async () => {}), 'invoices_visible');
 });
+
+test('Booking discovery ignores duplicate links to the same property entry', async () => {
+  let step = 0;
+  const link = () => ({ evaluate: async () => 'https://admin.booking.com/hotel/hoteladmin/?hotel_id=1140306',
+    click: async () => { step = 1; } });
+  const row = { evaluate: async () => true, [String.fromCharCode(36, 36)]: async () => [link(), link()] };
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  const page = {
+    url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/'
+      : 'https://admin.booking.com/hotel/hoteladmin/?hotel_id=1140306',
+    waitForNavigation: async () => {},
+    [String.fromCharCode(36, 36)]: async selector => selector === 'tr,[role="row"]' ? [row]
+      : step === 1 ? [control('finance', 2)] : step === 2 ? [control('invoices', 3)] : [],
+  };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
+    async () => {}), 'invoices_visible');
+});
