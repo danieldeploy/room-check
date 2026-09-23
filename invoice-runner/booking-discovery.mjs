@@ -73,7 +73,7 @@ export async function navigateBookingInvoices(page, input, onStep) {
       : matches.length === 1 && allowed.length === 1 ? allowed[0] : null;
     if (!target && matches.length === 1 && exact.length === 0) {
       const controls = [];
-      for (const control of await matches[0].$('button,[role="button"],a')) {
+      for (const control of await matches[0][String.fromCharCode(36, 36)]('button,[role="button"],a')) {
         const info = await control.evaluate(el => ({
           visible: el.getClientRects().length > 0 && !el.disabled,
           label: (el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase(),
