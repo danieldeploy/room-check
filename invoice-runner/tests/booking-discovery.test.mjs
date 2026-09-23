@@ -114,3 +114,20 @@ test('Booking discovery follows a unique named control in its matched row', asyn
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
     async () => {}), 'invoices_visible');
 });
+
+test('Booking discovery accepts only a unique observed URL for the matched property', async () => {
+  let step = 0;
+  const url = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306';
+  const row = { evaluate: async () => true, [String.fromCharCode(36, 36)]: async () => [] };
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  const page = {
+    url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html' : url,
+    goto: async destination => { assert.equal(destination, url); step = 1; },
+    waitForNavigation: async () => {},
+    [String.fromCharCode(36, 36)]: async selector => selector === 'tr,[role="row"]' ? [row]
+      : step === 1 ? [control('finance', 2)] : step === 2 ? [control('invoices', 3)] : [],
+  };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House',
+    propertyEntryUrls: [url, url] }, async () => {}), 'invoices_visible');
+});
