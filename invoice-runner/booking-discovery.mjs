@@ -30,22 +30,35 @@ export async function navigateBookingInvoices(page, input, onStep) {
   if (!/^\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
   let url = portalUrl('booking', page.url());
   if (url.hostname === 'admin.booking.com' && url.pathname.includes('/groups/home')) {
-    const rows = await page.$$('tr');
+    const rows = await page.$$('tr,[role="row"]');
     const matches = [];
     for (const row of rows) {
-      if (await row.evaluate((el, name) => el.getClientRects().length > 0
-          && (el.textContent || '').toLowerCase().includes(name.toLowerCase()), label)) matches.push(row);
+      const related = await row.evaluate((el, values) => el.getClientRects().length > 0
+        && ((el.textContent || '').toLowerCase().includes(values.label.toLowerCase())
+          || (el.textContent || '').includes(values.property)
+          || el.getAttribute('data-hotel-id') === values.property),
+        { label, property });
+      if (related) matches.push(row);
     }
-    if (matches.length !== 1) return 'property_not_unique';
-    const links = await matches[0].$$('a[href]');
     const allowed = [];
-    for (const link of links) {
-      const href = await link.evaluate(el => el.href);
-      try { portalUrl('booking', href); allowed.push({ link, href }); } catch { /* reject foreign destination */ }
+    for (const row of matches) {
+      for (const link of await row.$$('a[href]')) {
+        const href = await link.evaluate(el => el.href);
+        try { portalUrl('booking', href); allowed.push({ link, href }); } catch { /* reject foreign destination */ }
+      }
+    }
+    if (!allowed.length) {
+      for (const link of await page.$$('a[href]')) {
+        const href = await link.evaluate(el => el.href);
+        try { portalUrl('booking', href); if (href.includes(property)) allowed.push({ link, href }); }
+        catch { /* reject foreign destination */ }
+      }
     }
     const exact = allowed.filter(item => item.href.includes(property));
-    const target = exact.length === 1 ? exact[0] : allowed.length === 1 ? allowed[0] : null;
-    if (!target) return 'property_link_missing';
+    const target = exact.length === 1 ? exact[0]
+      : matches.length === 1 && allowed.length === 1 ? allowed[0] : null;
+    if (!target) return matches.length === 0 && exact.length === 0 ? 'property_not_found'
+      : matches.length > 1 || exact.length > 1 ? 'property_ambiguous' : 'property_link_missing';
     await clickAndSettle(page, target.link);
     await onStep('property');
   }
