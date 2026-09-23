@@ -71,8 +71,21 @@ export async function discoverPortal(page, input) {
   let stage = 'prepare';
   let identifierSubmit = null;
   try {
-    if (authMethod === 'sms') await broker.prepare();
     stage = 'navigate';
+    const currentUrl = new URL(page.url());
+    if (portal === 'booking' && currentUrl.protocol === 'https:'
+        && currentUrl.hostname === 'admin.booking.com' && currentUrl.pathname.startsWith('/hotel/')) {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const verified = new URL(page.url());
+      if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
+        stage = 'authenticated_session';
+        snapshots.push(await inspectPortalPage(page, portal));
+        return { version: 1, portal, validated: false, login_attempted: false,
+          authenticated_session: true, location: publicLocation(portal, page.url()),
+          snapshots, responses };
+      }
+    }
+    if (authMethod === 'sms') await broker.prepare();
     await page.goto(start, { waitUntil: 'domcontentloaded' });
     if (portal === 'booking') {
       // Its identifier handler is installed by client-side scripts after DOMContentLoaded.

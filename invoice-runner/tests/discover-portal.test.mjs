@@ -138,3 +138,21 @@ test('Booking identifier uses the unique button belonging to the validated form'
   assert.equal(result.login_attempted, true);
   assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
 });
+
+test('existing Booking extranet session is inspected without credential submission', async () => {
+  let reloads = 0; let navigations = 0;
+  const page = {
+    url: () => 'https://admin.booking.com/hotel/hoteladmin/groups/home/',
+    reload: async () => { reloads++; }, goto: async () => { navigations++; },
+    evaluate: async () => [],
+  };
+  const diagnostic = await discoverPortal(page, { portal: 'booking',
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
+    authMethod: 'sms' });
+  assert.equal(reloads, 1);
+  assert.equal(navigations, 0);
+  assert.equal(diagnostic.authenticated_session, true);
+  assert.equal(diagnostic.validated, false);
+  assert.equal(diagnostic.login_attempted, false);
+  assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
+});
