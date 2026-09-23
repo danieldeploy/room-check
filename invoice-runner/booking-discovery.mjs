@@ -30,6 +30,15 @@ export async function navigateBookingInvoices(page, input, onStep) {
   if (!/^\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
   let url = portalUrl('booking', page.url());
   if (url.hostname === 'admin.booking.com' && url.pathname.includes('/groups/home')) {
+    // The group table is populated asynchronously after DOMContentLoaded.
+    if (typeof page.waitForFunction === 'function') {
+      await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
+        .some(el => el.getClientRects().length > 0
+          && ((el.textContent || '').toLowerCase().includes(values.label.toLowerCase())
+            || (el.textContent || '').includes(values.property)
+            || el.getAttribute('data-hotel-id') === values.property)),
+      { timeout: 15000 }, { label, property }).catch(() => {});
+    }
     const rows = await page.$$('tr,[role="row"]');
     const matches = [];
     for (const row of rows) {
