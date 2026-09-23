@@ -61,8 +61,13 @@ try {
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
         userDataDir: profile, timeout: 30000, dumpio: false });
     }
-    const page = await browser.newPage();
-    if (connected) controlledPage = page;
+    const existing = connected ? (await browser.pages()).find(candidate => {
+      try { const url = new URL(candidate.url()); return url.protocol === 'https:'
+        && url.hostname === 'admin.booking.com' && url.pathname.startsWith('/hotel/'); }
+      catch { return false; }
+    }) : null;
+    const page = existing || await browser.newPage();
+    if (connected && !existing) controlledPage = page;
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
