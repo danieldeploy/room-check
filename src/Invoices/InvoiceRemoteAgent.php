@@ -316,16 +316,17 @@ final class InvoiceRemoteAgent
             $this->pdo->beginTransaction();
             try {
                 $code=$result['code'] ?? 'worker_failed';
-                if (in_array($code,['ok','no_invoices'],true)) {
-                    if ($job['kind']==='discover') {
-                        $draft=$result['diagnostic'] ?? null;
-                        $encoded=is_array($draft) ? json_encode($draft,JSON_THROW_ON_ERROR) : false;
-                        if (!$encoded || strlen($encoded)>65536 || ($draft['validated'] ?? null)!==false
-                            || ($draft['portal'] ?? null)!==$this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()) {
-                            throw new RuntimeException('invalid_document');
-                        }
-                        $this->vault->save('account-'.$job['account_id'].'-map-diagnostic.enc',$draft);
+                if ($job['kind']==='discover' && isset($result['diagnostic'])) {
+                    $draft=$result['diagnostic'];
+                    $encoded=is_array($draft) ? json_encode($draft,JSON_THROW_ON_ERROR) : false;
+                    if (!$encoded || strlen($encoded)>65536 || ($draft['validated'] ?? null)!==false
+                        || ($draft['portal'] ?? null)!==$this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()) {
+                        throw new RuntimeException('invalid_document');
                     }
+                    $this->vault->save('account-'.$job['account_id'].'-map-diagnostic.enc',$draft);
+                }
+                if (in_array($code,['ok','no_invoices'],true)) {
+                    if ($job['kind']==='discover' && !isset($result['diagnostic'])) throw new RuntimeException('invalid_document');
                     $ids=$result['documents'] ?? [];
                     if (!is_array($ids) || !array_is_list($ids) || count($ids)!==count(array_unique($ids,SORT_REGULAR))
                         || ($job['kind']==='collect' && count($ids)!==count($lease['uploads']))

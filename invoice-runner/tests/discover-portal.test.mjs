@@ -37,8 +37,23 @@ test('discovery uses saved credentials without serializing them or validating th
 });
 test('credentials are never sent to a foreign form action', async () => {
   const page = fakePage('https://evil.example/receive');
-  await assert.rejects(discoverPortal(page, { portal: 'booking',
+  const diagnostic = await discoverPortal(page, { portal: 'booking',
     credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
-    authMethod: 'password' }), /connector_unconfigured/);
+    authMethod: 'password' });
+  assert.equal(diagnostic.failure_code, 'connector_unconfigured');
+  assert.equal(diagnostic.failure_stage, 'identifier');
+  assert.equal(diagnostic.validated, false);
+  assert.deepEqual(page.typed, []);
+  assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
+});
+
+test('missing form action leaves a private diagnostic at the stopped step', async () => {
+  const page = fakePage(null);
+  const diagnostic = await discoverPortal(page, { portal: 'booking',
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
+    authMethod: 'password' });
+  assert.equal(diagnostic.failure_code, 'auth_unconfigured');
+  assert.equal(diagnostic.failure_stage, 'identifier');
+  assert.equal(diagnostic.snapshots.length, 1);
   assert.deepEqual(page.typed, []);
 });
