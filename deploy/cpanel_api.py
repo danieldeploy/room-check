@@ -174,6 +174,14 @@ class CpanelAPI:
             payload = json.loads(raw)
         except DeploymentError:
             raise
+        except urllib.error.HTTPError as error:
+            # HTTPError is also a URLError. Keep the status (not its body or
+            # headers) so authentication and access failures are actionable.
+            if error.code in (401, 403):
+                raise DeploymentError("api_http_access_denied_" + str(error.code)) from None
+            if error.code in (404, 405):
+                raise DeploymentError("api_http_endpoint_unavailable_" + str(error.code)) from None
+            raise DeploymentError("api_http_error_no_automatic_retry") from None
         except (urllib.error.URLError, OSError, ValueError, UnicodeError):
             # Never expose an exception/body that might echo an Authorization header.
             raise DeploymentError("request_failed_no_automatic_retry") from None
