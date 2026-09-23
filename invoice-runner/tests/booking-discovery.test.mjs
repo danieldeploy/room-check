@@ -4,7 +4,8 @@ import { navigateBookingInvoices } from '../booking-discovery.mjs';
 
 test('Booking discovery stops before clicking an ambiguous property', async () => {
   let clicks = 0;
-  const row = { evaluate: async () => true, $: async () => [] };
+  const row = { evaluate: async () => true };
+  row[String.fromCharCode(36, 36)] = async () => [];
   const page = {
     url: () => 'https://admin.booking.com/hotel/hoteladmin/groups/home/',
     $$: async selector => selector === 'tr,[role="row"]' ? [row, row] : [],
