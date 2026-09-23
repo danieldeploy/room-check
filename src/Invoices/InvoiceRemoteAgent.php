@@ -206,11 +206,6 @@ final class InvoiceRemoteAgent
                     $file=$this->vault->path($map);
                     if (!is_file($file) || filesize($file)>131072) throw new RuntimeException('connector_unconfigured');
                     $input['map']=json_decode((string)file_get_contents($file),true,32,JSON_THROW_ON_ERROR);
-                    if ($account['portal']==='booking') {
-                        foreach (($input['credentials']['invoice_urls'] ?? []) as $property=>$url) {
-                            if (isset($input['map']['properties'][$property]) && is_string($url)) $input['map']['properties'][$property]['url']=$url;
-                        }
-                    }
                 }
             }
             $lease=['lease'=>bin2hex(random_bytes(32)),'claim_id'=>$claimId,'job'=>$job,'input'=>$input,
