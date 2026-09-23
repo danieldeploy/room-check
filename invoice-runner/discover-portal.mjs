@@ -72,9 +72,9 @@ export async function discoverPortal(page, input) {
   let identifierSubmit = null;
   try {
     stage = 'navigate';
-    const current = new URL(page.url());
-    if (portal === 'booking' && current.protocol === 'https:'
-        && current.hostname === 'admin.booking.com' && current.pathname.startsWith('/hotel/')) {
+    const currentUrl = new URL(page.url());
+    if (portal === 'booking' && currentUrl.protocol === 'https:'
+        && currentUrl.hostname === 'admin.booking.com' && currentUrl.pathname.startsWith('/hotel/')) {
       await page.reload({ waitUntil: 'domcontentloaded' });
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
