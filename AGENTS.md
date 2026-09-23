@@ -14,8 +14,14 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 - Preserve existing modules and the application's transversal conventions for
   roles, bilingual content, shared form behavior, and sensitive data.
 - For invoice collection, group by invoice **issue date** in the selected
-  calendar month, irrespective of service period. Preserve the existing Airbnb
-  exception unless the owner requests a change.
+  calendar month, irrespective of service period. For an enabled monthly schedule,
+  run on the account's chosen day and time in `Europe/Lisbon` during the following
+  month, collecting invoices **issued in the previous calendar month**. Preserve
+  one scheduled request per account, property, and run month, including across
+  daylight-saving and year changes. Do not substitute the service month for the
+  issue month: an August service invoice issued in September belongs to the
+  September issue-month collection, normally scheduled in October. Preserve
+  the existing Airbnb export-month exception unless the owner requests a change.
 - Reuse credentials configured in the encrypted Management Hub vault and the
   established 2FA channel. Do not ask the owner to enter portal passwords in
   chat, add credentials to URLs, or log in through a browser for each run.
