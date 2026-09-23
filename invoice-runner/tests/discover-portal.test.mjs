@@ -4,22 +4,21 @@ import { discoverPortal } from '../discover-portal.mjs';
 
 function fakePage(action = 'https://account.booking.com/login') {
   let url = 'https://admin.booking.com/';
+  let stage = 0;
   const typed = [];
   const field = (type, autocomplete) => ({
     evaluate: async () => ({ visible: true, type, autocomplete, maxLength: -1, action }),
     type: async value => { typed.push(value); },
-    press: async () => { url = 'https://account.booking.com/login'; },
+    press: async () => { url = 'https://account.booking.com/login'; stage++; },
   });
-  let calls = 0;
   return {
     typed,
     url: () => url,
     goto: async () => { url = 'https://account.booking.com/login'; },
     waitForNavigation: async () => {},
     $$: async () => {
-      calls++;
-      if (calls <= 1) return [field('email','username')];
-      if (calls <= 2) return [field('password','current-password')];
+      if (stage === 0) return [field('email','username')];
+      if (stage === 1) return [field('password','current-password')];
       return [];
     },
     evaluate: async () => [],
