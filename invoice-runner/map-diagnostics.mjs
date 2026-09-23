@@ -5,7 +5,7 @@ const simple = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,4
 export function publicLocation(portal, value) {
   const url = portalUrl(portal, value);
   const allowed = new URLSearchParams();
-  if (portal === 'booking' && /^\\d{1,12}$/.test(url.searchParams.get('hotel_id') || '')) {
+  if (portal === 'booking' && /^\d{1,12}$/.test(url.searchParams.get('hotel_id') || '')) {
     allowed.set('hotel_id', url.searchParams.get('hotel_id'));
   }
   return url.origin + url.pathname + (allowed.size ? '?' + allowed : '');
