@@ -48,11 +48,16 @@ export async function discoverPortal(page, input) {
     try {
       const request = response.request();
       if (!['document','xhr','fetch'].includes(request.resourceType())) return;
-      const location = publicLocation(portal, response.url());
+      const url = portalUrl(portal, response.url());
+      // Keep login transitions visible; telemetry can otherwise evict every useful response.
+      if (/\/(?:js-metric|js_errors|navigation_times|js-track)$/.test(url.pathname)
+          || url.pathname.includes('/telemetry') || url.pathname.includes('/api/v1/acul/beacon')) return;
+      const location = url.pathname.includes('/__challenge_') ? url.origin + '/security_challenge'
+        : publicLocation(portal, response.url());
       const status = response.status();
       if (!Number.isInteger(status) || status < 100 || status > 599) return;
       responses.push({ location, status, method: ['GET','POST'].includes(request.method()) ? request.method() : 'other' });
-      if (responses.length > 12) responses.shift();
+      if (responses.length > 16) responses.shift();
     } catch { /* ignore foreign and malformed responses */ }
   });
   let identifierSent = false, passwordSent = false, otpSent = false;
