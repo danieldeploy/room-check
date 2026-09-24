@@ -34,11 +34,17 @@ try {
         'password'=>bin2hex(random_bytes(24))]);
     $agent=new InvoiceRemoteAgent($pdo,['private_dir'=>$tmp]);
 
+    // The previous release's false challenge must not suppress this corrected run.
+    $pdo->exec("INSERT INTO invoice_tasks (account_id,kind,property_id,period,state,schedule_key)
+        VALUES (1,'login','1140306','2026-08','needs_auth','booking-login-smoke:1:2026-09-24')");
+    $previous=(int)$pdo->lastInsertId();
+
     $first=BookingLoginSmoke::enqueue($pdo,$vault,$agent);
-    $check($first['created'] && $first['state']==='queued','First deployment queues login');
+    $check($first['created'] && $first['state']==='queued' && $first['id']!==$previous,
+        'Corrected deployment queues a fresh login after the previous failed attempt');
     $check($first['id']===BookingLoginSmoke::enqueue($pdo,$vault,$agent)['id'],
         'Repeated deployment returns the same task');
-    $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_tasks')->fetchColumn()===1,
+    $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_tasks')->fetchColumn()===2,
         'Repeated deployment does not insert another task');
     $pdo->exec("UPDATE invoice_tasks SET state='failed',active_key=NULL");
     $check($first['id']===BookingLoginSmoke::enqueue($pdo,$vault,$agent)['id'],

@@ -19,11 +19,16 @@ export function bookingLoginCode(diagnostic) {
 }
 async function humanChallenge(page) {
   const current = new URL(page.url());
-  if (current.searchParams.has('op_token') || current.pathname.includes('security_challenge')) return true;
-  return await page.evaluate(() => !!document.querySelector(
-    'iframe[src*="captcha"], [id*="captcha"], [class*="captcha"], [data-testid*="captcha"]')
-    || /let.s make sure you.re human|verify you are human|choose all the /i.test(
-      (document.body?.innerText || '').slice(0, 3000))) === true;
+  // Booking also puts op_token on an ordinary sign-in page. A token alone is
+  // never evidence of a challenge and must not block credential submission.
+  if (current.pathname.includes('security_challenge')) return true;
+  return await page.evaluate(() => {
+    const visibleChallenge = [...document.querySelectorAll(
+      'iframe[src*="captcha"], [id*="captcha"], [class*="captcha"], [data-testid*="captcha"]')]
+      .some(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
+    return visibleChallenge || /let.s make sure you.re human|verify you are human|choose all the /i.test(
+      (document.body?.innerText || '').slice(0, 3000));
+  }) === true;
 }
 async function uniqueInput(page, predicate) {
   const inputs = await page.$$('input');

@@ -294,7 +294,8 @@ test('human verification stops login before password and reports a distinct diag
   const page = {
     url: () => url,
     goto: async () => { url = 'https://account.booking.com/sign-in?op_token=secret'; },
-    waitForFunction: async () => {}, evaluate: async () => [],
+    waitForFunction: async () => {},
+    evaluate: async fn => fn.toString().includes('visibleChallenge') ? true : [],
     $$: async () => { throw new Error('credentials must not be requested'); },
   };
   const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
@@ -303,6 +304,30 @@ test('human verification stops login before password and reports a distinct diag
   assert.equal(result.failure_code, 'human_verification');
   assert.equal(bookingLoginCode(result), 'human_verification');
   assert.equal(result.login_attempted, false);
+  assert.ok(!JSON.stringify(result).includes('secret'));
+});
+
+test('Booking sign-in with an op_token and no visible challenge still attempts login', async () => {
+  let url = 'about:blank'; let step = 0;
+  const typed = [];
+  const action = 'https://account.booking.com/sign-in';
+  const field = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, autocomplete: '', maxLength: -1, action }),
+    type: async value => { typed.push([id, value]); },
+    press: async () => { if (++step === 2) url = 'https://admin.booking.com/hotel/hoteladmin/'; },
+  });
+  const page = {
+    url: () => url,
+    goto: async () => { url = 'https://account.booking.com/sign-in?op_token=secret'; },
+    waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    $$: async selector => selector !== 'input' ? [] : step === 0
+      ? [field('loginname', 'text')] : step === 1 ? [field('password', 'password')] : [],
+  };
+  const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' }, authMethod: 'password' });
+  assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
+  assert.equal(bookingLoginCode(result), 'ok');
+  assert.equal(result.login_attempted, true);
   assert.ok(!JSON.stringify(result).includes('secret'));
 });
 

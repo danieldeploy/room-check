@@ -80,6 +80,10 @@ try {
         const { discoverPortal, bookingLoginCode } = await import('./discover-portal.mjs');
         const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' });
         const code = input.action === 'login' ? bookingLoginCode(diagnostic) : diagnostic.failure_code || 'ok';
+        // Leave an actual human challenge visible in the persistent Chrome
+        // profile so the owner can complete it there. All listeners are still
+        // removed by cleanup before detaching from the browser.
+        if (connected && code === 'human_verification') controlledPage = undefined;
         process.stdout.write(JSON.stringify({ code, documents: [], diagnostic }));
       } else {
       const mapFile = path.join(root, `account-${input.accountId}-map.json`);
