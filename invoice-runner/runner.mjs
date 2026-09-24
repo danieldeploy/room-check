@@ -3,7 +3,7 @@ import path from 'node:path';
 import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
 import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
-import { controlledBrowserEndpoint, controlledBookingPage, guardPortalRequests } from './controlled-browser.mjs';
+import { controlledBrowserEndpoint, controlledBrowserProfile, controlledBookingPage, guardPortalRequests } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
@@ -40,6 +40,7 @@ try {
   const input = JSON.parse(raw);
   if (!['preflight', 'login', 'collect', 'discover'].includes(input.action) || !path.isAbsolute(input.privateDir)
       || input.privateDir.split(path.sep).some(part => ['public_html', '..', '.'].includes(part))) throw new PortalError('browser_unavailable');
+  const browserPurpose = controlledBrowserProfile(input);
   const root = await assertPrivateDirectory(input.privateDir);
   if (input.action !== 'preflight' && (!Number.isSafeInteger(input.accountId) || input.accountId < 1
       || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.period))) throw new PortalError('connector_unconfigured');
@@ -56,7 +57,7 @@ try {
     const { default: puppeteer } = await import('puppeteer');
     connected = ['discover', 'login'].includes(input.action) && input.portal === 'booking';
     if (connected) {
-      browser = await puppeteer.connect({ browserWSEndpoint: await controlledBrowserEndpoint(root),
+      browser = await puppeteer.connect({ browserWSEndpoint: await controlledBrowserEndpoint(root, browserPurpose),
         defaultViewport: null });
     } else {
       profile = await fs.mkdtemp(path.join(root, '.browser-'));

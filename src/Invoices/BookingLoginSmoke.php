@@ -7,7 +7,7 @@ final class BookingLoginSmoke
 {
     public const ACCOUNT_ID = 1;
     public const PERIOD = '2026-08';
-    public const KEY = 'booking-login-smoke:1:2026-09-24';
+    public const KEY = InvoiceRemoteAgent::BOOKING_FRESH_LOGIN_SMOKE_KEY;
 
     /** The caller holds the invoice worker lock. The key survives task completion. */
     public static function enqueue(PDO $pdo, InvoiceVault $vault, InvoiceRemoteAgent $agent): array
@@ -42,7 +42,8 @@ final class BookingLoginSmoke
         if (count($pending)>1) throw new RuntimeException('login_already_active');
         if ($pending) {
             $task=$pending[0];
-            if ($task['period'] !== self::PERIOD || !isset($properties[$task['property_id']])
+            if (!in_array($task['state'], ['queued','retry'], true) || $task['period'] !== self::PERIOD
+                || !isset($properties[$task['property_id']])
                 || ($task['schedule_key'] !== null && $task['schedule_key'] !== self::KEY)) {
                 throw new RuntimeException('login_already_active');
             }
