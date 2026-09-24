@@ -7,6 +7,7 @@ require_once __DIR__ . '/InvoiceAuth.php';
 final class InvoiceRemoteAgent
 {
     public const LEASE_SECONDS = 1200;
+    public const BOOKING_FRESH_LOGIN_SMOKE_KEY = 'booking-login-smoke:1:2026-09-24';
     public const CHUNK_BYTES = 196608;
     public const TOTAL_BYTES = 20971520;
     private const CONFIG = 'windows-agent.enc';
@@ -195,6 +196,10 @@ final class InvoiceRemoteAgent
         try {
             $input=['action'=>$job['kind'],'accountId'=>(int)$account['id'],'portal'=>$account['portal'],
                 'property'=>$job['property_id'],'period'=>$job['period'],'periodBasis'=>$account['period_basis']];
+            if ($job['kind']==='login' && (int)$account['id']===1 && $account['portal']==='booking'
+                && ($job['schedule_key'] ?? null)===self::BOOKING_FRESH_LOGIN_SMOKE_KEY) {
+                $input['browserProfile']='fresh_login';
+            }
             if ($job['kind']==='discover' && $account['portal']==='booking') {
                 $properties=$accounts->collectionProperties((int)$account['id']);
                 $input['propertyLabel']=(string)($properties[$job['property_id']] ?? '');
@@ -202,8 +207,10 @@ final class InvoiceRemoteAgent
             if ($job['kind']!=='preflight') {
                 $input['credentials']=$accounts->credentials($this->vault,(int)$account['id']);
                 $input['authMethod']=$account['auth_method'];
-                $session=InvoiceAccounts::secretName((int)$account['id'],'session');
-                $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];
+                if (($input['browserProfile'] ?? null)!=='fresh_login') {
+                    $session=InvoiceAccounts::secretName((int)$account['id'],'session');
+                    $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];
+                }
                 if ($job['kind']!=='discover' && !($job['kind']==='login' && $account['portal']==='booking')
                     && $account['portal']!=='email') {
                     $map='account-'.$account['id'].'-map.json';

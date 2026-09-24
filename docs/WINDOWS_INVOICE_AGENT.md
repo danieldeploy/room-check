@@ -72,6 +72,13 @@ novas em texto simples. Não guardar chaves, cookies ou credenciais no Git nem n
 Um PC desligado mantém tarefas na fila. Uma execução interrompida recupera depois
  de expirar a reserva de 20 minutos, respeitando o orçamento de tentativas existente.
 
+Após o Hub aceitar a conclusão de um teste de login, o agente grava um recibo privado
+`%LOCALAPPDATA%\ManagementHub\Invoices\data\task-<id>-receipt.json` na conta Windows
+da tarefa agendada. Contém ID, ação, código de resultado, estado devolvido pelo Hub,
+hora de conclusão e, quando válidos, os booleanos `sms_prompted` e `sms_submitted`.
+Não inclui credenciais, códigos SMS, cookies, URLs ou o diagnóstico completo. Uma falha ao gravar o recibo não altera
+o resultado da tarefa no Hub.
+
 ## Protocolo e preservação
 
 - POST JSON por TLS verificado; chave aleatória de 256 bits em `Authorization: Bearer`.

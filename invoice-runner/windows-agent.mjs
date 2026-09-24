@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AgentClient, AgentError, documentParts } from './agent-client.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
+import { writeTaskReceipt } from './task-receipt.mjs';
 
 const runner = fileURLToPath(new URL('./runner.mjs', import.meta.url));
 let child; let stopping = false;
@@ -134,6 +135,8 @@ async function execute(client, root, runtime, job) {
     if (['discover','login'].includes(job.input.action) && result.diagnostic) payload.diagnostic = result.diagnostic;
     const reply = await request({ action: 'complete', result: payload });
     if (reply.accepted !== true) throw new AgentError('invalid_response');
+    // Hub completion remains authoritative even if the local receipt cannot be written.
+    if (job.input.action === 'login') await writeTaskReceipt(root, job, result, reply).catch(() => {});
   } catch (error) {
     leaseError = error;
     await terminateChild(); await processResult;
@@ -141,7 +144,13 @@ async function execute(client, root, runtime, job) {
     const code = allowed.includes(error.message) ? error.message : 'network_error';
     // If a completion reply was lost, never replace it with a different result. Let the
     // existing receipt / fixed lease expiry recover it instead of creating a second outcome.
-    if (!completed || runnerError || !result) await request({ action: 'complete', result: { code } }).catch(() => {});
+    if (!completed || runnerError || !result) {
+      const fallback = { code };
+      const reply = await request({ action: 'complete', result: fallback }).catch(() => null);
+      if (reply?.accepted === true && job.input.action === 'login') {
+        await writeTaskReceipt(root, job, fallback, reply).catch(() => {});
+      }
+    }
   } finally {
     await terminateChild(); await processResult;
     await fs.rm(exchange, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
