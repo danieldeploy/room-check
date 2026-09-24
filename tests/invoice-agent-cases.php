@@ -59,16 +59,36 @@ function runInvoiceAgentCases(PDO $pdo): void
         $check($service->browserReady(),'Remote Chrome updates Hub readiness');
 
         $vault->save('account-1-credentials.enc',['identifier'=>'test-user','password'=>'test-secret','sms_sender'=>'Booking','sms_keyword'=>'code']);
+        $pdo->exec("UPDATE invoice_accounts SET status='configured',login_verified_at=NULL,enabled=0 WHERE id=1");
         $login=$service->enqueue('login','1140306','2026-08',1);
         $loginOffer=$send(['action'=>'claim','claim_id'=>str_repeat('b',32)])['job'];
         $check($loginOffer['id']===$login && !isset($loginOffer['input']['map']),
             'Booking login tests credentials without requiring an invoice map');
         $loginIdentity=['task_id'=>$login,'lease'=>$loginOffer['lease']];
+        $sessionDiagnostic=['version'=>1,'portal'=>'booking','validated'=>false,'login_attempted'=>false,
+            'authenticated_session'=>true,'location'=>'https://admin.booking.com/hotel/hoteladmin/groups/home/',
+            'snapshots'=>[]];
+        $check($send($loginIdentity+['action'=>'complete','result'=>['code'=>'session_active','documents'=>[],
+            'diagnostic'=>$sessionDiagnostic]])['state']==='completed','Existing Chrome session has its own task outcome');
+        $account=$pdo->query('SELECT status,login_verified_at,enabled FROM invoice_accounts WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        $check($account['status']==='configured' && $account['login_verified_at']===null && (int)$account['enabled']===0,
+            'An existing Chrome session does not verify credentials or enable scheduling');
+        $check($vault->read('account-1-login-diagnostic.enc')['login_attempted']===false,
+            'A session-only diagnostic remains private and distinct from a verified login');
+        $check((int)$pdo->query("SELECT COUNT(*) FROM invoice_failure_alerts WHERE task_id=$login")->fetchColumn()===0,
+            'An existing Chrome session does not queue a WhatsApp alert');
+
+        $login=$service->enqueue('login','1140306','2026-08',1);
+        $loginOffer=$send(['action'=>'claim','claim_id'=>str_repeat('c',32)])['job'];
+        $check($loginOffer['id']===$login,'A later test can verify a fresh login after the session expires');
+        $loginIdentity=['task_id'=>$login,'lease'=>$loginOffer['lease']];
         $loginDiagnostic=['version'=>1,'portal'=>'booking','validated'=>false,'login_attempted'=>true,
             'authenticated_session'=>true,'location'=>'https://admin.booking.com/hotel/hoteladmin/groups/home/',
             'snapshots'=>[]];
         $check($send($loginIdentity+['action'=>'complete','result'=>['code'=>'ok','documents'=>[],
-            'diagnostic'=>$loginDiagnostic]])['state']==='completed','Verified isolated Booking login completes');
+            'diagnostic'=>$loginDiagnostic]])['state']==='completed','Verified automatic Booking login completes');
+        $check($pdo->query('SELECT login_verified_at FROM invoice_accounts WHERE id=1')->fetchColumn()!==null,
+            'Only a fresh login verifies access to the account');
         $check($vault->read('account-1-login-diagnostic.enc')['authenticated_session']===true,
             'Private login diagnostic is stored separately from invoice map');
         InvoiceVault::atomicWrite($tmp.'/account-1-map.json','{"version":2,"validated":false}');

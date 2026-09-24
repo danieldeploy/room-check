@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverPortal } from '../discover-portal.mjs';
+import { EventEmitter } from 'node:events';
+import { discoverPortal, bookingLoginCode } from '../discover-portal.mjs';
 
 function fakePage(action = 'https://account.booking.com/login') {
   let url = 'https://admin.booking.com/';
@@ -154,10 +155,11 @@ test('existing Booking extranet session is inspected without credential submissi
   assert.equal(diagnostic.authenticated_session, true);
   assert.equal(diagnostic.validated, false);
   assert.equal(diagnostic.login_attempted, false);
+  assert.equal(bookingLoginCode(diagnostic), 'session_active');
   assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
 });
 
-test('isolated Booking login confirms extranet only after submitting identifier and password', async () => {
+test('Booking login confirms extranet only after submitting identifier and password', async () => {
   let url = 'about:blank'; let step = 0;
   const typed = [];
   const field = (id, type) => ({
@@ -178,8 +180,36 @@ test('isolated Booking login confirms extranet only after submitting identifier 
   assert.deepEqual(typed, ['private@example.com', 'sensitive-password']);
   assert.equal(result.authenticated_session, true);
   assert.equal(result.login_attempted, true);
+  assert.equal(bookingLoginCode(result), 'ok');
   assert.equal(result.validated, false);
   assert.ok(!JSON.stringify(result).includes('private@example.com'));
+});
+
+test('expired controlled Chrome session attempts username and password again', async () => {
+  let url = 'https://admin.booking.com/hotel/hoteladmin/groups/home/';
+  let stage = 0;
+  const typed = [];
+  const field = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, autocomplete: '', maxLength: -1,
+      action: 'https://account.booking.com/sign-in' }),
+    type: async value => { typed.push([id, value]); },
+    press: async () => {
+      if (++stage === 2) url = 'https://admin.booking.com/hotel/hoteladmin/groups/home/';
+    },
+  });
+  const page = {
+    url: () => url,
+    reload: async () => { url = 'https://account.booking.com/sign-in'; },
+    goto: async () => { url = 'https://account.booking.com/sign-in'; },
+    waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    $$: async selector => selector !== 'input' ? [] : stage === 0
+      ? [field('loginname', 'text')] : stage === 1 ? [field('password', 'password')] : [],
+  };
+  const diagnostic = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' }, authMethod: 'password' });
+  assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
+  assert.equal(bookingLoginCode(diagnostic), 'ok');
+  assert.equal(diagnostic.login_attempted, true);
 });
 
 test('human verification stops login before password and reports a distinct diagnostic', async () => {
@@ -194,6 +224,25 @@ test('human verification stops login before password and reports a distinct diag
     credentials: { identifier: 'private@example.com', password: 'sensitive-password' }, authMethod: 'password' });
   assert.deepEqual(typed, []);
   assert.equal(result.failure_code, 'human_verification');
+  assert.equal(bookingLoginCode(result), 'human_verification');
   assert.equal(result.login_attempted, false);
   assert.ok(!JSON.stringify(result).includes('secret'));
+});
+
+test('response diagnostics release their listener on success and failure', async () => {
+  for (const action of ['https://account.booking.com/login', 'https://evil.example/receive']) {
+    const page = fakePage(action);
+    const events = new EventEmitter();
+    page.on = events.on.bind(events);
+    page.off = events.off.bind(events);
+    const goto = page.goto;
+    page.goto = async (...args) => {
+      assert.equal(events.listenerCount('response'), 1);
+      return goto(...args);
+    };
+    const result = await discoverPortal(page, { portal: 'booking',
+      credentials: { identifier: 'private@example.com', password: 'sensitive-password' }, authMethod: 'password' });
+    assert.equal(result.failure_code === undefined, !action.includes('evil.example'));
+    assert.equal(events.listenerCount('response'), 0);
+  }
 });
