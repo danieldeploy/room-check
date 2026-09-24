@@ -22,6 +22,14 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
     state: reply.state,
     finished_at: now().toISOString(),
   };
+  const diagnostic = result.diagnostic;
+  if (job.input.portal === 'booking' && diagnostic && !Array.isArray(diagnostic)
+      && Object.hasOwn(diagnostic, 'sms_prompted') && Object.hasOwn(diagnostic, 'sms_submitted')
+      && typeof diagnostic.sms_prompted === 'boolean' && typeof diagnostic.sms_submitted === 'boolean'
+      && (!diagnostic.sms_submitted || diagnostic.sms_prompted)) {
+    receipt.sms_prompted = diagnostic.sms_prompted;
+    receipt.sms_submitted = diagnostic.sms_submitted;
+  }
   const filename = path.join(root, `task-${job.id}-receipt.json`);
   const temporary = `${filename}.${crypto.randomBytes(8).toString('hex')}.tmp`;
   try {

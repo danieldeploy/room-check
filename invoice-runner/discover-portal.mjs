@@ -103,6 +103,9 @@ export async function discoverPortal(page, input) {
   };
   if (typeof page.on === 'function') page.on('response', onResponse);
   let identifierSent = false, passwordSent = false, otpSent = false;
+  let smsPrompted = false, smsSubmitted = false;
+  const smsSignals = () => portal === 'booking' && loginOnly
+    ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted } : {};
   let stage = 'prepare';
   let identifierSubmit = null;
   try {
@@ -119,7 +122,8 @@ export async function discoverPortal(page, input) {
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
         if (loginOnly) return { version: 1, portal, validated: false, login_attempted: false,
-          authenticated_session: true, location: publicLocation(portal, page.url()), snapshots: [], responses };
+          authenticated_session: true, location: publicLocation(portal, page.url()), snapshots: [], responses,
+          ...smsSignals() };
         if (verified.pathname.includes('/groups/home') && typeof page.waitForFunction === 'function') {
           await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
             .some(el => el.getClientRects().length > 0
@@ -192,12 +196,13 @@ export async function discoverPortal(page, input) {
         continue;
       }
       const otp = await uniqueInput(page, x => x.autocomplete === 'one-time-code' || (x.type === 'tel' && x.maxLength === 6));
+      if (otp && authMethod === 'sms') smsPrompted = true;
       if (otp && !otpSent) {
         stage = 'second_factor';
         if (authMethod !== 'sms') fail('needs_auth');
         const code = await broker.value({ method: 'sms', digits: 6 });
         await otp.input.type(code); otpSent = true;
-        await submit(page, otp, portal);
+        await submit(page, otp, portal); smsSubmitted = true;
         if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
           location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
           || !!document.querySelector('[id*="captcha"], [class*="captcha"]'),
@@ -211,7 +216,8 @@ export async function discoverPortal(page, input) {
       if (!authenticatedBookingPage(page)) { stage = 'login_incomplete'; fail('portal_changed'); }
       return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
         authenticated_session: true, location: publicLocation(portal, page.url()),
-        snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit, responses };
+        snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit, responses,
+        ...smsSignals() };
     }
     if (!identifierSent || !passwordSent) { stage = 'login_incomplete'; fail('portal_changed'); }
     const current = publicLocation(portal, page.url());
@@ -223,7 +229,7 @@ export async function discoverPortal(page, input) {
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, identifier_submit: identifierSubmit, responses };
+      failure_stage: stage, identifier_submit: identifierSubmit, responses, ...smsSignals() };
   } finally {
     if (typeof page.off === 'function') page.off('response', onResponse);
     await broker.close();

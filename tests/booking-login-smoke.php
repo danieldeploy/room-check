@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/src/Invoices/BookingLoginSmoke.php';
+require_once dirname(__DIR__).'/src/Invoices/InvoiceAlerts.php';
 
 $pdo=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
 $pdo->exec("CREATE TABLE invoice_accounts (id INTEGER PRIMARY KEY,portal TEXT);
@@ -12,7 +13,9 @@ $pdo->exec("CREATE TABLE invoice_accounts (id INTEGER PRIMARY KEY,portal TEXT);
     CREATE TABLE invoice_property_settings (account_id INTEGER,property_id TEXT,is_active INTEGER);
     CREATE TABLE invoice_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER,kind TEXT,
         property_id TEXT,period TEXT,state TEXT DEFAULT 'queued',active_key TEXT UNIQUE,
-        schedule_key TEXT UNIQUE,requested_by INTEGER,created_at TEXT);");
+        schedule_key TEXT UNIQUE,requested_by INTEGER,created_at TEXT);
+    CREATE TABLE invoice_failure_alerts (id INTEGER PRIMARY KEY AUTOINCREMENT,task_id INTEGER,
+        dedupe_key TEXT UNIQUE,created_at TEXT);");
 $tmp=sys_get_temp_dir().'/booking-smoke-'.bin2hex(random_bytes(8));
 mkdir($tmp,0700);
 $check=static function(bool $condition,string $message): void {
@@ -58,6 +61,13 @@ try {
 
     $service=new InvoiceService($pdo);
     $manual=$service->enqueue('login','1140306',BookingLoginSmoke::PERIOD,null);
+    foreach (['running','waiting_auth'] as $state) {
+        $pdo->exec("UPDATE invoice_tasks SET state='$state'");
+        $reject(fn()=>BookingLoginSmoke::enqueue($pdo,$vault,$agent),'login_already_active');
+        $check($pdo->query('SELECT schedule_key FROM invoice_tasks')->fetchColumn()===null,
+            'A claimed task cannot acquire a fresh-profile key after its lease was issued');
+    }
+    $pdo->exec("UPDATE invoice_tasks SET state='queued'");
     $adopted=BookingLoginSmoke::enqueue($pdo,$vault,$agent);
     $check(!$adopted['created'] && $adopted['id']===$manual,
         'Existing account login is adopted without a second attempt');
@@ -72,6 +82,19 @@ try {
     $reject(fn()=>BookingLoginSmoke::enqueue($pdo,$vault,$agent),'login_already_active');
     $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_tasks')->fetchColumn()===1,
         'Different active login period does not create another attempt');
+    $alerts=new InvoiceAlerts($pdo,[]);
+    $captcha=['id'=>71,'kind'=>'login','account_id'=>1,'period'=>BookingLoginSmoke::PERIOD];
+    $alerts->queue($captcha,'human_verification');
+    $alerts->queue($captcha,'human_verification');
+    $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_failure_alerts')->fetchColumn()===1,
+        'The same CAPTCHA task queues one WhatsApp alert');
+    $later=$captcha; $later['id']=72;
+    $alerts->queue($later,'human_verification');
+    $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_failure_alerts')->fetchColumn()===2,
+        'A later CAPTCHA task in the same month can alert again');
+    $alerts->queue($later,'auth_invalid');
+    $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_failure_alerts')->fetchColumn()===2,
+        'Login failures other than human verification do not send WhatsApp alerts');
     echo "Booking one-off login queue checks passed.\n";
 } finally {
     foreach (glob($tmp.'/*') ?: [] as $file) if (is_file($file) || is_link($file)) unlink($file);

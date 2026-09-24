@@ -2,14 +2,29 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { assertPrivateDirectory } from './private-storage.mjs';
 
-// Chrome writes this file inside its dedicated, ACL-restricted profile.
+// Chrome writes an endpoint inside each fixed, ACL-restricted persistent profile.
 // Never accept an endpoint, host or profile path from a portal or a Hub job.
-export async function controlledBrowserEndpoint(root) {
-  const profile = path.join(root, 'controlled-booking-chrome');
-  if (path.dirname(await fs.realpath(profile)) !== root) throw new Error('controlled_profile_invalid');
+export function controlledBrowserProfile(input) {
+  if (input.browserProfile === undefined) return 'primary';
+  if (input.browserProfile === 'fresh_login' && input.action === 'login'
+      && input.portal === 'booking' && input.accountId === 1
+      && !Object.hasOwn(input, 'session')) return 'fresh_login';
+  throw new Error('controlled_profile_invalid');
+}
+
+export async function controlledBrowserEndpoint(root, purpose = 'primary') {
+  const folder = purpose === 'primary' ? 'controlled-booking-chrome'
+    : purpose === 'fresh_login' ? 'controlled-booking-login-chrome' : null;
+  if (!folder) throw new Error('controlled_profile_invalid');
+  const profile = path.join(root, folder);
+  const info = await fs.lstat(profile);
+  if (!info.isDirectory() || info.isSymbolicLink()
+      || path.dirname(await fs.realpath(profile)) !== root) throw new Error('controlled_profile_invalid');
   await assertPrivateDirectory(profile);
-  const data = await fs.readFile(path.join(profile, 'DevToolsActivePort'), 'utf8');
-  return parseControlledEndpoint(data);
+  const endpointFile = path.join(profile, 'DevToolsActivePort');
+  const endpointInfo = await fs.lstat(endpointFile);
+  if (!endpointInfo.isFile() || endpointInfo.isSymbolicLink()) throw new Error('controlled_endpoint_invalid');
+  return parseControlledEndpoint(await fs.readFile(endpointFile, 'utf8'));
 }
 export function parseControlledEndpoint(data) {
   if (typeof data !== 'string' || data.length > 256) throw new Error('controlled_endpoint_invalid');

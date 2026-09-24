@@ -10,7 +10,11 @@ final class InvoiceAlerts
     {
         if ($job['kind'] === 'preflight') return;
         if ($job['kind'] === 'login' && $code !== 'human_verification') return;
-        $key = $job['account_id'] . ':' . $job['period'] . ':' . $code;
+        // A later login can hit a new human challenge in the same month. Deduplicate
+        // retries of one task without suppressing the later task's notification.
+        $key = $job['kind'] === 'login' && $code === 'human_verification'
+            ? 'login:' . $job['id'] . ':human_verification'
+            : $job['account_id'] . ':' . $job['period'] . ':' . $code;
         try {
             $this->pdo->prepare('INSERT INTO invoice_failure_alerts (task_id, dedupe_key, created_at) VALUES (?, ?, ?)')
                 ->execute([$job['id'], $key, gmdate('Y-m-d H:i:s')]);
