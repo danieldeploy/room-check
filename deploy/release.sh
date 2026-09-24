@@ -32,3 +32,5 @@ export PRIVATEPATH="$HOME/room-check-private/"
 /bin/rm -f "$DEPLOYPATH/translation-validate.php" "$DEPLOYPATH/src/I18n/BilingualContentMaintenance.php" "$DEPLOYPATH/src/I18n/LanguageGuard.php" "$DEPLOYPATH/src/I18n/LexicalLanguageChecker.php"
 /bin/rm -rf "$DEPLOYPATH/resources/lexicon/full" "$DEPLOYPATH/src/ThirdParty/efficient-language-detector"
 /bin/cp -R migrations "$PRIVATEPATH"
+# One reviewed, idempotent login request. No portal secret enters the release job.
+/usr/local/bin/php deploy/enqueue_booking_login_once.php "$DEPLOYPATH"
