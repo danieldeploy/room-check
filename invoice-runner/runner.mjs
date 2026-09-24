@@ -64,7 +64,7 @@ try {
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
         userDataDir: profile, timeout: 30000, dumpio: false });
     }
-    const selection = connected ? await controlledBookingPage(browser)
+    const selection = connected ? await controlledBookingPage(browser, browserPurpose)
       : { page: await browser.newPage(), created: false };
     const page = selection.page;
     if (connected && selection.created) controlledPage = page;

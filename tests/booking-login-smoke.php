@@ -101,6 +101,11 @@ try {
     $alerts->queue($later,'auth_invalid');
     $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_failure_alerts')->fetchColumn()===2,
         'Login failures other than human verification do not send WhatsApp alerts');
+    $instruction=InvoiceAlerts::action('human_verification');
+    $check(str_contains($instruction,'apenas a verificação humana')
+        && str_contains($instruction,'agente trata das credenciais e do SMS')
+        && str_contains($instruction,'Testar acesso à conta'),
+        'WhatsApp human intervention instruction reserves credentials and SMS for the agent');
     echo "Booking one-off login queue checks passed.\n";
 } finally {
     foreach (glob($tmp.'/*') ?: [] as $file) if (is_file($file) || is_link($file)) unlink($file);

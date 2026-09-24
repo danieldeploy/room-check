@@ -57,6 +57,13 @@ text validates the company; otherwise review is required. PDFs need pdftotext av
 3. On an expired session, retry normal login first. Queue a manager WhatsApp
    intervention notice only for an actual human-verification challenge. Do not
    treat ordinary expiry as requiring a person, and do not try to bypass CAPTCHA.
+   The manager's Booking account-1 access test and later retries use the same
+   separate, persistent Chrome login profile; an active collection profile is
+   preserved for collection and discovery. A real challenge leaves its tab open
+   for human completion, then the next access test resumes the newest Booking
+   sign-in tab in that profile without needing another deployment. `op_token`
+   alone is not a CAPTCHA signal and its value never enters the private diagnostic.
+   WhatsApp delivery still requires the configured notification recipient/template.
 4. After an independently verified login, record the navigation to invoices and
    validate collection for Welcome Guest House and City Center Guest House.
    Monthly collection uses the previous month's **invoice issue date** in

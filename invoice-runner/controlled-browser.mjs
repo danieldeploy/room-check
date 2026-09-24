@@ -37,16 +37,28 @@ export function parseControlledEndpoint(data) {
 
 // Both discovery and login use the dedicated persistent Chrome profile. A fresh
 // incognito context discards the human verification already completed there.
-export async function controlledBookingPage(browser) {
+export async function controlledBookingPage(browser, purpose = 'primary') {
   const context = browser.defaultBrowserContext();
-  const existing = (await context.pages()).find(candidate => {
+  const pages = await context.pages();
+  const existing = pages.find(candidate => {
     try {
       const url = new URL(candidate.url());
       return url.protocol === 'https:' && url.hostname === 'admin.booking.com'
         && url.pathname.startsWith('/hotel/');
     } catch { return false; }
   });
-  return existing ? { page: existing, created: false }
+  // The human challenge remains in its original tab. Reuse the newest exact
+  // Booking sign-in tab after the owner completes it; a new tab would lose the
+  // pending challenge and can provoke another verification request.
+  const continuation = purpose === 'fresh_login' ? [...pages].reverse().find(candidate => {
+    try {
+      const url = new URL(candidate.url());
+      return url.protocol === 'https:' && url.hostname === 'account.booking.com'
+        && url.pathname === '/sign-in';
+    } catch { return false; }
+  }) : null;
+  const selected = existing || continuation;
+  return selected ? { page: selected, created: false }
     : { page: await context.newPage(), created: true };
 }
 
