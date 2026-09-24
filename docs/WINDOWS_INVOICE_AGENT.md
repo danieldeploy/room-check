@@ -74,9 +74,9 @@ Um PC desligado mantém tarefas na fila. Uma execução interrompida recupera de
 
 Após o Hub aceitar a conclusão de um teste de login, o agente grava um recibo privado
 `%LOCALAPPDATA%\ManagementHub\Invoices\data\task-<id>-receipt.json` na conta Windows
-da tarefa agendada. Contém só ID, ação, código de
-resultado, estado devolvido pelo Hub e hora de conclusão. Não inclui credenciais,
-códigos SMS, cookies, URLs ou diagnósticos. Uma falha ao gravar o recibo não altera
+da tarefa agendada. Contém ID, ação, código de resultado, estado devolvido pelo Hub,
+hora de conclusão e, quando válidos, os booleanos `sms_prompted` e `sms_submitted`.
+Não inclui credenciais, códigos SMS, cookies, URLs ou o diagnóstico completo. Uma falha ao gravar o recibo não altera
 o resultado da tarefa no Hub.
 
 ## Protocolo e preservação
