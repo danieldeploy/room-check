@@ -7,7 +7,7 @@ require_once __DIR__ . '/InvoiceAuth.php';
 final class InvoiceRemoteAgent
 {
     public const LEASE_SECONDS = 1200;
-    public const BOOKING_FRESH_LOGIN_SMOKE_KEY = 'booking-login-smoke:1:2026-09-24';
+    public const BOOKING_FRESH_LOGIN_SMOKE_KEY = 'booking-login-smoke:2:2026-09-24';
     public const CHUNK_BYTES = 196608;
     public const TOTAL_BYTES = 20971520;
     private const CONFIG = 'windows-agent.enc';
