@@ -12,6 +12,11 @@ function authenticatedBookingPage(page) {
       && url.pathname.startsWith('/hotel/');
   } catch { return false; }
 }
+export function bookingLoginCode(diagnostic) {
+  if (diagnostic.failure_code) return diagnostic.failure_code;
+  if (diagnostic.authenticated_session !== true) return 'portal_changed';
+  return diagnostic.login_attempted === true ? 'ok' : 'session_active';
+}
 async function humanChallenge(page) {
   const current = new URL(page.url());
   if (current.searchParams.has('op_token') || current.pathname.includes('security_challenge')) return true;
@@ -62,7 +67,7 @@ export async function discoverPortal(page, input) {
   const responses = [];
   const propertyUrls = [];
   const propertyReads = [];
-  if (typeof page.on === 'function') page.on('response', response => {
+  const onResponse = response => {
     try {
       const request = response.request();
       if (!['document','xhr','fetch'].includes(request.resourceType())) return;
@@ -95,7 +100,8 @@ export async function discoverPortal(page, input) {
         }).catch(() => {}));
       }
     } catch { /* ignore foreign and malformed responses */ }
-  });
+  };
+  if (typeof page.on === 'function') page.on('response', onResponse);
   let identifierSent = false, passwordSent = false, otpSent = false;
   let stage = 'prepare';
   let identifierSubmit = null;
@@ -105,6 +111,10 @@ export async function discoverPortal(page, input) {
     if (portal === 'booking' && currentUrl.protocol === 'https:'
         && currentUrl.hostname === 'admin.booking.com' && currentUrl.pathname.startsWith('/hotel/')) {
       await page.reload({ waitUntil: 'domcontentloaded' });
+      if (typeof page.waitForFunction === 'function') {
+        await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 }).catch(() => {});
+      }
+      if (await humanChallenge(page)) { stage = 'human_verification'; fail('human_verification'); }
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
@@ -214,5 +224,8 @@ export async function discoverPortal(page, input) {
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
       failure_stage: stage, identifier_submit: identifierSubmit, responses };
-  } finally { await broker.close(); }
+  } finally {
+    if (typeof page.off === 'function') page.off('response', onResponse);
+    await broker.close();
+  }
 }

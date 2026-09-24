@@ -11,6 +11,16 @@ final class InvoiceTaskLifecycle
     public function complete(InvoiceVault $vault, array $job, array $result, ?iterable $documents = null): void
     {
         $code = (string) ($result['code'] ?? 'worker_failed');
+        if ($code === 'session_active') {
+            if ($job['kind'] !== 'login' || ($result['documents'] ?? null) !== [] || isset($result['session'])) {
+                throw new RuntimeException('invalid_document');
+            }
+            // The task completed its check; the account has not passed a fresh
+            // username/password/2FA login. Preserve its previous readiness.
+            $this->pdo->prepare("UPDATE invoice_tasks SET state='completed',result_code=?,active_key=NULL,finished_at=? WHERE id=?")
+                ->execute([$code, InvoiceService::utcNow(), $job['id']]);
+            return;
+        }
         if (!in_array($code, ['ok', 'no_invoices'], true)) throw new RuntimeException($code);
         if ($job['kind'] === 'preflight') {
             if ($code !== 'ok') throw new RuntimeException('browser_unavailable');

@@ -331,7 +331,16 @@ final class InvoiceRemoteAgent
                     $suffix=$job['kind']==='login' ? 'login-diagnostic.enc' : 'map-diagnostic.enc';
                     $this->vault->save('account-'.$job['account_id'].'-'.$suffix,$draft);
                 }
-                if (in_array($code,['ok','no_invoices'],true)) {
+                if ($code==='session_active') {
+                    if ($job['kind']!=='login'
+                        || $this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()!=='booking'
+                        || ($result['diagnostic']['authenticated_session'] ?? null)!==true
+                        || ($result['diagnostic']['login_attempted'] ?? null)!==false
+                        || ($result['documents'] ?? null)!==[] || isset($result['session']) || $lease['uploads']) {
+                        throw new RuntimeException('invalid_document');
+                    }
+                    (new InvoiceTaskLifecycle($this->pdo))->complete($this->vault,$job,$result);
+                } elseif (in_array($code,['ok','no_invoices'],true)) {
                     if ($job['kind']==='discover' && !isset($result['diagnostic'])) throw new RuntimeException('invalid_document');
                     if ($job['kind']==='login' && $this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()==='booking'
                         && (($result['diagnostic']['authenticated_session'] ?? null)!==true

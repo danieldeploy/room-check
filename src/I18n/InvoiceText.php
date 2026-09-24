@@ -156,6 +156,8 @@ final class InvoiceText
         'queued' => ['Em fila', 'Queued'],
         'running' => ['Em execução', 'Running'],
         'completed' => ['Concluída', 'Completed'],
+        'session_active_badge' => ['Sessão ativa; login por validar', 'Session active; login unverified'],
+        'session_active' => ['A sessão Booking está ativa neste Chrome. Este teste não comprovou a entrada automática com utilizador, palavra-passe e 2FA.', 'The Booking session is active in this Chrome. This test did not verify automatic sign-in with username, password and 2FA.'],
         'failed' => ['Falhou', 'Failed'],
         'needs_auth' => ['A autenticação requer intervenção.', 'Authentication requires intervention.'],
         'human_verification' => ['O Booking pediu verificação humana.', 'Booking requested human verification.'],

@@ -3,21 +3,21 @@ import path from 'node:path';
 import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
 import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
-import { controlledBrowserEndpoint } from './controlled-browser.mjs';
+import { controlledBrowserEndpoint, controlledBookingPage, guardPortalRequests } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
 let profile;
 let connected = false;
 let controlledPage;
-let isolatedContext;
+let releaseRequestGuard;
 let closing;
 async function cleanup() {
   if (closing) return closing;
   closing = (async () => {
     if (browser) {
+      if (releaseRequestGuard) await releaseRequestGuard().catch(() => {});
       if (connected) {
-        if (isolatedContext) await isolatedContext.close().catch(() => {});
         if (controlledPage) await controlledPage.close().catch(() => {});
         browser.disconnect();
       }
@@ -63,14 +63,10 @@ try {
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
         userDataDir: profile, timeout: 30000, dumpio: false });
     }
-    if (connected && input.action === 'login') isolatedContext = await browser.createBrowserContext();
-    const existing = connected && !isolatedContext ? (await browser.pages()).find(candidate => {
-      try { const url = new URL(candidate.url()); return url.protocol === 'https:'
-        && url.hostname === 'admin.booking.com' && url.pathname.startsWith('/hotel/'); }
-      catch { return false; }
-    }) : null;
-    const page = isolatedContext ? await isolatedContext.newPage() : existing || await browser.newPage();
-    if (connected && !existing && !isolatedContext) controlledPage = page;
+    const selection = connected ? await controlledBookingPage(browser)
+      : { page: await browser.newPage(), created: false };
+    const page = selection.page;
+    if (connected && selection.created) controlledPage = page;
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
@@ -79,18 +75,10 @@ try {
     } else {
       if (input.action === 'discover' || (input.action === 'login' && input.portal === 'booking')) {
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
-        await page.setRequestInterception(true);
-        page.on('request', request => {
-          if (request.isInterceptResolutionHandled()) return;
-          if (request.isNavigationRequest() || !['GET', 'HEAD'].includes(request.method())) {
-            try { portalUrl(input.portal, request.url()); } catch { void request.abort().catch(() => {}); return; }
-          }
-          void request.continue().catch(() => {});
-        });
-        const { discoverPortal } = await import('./discover-portal.mjs');
+        releaseRequestGuard = await guardPortalRequests(page, input.portal, portalUrl);
+        const { discoverPortal, bookingLoginCode } = await import('./discover-portal.mjs');
         const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' });
-        const code = diagnostic.failure_code || (input.action === 'login' && !diagnostic.authenticated_session
-          ? 'portal_changed' : 'ok');
+        const code = input.action === 'login' ? bookingLoginCode(diagnostic) : diagnostic.failure_code || 'ok';
         process.stdout.write(JSON.stringify({ code, documents: [], diagnostic }));
       } else {
       const mapFile = path.join(root, `account-${input.accountId}-map.json`);
@@ -100,14 +88,7 @@ try {
         if (input.portal !== 'booking' || input.accountId !== 1) throw new PortalError('connector_unconfigured');
         map = JSON.parse(await fs.readFile(path.join(root, 'booking-map.json'), 'utf8').catch(() => { throw new PortalError('connector_unconfigured'); }));
       }
-      await page.setRequestInterception(true);
-      page.on('request', request => {
-        if (request.isInterceptResolutionHandled()) return;
-        if (request.isNavigationRequest() || !['GET', 'HEAD'].includes(request.method())) {
-          try { portalUrl(input.portal, request.url()); } catch { void request.abort().catch(() => {}); return; }
-        }
-        void request.continue().catch(() => {});
-      });
+      releaseRequestGuard = await guardPortalRequests(page, input.portal, portalUrl);
       const cookies = safeCookies(input.portal, input.session?.cookies);
       if (cookies.length) await browser.setCookie(...cookies);
       let documents;

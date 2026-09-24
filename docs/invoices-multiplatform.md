@@ -45,12 +45,14 @@ text validates the company; otherwise review is required. PDFs need pdftotext av
 
 ### Booking implementation order (decision, 23 September 2026)
 
-1. Prove an automatic login with the Hub's saved credentials in an isolated context
-   of the controlled Windows Chrome. This context must not reuse the manager's
-   already authenticated tab, and the test must not require an invoice map.
+1. Test Booking in the dedicated, persistent Windows Chrome profile, which keeps
+   the human verification already completed there. If an extranet session is still
+   active, return `session_active`: the task ends, but it does not verify saved
+   credentials, change account readiness or enable scheduling. Do not force a
+   logout merely to manufacture a fresh login test. The test needs no invoice map.
 2. If Booking offers SMS 2FA, receive the code through the existing correlated
-   Android-to-Hub flow and finish the login automatically. A new isolated login
-   can request SMS, but Booking decides whether to present that challenge;
+   Android-to-Hub flow and finish the login automatically. A fresh login after
+   session expiry can request SMS, but Booking decides whether to present it;
    never claim that an SMS was tested unless it was actually requested and used.
 3. On an expired session, retry normal login first. Queue a manager WhatsApp
    intervention notice only for an actual human-verification challenge. Do not
