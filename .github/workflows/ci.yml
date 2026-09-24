@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - agent/room-item-assignments
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-only-ci-password
+          MYSQL_DATABASE: hub_invoice_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      - name: Validate hosting deployment tools
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
+
+      - name: Configure PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, pdo_sqlite
+          coverage: none
+
+      - name: Validate PHP syntax
+        run: find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check assets/save-context.js
+          node --check admin/assets/invoices.js
+          node --check assets/app.js
+          node --check assets/app-dialog.js
+          node --check assets/verification-categories.js
+          node --check assets/immediate-edit-decision.js
+          node --check assets/validation-feedback.js
+          node --check assets/bilingual-textareas.js
+          if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
+
+      - name: Test shared save context
+        run: |
+          npm ci --prefix tests/ui --ignore-scripts --no-audit --no-fund
+          node --test tests/ui/*.test.cjs
+
+      - name: Validate invoice runner
+        run: |
+          node --check invoice-runner/runner.mjs
+          node --check invoice-runner/booking.mjs
+          node --check invoice-runner/windows-agent.mjs
+          node --test invoice-runner/tests/*.test.mjs
+
+      - name: Run PHP tests
+        run: |
+          php tests/release-backup.php
+          TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
+          php tests/booking-login-smoke.php
+          TEST_NODE_BINARY=$(command -v node) php tests/invoice-agent.php
+          php tests/invoice-workspace.php
+          php tests/invoice-drive.php
+          php tests/run.php
+          php tests/i18n.php
+          php tests/transversal-i18n-contract.php
+          php tests/static-i18n-audit.php
+          php tests/persistent-i18n-boundaries.php
+          php tests/bilingual-write-audit.php
+          php tests/checklist-autosave-contract.php
+          php tests/runtime-i18n-preservation.php
+          php tests/assignment-textarea-lock.php
+          php tests/validation-feedback-contract.php
+          php tests/decision-dialog-style.php
+          php tests/entity-quote-punctuation.php
+          php tests/autosave-hardening.php
+          php tests/invalid-edit-ux.php
+          php tests/bilingual-textarea-transversal.php
+          php tests/whatsapp-reminder-template.php
+          php tests/translation-quota.php
+          php tests/pending-translations.php
+          php tests/user-preferred-name.php
+          php tests/verification-categories.php
+
+      - name: Validate invoice migration and MySQL concurrency
+        env:
+          INVOICES_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=hub_invoice_test
+          INVOICES_TEST_USER: root
+          INVOICES_TEST_PASSWORD: test-only-ci-password
+        run: php tests/invoices-mysql.php
+
+  deploy:
+    needs: [validate, windows-agent]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check' &&
+      (vars.HUB_DEPLOY_ENABLED == 'true' || vars.HUB_DIAGNOSTIC_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout the validated commit
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Release the exact production commit through WHM
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+          DIAGNOSTIC_ONLY: ${{ vars.HUB_DEPLOY_ENABLED != 'true' }}
+        run: |
+          if [ "$DIAGNOSTIC_ONLY" = 'true' ]; then
+            python3 deploy/automated_release.py --diagnostic
+          else
+            python3 deploy/automated_release.py --expected-commit "$GITHUB_SHA"
+          fi
+
+  windows-agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate PowerShell and Windows security primitives
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem invoice-runner/windows/*.ps1 | ForEach-Object {
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors) | Out-Null
+            if ($parseErrors) { throw ($parseErrors | Out-String) }
+          }
+          & tests/invoice-agent-windows.ps1
+          & tests/invoice-pairing-windows.ps1
+      - name: Test agent protocol
+        run: node --test invoice-runner/tests/*.test.mjs
+      - name: Install locked runner and Chrome
+        working-directory: invoice-runner
+        run: |
+          npm ci --no-audit --no-fund
+          npm run install-chrome
+      - name: Verify real Windows Chrome with sandbox enabled
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & tests/invoice-agent-windows.ps1 -Browser

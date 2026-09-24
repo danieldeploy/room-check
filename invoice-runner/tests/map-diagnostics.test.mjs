@@ -1,0 +1,60 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { publicLocation, candidateSelector, inspectPortalPage } from '../map-diagnostics.mjs';
+
+test('URL hints omit credentials, query secrets and fragments', () => {
+  assert.equal(publicLocation('booking', 'https://admin.booking.com/hotel/finance?hotel_id=539828&token=private#tab'),
+    'https://admin.booking.com/hotel/finance?hotel_id=539828');
+  assert.equal(publicLocation('expedia', 'https://www.expediapartnercentral.com/invoices?session=private'),
+    'https://www.expediapartnercentral.com/invoices');
+  assert.equal(publicLocation('booking', 'https://admin.booking.com/invoices/a1b2c3d4e5f6a7b8c9d0ef01?hotel_id=539828'),
+    'https://admin.booking.com/invoices/:redacted?hotel_id=539828');
+  assert.throws(() => publicLocation('booking', 'https://booking.com.evil.example/invoices'));
+});
+test('candidate selectors are restricted to simple stable identifiers', () => {
+  assert.equal(candidateSelector('input', 'login-password'), '#login-password');
+  assert.equal(candidateSelector('button', 'a:b', ['next', 'active']), 'button.next.active');
+  assert.equal(candidateSelector('input', 'secret.value', ['x:y']), 'input');
+  assert.equal(candidateSelector('input', 'a1b2c3d4e5f6a7b8', []), 'input');
+});
+test('inspection emits unvalidated structural hints and never serializes values or text', async () => {
+  let calls = 0;
+  const page = {
+    url: () => 'https://admin.booking.com/invoices?hotel_id=1140306&auth=secret',
+    evaluate: async () => ++calls === 1 ? [
+      { tag: 'input', id: 'user', classes: [], type: 'text', value: 'secret@example.com' },
+      { tag: 'input', id: 'pass', classes: [], type: 'password', value: 'password-secret' },
+      { tag: 'a', id: 'invoice', classes: [], href: 'https://admin.booking.com/pdf?token=private', text: 'invoice details' },
+      { tag: 'a', id: 'foreign', classes: [], href: 'https://evil.example/private' },
+    ] : { ready_state: 'complete', identifier: false, password: false, otp: false,
+      form: false, alert: true, invalid_field: false, challenge: true, text: 'private error message' },
+  };
+  const snapshot = await inspectPortalPage(page, 'booking');
+  assert.equal(snapshot.validated, false);
+  assert.equal(snapshot.location, 'https://admin.booking.com/invoices?hotel_id=1140306');
+  assert.equal(snapshot.hints[2].href, 'https://admin.booking.com/pdf');
+  assert.equal(snapshot.hints[3].href, undefined);
+  assert.equal(snapshot.signals.alert, true);
+  assert.equal(snapshot.signals.challenge, true);
+  for (const forbidden of ['secret@example.com', 'password-secret', 'invoice details', 'token=private', 'auth=secret', 'private error message']) {
+    assert.ok(!JSON.stringify(snapshot).includes(forbidden));
+  }
+});
+
+test('Booking navigation diagnostics retain booleans but discard page text', async () => {
+  let call = 0;
+  const page = { url: () => 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
+    evaluate: async () => {
+      call++;
+      if (call === 1) return [];
+      if (call === 2) return { ready_state: 'complete', identifier: false, password: false, otp: false,
+        form: false, alert: false, invalid_field: false, challenge: false };
+      return [{ top: true, visible: true, visible_finance: true, full_finance: true,
+        aria_finance: false, visible_invoices: false, full_invoices: true, aria_invoices: false,
+        visible_length: 7, full_length: 30, children: 2, text: 'private-navigation-label' }];
+    } };
+  const snapshot = await inspectPortalPage(page, 'booking');
+  assert.equal(snapshot.navigation[0].visible_finance, true);
+  assert.equal(snapshot.navigation[0].full_invoices, true);
+  assert.ok(!JSON.stringify(snapshot).includes('private-navigation-label'));
+});

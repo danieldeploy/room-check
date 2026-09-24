@@ -1,3 +1,14 @@
 config.local.php
+my2n-secrets.json
+.env
 .DS_Store
 Thumbs.db
+error_log
+
+node_modules/
+*.enc
+master.key
+booking-map.json
+invoice-runtime.json
+
+account-*-map.json
