@@ -151,7 +151,7 @@ test('existing Booking extranet session is inspected without credential submissi
     reload: async () => { reloads++; }, goto: async () => { navigations++; },
     evaluate: async () => [],
   };
-  const diagnostic = await discoverPortal(page, { portal: 'booking',
+  const diagnostic = await discoverPortal(page, { portal: 'booking', loginOnly: true,
     credentials: { identifier: 'private@example.com', password: 'sensitive-password' },
     authMethod: 'sms' });
   assert.equal(reloads, 1);
