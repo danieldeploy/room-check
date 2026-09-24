@@ -77,7 +77,7 @@ final class InvoiceAlerts
             'drive_quota' => 'Liberte espaço no Google Drive e clique em Tentar novamente no módulo.',
             'drive_not_configured', 'drive_invalid_id', 'drive_account_mismatch', 'drive_permission', 'drive_not_found' => 'Verifique a ligação e a pasta da conta daniel.ciorcas@welcomehostel.pt e clique em Tentar novamente.',
             'drive_local_missing', 'drive_verify' => 'Peça a verificação dos ficheiros ao suporte antes de repetir. Não elimine a cópia do servidor.',
-            'human_verification' => 'Inicie sessão no Chrome de recolha e conclua a verificação humana no Booking. Depois volte a testar o login automático.',
+            'human_verification' => 'No Chrome de login controlado, conclua apenas a verificação humana na aba do Booking. Depois clique em Testar acesso à conta no Management Hub; o agente trata das credenciais e do SMS.',
             'needs_auth', 'auth_invalid', 'auth_timeout' => 'Verifique o acesso e o método 2FA da conta no módulo e teste novamente.',
             'browser_unavailable' => 'Verifique o Chrome no computador de recolha e volte a testar o acesso.',
             'connector_unconfigured', 'portal_changed' => 'Peça ao suporte para validar o procedimento de acesso e recolha desta conta.',

@@ -17,7 +17,7 @@ test('Booking control endpoint is pinned to local Chrome', () => {
   }
 });
 
-test('only the fixed Booking smoke job can select a fresh login browser', () => {
+test('only a Booking account-1 login without saved cookies can select the fixed fresh browser', () => {
   assert.equal(controlledBrowserProfile({ action: 'login', portal: 'booking', accountId: 1 }), 'primary');
   assert.equal(controlledBrowserProfile({ action: 'login', portal: 'booking', accountId: 1,
     browserProfile: 'fresh_login' }), 'fresh_login');
@@ -77,6 +77,32 @@ test('Booking login reuses a verified page in the persistent Chrome context', as
     newPage: async () => { throw new Error('must use the default context'); },
   };
   assert.deepEqual(await controlledBookingPage(browser), { page: authenticated, created: false });
+});
+
+test('fresh Booking login resumes the newest exact sign-in tab after human verification', async () => {
+  const oldSignIn = { url: () => 'https://account.booking.com/sign-in' };
+  const solvedChallenge = { url: () => 'https://account.booking.com/sign-in?op_token=private-token' };
+  const browser = {
+    defaultBrowserContext: () => ({
+      pages: async () => [oldSignIn,
+        { url: () => 'https://account.booking.com/sign-in-malicious?op_token=bad' },
+        { url: () => 'https://evil.example/sign-in' }, solvedChallenge],
+      newPage: async () => { throw new Error('must continue the existing tab'); },
+    }),
+  };
+  assert.deepEqual(await controlledBookingPage(browser, 'fresh_login'),
+    { page: solvedChallenge, created: false });
+  const hotel = { url: () => 'https://admin.booking.com/hotel/hoteladmin/groups/home/' };
+  browser.defaultBrowserContext = () => ({
+    pages: async () => [hotel, oldSignIn, solvedChallenge],
+    newPage: async () => { throw new Error('must reuse authenticated tab'); },
+  });
+  assert.deepEqual(await controlledBookingPage(browser, 'fresh_login'),
+    { page: hotel, created: false });
+  const normalProfile = await controlledBookingPage({ defaultBrowserContext: () => ({
+    pages: async () => [oldSignIn], newPage: async () => ({ url: () => 'about:blank' }),
+  }) });
+  assert.equal(normalProfile.created, true, 'the collection profile does not reuse an account sign-in tab');
 });
 
 test('Booking login opens a tab in the same persistent Chrome context when needed', async () => {

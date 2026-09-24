@@ -61,10 +61,11 @@ function runInvoiceAgentCases(PDO $pdo): void
         $vault->save('account-1-credentials.enc',['identifier'=>'test-user','password'=>'test-secret','sms_sender'=>'Booking','sms_keyword'=>'code']);
         $pdo->exec("UPDATE invoice_accounts SET status='configured',login_verified_at=NULL,enabled=0 WHERE id=1");
         $login=$service->enqueue('login','1140306','2026-08',1);
-        $loginOffer=$send(['action'=>'claim','claim_id'=>str_repeat('b',32)])['job'];
+        $loginOffer=$send(['action'=>'claim','claim_id'=>str_repeat('b',32),'browserProfile'=>'primary'])['job'];
         $check($loginOffer['id']===$login && !isset($loginOffer['input']['map'])
-            && !isset($loginOffer['input']['browserProfile']),
-            'Ordinary Booking login uses the primary Chrome profile without an invoice map');
+            && ($loginOffer['input']['browserProfile'] ?? null)==='fresh_login'
+            && !array_key_exists('session',$loginOffer['input']),
+            'Manager Booking login uses the fixed fresh profile even if the agent request supplies a different profile');
         $loginIdentity=['task_id'=>$login,'lease'=>$loginOffer['lease']];
         $sessionDiagnostic=['version'=>1,'portal'=>'booking','validated'=>false,'login_attempted'=>false,
             'authenticated_session'=>true,'sms_prompted'=>false,'sms_submitted'=>false,'location'=>'https://admin.booking.com/hotel/hoteladmin/groups/home/',
@@ -79,11 +80,31 @@ function runInvoiceAgentCases(PDO $pdo): void
         $check((int)$pdo->query("SELECT COUNT(*) FROM invoice_failure_alerts WHERE task_id=$login")->fetchColumn()===0,
             'An existing Chrome session does not queue a WhatsApp alert');
 
+        $challengeTask=$service->enqueue('login','1140306','2026-08',1);
+        $challengeOffer=$send(['action'=>'claim','claim_id'=>str_repeat('d',32)])['job'];
+        $check($challengeOffer['id']===$challengeTask
+            && ($challengeOffer['input']['browserProfile'] ?? null)==='fresh_login'
+            && !array_key_exists('session',$challengeOffer['input']),
+            'An access test remains in the fresh profile after a prior task finished');
+        $challengeIdentity=['task_id'=>$challengeTask,'lease'=>$challengeOffer['lease']];
+        $check($send($challengeIdentity+['action'=>'complete','result'=>['code'=>'human_verification']])['state']==='needs_auth',
+            'A human challenge ends the current task without verifying login');
+        $retry=$service->enqueue('login','1140306','2026-08',1);
+        $retryOffer=$send(['action'=>'claim','claim_id'=>str_repeat('e',32)])['job'];
+        $check($retry!==$challengeTask && $retryOffer['id']===$retry
+            && ($retryOffer['input']['browserProfile'] ?? null)==='fresh_login'
+            && !array_key_exists('session',$retryOffer['input']),
+            'The manager can retry the same account and period after the challenge without a deployment key');
+        $retryIdentity=['task_id'=>$retry,'lease'=>$retryOffer['lease']];
+        $check($send($retryIdentity+['action'=>'complete','result'=>['code'=>'session_active','documents'=>[],
+            'diagnostic'=>$sessionDiagnostic]])['state']==='completed',
+            'A session-only retry is completed without claiming credential verification');
+
         $login=$service->enqueue('login','1140306','2026-08',1,InvoiceRemoteAgent::BOOKING_FRESH_LOGIN_SMOKE_KEY);
         $loginOffer=$send(['action'=>'claim','claim_id'=>str_repeat('c',32)])['job'];
         $check($loginOffer['id']===$login && ($loginOffer['input']['browserProfile'] ?? null)==='fresh_login'
             && !array_key_exists('session',$loginOffer['input']),
-            'Only the one-off Booking smoke task selects the secondary profile and excludes saved cookies');
+            'The existing one-off Booking smoke task also uses the secondary profile and excludes saved cookies');
         $loginIdentity=['task_id'=>$login,'lease'=>$loginOffer['lease']];
         $loginDiagnostic=['version'=>1,'portal'=>'booking','validated'=>false,'login_attempted'=>true,
             'authenticated_session'=>true,'sms_prompted'=>true,'sms_submitted'=>true,'location'=>'https://admin.booking.com/hotel/hoteladmin/groups/home/',
@@ -102,6 +123,8 @@ function runInvoiceAgentCases(PDO $pdo): void
         $identity=['task_id'=>$job,'lease'=>$offer['lease']];
         $check($offer['input']['credentials']['password']==='test-secret','Credentials are delivered only in the authenticated job');
         $check(!isset($offer['input']['privateDir']),'Server filesystem paths are never execution instructions on Windows');
+        $check(!isset($offer['input']['browserProfile']) && isset($offer['input']['session']),
+            'Booking collection keeps its primary browser profile and saved session');
         $agent->maintenance();
         $check($pdo->query("SELECT state FROM invoice_tasks WHERE id=$job")->fetchColumn()==='running','Cron maintenance preserves a live remote task');
         $bytes='%PDF-1.7 '.str_repeat('test ',50000);

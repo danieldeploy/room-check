@@ -196,8 +196,11 @@ final class InvoiceRemoteAgent
         try {
             $input=['action'=>$job['kind'],'accountId'=>(int)$account['id'],'portal'=>$account['portal'],
                 'property'=>$job['property_id'],'period'=>$job['period'],'periodBasis'=>$account['period_basis']];
-            if ($job['kind']==='login' && (int)$account['id']===1 && $account['portal']==='booking'
-                && ($job['schedule_key'] ?? null)===self::BOOKING_FRESH_LOGIN_SMOKE_KEY) {
+            // Every Booking account-1 access test uses the fixed secondary Chrome
+            // profile. A manager can retry after a human challenge without a new
+            // deployment key; collection and discovery keep the primary profile.
+            // The client cannot choose a profile through the agent request.
+            if ($job['kind']==='login' && (int)$account['id']===1 && $account['portal']==='booking') {
                 $input['browserProfile']='fresh_login';
             }
             if ($job['kind']==='discover' && $account['portal']==='booking') {

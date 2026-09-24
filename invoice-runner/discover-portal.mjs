@@ -149,7 +149,13 @@ export async function discoverPortal(page, input) {
       }
     }
     if (authMethod === 'sms') await broker.prepare();
-    await page.goto(start, { waitUntil: 'domcontentloaded' });
+    // A human may have just solved Booking's challenge in the persistent fresh
+    // profile. Resume that exact sign-in page (including its private in-browser
+    // token), rather than navigating back to the start and triggering it again.
+    const continuingSignIn = portal === 'booking' && loginOnly && input.browserProfile === 'fresh_login'
+      && currentUrl.protocol === 'https:' && currentUrl.hostname === 'account.booking.com'
+      && currentUrl.pathname === '/sign-in';
+    if (!continuingSignIn) await page.goto(start, { waitUntil: 'domcontentloaded' });
     if (portal === 'booking') {
       // Its identifier handler is installed by client-side scripts after DOMContentLoaded.
       await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });

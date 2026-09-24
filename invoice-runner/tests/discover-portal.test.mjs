@@ -191,6 +191,34 @@ test('Booking login confirms extranet only after submitting identifier and passw
   assert.ok(!JSON.stringify(result).includes('private@example.com'));
 });
 
+test('fresh Booking login resumes solved challenge sign-in without navigating away or exposing token', async () => {
+  let url = 'https://account.booking.com/sign-in?op_token=secret-do-not-log';
+  let step = 0;
+  let navigations = 0;
+  const typed = [];
+  const field = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, autocomplete: '', maxLength: -1,
+      action: 'https://account.booking.com/sign-in' }),
+    type: async value => { typed.push(value); },
+    press: async () => { if (++step === 2) url = 'https://admin.booking.com/hotel/hoteladmin/'; },
+  });
+  const page = {
+    url: () => url,
+    goto: async () => { navigations++; url = 'https://account.booking.com/sign-in'; },
+    waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    $$: async selector => selector !== 'input' ? [] : step === 0
+      ? [field('loginname', 'text')] : step === 1 ? [field('password', 'password')] : [],
+  };
+  const diagnostic = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    browserProfile: 'fresh_login', credentials: { identifier: 'private@example.com', password: 'private-password' },
+    authMethod: 'password' });
+  assert.equal(navigations, 0);
+  assert.deepEqual(typed, ['private@example.com', 'private-password']);
+  assert.equal(bookingLoginCode(diagnostic), 'ok');
+  assert.ok(!JSON.stringify(diagnostic).includes('secret-do-not-log'));
+  assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
+});
+
 test('expired controlled Chrome session attempts username and password again', async () => {
   let url = 'https://admin.booking.com/hotel/hoteladmin/groups/home/';
   let stage = 0;
