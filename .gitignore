@@ -12,3 +12,5 @@ booking-map.json
 invoice-runtime.json
 
 account-*-map.json
+task-*-booking-login-metadata.json
+*.har

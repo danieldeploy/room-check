@@ -376,3 +376,49 @@ test('response diagnostics release their listener on success and failure', async
     assert.equal(events.listenerCount('response'), 0);
   }
 });
+
+test('Booking login records only safe login_name metadata and challenge visibility, then strips it for Hub', async () => {
+  let url = 'https://account.booking.com/sign-in?op_token=URL_SECRET';
+  let stage = 0;
+  const events = new EventEmitter();
+  const page = {
+    url: () => url,
+    goto: async () => { throw new Error('the existing sign-in tab must be reused'); },
+    waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    on: events.on.bind(events), off: events.off.bind(events),
+    $$: async selector => {
+      if (selector !== 'input') return [];
+      if (stage > 1) return [];
+      return [{ evaluate: async () => ({ visible: true, id: stage ? 'password' : 'loginname',
+        type: stage ? 'password' : 'text', autocomplete: '', maxLength: -1,
+        action: 'https://account.booking.com/sign-in' }),
+      type: async () => {}, press: async () => {
+        if (stage === 0) {
+          const request = {
+            method: () => 'POST', resourceType: () => 'fetch',
+            headers: () => ({ 'content-type': 'application/json',
+              'referer': 'https://account.booking.com/sign-in?token=REFERER_SECRET',
+              'cookie': 'COOKIE_SECRET', 'sec-fetch-mode': 'cors' }),
+            postData: () => JSON.stringify({ login_name: 'USERNAME_SECRET', op_token: 'OP_SECRET' }),
+          };
+          events.emit('response', { url: () => 'https://account.booking.com/account/sign-in/login_name?query=QUERY_SECRET',
+            status: () => 405, request: () => request, headers: () => ({ 'content-type': 'text/html' }) });
+        } else url = 'https://admin.booking.com/hotel/hoteladmin/';
+        stage++;
+      } }];
+    },
+  };
+  const result = await discoverPortal(page, { portal: 'booking', loginOnly: true, browserProfile: 'fresh_login',
+    credentials: { identifier: 'USERNAME_SECRET', password: 'PASSWORD_SECRET' }, authMethod: 'password' });
+  assert.equal(result.private_login_metadata.challenge_visible_before, false);
+  assert.equal(result.private_login_metadata.challenge_visible_after, false);
+  assert.equal(result.private_login_metadata.requests.length, 1);
+  assert.equal(result.private_login_metadata.requests[0].status, 405);
+  assert.equal(result.private_login_metadata.requests[0].body_keys.login_name, 'string');
+  assert.equal(events.listenerCount('response'), 0);
+  for (const secret of ['URL_SECRET', 'REFERER_SECRET', 'COOKIE_SECRET', 'USERNAME_SECRET',
+    'OP_SECRET', 'QUERY_SECRET', 'PASSWORD_SECRET']) assert.ok(!JSON.stringify(result).includes(secret));
+  const { removePrivateBookingLoginMetadata } = await import('../booking-login-report.mjs');
+  removePrivateBookingLoginMetadata({ diagnostic: result });
+  assert.equal(result.private_login_metadata, undefined);
+});

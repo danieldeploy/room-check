@@ -8,7 +8,7 @@ const loginCodes = new Set(['ok', 'session_active', 'needs_auth', 'human_verific
   'invalid_document', 'network_error', 'worker_failed', 'worker_unavailable']);
 
 // A local receipt is a small summary, never a copy of the job or portal result.
-export async function writeTaskReceipt(root, job, result, reply, now = () => new Date()) {
+export async function writeTaskReceipt(root, job, result, reply, now = () => new Date(), loginMetadataSaved = null) {
   if (reply?.accepted !== true || !Number.isSafeInteger(job?.id) || job.id < 1
       || job?.input?.action !== 'login'
       || !loginCodes.has(result?.code)
@@ -29,6 +29,9 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
       && (!diagnostic.sms_submitted || diagnostic.sms_prompted)) {
     receipt.sms_prompted = diagnostic.sms_prompted;
     receipt.sms_submitted = diagnostic.sms_submitted;
+  }
+  if (job.input.portal === 'booking' && typeof loginMetadataSaved === 'boolean') {
+    receipt.booking_login_metadata_saved = loginMetadataSaved;
   }
   const filename = path.join(root, `task-${job.id}-receipt.json`);
   const temporary = `${filename}.${crypto.randomBytes(8).toString('hex')}.tmp`;
