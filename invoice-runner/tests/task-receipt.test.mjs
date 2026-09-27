@@ -49,6 +49,14 @@ test('accepted completion stores only a private atomic receipt', async () => {
       { accepted: true, state: 'completed' });
     assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(path.join(root, 'task-49-receipt.json'), 'utf8')),
       'sms_submitted'), false);
+    await writeTaskReceipt(root, { ...job, id: 50 }, { code: 'portal_changed', diagnostic: {} },
+      { accepted: true, state: 'failed' }, () => new Date('2026-09-24T08:20:00.000Z'), false);
+    const metadataFailure = JSON.parse(await fs.readFile(path.join(root, 'task-50-receipt.json'), 'utf8'));
+    assert.equal(metadataFailure.booking_login_metadata_saved, false);
+    await writeTaskReceipt(root, { ...job, id: 51 }, { code: 'human_verification', diagnostic: {} },
+      { accepted: true, state: 'needs_auth' }, () => new Date('2026-09-24T08:21:00.000Z'), true);
+    assert.equal(JSON.parse(await fs.readFile(path.join(root, 'task-51-receipt.json'), 'utf8'))
+      .booking_login_metadata_saved, true);
     await assert.rejects(writeTaskReceipt(root, { ...job, id: 47, input: { action: 'collect' } }, result, reply));
     await assert.rejects(fs.access(path.join(root, 'task-47-receipt.json')));
   } finally { await fs.rm(root, { recursive: true, force: true }); }

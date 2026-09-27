@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { AgentClient, AgentError, documentParts } from './agent-client.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
 import { writeTaskReceipt } from './task-receipt.mjs';
+import { removePrivateBookingLoginMetadata, writeBookingLoginReport } from './booking-login-report.mjs';
 
 const runner = fileURLToPath(new URL('./runner.mjs', import.meta.url));
 let child; let stopping = false;
@@ -114,6 +115,16 @@ async function execute(client, root, runtime, job) {
     }
     await processResult;
     if (runnerError) throw runnerError;
+    // This value travels only from the local runner to the local Windows agent.
+    // Remove it before constructing any response to the Hub or an error receipt.
+    const privateMetadata = removePrivateBookingLoginMetadata(result);
+    let loginMetadataSaved = null;
+    if (privateMetadata && job.input.action === 'login' && job.input.portal === 'booking') {
+      try {
+        await writeBookingLoginReport(root, job.id, privateMetadata);
+        loginMetadataSaved = true;
+      } catch { loginMetadataSaved = false; }
+    }
     const documents = result.documents ?? [];
     if (!Array.isArray(documents) || documents.length > 100) throw new AgentError('invalid_document');
     let total = 0; const ids = [];
@@ -136,7 +147,8 @@ async function execute(client, root, runtime, job) {
     const reply = await request({ action: 'complete', result: payload });
     if (reply.accepted !== true) throw new AgentError('invalid_response');
     // Hub completion remains authoritative even if the local receipt cannot be written.
-    if (job.input.action === 'login') await writeTaskReceipt(root, job, result, reply).catch(() => {});
+    if (job.input.action === 'login') await writeTaskReceipt(root, job, result, reply,
+      undefined, loginMetadataSaved).catch(() => {});
   } catch (error) {
     leaseError = error;
     await terminateChild(); await processResult;

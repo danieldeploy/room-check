@@ -3,6 +3,7 @@ import { portalUrl } from './portal.mjs';
 import { SecondFactor } from './second-factor.mjs';
 import { PortalError } from './booking.mjs';
 import { navigateBookingInvoices } from './booking-discovery.mjs';
+import { sanitizeBookingLoginNameEvidence } from './booking-login-metadata.mjs';
 
 const fail = code => { throw new PortalError(code); };
 function authenticatedBookingPage(page) {
@@ -70,6 +71,11 @@ export async function discoverPortal(page, input) {
   const broker = new SecondFactor(input, value => portalUrl(portal, value));
   const snapshots = [];
   const responses = [];
+  const loginNameRequests = [];
+  let challengeVisibleBefore = null, challengeVisibleAfter = null;
+  const privateLoginMetadata = () => portal === 'booking' && loginOnly
+    ? { private_login_metadata: { version: 1, requests: loginNameRequests.slice(0, 3),
+      challenge_visible_before: challengeVisibleBefore, challenge_visible_after: challengeVisibleAfter } } : {};
   const propertyUrls = [];
   const propertyReads = [];
   const onResponse = response => {
@@ -90,6 +96,12 @@ export async function discoverPortal(page, input) {
         const mime = String(request.headers()['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
         entry.content_type = mime === 'application/json' ? 'json'
           : mime === 'application/x-www-form-urlencoded' ? 'form' : 'other';
+        if (portal === 'booking' && loginOnly && loginNameRequests.length < 3) {
+          const safe = sanitizeBookingLoginNameEvidence({ url: response.url(), status,
+            method: request.method(), resourceType: request.resourceType(),
+            requestHeaders: request.headers(), responseHeaders: response.headers(), postData: request.postData() });
+          if (safe) loginNameRequests.push(safe);
+        }
       }
       responses.push(entry);
       if (responses.length > 16) responses.shift();
@@ -122,13 +134,15 @@ export async function discoverPortal(page, input) {
       if (typeof page.waitForFunction === 'function') {
         await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 }).catch(() => {});
       }
-      if (await humanChallenge(page)) { stage = 'human_verification'; fail('human_verification'); }
+      const challengeNow = await humanChallenge(page);
+      if (loginOnly) challengeVisibleBefore = challengeNow;
+      if (challengeNow) { stage = 'human_verification'; fail('human_verification'); }
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
         if (loginOnly) return { version: 1, portal, validated: false, login_attempted: false,
           authenticated_session: true, location: publicLocation(portal, page.url()), snapshots: [], responses,
-          ...smsSignals() };
+          ...smsSignals(), ...privateLoginMetadata() };
         if (verified.pathname.includes('/groups/home') && typeof page.waitForFunction === 'function') {
           await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
             .some(el => el.getClientRects().length > 0
@@ -164,7 +178,12 @@ export async function discoverPortal(page, input) {
       portalUrl(portal, page.url());
       stage = 'inspect';
       snapshots.push(await inspectPortalPage(page, portal));
-      if (portal === 'booking' && await humanChallenge(page)) {
+      const challengeNow = portal === 'booking' && await humanChallenge(page);
+      if (portal === 'booking' && loginOnly) {
+        if (identifierSent) challengeVisibleAfter = challengeNow;
+        else if (challengeVisibleBefore === null) challengeVisibleBefore = challengeNow;
+      }
+      if (challengeNow) {
         stage = 'human_verification'; fail('human_verification');
       }
       if (loginOnly && authenticatedBookingPage(page)) break;
@@ -223,12 +242,14 @@ export async function discoverPortal(page, input) {
       break;
     }
     if (loginOnly) {
-      if (portal === 'booking' && await humanChallenge(page)) { stage = 'human_verification'; fail('human_verification'); }
+      const challengeNow = portal === 'booking' && await humanChallenge(page);
+      if (portal === 'booking') challengeVisibleAfter = challengeNow;
+      if (challengeNow) { stage = 'human_verification'; fail('human_verification'); }
       if (!authenticatedBookingPage(page)) { stage = 'login_incomplete'; fail('portal_changed'); }
       return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
         authenticated_session: true, location: publicLocation(portal, page.url()),
         snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit, responses,
-        ...smsSignals() };
+        ...smsSignals(), ...privateLoginMetadata() };
     }
     if (!identifierSent || !passwordSent) { stage = 'login_incomplete'; fail('portal_changed'); }
     const current = publicLocation(portal, page.url());
@@ -240,7 +261,7 @@ export async function discoverPortal(page, input) {
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, identifier_submit: identifierSubmit, responses, ...smsSignals() };
+      failure_stage: stage, identifier_submit: identifierSubmit, responses, ...smsSignals(), ...privateLoginMetadata() };
   } finally {
     if (typeof page.off === 'function') page.off('response', onResponse);
     await broker.close();
