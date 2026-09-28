@@ -31,7 +31,7 @@ export async function testBookingCookieConsent(browser) {
       browserProfile: 'fresh_login', loginOnly: true, authMethod: 'password',
       credentials: { identifier: 'synthetic-user', password: 'synthetic-password' } });
     assert.equal(diagnostic.cookie_consent_rejected, true);
-    assert.equal(diagnostic.authenticated_session, true);
+    assert.equal(diagnostic.authenticated_session, true, JSON.stringify(diagnostic));
     assert.equal(diagnostic.login_attempted, true);
     assert.equal(JSON.stringify(diagnostic).includes('synthetic-password'), false);
     // Hidden rejection controls, even with a visible accept button, are ignored.
