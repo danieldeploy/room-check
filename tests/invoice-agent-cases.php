@@ -117,14 +117,23 @@ function runInvoiceAgentCases(PDO $pdo): void
         $check($savedDiagnostic['authenticated_session']===true
             && $savedDiagnostic['sms_prompted']===true && $savedDiagnostic['sms_submitted']===true,
             'Private login diagnostic stores SMS progress as booleans, separately from invoice map');
+        $discovery=$service->enqueue('discover','1140306','2026-08',1);
+        $discoveryOffer=$send(['action'=>'claim','claim_id'=>str_repeat('f',32)])['job'];
+        $check($discoveryOffer['id']===$discovery
+            && ($discoveryOffer['input']['browserProfile'] ?? null)==='fresh_login'
+            && !isset($discoveryOffer['input']['session'])
+            && $discoveryOffer['input']['propertyLabel']===(new InvoiceAccounts($pdo))->collectionProperties(1)['1140306'],
+            'Map inspection retains the authenticated Chrome profile and selected property');
+        $send(['task_id'=>$discovery,'lease'=>$discoveryOffer['lease'],'action'=>'complete',
+            'result'=>['code'=>'ok','documents'=>[],'diagnostic'=>$sessionDiagnostic]]);
         InvoiceVault::atomicWrite($tmp.'/account-1-map.json','{"version":2,"validated":false}');
         $job=$service->enqueue('collect','1140306','2026-08',1);
         $offer=$send(['action'=>'claim','claim_id'=>str_repeat('4',32)])['job'];
         $identity=['task_id'=>$job,'lease'=>$offer['lease']];
         $check($offer['input']['credentials']['password']==='test-secret','Credentials are delivered only in the authenticated job');
         $check(!isset($offer['input']['privateDir']),'Server filesystem paths are never execution instructions on Windows');
-        $check(!isset($offer['input']['browserProfile']) && isset($offer['input']['session']),
-            'Booking collection keeps its primary browser profile and saved session');
+        $check(($offer['input']['browserProfile'] ?? null)==='fresh_login' && !isset($offer['input']['session']),
+            'Booking collection reuses the verified persistent profile without importing another session');
         $agent->maintenance();
         $check($pdo->query("SELECT state FROM invoice_tasks WHERE id=$job")->fetchColumn()==='running','Cron maintenance preserves a live remote task');
         $bytes='%PDF-1.7 '.str_repeat('test ',50000);

@@ -4,8 +4,8 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseControlledEndpoint, controlledBrowserEndpoint, controlledBrowserProfile,
-  controlledBookingPage, guardPortalRequests } from '../controlled-browser.mjs';
+import { parseControlledEndpoint, controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions,
+  controlledBookingPage, guardPortalRequests, usesControlledBrowser } from '../controlled-browser.mjs';
 
 test('Booking control endpoint is pinned to local Chrome', () => {
   assert.equal(parseControlledEndpoint('38617\n/devtools/browser/12345678-abcd-1234-abcd-123456789012\n'),
@@ -17,12 +17,21 @@ test('Booking control endpoint is pinned to local Chrome', () => {
   }
 });
 
-test('only a Booking account-1 login without saved cookies can select the fixed fresh browser', () => {
+test('Booking account-1 login, discovery and collection share the fixed profile without imported cookies', () => {
   assert.equal(controlledBrowserProfile({ action: 'login', portal: 'booking', accountId: 1 }), 'primary');
   assert.equal(controlledBrowserProfile({ action: 'login', portal: 'booking', accountId: 1,
     browserProfile: 'fresh_login' }), 'fresh_login');
+  for (const action of ['login', 'discover', 'collect']) {
+    const input = { action, portal: 'booking', accountId: 1, browserProfile: 'fresh_login' };
+    assert.equal(controlledBrowserProfile(input), 'fresh_login');
+    assert.equal(usesControlledBrowser(input), true);
+    assert.throws(() => controlledBrowserProfile({ ...input, session: { cookies: [] } }), /controlled_profile_invalid/);
+  }
+  assert.equal(usesControlledBrowser({ action: 'preflight', portal: 'booking', accountId: 1 }), false);
+  assert.equal(usesControlledBrowser({ action: 'collect', portal: 'booking', accountId: 2 }), false);
+  assert.equal(usesControlledBrowser({ action: 'collect', portal: 'airbnb', accountId: 1 }), false);
   for (const input of [
-    { action: 'discover', portal: 'booking', accountId: 1, browserProfile: 'fresh_login' },
+    { action: 'preflight', portal: 'booking', accountId: 1, browserProfile: 'fresh_login' },
     { action: 'login', portal: 'airbnb', accountId: 1, browserProfile: 'fresh_login' },
     { action: 'login', portal: 'booking', accountId: 2, browserProfile: 'fresh_login' },
     { action: 'login', portal: 'booking', accountId: 1, browserProfile: 'fresh_login', session: {} },
@@ -31,6 +40,16 @@ test('only a Booking account-1 login without saved cookies can select the fixed 
     { action: 'login', portal: 'booking', accountId: 1, browserProfile: '../controlled-booking-chrome' },
     { action: 'login', portal: 'booking', accountId: 1, browserProfile: 'ws://127.0.0.1:2000' },
   ]) assert.throws(() => controlledBrowserProfile(input), /controlled_profile_invalid/);
+});
+
+test('fresh Booking login bounds CDP commands without changing the primary connection', () => {
+  const endpoint = 'ws://127.0.0.1:38617/devtools/browser/12345678-abcd-1234-abcd-123456789012';
+  assert.deepEqual(controlledBrowserConnectOptions(endpoint, 'fresh_login'), {
+    browserWSEndpoint: endpoint, defaultViewport: null, protocolTimeout: 30000,
+  });
+  assert.deepEqual(controlledBrowserConnectOptions(endpoint, 'primary'), {
+    browserWSEndpoint: endpoint, defaultViewport: null,
+  });
 });
 
 test('fixed persistent profiles keep their endpoint files and ports isolated',
@@ -105,6 +124,40 @@ test('fresh Booking login resumes the newest exact sign-in tab after human verif
   assert.equal(normalProfile.created, true, 'the collection profile does not reuse an account sign-in tab');
 });
 
+test('fresh Booking login selects the separate password tab ahead of an older sign-in tab', async () => {
+  const oldSignIn = { url: () => 'https://account.booking.com/sign-in?op_token=private' };
+  const passwordTab = { url: () => 'https://auth.booking.com/u/login/password?state=private',
+    evaluate: async () => true };
+  const browser = { defaultBrowserContext: () => ({
+    pages: async () => [passwordTab,
+      { url: () => 'https://auth.booking.com.evil.example/u/login/password' },
+      { url: () => 'http://auth.booking.com/u/login/password' },
+      { url: () => 'https://auth.booking.com/u/login/password-confirm' }, oldSignIn],
+    newPage: async () => { throw new Error('must continue existing password tab'); },
+  }) };
+  assert.deepEqual(await controlledBookingPage(browser, 'fresh_login'),
+    { page: passwordTab, created: false });
+  const regular = await controlledBookingPage({ defaultBrowserContext: () => ({
+    pages: async () => [oldSignIn, passwordTab], newPage: async () => ({ url: () => 'about:blank' }),
+  }) });
+  assert.equal(regular.created, true, 'the collection profile must not reuse login tabs');
+});
+
+test('fresh Booking login ignores a non-actionable password tab and rejects two actionable tabs', async () => {
+  const signIn = { url: () => 'https://account.booking.com/sign-in' };
+  const password = (ready, token) => ({
+    url: () => `https://auth.booking.com/u/login/password?state=${token}`,
+    evaluate: async () => ready,
+  });
+  const withPages = pages => ({ defaultBrowserContext: () => ({
+    pages: async () => pages, newPage: async () => { throw new Error('must reuse sign-in'); },
+  }) });
+  assert.deepEqual(await controlledBookingPage(withPages([password(false, 'stale'), signIn]), 'fresh_login'),
+    { page: signIn, created: false });
+  await assert.rejects(controlledBookingPage(withPages([password(true, 'one'), password(true, 'two'), signIn]),
+    'fresh_login'), /controlled_password_tab_ambiguous/);
+});
+
 test('Booking login opens a tab in the same persistent Chrome context when needed', async () => {
   const page = { url: () => 'about:blank' };
   const browser = {
@@ -140,5 +193,31 @@ test('request guard is detached before a persistent page is reused', async () =>
   const removeAgain = await guardPortalRequests(page, 'booking', allowedUrl);
   assert.equal(page.listenerCount('request'), 1);
   await removeAgain();
+  assert.equal(page.listenerCount('request'), 0);
+});
+
+test('request guard aborts password and OTP query leaks even on allowed Booking GETs', async () => {
+  const page = new EventEmitter();
+  page.setRequestInterception = async () => {};
+  const secrets = ['p@ss&word'];
+  const allowedUrl = (_portal, value) => {
+    if (new URL(value).hostname !== 'auth.booking.com') throw new Error('foreign');
+  };
+  let forwarded = 0; let aborted = 0;
+  const request = (url, navigation = true) => ({
+    isInterceptResolutionHandled: () => false,
+    isNavigationRequest: () => navigation,
+    method: () => 'GET', url: () => url,
+    continue: async () => { forwarded++; }, abort: async () => { aborted++; },
+  });
+  const release = await guardPortalRequests(page, 'booking', allowedUrl, secrets);
+  page.emit('request', request('https://auth.booking.com/u/login/password?state=normal'));
+  page.emit('request', request('https://auth.booking.com/u/login/password?password=p%40ss%26word'));
+  page.emit('request', request('https://auth.booking.com/u/login/password?password=p%2540ss%2526word', false));
+  secrets.push('742619');
+  page.emit('request', request('https://auth.booking.com/u/login/otp?code=742619'));
+  assert.equal(forwarded, 1);
+  assert.equal(aborted, 3);
+  await release();
   assert.equal(page.listenerCount('request'), 0);
 });

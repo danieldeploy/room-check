@@ -6,10 +6,20 @@ import { assertPrivateDirectory } from './private-storage.mjs';
 // Never accept an endpoint, host or profile path from a portal or a Hub job.
 export function controlledBrowserProfile(input) {
   if (input.browserProfile === undefined) return 'primary';
-  if (input.browserProfile === 'fresh_login' && input.action === 'login'
+  if (input.browserProfile === 'fresh_login' && ['login', 'discover', 'collect'].includes(input.action)
       && input.portal === 'booking' && input.accountId === 1
       && !Object.hasOwn(input, 'session')) return 'fresh_login';
   throw new Error('controlled_profile_invalid');
+}
+
+export function usesControlledBrowser(input) {
+  return input.portal === 'booking' && input.accountId === 1
+    && ['login', 'discover', 'collect'].includes(input.action);
+}
+
+export function controlledBrowserConnectOptions(endpoint, purpose) {
+  return { browserWSEndpoint: endpoint, defaultViewport: null,
+    ...(purpose === 'fresh_login' ? { protocolTimeout: 30000 } : {}) };
 }
 
 export async function controlledBrowserEndpoint(root, purpose = 'primary') {
@@ -35,6 +45,33 @@ export function parseControlledEndpoint(data) {
   return 'ws://127.0.0.1:' + port + endpoint;
 }
 
+async function exactBookingPasswordTab(pages) {
+  const candidates = [];
+  for (const page of pages) {
+    try {
+      const url = new URL(page.url());
+      if (url.protocol !== 'https:' || url.hostname !== 'auth.booking.com'
+          || url.pathname !== '/u/login/password') continue;
+      const actionable = await page.evaluate(() => [...document.querySelectorAll('input[type="password"]')]
+        .filter(el => {
+          if (!el.form || !el.getClientRects().length || el.disabled) return false;
+          try {
+            const action = new URL(el.form.action);
+            return action.protocol === 'https:' && action.hostname === 'auth.booking.com'
+              && action.pathname === '/u/login/password';
+          } catch { return false; }
+        }).length === 1);
+      if (actionable === true) candidates.push(page);
+    } catch { /* An unresponsive or foreign tab is never a login candidate. */ }
+  }
+  if (candidates.length > 1) throw new Error('controlled_password_tab_ambiguous');
+  return candidates[0] || null;
+}
+
+export async function controlledBookingPasswordPage(browser) {
+  return exactBookingPasswordTab(await browser.defaultBrowserContext().pages());
+}
+
 // Both discovery and login use the dedicated persistent Chrome profile. A fresh
 // incognito context discards the human verification already completed there.
 export async function controlledBookingPage(browser, purpose = 'primary') {
@@ -47,25 +84,46 @@ export async function controlledBookingPage(browser, purpose = 'primary') {
         && url.pathname.startsWith('/hotel/');
     } catch { return false; }
   });
+  // Booking may open the password step in a different tab on auth.booking.com.
+  // Prefer that exact step over an older account sign-in tab without navigating
+  // away from either tab or copying its private query tokens.
+  const passwordContinuation = purpose === 'fresh_login' ? await exactBookingPasswordTab(pages) : null;
   // The human challenge remains in its original tab. Reuse the newest exact
-  // Booking sign-in tab after the owner completes it; a new tab would lose the
-  // pending challenge and can provoke another verification request.
-  const continuation = purpose === 'fresh_login' ? [...pages].reverse().find(candidate => {
+  // Booking sign-in tab after the owner completes it when no password tab exists.
+  const identifierContinuation = purpose === 'fresh_login' ? [...pages].reverse().find(candidate => {
     try {
       const url = new URL(candidate.url());
       return url.protocol === 'https:' && url.hostname === 'account.booking.com'
         && url.pathname === '/sign-in';
     } catch { return false; }
   }) : null;
-  const selected = existing || continuation;
+  const selected = existing || passwordContinuation || identifierContinuation;
   return selected ? { page: selected, created: false }
     : { page: await context.newPage(), created: true };
 }
 
-export async function guardPortalRequests(page, portal, allowedUrl) {
+export async function guardPortalRequests(page, portal, allowedUrl, blockedValues = []) {
   await page.setRequestInterception(true);
   const onRequest = request => {
     if (request.isInterceptResolutionHandled()) return;
+    // The password form can be a GET SPA form. If its script fails to intercept
+    // Enter, never send a native form navigation containing a vault secret.
+    // blockedValues is mutable so a newly received OTP can be registered too.
+    try {
+      const url = new URL(request.url());
+      const queryValues = [...url.searchParams.values()];
+      if (blockedValues.some(secret => typeof secret === 'string' && secret.length > 0
+          && queryValues.some(value => {
+            for (let i = 0; i < 3; i++) {
+              if (value.includes(secret)) return true;
+              try { value = decodeURIComponent(value); } catch { break; }
+            }
+            return false;
+          }))) {
+        void request.abort().catch(() => {});
+        return;
+      }
+    } catch { /* The regular destination allowlist handles invalid URLs. */ }
     if (request.isNavigationRequest() || !['GET', 'HEAD'].includes(request.method())) {
       try { allowedUrl(portal, request.url()); }
       catch { void request.abort().catch(() => {}); return; }

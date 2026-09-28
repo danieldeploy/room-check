@@ -3,7 +3,8 @@ import path from 'node:path';
 import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
 import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
-import { controlledBrowserEndpoint, controlledBrowserProfile, controlledBookingPage, guardPortalRequests } from './controlled-browser.mjs';
+import { controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions, controlledBookingPage,
+  controlledBookingPasswordPage, guardPortalRequests, usesControlledBrowser } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
@@ -55,10 +56,10 @@ try {
     const runtime = input.runtime ?? JSON.parse(await fs.readFile(path.join(root, 'invoice-runtime.json'), 'utf8'));
     if (runtime.executablePath && !path.isAbsolute(runtime.executablePath)) throw new PortalError('browser_unavailable');
     const { default: puppeteer } = await import('puppeteer');
-    connected = ['discover', 'login'].includes(input.action) && input.portal === 'booking';
+    connected = usesControlledBrowser(input);
     if (connected) {
-      browser = await puppeteer.connect({ browserWSEndpoint: await controlledBrowserEndpoint(root, browserPurpose),
-        defaultViewport: null });
+      browser = await puppeteer.connect(controlledBrowserConnectOptions(
+        await controlledBrowserEndpoint(root, browserPurpose), browserPurpose));
     } else {
       profile = await fs.mkdtemp(path.join(root, '.browser-'));
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
@@ -76,9 +77,26 @@ try {
     } else {
       if (input.action === 'discover' || (input.action === 'login' && input.portal === 'booking')) {
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
-        releaseRequestGuard = await guardPortalRequests(page, input.portal, portalUrl);
+        const requestGuards = [];
+        const blockedValues = [input.credentials?.password];
+        const guard = async target => {
+          requestGuards.push(await guardPortalRequests(target, input.portal, portalUrl, blockedValues));
+        };
+        await guard(page);
+        releaseRequestGuard = async () => {
+          for (const release of requestGuards.reverse()) await release().catch(() => {});
+        };
         const { discoverPortal, bookingLoginCode } = await import('./discover-portal.mjs');
-        const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' });
+        const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' }, {
+          registerBlockedValue: value => { blockedValues.push(value); },
+          passwordTab: browserPurpose === 'fresh_login' ? async current => {
+            const candidate = await controlledBookingPasswordPage(browser);
+            if (!candidate || candidate === current) return null;
+            candidate.setDefaultNavigationTimeout(30000); candidate.setDefaultTimeout(15000);
+            await guard(candidate);
+            return candidate;
+          } : undefined,
+        });
         const code = input.action === 'login' ? bookingLoginCode(diagnostic) : diagnostic.failure_code || 'ok';
         // Leave an actual human challenge visible in the persistent Chrome
         // profile so the owner can complete it there. All listeners are still
@@ -93,9 +111,9 @@ try {
         if (input.portal !== 'booking' || input.accountId !== 1) throw new PortalError('connector_unconfigured');
         map = JSON.parse(await fs.readFile(path.join(root, 'booking-map.json'), 'utf8').catch(() => { throw new PortalError('connector_unconfigured'); }));
       }
-      releaseRequestGuard = await guardPortalRequests(page, input.portal, portalUrl);
+      releaseRequestGuard = await guardPortalRequests(page, input.portal, portalUrl, [input.credentials?.password]);
       const cookies = safeCookies(input.portal, input.session?.cookies);
-      if (cookies.length) await browser.setCookie(...cookies);
+      if (!connected && cookies.length) await browser.setCookie(...cookies);
       let documents;
       if (map.version === 1 && input.portal === 'booking' && input.accountId === 1) {
         // Preserve the old validated password/session flow until its map is upgraded.
@@ -106,10 +124,10 @@ try {
         const { login, target } = validatePortalMap(map, input);
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
         await authenticatePortal(page, login, input);
-        const downloads = path.join(profile, 'invoice-downloads'); await fs.mkdir(downloads, { mode: 0o700 });
+        const downloads = path.join(profile || input.exchangeDir, 'invoice-downloads'); await fs.mkdir(downloads, { mode: 0o700 });
         documents = input.action === 'collect' ? await collectPortal(page, login, target, input, browser, downloads) : [];
       }
-      const session = { cookies: safeCookies(input.portal, await browser.cookies()) };
+      const session = connected ? undefined : { cookies: safeCookies(input.portal, await browser.cookies()) };
       process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok', documents, session }));
       }
     }

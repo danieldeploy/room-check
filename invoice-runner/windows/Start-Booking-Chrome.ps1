@@ -40,11 +40,6 @@ function Start-ControlledProfile {
     if (-not (Test-Path -LiteralPath $endpointFile)) { throw 'controlled_chrome_not_ready' }
 }
 
-# The existing browser and its cookies remain untouched.
-Start-ControlledProfile -Name 'controlled-booking-chrome' -StartUrl 'https://admin.booking.com/'
-# A failed smoke-test browser must not prevent the primary agent from running.
-try {
-    Start-ControlledProfile -Name 'controlled-booking-login-chrome' -StartUrl 'about:blank'
-} catch {
-    Write-Warning 'fresh_login_chrome_unavailable'
-}
+# Login, mapping and collection share the already authenticated profile.
+# Keep the historical directory name so upgrading never loses its cookies.
+Start-ControlledProfile -Name 'controlled-booking-login-chrome' -StartUrl 'about:blank'
