@@ -144,6 +144,192 @@ test('Booking identifier uses the unique button belonging to the validated form'
   assert.deepEqual(typed, [['loginname', 'private@example.com'], ['password', 'sensitive-password']]);
 });
 
+function freshKeyboardPage(keyboardError) {
+  const action = 'https://account.booking.com/sign-in';
+  let url = action; let stage = 0; let presses = 0;
+  const typed = [];
+  const field = (id, type) => ({
+    evaluate: async () => ({ visible: true, id, type, autocomplete: '', maxLength: -1, action }),
+    type: async value => { typed.push([id, value]); },
+    press: async () => {
+      if (id === 'loginname') throw new Error('identifier field press must not be used');
+      url = 'https://admin.booking.com/hotel/hoteladmin/'; stage = 2;
+    },
+  });
+  return {
+    typed, get presses() { return presses; },
+    page: {
+      url: () => url,
+      goto: async () => { throw new Error('must reuse the sign-in tab'); },
+      waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+      keyboard: { press: async key => {
+        assert.equal(key, 'Enter'); presses++;
+        if (keyboardError) throw keyboardError;
+        stage = 1;
+      } },
+      $$: async selector => {
+        if (selector !== 'input') throw new Error('identifier button must not be queried');
+        return stage === 0 ? [field('loginname', 'text')]
+          : stage === 1 ? [field('password', 'password')] : [];
+      },
+    },
+  };
+}
+
+test('fresh Booking identifier uses one keyboard Enter and never clicks a submit button', async () => {
+  const fake = freshKeyboardPage();
+  const result = await discoverPortal(fake.page, { portal: 'booking', loginOnly: true, accountId: 1,
+    browserProfile: 'fresh_login', credentials: { identifier: 'private@example.com', password: 'private-password' },
+    authMethod: 'password' });
+  assert.equal(result.identifier_submit, 'enter');
+  assert.equal(result.authenticated_session, true);
+  assert.equal(fake.presses, 1);
+  assert.deepEqual(fake.typed, [['loginname', 'private@example.com'], ['password', 'private-password']]);
+  assert.ok(!JSON.stringify(result).includes('private@example.com'));
+  assert.ok(!JSON.stringify(result).includes('private-password'));
+});
+
+test('fresh Booking identifier follows the new password tab within the same login run', async () => {
+  const oldTab = new EventEmitter();
+  const passwordTab = new EventEmitter();
+  const action = 'https://account.booking.com/sign-in';
+  let opened = false; let keyboardSubmissions = 0; let passwordSubmissions = 0;
+  let passwordUrl = 'https://auth.booking.com/u/login/password?state=PRIVATE_STATE';
+  let passwordFocused = false; let passwordSelected = false; let passwordValue = '';
+  oldTab.url = () => action;
+  oldTab.goto = async () => { throw new Error('existing identifier tab must be reused'); };
+  oldTab.waitForNavigation = async () => {};
+  oldTab.waitForFunction = async () => {};
+  oldTab.evaluate = async () => [];
+  oldTab.keyboard = { press: async key => { assert.equal(key, 'Enter'); keyboardSubmissions++; opened = true; } };
+  oldTab.$$ = async selector => selector === 'input' ? [{
+    evaluate: async () => ({ visible: true, id: 'loginname', type: 'text', autocomplete: '', action }),
+    type: async value => assert.equal(value, 'PRIVATE_IDENTIFIER'),
+    press: async () => { throw new Error('identifier field must not press Enter'); },
+  }] : [];
+  passwordTab.url = () => passwordUrl;
+  passwordTab.waitForNavigation = async () => {};
+  passwordTab.waitForFunction = async () => {};
+  passwordTab.evaluate = async () => [];
+  passwordTab.$$ = async selector => selector === 'input' && passwordSubmissions === 0 ? [{
+    evaluate: async fn => fn.toString().includes('document.activeElement')
+      ? passwordFocused && passwordValue.length === 0
+      : { visible: true, id: 'password', type: 'password', autocomplete: '',
+        action: 'https://auth.booking.com/u/login/password?state=PRIVATE_ACTION' },
+    type: async value => { assert.equal(passwordValue.length, 0); passwordValue = value;
+      assert.equal(value, 'PRIVATE_PASSWORD'); },
+    press: async key => {
+      if (key === 'Control+A') { passwordFocused = true; passwordSelected = true; }
+      else if (key === 'Backspace') { if (passwordSelected) passwordValue = ''; passwordSelected = false; }
+      else if (key === 'Enter') {
+        passwordSubmissions++;
+        passwordUrl = 'https://admin.booking.com/hotel/hoteladmin/';
+      } else throw new Error('unexpected keyboard action');
+    },
+  }] : [];
+  let guarded = false;
+  const result = await discoverPortal(oldTab, { portal: 'booking', loginOnly: true, accountId: 1,
+    browserProfile: 'fresh_login', credentials: { identifier: 'PRIVATE_IDENTIFIER', password: 'PRIVATE_PASSWORD' },
+    authMethod: 'password' }, { passwordTab: async current => {
+      assert.equal(current, oldTab);
+      if (!opened) return null;
+      guarded = true; // Runner's callback installs the request guard before handing over the tab.
+      return passwordTab;
+    } });
+  assert.equal(guarded, true);
+  assert.equal(keyboardSubmissions, 1);
+  assert.equal(passwordSubmissions, 1);
+  assert.equal(result.authenticated_session, true);
+  assert.equal(result.login_attempted, true);
+  assert.equal(oldTab.listenerCount('response'), 0);
+  assert.equal(passwordTab.listenerCount('response'), 0);
+  for (const secret of ['PRIVATE_IDENTIFIER', 'PRIVATE_PASSWORD', 'PRIVATE_STATE', 'PRIVATE_ACTION'])
+    assert.ok(!JSON.stringify(result).includes(secret));
+});
+
+test('a fresh Booking keyboard CDP timeout is reported without retrying identifier', async () => {
+  const secret = 'PRIVATE_IDENTIFIER_AND_PROTOCOL_ERROR';
+  const error = new Error(`Input.dispatchKeyEvent timed out: ${secret}`);
+  error.name = 'ProtocolError';
+  const fake = freshKeyboardPage(error);
+  const result = await discoverPortal(fake.page, { portal: 'booking', loginOnly: true, accountId: 1,
+    browserProfile: 'fresh_login', credentials: { identifier: secret, password: 'private-password' },
+    authMethod: 'password' });
+  assert.equal(result.failure_code, 'browser_unavailable');
+  assert.equal(result.failure_stage, 'identifier');
+  assert.equal(result.identifier_phase, 'submit_action');
+  assert.equal(result.browser_error_kind, 'timeout');
+  assert.equal(result.identifier_submit, null);
+  assert.equal(fake.presses, 1);
+  assert.deepEqual(fake.typed, [['loginname', secret]]);
+  assert.ok(!JSON.stringify(result).includes(secret));
+  assert.ok(!JSON.stringify(result).includes('private-password'));
+});
+
+test('Booking identifier browser failures report only a fixed phase and error category', async t => {
+  const action = 'https://account.booking.com/sign-in';
+  const secret = 'PRIVATE_IDENTIFIER_AND_BROWSER_ERROR_DETAIL';
+  const cases = [
+    { point: 'type', message: `Node is detached from document: ${secret}`,
+      phase: 'typing', kind: 'detached', typed: 1, submitted: 0 },
+    { point: 'buttons', message: `Execution context was destroyed: ${secret}`,
+      phase: 'button_lookup', kind: 'context_lost', typed: 1, submitted: 0 },
+    { point: 'button_evaluate', message: `Cannot find context with specified id: ${secret}`,
+      phase: 'button_lookup', kind: 'context_lost', typed: 1, submitted: 0 },
+    { point: 'click', message: `Target closed: ${secret}`,
+      phase: 'submit_action', kind: 'browser_closed', typed: 1, submitted: 1 },
+    { point: 'press', message: `Unexpected browser state: ${secret}`,
+      phase: 'submit_action', kind: 'other', typed: 1, submitted: 1 },
+  ];
+  for (const scenario of cases) await t.test(scenario.point, async () => {
+    let typed = 0, submitted = 0;
+    const field = {
+      evaluate: async () => ({ visible: true, id: 'loginname', type: 'text', autocomplete: '', action }),
+      type: async () => { typed++; if (scenario.point === 'type') throw new Error(scenario.message); },
+      press: async () => { submitted++; if (scenario.point === 'press') throw new Error(scenario.message); },
+    };
+    const button = {
+      evaluate: async () => {
+        if (scenario.point === 'button_evaluate') throw new Error(scenario.message);
+        return { visible: true, action };
+      },
+      click: async () => { submitted++; if (scenario.point === 'click') throw new Error(scenario.message); },
+    };
+    const page = {
+      url: () => action, goto: async () => { throw new Error('must reuse the sign-in tab'); },
+      waitForFunction: async () => {}, evaluate: async () => [],
+      $$: async selector => {
+        if (selector === 'input') return [field];
+        if (scenario.point === 'buttons') throw new Error(scenario.message);
+        return scenario.point === 'press' ? [] : [button];
+      },
+    };
+    const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+      browserProfile: 'fresh_login', credentials: { identifier: secret, password: 'SECRET_PASSWORD' },
+      authMethod: 'password' });
+    assert.equal(result.failure_code, 'browser_unavailable');
+    assert.equal(result.failure_stage, 'identifier');
+    assert.equal(result.identifier_phase, scenario.phase);
+    assert.equal(result.browser_error_kind, scenario.kind);
+    assert.equal(result.identifier_submit, null);
+    assert.equal(typed, scenario.typed);
+    assert.equal(submitted, scenario.submitted);
+    assert.ok(!JSON.stringify(result).includes(secret));
+    assert.ok(!JSON.stringify(result).includes('SECRET_PASSWORD'));
+  });
+});
+
+test('expected Booking form validation failure has no browser error category', async () => {
+  const page = fakePage(null);
+  const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    credentials: { identifier: 'private@example.com', password: 'SECRET_PASSWORD' },
+    authMethod: 'password' });
+  assert.equal(result.failure_code, 'auth_unconfigured');
+  assert.equal(result.identifier_phase, 'field_check');
+  assert.equal(result.browser_error_kind, null);
+  assert.deepEqual(page.typed, []);
+});
+
 test('existing Booking extranet session is inspected without credential submission', async () => {
   let reloads = 0; let navigations = 0;
   const page = {
@@ -219,6 +405,45 @@ test('fresh Booking login resumes solved challenge sign-in without navigating aw
   assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
 });
 
+test('fresh Booking login resumes an existing password tab without returning to the username tab', async () => {
+  let url = 'https://auth.booking.com/u/login/password?state=PRIVATE_BROWSER_TOKEN';
+  let enteredPassword = false;
+  let submissions = 0;
+  let passwordValue = 'stale-password'; let focused = false; let selected = false;
+  const page = {
+    url: () => url,
+    goto: async () => { throw new Error('must not navigate away from the password tab'); },
+    waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    $$: async selector => selector !== 'input' || enteredPassword ? [] : [{
+      evaluate: async fn => fn.toString().includes('document.activeElement')
+        ? focused && passwordValue.length === 0
+        : { visible: true, id: 'password', type: 'password', autocomplete: 'current-password',
+          action: 'https://auth.booking.com/u/login/password?state=PRIVATE_FORM_TOKEN' },
+      type: async value => {
+        assert.equal(passwordValue.length, 0);
+        assert.equal(value, 'PRIVATE_PASSWORD');
+        passwordValue = value; enteredPassword = true;
+      },
+      press: async key => {
+        if (key === 'Control+A') { focused = true; selected = true; }
+        else if (key === 'Backspace') { if (selected) passwordValue = ''; selected = false; }
+        else if (key === 'Enter') { submissions++; url = 'https://admin.booking.com/hotel/hoteladmin/'; }
+        else throw new Error('unexpected keyboard action');
+      },
+    }],
+  };
+  const result = await discoverPortal(page, { portal: 'booking', loginOnly: true,
+    browserProfile: 'fresh_login', credentials: { identifier: 'PRIVATE_IDENTIFIER', password: 'PRIVATE_PASSWORD' },
+    authMethod: 'password' });
+  assert.equal(submissions, 1);
+  assert.equal(passwordValue, 'PRIVATE_PASSWORD');
+  assert.equal(result.authenticated_session, true);
+  assert.equal(result.login_attempted, true, 'the verified password step completes the resumed login attempt');
+  assert.equal(bookingLoginCode(result), 'ok');
+  for (const secret of ['PRIVATE_BROWSER_TOKEN', 'PRIVATE_FORM_TOKEN', 'PRIVATE_IDENTIFIER', 'PRIVATE_PASSWORD'])
+    assert.ok(!JSON.stringify(result).includes(secret));
+});
+
 test('expired controlled Chrome session attempts username and password again', async () => {
   let url = 'https://admin.booking.com/hotel/hoteladmin/groups/home/';
   let stage = 0;
@@ -250,10 +475,14 @@ async function loginWithSmsBridge(message, showOtp = true) {
   const exchangeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'booking-sms-test-'));
   let url = 'about:blank'; let stage = 0;
   const typed = [];
+  const blockedValues = [];
   const action = 'https://account.booking.com/sign-in';
   const field = (id, type, autocomplete, maxLength = -1) => ({
     evaluate: async () => ({ visible: true, id, type, name: id, autocomplete, maxLength, action }),
-    type: async value => { typed.push([id, value]); },
+    type: async value => {
+      if (id === 'sms-code') assert.ok(blockedValues.includes(value), 'OTP is blocked in query before typing');
+      typed.push([id, value]);
+    },
     press: async () => {
       stage++;
       if (stage === 3 || (!showOtp && stage === 2))
@@ -284,7 +513,7 @@ async function loginWithSmsBridge(message, showOtp = true) {
     const diagnostic = await discoverPortal(page, { portal: 'booking', loginOnly: true,
       credentials: { identifier: 'private@example.com', password: 'sensitive-password',
         sms_sender: 'Booking', sms_keyword: 'code' },
-      authMethod: 'sms', exchangeDir });
+      authMethod: 'sms', exchangeDir }, { registerBlockedValue: value => blockedValues.push(value) });
     await bridge;
     return { diagnostic, typed };
   } finally { await fs.rm(exchangeDir, { recursive: true, force: true }); }

@@ -6,6 +6,7 @@ final class InvoiceText
 {
     public const TEXT = [
         'discover_map' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
+        'discover' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
         'map_diagnostic' => ['Diagnóstico privado do mapa', 'Private map diagnostic'],
         'login_diagnostic' => ['Diagnóstico privado do login', 'Private login diagnostic'],
         'map_diagnostic_note' => ['Pistas estruturais por confirmar. Este resultado não ativa o conector nem valida o login ou as faturas.', 'Unverified structural hints. This result does not activate the connector or validate login or invoices.'],

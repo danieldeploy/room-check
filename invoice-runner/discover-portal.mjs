@@ -6,6 +6,17 @@ import { navigateBookingInvoices } from './booking-discovery.mjs';
 import { sanitizeBookingLoginNameEvidence } from './booking-login-metadata.mjs';
 
 const fail = code => { throw new PortalError(code); };
+// Classify browser errors without ever returning their message, stack, or data
+// from the sign-in page. The categories are deliberately fixed and bounded.
+function browserErrorKind(error) {
+  const message = error instanceof Error ? error.message : '';
+  if (/node is detached|not attached to the (?:dom|document)/i.test(message)) return 'detached';
+  if (/execution context was destroyed|cannot find context with specified id/i.test(message)) return 'context_lost';
+  if (/target closed|session closed|connection closed/i.test(message)) return 'browser_closed';
+  if (error?.name === 'TimeoutError'
+      || (error?.name === 'ProtocolError' && /timed out|timeout/i.test(message))) return 'timeout';
+  return 'other';
+}
 function authenticatedBookingPage(page) {
   try {
     const url = new URL(page.url());
@@ -44,11 +55,17 @@ async function uniqueInput(page, predicate) {
   }
   return matches.length === 1 ? matches[0] : null;
 }
-async function submit(page, field, portal, identifierStep = false) {
+async function submit(page, field, portal, identifierStep = false, onPhase = () => {}, keyboardIdentifier = false) {
   if (!field.info.action) fail('auth_unconfigured');
   portalUrl(portal, field.info.action);
   let method = 'enter';
-  if (portal === 'booking' && identifierStep) {
+  if (portal === 'booking' && identifierStep && keyboardIdentifier) {
+    // The fresh login uses one keyboard action. A timed-out CDP command may
+    // still have reached Chrome, so never fall back to a button or retry it.
+    onPhase('submit_action');
+    await page.keyboard.press('Enter');
+  } else if (portal === 'booking' && identifierStep) {
+    onPhase('button_lookup');
     const buttons = await page.$$('form.nw-signin button:not([type]), form.nw-signin button[type="submit"], form.nw-signin input[type="submit"]');
     const usable = [];
     for (const button of buttons) {
@@ -56,14 +73,18 @@ async function submit(page, field, portal, identifierStep = false) {
         action: el.form?.action || null }));
       if (info.visible && info.action === field.info.action) usable.push(button);
     }
+    onPhase('submit_action');
     if (usable.length === 1) { await usable[0].click(); method = 'form_button'; }
     else await field.input.press('Enter');
-  } else await field.input.press('Enter');
+  } else { onPhase('submit_action'); await field.input.press('Enter'); }
+  onPhase('navigation_wait');
   await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+  onPhase('destination_check');
   portalUrl(portal, page.url());
   return method;
 }
-export async function discoverPortal(page, input) {
+export async function discoverPortal(initialPage, input, hooks = {}) {
+  let page = initialPage;
   const { portal, credentials = {}, authMethod, loginOnly = false } = input;
   const start = portal === 'booking' ? 'https://admin.booking.com/' : input.map?.login?.url;
   if (!start) fail('connector_unconfigured');
@@ -118,13 +139,33 @@ export async function discoverPortal(page, input) {
       }
     } catch { /* ignore foreign and malformed responses */ }
   };
-  if (typeof page.on === 'function') page.on('response', onResponse);
+  const observedPages = new Set();
+  const observe = candidate => {
+    if (typeof candidate.on === 'function' && !observedPages.has(candidate)) {
+      candidate.on('response', onResponse);
+      observedPages.add(candidate);
+    }
+  };
+  observe(page);
+  const followPasswordTab = async () => {
+    if (portal !== 'booking' || !loginOnly || input.browserProfile !== 'fresh_login'
+        || typeof hooks.passwordTab !== 'function') return false;
+    const candidate = await hooks.passwordTab(page);
+    if (!candidate || candidate === page) return false;
+    const url = portalUrl(portal, candidate.url());
+    if (url.hostname !== 'auth.booking.com' || url.pathname !== '/u/login/password') fail('portal_changed');
+    page = candidate;
+    observe(page);
+    return true;
+  };
   let identifierSent = false, passwordSent = false, otpSent = false;
+  let resumedPasswordStep = false;
   let smsPrompted = false, smsSubmitted = false;
   const smsSignals = () => portal === 'booking' && loginOnly
     ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted } : {};
   let stage = 'prepare';
   let identifierSubmit = null;
+  let identifierPhase = null;
   try {
     stage = 'navigate';
     const currentUrl = new URL(page.url());
@@ -164,11 +205,13 @@ export async function discoverPortal(page, input) {
     }
     if (authMethod === 'sms') await broker.prepare();
     // A human may have just solved Booking's challenge in the persistent fresh
-    // profile. Resume that exact sign-in page (including its private in-browser
-    // token), rather than navigating back to the start and triggering it again.
+    // profile, or Booking may have opened its password step in another tab.
+    // Resume that exact page without copying private in-browser query tokens.
     const continuingSignIn = portal === 'booking' && loginOnly && input.browserProfile === 'fresh_login'
-      && currentUrl.protocol === 'https:' && currentUrl.hostname === 'account.booking.com'
-      && currentUrl.pathname === '/sign-in';
+      && currentUrl.protocol === 'https:' && (currentUrl.hostname === 'account.booking.com'
+        && currentUrl.pathname === '/sign-in'
+        || currentUrl.hostname === 'auth.booking.com' && currentUrl.pathname === '/u/login/password');
+    const continuingPasswordStep = continuingSignIn && currentUrl.hostname === 'auth.booking.com';
     if (!continuingSignIn) await page.goto(start, { waitUntil: 'domcontentloaded' });
     if (portal === 'booking') {
       // Its identifier handler is installed by client-side scripts after DOMContentLoaded.
@@ -191,21 +234,38 @@ export async function discoverPortal(page, input) {
         || (portal === 'booking' && x.id === 'loginname' && x.type === 'text'));
       if (identifier && !identifierSent) {
         stage = 'identifier';
+        identifierPhase = 'field_check';
         if (!credentials.identifier) fail('auth_unconfigured');
         if (!identifier.info.action) fail('auth_unconfigured');
         portalUrl(portal, identifier.info.action);
+        identifierPhase = 'typing';
         await identifier.input.type(credentials.identifier); identifierSent = true;
-        identifierSubmit = await submit(page, identifier, portal, true);
+        identifierPhase = 'button_lookup';
+        identifierSubmit = await submit(page, identifier, portal, true,
+          phase => { identifierPhase = phase; },
+          loginOnly && input.accountId === 1 && input.browserProfile === 'fresh_login');
+        identifierPhase = 'submitted';
         // Booking can temporarily remove the sign-in form while loading the password step.
         // Wait for an actionable next field instead of treating the loading state as a portal change.
-        if (portal === 'booking') await page.waitForFunction(() =>
-          location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
-          || !!document.querySelector('[id*="captcha"], [class*="captcha"]')
-          || [...document.querySelectorAll('input')].some(el => {
-            const actionable = (el.type === 'password' && el.id !== 'hidden-password')
-              || el.autocomplete === 'one-time-code' || (el.type === 'tel' && el.maxLength === 6);
-            return actionable && el.getClientRects().length > 0 && !el.disabled;
-          }), { timeout: 20000 }).catch(() => {});
+        if (portal === 'booking') {
+          const ready = () => location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
+            || !!document.querySelector('[id*="captcha"], [class*="captcha"]')
+            || [...document.querySelectorAll('input')].some(el => {
+              const actionable = (el.type === 'password' && el.id !== 'hidden-password')
+                || el.autocomplete === 'one-time-code' || (el.type === 'tel' && el.maxLength === 6);
+              return actionable && el.getClientRects().length > 0 && !el.disabled;
+            });
+          if (typeof hooks.passwordTab === 'function' && loginOnly && input.browserProfile === 'fresh_login') {
+            // The original tab can remain on the identifier form while Booking
+            // opens the password page in another tab. Poll both for up to 20 s;
+            // the identifier Enter is never repeated after a CDP timeout.
+            for (let attempt = 0; attempt < 10; attempt++) {
+              if (await followPasswordTab()) break;
+              const oldTabReady = await page.waitForFunction(ready, { timeout: 2000 }).then(() => true, () => false);
+              if (oldTabReady || await followPasswordTab()) break;
+            }
+          } else await page.waitForFunction(ready, { timeout: 20000 }).catch(() => {});
+        }
         continue;
       }
       const password = await uniqueInput(page, x => x.type === 'password'
@@ -214,7 +274,20 @@ export async function discoverPortal(page, input) {
         stage = 'password';
         if (!credentials.password) fail('auth_unconfigured');
         if (!password.info.action) fail('auth_unconfigured');
-        portalUrl(portal, password.info.action);
+        const passwordAction = portalUrl(portal, password.info.action);
+        const passwordPage = portalUrl(portal, page.url());
+        const activePasswordStep = portal === 'booking' && loginOnly && input.browserProfile === 'fresh_login'
+          && passwordPage.hostname === 'auth.booking.com' && passwordPage.pathname === '/u/login/password';
+        if (continuingPasswordStep && passwordAction.hostname === 'auth.booking.com'
+            && passwordAction.pathname === '/u/login/password') resumedPasswordStep = true;
+        if (activePasswordStep) {
+          // The password tab is persistent. Focus and clear through real keyboard
+          // events so reruns never append a secret to a retained field value.
+          await password.input.press('Control+A');
+          await password.input.press('Backspace');
+          const cleared = await password.input.evaluate(el => document.activeElement === el && el.value.length === 0);
+          if (cleared !== true) fail('portal_changed');
+        }
         await password.input.type(credentials.password); passwordSent = true;
         await submit(page, password, portal);
         if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
@@ -231,6 +304,7 @@ export async function discoverPortal(page, input) {
         stage = 'second_factor';
         if (authMethod !== 'sms') fail('needs_auth');
         const code = await broker.value({ method: 'sms', digits: 6 });
+        if (typeof hooks.registerBlockedValue === 'function') hooks.registerBlockedValue(code);
         await otp.input.type(code); otpSent = true;
         await submit(page, otp, portal); smsSubmitted = true;
         if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
@@ -246,7 +320,8 @@ export async function discoverPortal(page, input) {
       if (portal === 'booking') challengeVisibleAfter = challengeNow;
       if (challengeNow) { stage = 'human_verification'; fail('human_verification'); }
       if (!authenticatedBookingPage(page)) { stage = 'login_incomplete'; fail('portal_changed'); }
-      return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
+      return { version: 1, portal, validated: false,
+        login_attempted: passwordSent && (identifierSent || resumedPasswordStep),
         authenticated_session: true, location: publicLocation(portal, page.url()),
         snapshots: snapshots.slice(0, 6), identifier_submit: identifierSubmit, responses,
         ...smsSignals(), ...privateLoginMetadata() };
@@ -261,9 +336,13 @@ export async function discoverPortal(page, input) {
     try { location = publicLocation(portal, page.url()); } catch { location = publicLocation(portal, start); }
     return { version: 1, portal, validated: false, login_attempted: identifierSent && passwordSent,
       location, snapshots: snapshots.slice(0, 6), failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, identifier_submit: identifierSubmit, responses, ...smsSignals(), ...privateLoginMetadata() };
+      failure_stage: stage, identifier_submit: identifierSubmit, responses,
+      ...(portal === 'booking' && loginOnly && stage === 'identifier'
+        ? { identifier_phase: identifierPhase,
+          browser_error_kind: error instanceof PortalError ? null : browserErrorKind(error) } : {}),
+      ...smsSignals(), ...privateLoginMetadata() };
   } finally {
-    if (typeof page.off === 'function') page.off('response', onResponse);
+    for (const observed of observedPages) if (typeof observed.off === 'function') observed.off('response', onResponse);
     await broker.close();
   }
 }
