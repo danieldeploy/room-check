@@ -143,7 +143,10 @@ test('waits through Booking loading state before inspecting password step', asyn
   const page = {
     url: () => 'https://account.booking.com/sign-in',
     goto: async () => {}, waitForNavigation: async () => {}, evaluate: async () => [],
-    waitForFunction: async () => { waits++; if (stage === 1) stage = 2; },
+    waitForFunction: async fn => {
+      if (fn.name === 'visibleRejectButton') return;
+      waits++; if (stage === 1) stage = 2;
+    },
     $$: async selector => selector !== 'input' ? [] : stage === 0 ? [field('loginname', 'text')]
       : stage === 1 ? [] : stage === 2 ? [field('password', 'password')] : [],
   };
@@ -252,7 +255,15 @@ test('fresh Booking identifier follows the new password tab within the same logi
   passwordTab.waitForNavigation = async () => {};
   passwordTab.waitForFunction = async () => {};
   passwordTab.evaluate = async () => [];
+  let passwordControlDown = false;
+  passwordTab.keyboard = {
+    down: async key => { assert.equal(key, 'Control'); passwordControlDown = true; },
+    up: async key => { assert.equal(key, 'Control'); passwordControlDown = false; },
+    press: async key => { assert.equal(key, 'A'); assert.equal(passwordControlDown, true);
+      assert.equal(passwordFocused, true); passwordSelected = true; },
+  };
   passwordTab.$$ = async selector => selector === 'input' && passwordSubmissions === 0 ? [{
+    focus: async () => { passwordFocused = true; },
     evaluate: async fn => fn.toString().includes('document.activeElement')
       ? passwordFocused && passwordValue.length === 0
       : { visible: true, id: 'password', type: 'password', autocomplete: '',
@@ -260,8 +271,7 @@ test('fresh Booking identifier follows the new password tab within the same logi
     type: async value => { assert.equal(passwordValue.length, 0); passwordValue = value;
       assert.equal(value, 'PRIVATE_PASSWORD'); },
     press: async key => {
-      if (key === 'Control+A') { passwordFocused = true; passwordSelected = true; }
-      else if (key === 'Backspace') { if (passwordSelected) passwordValue = ''; passwordSelected = false; }
+      if (key === 'Backspace') { if (passwordSelected) passwordValue = ''; passwordSelected = false; }
       else if (key === 'Enter') {
         passwordSubmissions++;
         passwordUrl = 'https://admin.booking.com/hotel/hoteladmin/';
@@ -450,12 +460,19 @@ test('fresh Booking login resumes an existing password tab without returning to 
   let url = 'https://auth.booking.com/u/login/password?state=PRIVATE_BROWSER_TOKEN';
   let enteredPassword = false;
   let submissions = 0;
-  let passwordValue = 'stale-password'; let focused = false; let selected = false;
+  let passwordValue = 'stale-password'; let focused = false; let selected = false; let controlDown = false;
   const page = {
     url: () => url,
     goto: async () => { throw new Error('must not navigate away from the password tab'); },
     waitForNavigation: async () => {}, waitForFunction: async () => {}, evaluate: async () => [],
+    keyboard: {
+      down: async key => { assert.equal(key, 'Control'); controlDown = true; },
+      up: async key => { assert.equal(key, 'Control'); controlDown = false; },
+      press: async key => { assert.equal(key, 'A'); assert.equal(controlDown, true);
+        assert.equal(focused, true); selected = true; },
+    },
     $$: async selector => selector !== 'input' || enteredPassword ? [] : [{
+      focus: async () => { focused = true; },
       evaluate: async fn => fn.toString().includes('document.activeElement')
         ? focused && passwordValue.length === 0
         : { visible: true, id: 'password', type: 'password', autocomplete: 'current-password',
@@ -466,8 +483,7 @@ test('fresh Booking login resumes an existing password tab without returning to 
         passwordValue = value; enteredPassword = true;
       },
       press: async key => {
-        if (key === 'Control+A') { focused = true; selected = true; }
-        else if (key === 'Backspace') { if (selected) passwordValue = ''; selected = false; }
+        if (key === 'Backspace') { if (selected) passwordValue = ''; selected = false; }
         else if (key === 'Enter') { submissions++; url = 'https://admin.booking.com/hotel/hoteladmin/'; }
         else throw new Error('unexpected keyboard action');
       },

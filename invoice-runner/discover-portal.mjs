@@ -5,6 +5,7 @@ import { PortalError } from './booking.mjs';
 import { navigateBookingInvoices } from './booking-discovery.mjs';
 import { sanitizeBookingLoginNameEvidence } from './booking-login-metadata.mjs';
 import { inspectBookingInvoices } from './booking-invoice-inspection.mjs';
+import { rejectBookingOptionalCookies } from './booking-cookie-consent.mjs';
 
 const fail = code => { throw new PortalError(code); };
 // Classify browser errors without ever returning their message, stack, or data
@@ -55,6 +56,15 @@ async function uniqueInput(page, predicate) {
     if (info.visible && predicate(info)) matches.push({ input, info });
   }
   return matches.length === 1 ? matches[0] : null;
+}
+async function clearInput(page, input) {
+  await input.focus();
+  // Puppeteer press() accepts one key, not a chord string such as Control+A.
+  await page.keyboard.down('Control');
+  try { await page.keyboard.press('A'); }
+  finally { await page.keyboard.up('Control'); }
+  await input.press('Backspace');
+  if (await input.evaluate(el => document.activeElement === el && el.value.length === 0) !== true) fail('portal_changed');
 }
 async function submit(page, field, portal, identifierStep = false, onPhase = () => {}, keyboardIdentifier = false) {
   if (!field.info.action) fail('auth_unconfigured');
@@ -162,8 +172,23 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
   let identifierSent = false, passwordSent = false, otpSent = false;
   let resumedPasswordStep = false;
   let smsPrompted = false, smsSubmitted = false;
+  let cookieConsentRejected = false;
+  const dismissCookies = async (waitMs = 0) => {
+    if (portal !== 'booking') return false;
+    const rejected = await rejectBookingOptionalCookies(page, { waitMs });
+    cookieConsentRejected ||= rejected;
+    return rejected;
+  };
+  const restoreTypingAfterCookies = async (field, value) => {
+    if (!await dismissCookies()) return;
+    // Rejecting the banner moves focus. Refill only before the first submit,
+    // since its appearance may also have intercepted some typing.
+    await clearInput(page, field);
+    await field.type(value);
+  };
   const smsSignals = () => portal === 'booking' && loginOnly
-    ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted } : {};
+    ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted,
+      cookie_consent_rejected: cookieConsentRejected } : {};
   let stage = 'prepare';
   let identifierSubmit = null;
   let identifierPhase = null;
@@ -179,6 +204,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       const challengeNow = await humanChallenge(page);
       if (loginOnly) challengeVisibleBefore = challengeNow;
       if (challengeNow) { stage = 'human_verification'; fail('human_verification'); }
+      await dismissCookies();
       const verified = new URL(page.url());
       if (verified.hostname === 'admin.booking.com' && verified.pathname.startsWith('/hotel/')) {
         stage = 'authenticated_session';
@@ -233,6 +259,8 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         stage = 'human_verification'; fail('human_verification');
       }
       if (loginOnly && authenticatedBookingPage(page)) break;
+      stage = 'cookie_consent';
+      await dismissCookies(step === 0 ? 2500 : 0);
       const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email'
         || (portal === 'booking' && x.id === 'loginname' && x.type === 'text'));
       if (identifier && !identifierSent) {
@@ -243,6 +271,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         portalUrl(portal, identifier.info.action);
         identifierPhase = 'typing';
         await identifier.input.type(credentials.identifier); identifierSent = true;
+        await restoreTypingAfterCookies(identifier.input, credentials.identifier);
         identifierPhase = 'button_lookup';
         identifierSubmit = await submit(page, identifier, portal, true,
           phase => { identifierPhase = phase; },
@@ -286,12 +315,10 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         if (activePasswordStep) {
           // The password tab is persistent. Focus and clear through real keyboard
           // events so reruns never append a secret to a retained field value.
-          await password.input.press('Control+A');
-          await password.input.press('Backspace');
-          const cleared = await password.input.evaluate(el => document.activeElement === el && el.value.length === 0);
-          if (cleared !== true) fail('portal_changed');
+          await clearInput(page, password.input);
         }
         await password.input.type(credentials.password); passwordSent = true;
+        await restoreTypingAfterCookies(password.input, credentials.password);
         await submit(page, password, portal);
         if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
           location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
@@ -309,6 +336,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         const code = await broker.value({ method: 'sms', digits: 6 });
         if (typeof hooks.registerBlockedValue === 'function') hooks.registerBlockedValue(code);
         await otp.input.type(code); otpSent = true;
+        await restoreTypingAfterCookies(otp.input, code);
         await submit(page, otp, portal); smsSubmitted = true;
         if (portal === 'booking' && loginOnly) await page.waitForFunction(() =>
           location.hostname === 'admin.booking.com' && location.pathname.startsWith('/hotel/')
