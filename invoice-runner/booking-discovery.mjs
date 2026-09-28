@@ -13,21 +13,35 @@ async function clickAndSettle(page, element) {
 }
 async function waitForControl(page, names) {
   if (typeof page.waitForFunction !== 'function') return;
-  await page.waitForFunction(labels => [...document.querySelectorAll('a,button,[role="button"]')]
-    .some(el => el.getClientRects().length > 0 && !el.disabled
-      && labels.includes((el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase())),
+  await page.waitForFunction(labels => [...document.querySelectorAll('a,button,[role="button"]')].some(el => {
+    if (!el.getClientRects().length || el.disabled) return false;
+    const normalize = text => (text || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    if (labels.includes(normalize(el.innerText || el.getAttribute('aria-label') || el.textContent))) return true;
+    if (!el.matches('.ext-navigation-top-item__link,.ext-navigation-submenu-item__link')) return false;
+    return [...el.querySelectorAll('*')].some(child => child.children.length === 0
+      && child.getClientRects().length > 0 && child.closest('a,button,[role="button"]') === el
+      && labels.includes(normalize(child.innerText || child.textContent)));
+  }),
   { timeout: 15000 }, names).catch(() => {});
 }
 async function uniqueControl(page, names) {
   const controls = await page.$$('a,button,[role="button"]');
   const matches = [];
   for (const control of controls) {
-    const info = await control.evaluate(el => ({
-      visible: el.getClientRects().length > 0 && !el.disabled,
-      label: (el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase(),
-      href: el.tagName === 'A' ? el.href : null,
-    }));
-    if (info.visible && names.includes(info.label)) matches.push({ control, info });
+    const info = await control.evaluate((el, labels) => {
+      const normalize = text => (text || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      const menuLabels = el.matches?.('.ext-navigation-top-item__link,.ext-navigation-submenu-item__link')
+        ? [...el.querySelectorAll('*')].filter(child => child.children.length === 0
+          && child.getClientRects().length > 0 && child.closest('a,button,[role="button"]') === el)
+          .map(child => normalize(child.innerText || child.textContent)).filter(label => labels.includes(label)) : [];
+      return {
+        visible: el.getClientRects().length > 0 && !el.disabled,
+        label: normalize(el.innerText || el.getAttribute('aria-label') || el.textContent),
+        menuLabel: new Set(menuLabels).size === 1 ? menuLabels[0] : null,
+        href: el.tagName === 'A' ? el.href : null,
+      };
+    }, names);
+    if (info.visible && names.includes(info.menuLabel || info.label)) matches.push({ control, info });
   }
   return matches.length === 1 ? matches[0] : null;
 }
