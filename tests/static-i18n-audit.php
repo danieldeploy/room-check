@@ -42,6 +42,11 @@ $technicalLiterals = array_fill_keys([
 // Exact server-only exceptions. These are not website UI: they are transport
 // diagnostics or the PT branch of a message that already has an explicit EN branch.
 $technicalExceptions = [
+    // PDF source-label patterns are parser instructions, never rendered UI.
+    'src/Invoices/InvoiceBookingVerification.php' => [
+        '~^[\t ]*(?:invoice date|date of issue|issue date|date|data de emissão|data da fatura|data)[\t ]*:?[\t ]*(?:\r?\n[\t ]*)?(',
+        '/(?:property|hotel|accommodation|alojamento)[\t ]*(?:id|number|no\.?|número|numero)?[\t ]*:?[\t ]*(?:\r?\n[\t ]*)?',
+    ],
     'cron/whatsapp-reminders.php' => [
         'os itens e respetivas instruções.',
     ],
