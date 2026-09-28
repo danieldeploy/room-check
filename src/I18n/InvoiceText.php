@@ -7,6 +7,13 @@ final class InvoiceText
     public const TEXT = [
         'discover_map' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
         'discover' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
+        'verify' => ['Verificar PDFs e datas do Booking', 'Verify Booking PDFs and dates'],
+        'booking_verification' => ['Validação da recolha Booking', 'Booking collection verification'],
+        'booking_verification_note' => ['Verifica os documentos completos do mês selecionado sem importar faturas. Depois de todas as casas passarem, o Gerente pode aprovar o mapa.', 'Checks complete documents for the selected month without importing invoices. After all properties pass, the manager can approve the map.'],
+        'approve_booking_map' => ['Aprovar mapa de recolha verificado', 'Approve verified collection map'],
+        'verification_required' => ['É necessária uma verificação completa e recente de todas as casas para este mês.', 'A complete recent verification of every property is required for this month.'],
+        'verification_sample_missing' => ['Não foi encontrado um PDF no mês escolhido para validar a recolha.', 'No PDF was found in the selected month to verify collection.'],
+        'verification_failed' => ['A validação do documento não passou. Consulte o resultado privado antes de aprovar o mapa.', 'Document verification did not pass. Review the private result before approving the map.'],
         'map_diagnostic' => ['Diagnóstico privado do mapa', 'Private map diagnostic'],
         'login_diagnostic' => ['Diagnóstico privado do login', 'Private login diagnostic'],
         'map_diagnostic_note' => ['Pistas estruturais por confirmar. Este resultado não ativa o conector nem valida o login ou as faturas.', 'Unverified structural hints. This result does not activate the connector or validate login or invoices.'],

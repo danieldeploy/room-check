@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } else {
             InvoiceService::assertGerente($currentUser);
             // Match the worker lock for changes to access, account membership and private files.
-            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','sms_token','schedule','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
+            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','sms_token','schedule','approve_booking_map','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
                 if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
                 $locked=true;
                 if ($vault && $vault->has('windows-agent.enc')) {
@@ -110,15 +110,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             } elseif ($action==='archive_account' || $action==='restore_account') {
                 $repository->setLifecycle($id,$action==='restore_account',$action==='archive_account');
                 $returnTab='accounts'; $returnEdit=0;
-            } elseif (in_array($action,['preflight','login','discover'],true)) {
+            } elseif (in_array($action,['preflight','login','discover','verify'],true)) {
                 $props=$repository->collectionProperties($id);
                 if (!$props) throw new RuntimeException('properties_required');
-                if ($action==='discover' && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
+                if (in_array($action,['discover','verify'],true) && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
+                if ($action==='verify' && ($id!==1 || $repository->get($id)['portal']!=='booking' || !$repository->get($id)['login_verified_at'])) throw new RuntimeException('login_required');
                 if ($action==='login' && $repository->get($id)['portal']==='booking'
                     && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
-                $targetProperty=InvoiceWorkspace::diagnosticProperty($props,$action==='discover'?($_POST['diagnostic_property']??null):null);
+                $targetProperty=InvoiceWorkspace::diagnosticProperty($props,in_array($action,['discover','verify'],true)?($_POST['diagnostic_property']??null):null);
                 $service->enqueue($action,$targetProperty,$period,(int)$currentUser['id'],null,$id);
                 $returnTab='activity'; $returnEdit=0; $message='requested';
+            } elseif ($action==='approve_booking_map') {
+                if (!$vault) throw new RuntimeException('private_storage_unavailable');
+                InvoiceBookingVerification::approve($pdo,$vault,$id,$period);
+                $returnTab='accounts'; $returnEdit=$id;
             } elseif ($action==='credentials' || $action==='sms_token') {
                 if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
