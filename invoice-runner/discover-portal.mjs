@@ -197,7 +197,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         snapshots.push(await inspectPortalPage(page, portal));
         const navigationStage = await navigateBookingInvoices(page, { ...input, propertyEntryUrls: propertyUrls }, async () => {
           snapshots.push(await inspectPortalPage(page, portal));
-        });
+        }, { waitForPropertyEntries: () => Promise.allSettled(propertyReads) });
         if (navigationStage !== 'invoices_visible') snapshots.push(await inspectPortalPage(page, portal));
         const invoiceInspection = navigationStage === 'invoices_visible' ? await inspectBookingInvoices(page, input) : undefined;
         return { version: 1, portal, validated: false, login_attempted: false,

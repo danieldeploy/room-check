@@ -25,6 +25,9 @@ aberta noutra casa regressa por uma ligação de grupo observada na página. Se 
 página de faturas omitir essa ligação, volta uma vez à entrada pública Booking
 já usada no login, mantendo a sessão. Só prossegue se o portal permitir escolher
 a casa pedida; nunca constrói URLs privados nem altera tokens para trocar de casa.
+Ao regressar ao grupo, espera pelas leituras das respostas observadas nessa
+página antes de resolver a ligação da casa. Não exige repetir a tarefa para
+aproveitar uma resposta que ainda estava a chegar na primeira execução.
 Na página de faturas Booking, a observação classifica cabeçalhos, formatos de
 data e controlos de paginação, sem persistir contagens de faturas ou documentos.
 Uma data genérica não é tratada como

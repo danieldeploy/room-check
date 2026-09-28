@@ -7,6 +7,47 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { discoverPortal, bookingLoginCode } from '../discover-portal.mjs';
 
+test('a property switch awaits group responses that begin after the authenticated reload', async () => {
+  const page = new EventEmitter();
+  const target = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=539828&ses=PRIVATE_FIXTURE';
+  const group = 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html';
+  let current = target.replace('539828', '1140306'), step = 0;
+  const visits = [];
+  const row = { evaluate: async () => true, $$: async () => [] };
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  page.url = () => current;
+  page.reload = async () => {};
+  page.evaluate = async () => [];
+  page.waitForFunction = async () => {};
+  page.waitForNavigation = async () => {};
+  page.goto = async href => {
+    visits.push(href);
+    if (href === 'https://admin.booking.com/') {
+      current = group; step = 1;
+      page.emit('response', {
+        request: () => ({ resourceType: () => 'fetch', method: () => 'POST' }),
+        url: () => 'https://admin.booking.com/dml/graphql.json', status: () => 200,
+        json: async () => { await delay(25); return { data: { partnerProperty: { propertyListv2: {
+          properties: [{ id: 539828, extranetUrl: target }],
+        } } } }; },
+      });
+    } else { assert.equal(href, target); current = target; step = 2; }
+  };
+  page.$$ = async selector => selector === 'tr,[role="row"]' ? [row]
+    : selector === 'a[href]' ? [] : step === 2 ? [control('finance', 3)]
+      : step === 3 ? [control('invoices', 4)] : [];
+  const result = await discoverPortal(page, { portal: 'booking', property: '539828',
+    propertyLabel: 'Two', period: '2026-08', authMethod: 'password' });
+  assert.equal(result.navigation_stage, 'invoices_visible');
+  assert.equal(result.authenticated_session, true);
+  assert.equal(result.login_attempted, false);
+  assert.equal(result.validated, false);
+  assert.deepEqual(visits, ['https://admin.booking.com/', target]);
+  assert.equal(JSON.stringify(result).includes('PRIVATE_FIXTURE'), false);
+  assert.equal(page.listenerCount('response'), 0);
+});
+
 function fakePage(action = 'https://account.booking.com/login') {
   let url = 'https://admin.booking.com/';
   let stage = 0;
