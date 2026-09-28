@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { assertPrivateDirectory } from '../invoice-runner/private-storage.mjs';
+import { testBookingCookieConsent } from './booking-cookie-consent-browser.mjs';
 
 const root = process.argv[2];
 assert.equal(process.platform, 'win32');
@@ -33,3 +34,15 @@ if (result.status !== 0 || JSON.parse(result.stdout || '{}').code !== 'ok') {
   throw new Error('Production runner preflight failed');
 }
 console.info('Production runner preflight passed over UTF-8 stdin with a Unicode private path.');
+const requireRunner = createRequire(new URL('../invoice-runner/package.json', import.meta.url));
+const { default: puppeteer } = await import(pathToFileURL(requireRunner.resolve('puppeteer')).href);
+const consentProfile = await fs.mkdtemp(path.join(root, '.consent-'));
+let consentBrowser;
+try {
+  consentBrowser = await puppeteer.launch({ headless: true, userDataDir: consentProfile, timeout: 30000 });
+  await testBookingCookieConsent(consentBrowser);
+  console.info('Delayed Booking cookie rejection and login continuation passed in sandboxed Windows Chrome.');
+} finally {
+  if (consentBrowser) await consentBrowser.close();
+  await fs.rm(consentProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+}

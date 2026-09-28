@@ -143,7 +143,10 @@ test('waits through Booking loading state before inspecting password step', asyn
   const page = {
     url: () => 'https://account.booking.com/sign-in',
     goto: async () => {}, waitForNavigation: async () => {}, evaluate: async () => [],
-    waitForFunction: async () => { waits++; if (stage === 1) stage = 2; },
+    waitForFunction: async fn => {
+      if (fn.name === 'visibleRejectButton') return;
+      waits++; if (stage === 1) stage = 2;
+    },
     $$: async selector => selector !== 'input' ? [] : stage === 0 ? [field('loginname', 'text')]
       : stage === 1 ? [] : stage === 2 ? [field('password', 'password')] : [],
   };

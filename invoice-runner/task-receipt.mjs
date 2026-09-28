@@ -23,6 +23,9 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
     finished_at: now().toISOString(),
   };
   const diagnostic = result.diagnostic;
+  if (job.input.portal === 'booking' && typeof diagnostic?.cookie_consent_rejected === 'boolean') {
+    receipt.cookie_consent_rejected = diagnostic.cookie_consent_rejected;
+  }
   if (job.input.action === 'verify') {
     receipt.document_count = Array.isArray(result.documents) ? Math.min(result.documents.length, 100) : 0;
     const trace = result.collection_trace;
