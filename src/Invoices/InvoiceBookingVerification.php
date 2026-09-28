@@ -33,7 +33,7 @@ final class InvoiceBookingVerification
     public static function issueDates(string $text): array
     {
         $date='(?:\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9},?\s+\d{4})';
-        preg_match_all('/^[\t ]*(?:invoice date|date of issue|issue date|date|data de emissão|data da fatura|data)[\t ]*:?[\t ]*(?:\r?\n[\t ]*)?('.$date.')\b/imu',$text,$matches);
+        preg_match_all('~^[\t ]*(?:invoice date|date of issue|issue date|date|data de emissão|data da fatura|data)[\t ]*:?[\t ]*(?:\r?\n[\t ]*)?('.$date.')\b~imu',$text,$matches);
         $dates=[];
         foreach ($matches[1] as $value) {
             $value=preg_replace('/\s+/',' ',str_replace(',','',trim($value)));
