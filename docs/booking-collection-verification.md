@@ -37,3 +37,10 @@ It uses native mbstring, keeps encryption checks, discards image contents,
 bounds decode memory and accepts only files up to 2 MiB and ten pages. Both
 parsers are tested against the same synthetic invoice; no document is approved
 because text extraction failed.
+
+The accepted collector persists its server-verified company result for the
+matching account/property/invoice number/hash, for both imports and duplicates.
+The Hub therefore shows the verified recipient even when Drive is not configured.
+Only a complete matching PDF can update this result; client state flags cannot.
+No Drive or accounting progress is changed. Tests cover rejection, first import,
+duplicate repair and preservation of independent archive fields.

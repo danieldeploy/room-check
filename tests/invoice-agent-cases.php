@@ -16,7 +16,7 @@ function runInvoiceAgentCases(PDO $pdo): void
     $tmp=sys_get_temp_dir().'/agent-test-'.bin2hex(random_bytes(8)); mkdir($tmp,0700);
     InvoiceVault::atomicWrite($tmp.'/master.key',random_bytes(32));
     $vault=new InvoiceVault($tmp);
-    $pdo->exec('DELETE FROM invoice_tasks; DELETE FROM invoice_documents; DELETE FROM invoice_auth_challenges; UPDATE invoice_accounts SET enabled=0');
+    $pdo->exec('DELETE FROM invoice_tasks; DELETE FROM invoice_document_delivery; DELETE FROM invoice_documents; DELETE FROM invoice_auth_challenges; UPDATE invoice_accounts SET enabled=0');
     $agent=new InvoiceRemoteAgent($pdo,['private_dir'=>$tmp]); $service=new InvoiceService($pdo);
     $token='';
     $send=static function(array $data) use ($agent,&$token): array { return $agent->handle($token,$data); };
@@ -154,6 +154,25 @@ function runInvoiceAgentCases(PDO $pdo): void
         $check(!(glob($tmp.'/windows-*.part')?:[]),'Verification PDFs are removed after checking');
         $report=$vault->read(InvoiceBookingVerification::reportName(1,'1140306'));
         $check(!str_contains(json_encode($report),'FIXTURE-900') && !str_contains(json_encode($report),'03/08/2026'),'Verification reports contain no source invoice values');
+        $collectVerified=static function(string $date='03/08/2026') use ($service,$send): array {
+            $id=$service->enqueue('collect','1140306','2026-08',1);
+            $offer=$send(['action'=>'claim','claim_id'=>bin2hex(random_bytes(16))])['job'];
+            $identity=['task_id'=>$id,'lease'=>$offer['lease']]; $bytes=bookingVerificationFixture('1140306',$date);
+            $metadata=['number'=>'FIXTURE-900','issued_on'=>'2026-08-03','period'=>'2026-08','period_basis'=>'issue_month','format'=>'pdf','company_state'=>'validated'];
+            $send($identity+['action'=>'upload','id'=>0,'offset'=>0,'size'=>strlen($bytes),'sha256'=>hash('sha256',$bytes),'metadata'=>$metadata,'chunk'=>base64_encode($bytes)]);
+            return $send($identity+['action'=>'complete','result'=>['code'=>'ok','documents'=>[0]]]);
+        };
+        $check($collectVerified('03/09/2026')['state']==='failed','A client validation flag cannot replace the full PDF date check');
+        $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_document_delivery')->fetchColumn()===0,'Rejected PDFs create no company validation');
+        $check($collectVerified()['state']==='completed','The verified collector imports a complete matching PDF');
+        $delivery=$pdo->query('SELECT * FROM invoice_document_delivery')->fetch(PDO::FETCH_ASSOC);
+        $check($delivery['company_state']==='validated' && $delivery['company_name']==='Active Lines' && $delivery['drive_state']==='pending','Company validation is saved without enabling or completing Drive');
+        $pdo->exec("UPDATE invoice_document_delivery SET company_state='review',drive_state='retry',attempts=7");
+        $check($collectVerified()['state']==='completed','A previously collected matching PDF can refresh its company evidence');
+        $delivery=$pdo->query('SELECT * FROM invoice_document_delivery')->fetch(PDO::FETCH_ASSOC);
+        $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_documents')->fetchColumn()===1 && $delivery['company_state']==='validated'
+            && $delivery['drive_state']==='retry' && (int)$delivery['attempts']===7,'Deduplication refreshes only company state and preserves archive progress');
+        $pdo->exec('DELETE FROM invoice_document_delivery; DELETE FROM invoice_documents');
         $newer=$service->enqueue('verify','1140306','2026-08',1);
         $reject(fn()=>InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08'),'verification_required');
         $pdo->prepare("UPDATE invoice_tasks SET state='failed',active_key=NULL,result_code='portal_changed' WHERE id=?")->execute([$newer]);

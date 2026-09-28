@@ -366,7 +366,7 @@ final class InvoiceRemoteAgent
                         foreach ($ids as $id) {
                             $entry=$lease['uploads'][$id]; $file=$this->uploadPath($lease,$id); clearstatcache(true,$file);
                             if (!is_file($file) || filesize($file)!==$entry['size'] || hash_file('sha256',$file)!==$entry['sha256']) throw new RuntimeException('invalid_document');
-                            $verifiedFiles[]=['path'=>$file,'metadata'=>$entry['metadata']];
+                            $verifiedFiles[]=['path'=>$file,'metadata'=>$entry['metadata'],'sha256'=>$entry['sha256']];
                             if ($job['kind']==='collect' && in_array(false,InvoiceBookingVerification::checkPdf($file,$job['property_id'],$entry['metadata'],$job['period']),true)) throw new RuntimeException('invalid_document');
                         }
                     }
@@ -380,6 +380,19 @@ final class InvoiceRemoteAgent
                         }
                     })();
                     (new InvoiceTaskLifecycle($this->pdo))->complete($this->vault,$job,$result,$documents);
+                    if ($job['kind']==='collect' && ($lease['input']['map']['version']??null)===3) {
+                        // All files passed the server's PDF/date/company checks above.
+                        // Record that evidence for new and repeated invoices independently
+                        // of Drive configuration; never trust a client company-state flag.
+                        foreach ($verifiedFiles as $file) {
+                            $s=$this->pdo->prepare('SELECT id FROM invoice_documents WHERE account_id=? AND property_id=? AND period=? AND invoice_number=? AND sha256=?');
+                            $s->execute([$job['account_id'],$job['property_id'],$job['period'],$file['metadata']['number'],$file['sha256']]);
+                            $documentId=$s->fetchColumn();
+                            if ($documentId===false) throw new RuntimeException('invalid_document');
+                            $this->pdo->prepare("INSERT INTO invoice_document_delivery (document_id,company_state,company_name) SELECT ?,'validated','Active Lines' WHERE NOT EXISTS (SELECT 1 FROM invoice_document_delivery WHERE document_id=?)")->execute([$documentId,$documentId]);
+                            $this->pdo->prepare("UPDATE invoice_document_delivery SET company_state='validated',company_name='Active Lines' WHERE document_id=?")->execute([$documentId]);
+                        }
+                    }
                 } else $this->fail($job,is_string($code)?$code:'worker_failed');
                 $this->pdo->commit();
             } catch (Throwable $e) {
