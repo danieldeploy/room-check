@@ -176,8 +176,11 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
     }
     if (!target && !observedUrl) return matches.length === 0 && exact.length === 0 ? 'property_not_found'
       : matches.length > 1 || exact.length > 1 ? 'property_ambiguous' : 'property_link_missing';
-    if (observedUrl) {
-      await page.goto(observedUrl, { waitUntil: 'domcontentloaded' });
+    const destination = observedUrl || target?.href;
+    if (destination) {
+      // Group links may open a new tab. Follow the exact observed destination
+      // in this controlled page so the subsequent property check sees it.
+      await page.goto(destination, { waitUntil: 'domcontentloaded' });
       await pause(600);
     } else await clickAndSettle(page, target.link);
     await onStep('property');

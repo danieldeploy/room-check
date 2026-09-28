@@ -27,6 +27,9 @@ já usada no login, mantendo a sessão. Só prossegue se o portal permitir escol
 a casa pedida; nunca constrói URLs privados nem altera tokens para trocar de casa.
 São aceites as entradas observadas `manage/home.html` e `manage/index.html`,
 sempre com o `hotel_id` exato. Ligações de mensagens ou reservas não são entradas.
+Quando existe um endereço de entrada observado, segue-o na página controlada,
+mesmo que a ligação do portal costume abrir outro separador. Só os controlos
+sem endereço precisam de um clique; a identidade é verificada após a navegação.
 Ao regressar ao grupo, espera pelas leituras das respostas observadas nessa
 página antes de resolver a ligação da casa. Não exige repetir a tarefa para
 aproveitar uma resposta que ainda estava a chegar na primeira execução.
