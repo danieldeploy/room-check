@@ -69,6 +69,7 @@ final class InvoiceRunner
                     }
                     $input['credentials'] = $accounts->credentials($vault, (int) $account['id']);
                     $input['authMethod'] = $account['auth_method'];
+                    $input['automation'] = $accounts->automationOptions($vault, (int)$account['id'], $job['kind'] === 'login');
                     $sessionName = InvoiceAccounts::secretName((int) $account['id'], 'session');
                     $input['session'] = $vault->has($sessionName) ? $vault->read($sessionName) : [];
                     $exchange = $vault->path('exchange-' . bin2hex(random_bytes(16)));

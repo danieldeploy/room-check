@@ -66,6 +66,18 @@ try {
  $pdo->prepare("UPDATE invoice_accounts SET login_verified_at='2029-01-01 00:00:00',enabled=1 WHERE id=?")->execute([$wa]);
  $accounts->saveCredentials($vault,$wa,['identifier'=>'','password'=>'','auth_method'=>'password']);
  checkWorkspace((int)$accounts->get($wa)['enabled']===1&&!empty($accounts->get($wa)['login_verified_at']),'Saving unchanged credentials preserves validation and schedule');
+ $options=$accounts->automationOptions($vault,$wa);
+ checkWorkspace($options['deny_loopback'] && $options['captcha_mode']==='disabled' && !isset($options['captcha_api_key']),'Safe automation defaults omit secrets');
+ rejectWorkspace(fn()=>$accounts->saveAutomationOptions($vault,$wa,['captcha_mode'=>'test']),'auth_unconfigured');
+ rejectWorkspace(fn()=>$accounts->saveAutomationOptions($vault,$air,[]),'invalid_request');
+ $accounts->saveAutomationOptions($vault,$wa,['deny_loopback'=>'on','captcha_mode'=>'test','captcha_api_key'=>str_repeat('a',32)]);
+ checkWorkspace(!isset($accounts->automationOptions($vault,$wa)['captcha_api_key']),'UI never receives provider secret');
+ checkWorkspace($accounts->automationOptions($vault,$wa,true)['captcha_api_key']===str_repeat('a',32),'Login can obtain encrypted provider key');
+ $accounts->saveAutomationOptions($vault,$wa,['deny_loopback'=>'on','captcha_mode'=>'test','captcha_api_key'=>'']);
+ checkWorkspace($accounts->automationOptions($vault,$wa,true)['captcha_api_key']===str_repeat('a',32),'Blank provider key retains saved secret');
+ checkWorkspace((int)$accounts->get($wa)['enabled']===1&&!empty($accounts->get($wa)['login_verified_at']),'Automation settings preserve validation and schedule');
+ $accounts->saveAutomationOptions($vault,$wa,['captcha_mode'=>'disabled','captcha_remove_key'=>'on']);
+ checkWorkspace(!$accounts->automationOptions($vault,$wa)['captcha_key_configured'],'Provider key can be removed');
  $accounts->saveCredentials($vault,$wa,['password'=>'changed-fixture']);
  checkWorkspace(!(int)$accounts->get($wa)['enabled']&&empty($accounts->get($wa)['login_verified_at']),'Changed credentials require new validation');
  checkWorkspace(InvoiceWorkspace::integration($accounts->get($air),$vault)==='integration_setup','An account without a connector cannot be presented as ready');

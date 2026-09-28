@@ -188,7 +188,9 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
   };
   const smsSignals = () => portal === 'booking' && loginOnly
     ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted,
-      cookie_consent_rejected: cookieConsentRejected } : {};
+      cookie_consent_rejected: cookieConsentRejected,
+      ...(hooks.loopbackPermission ? { loopback_permission: hooks.loopbackPermission } : {}),
+      ...(hooks.captchaTest ? { captcha_status: hooks.captchaTest.status() } : {}) } : {};
   let stage = 'prepare';
   let identifierSubmit = null;
   let identifierPhase = null;
@@ -201,8 +203,9 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       if (typeof page.waitForFunction === 'function') {
         await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 }).catch(() => {});
       }
-      const challengeNow = await humanChallenge(page);
+      let challengeNow = await humanChallenge(page);
       if (loginOnly) challengeVisibleBefore = challengeNow;
+      if (challengeNow && await hooks.captchaTest?.attempt(page, humanChallenge)) challengeNow = false;
       if (challengeNow) { stage = 'human_verification'; fail('human_verification'); }
       await dismissCookies();
       const verified = new URL(page.url());
@@ -250,10 +253,25 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       portalUrl(portal, page.url());
       stage = 'inspect';
       snapshots.push(await inspectPortalPage(page, portal));
-      const challengeNow = portal === 'booking' && await humanChallenge(page);
+      let challengeNow = portal === 'booking' && await humanChallenge(page);
       if (portal === 'booking' && loginOnly) {
         if (identifierSent) challengeVisibleAfter = challengeNow;
         else if (challengeVisibleBefore === null) challengeVisibleBefore = challengeNow;
+      }
+      let captchaRestartedSignIn = false;
+      if (challengeNow && await hooks.captchaTest?.attempt(page, humanChallenge)) {
+        challengeNow = false;
+        const resumed = new URL(page.url());
+        captchaRestartedSignIn = resumed.hostname === 'account.booking.com' && resumed.pathname === '/sign-in';
+        const restartedPassword = resumed.hostname === 'auth.booking.com' && resumed.pathname === '/u/login/password';
+        if (captchaRestartedSignIn || restartedPassword) {
+          // A consumed SMS code cannot be replayed. A new job obtains a fresh
+          // challenge through the existing broker instead of weakening its one-use contract.
+          if (otpSent) { stage = 'second_factor'; fail('needs_auth'); }
+          passwordSent = false;
+          if (captchaRestartedSignIn) identifierSent = false;
+          else resumedPasswordStep = true;
+        }
       }
       if (challengeNow) {
         stage = 'human_verification'; fail('human_verification');
@@ -270,6 +288,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         if (!identifier.info.action) fail('auth_unconfigured');
         portalUrl(portal, identifier.info.action);
         identifierPhase = 'typing';
+        if (captchaRestartedSignIn) await clearInput(page, identifier.input);
         await identifier.input.type(credentials.identifier); identifierSent = true;
         await restoreTypingAfterCookies(identifier.input, credentials.identifier);
         identifierPhase = 'button_lookup';
@@ -347,7 +366,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       break;
     }
     if (loginOnly) {
-      const challengeNow = portal === 'booking' && await humanChallenge(page);
+      let challengeNow = portal === 'booking' && await humanChallenge(page);
       if (portal === 'booking') challengeVisibleAfter = challengeNow;
       if (challengeNow) { stage = 'human_verification'; fail('human_verification'); }
       if (!authenticatedBookingPage(page)) { stage = 'login_incomplete'; fail('portal_changed'); }

@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { assertPrivateDirectory } from '../invoice-runner/private-storage.mjs';
+import { testBookingAutomation } from './booking-automation-browser.mjs';
 import { testBookingCookieConsent } from './booking-cookie-consent-browser.mjs';
 
 const root = process.argv[2];
@@ -41,6 +42,8 @@ let consentBrowser;
 try {
   consentBrowser = await puppeteer.launch({ headless: true, userDataDir: consentProfile, timeout: 30000 });
   await testBookingCookieConsent(consentBrowser);
+  await testBookingAutomation(consentBrowser);
+  console.info('Scoped loopback denial and synthetic CAPTCHA login continuation passed.');
   console.info('Delayed Booking cookie rejection and login continuation passed in sandboxed Windows Chrome.');
 } finally {
   if (consentBrowser) await consentBrowser.close();
