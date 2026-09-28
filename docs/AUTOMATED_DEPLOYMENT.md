@@ -46,13 +46,23 @@ autenticado e de uma publicação real verificada.
 - O job `deploy` depende do job `validate` no mesmo workflow e só corre num push
   da branch exata de produção, com a ativação explícita acima.
 - O checkout de publicação usa o SHA que passou nos testes e não guarda a
-  credencial GitHub no checkout. A credencial WHM só entra no passo de publicação.
+  credencial GitHub no checkout. A credencial WHM só entra nos passos protegidos
+  de inspeção e publicação.
 - Existe uma única fila de publicação, sem cancelar um deployment em execução.
 - Antes de alterar o alojamento, o cliente confirma o HEAD remoto, a origem Git,
   a branch, o estado das tarefas e que o avanço é fast-forward. Volta a confirmar
   antes de publicar. Um commit ultrapassado por outro não é publicado por este fluxo.
 - Uma versão já publicada faz apenas verificação de saúde. Uma tarefa anterior
   falhada, cancelada ou incerta exige inspeção; não há repetição cega de mutações.
+- Cada publicação começa com um passo separado `--inspect-state`, apenas de
+  leitura, que verifica conta, origem, branch, estado do repositório e histórico
+  de tarefas. Só apresenta os SHAs confirmados e o ID/estado da última tarefa.
+  Se o WHM devolver 403 ou o estado não for seguro, o passo de publicação não
+  corre. Esta inspeção usa a ligação e o segredo já existentes no GitHub Actions;
+  não exige mudar variáveis nem autenticar nas definições pelo navegador.
+  Depois da inspeção, o publicador repete as verificações e mantém os bloqueios
+  de backup, commit exato, fast-forward e tarefas pendentes/falhadas. A inspeção
+  não autoriza ignorar uma falha nem comprova permissão de escrita.
 - A `.cpanel.yml` chama uma única tarefa, `deploy/release.sh`, que mantém um bloqueio
   durante toda a publicação e termina ao primeiro erro. O backup antecede qualquer
   migração ou cópia. A sua falha impede os passos seguintes. A API acompanha o ID

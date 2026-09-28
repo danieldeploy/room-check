@@ -2,6 +2,7 @@
 import copy
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import sys
@@ -52,6 +53,51 @@ class Runner:
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_hosting_inspection_is_readonly_and_reports_only_verified_state(self):
+        runner = Runner()
+        runner.doctor = Mock(return_value={'transport': 'whm', 'cpanel_user': 'welcome',
+                                          'private_metadata': 'must-not-be-printed'})
+        self.assertEqual(release.inspect_release_state(runner), {
+            'mode': 'inspect-state', 'writes': False, 'current_commit': OLD,
+            'last_deployed_commit': OLD, 'last_deploy_id': '17', 'last_deploy_state': 'succeeded'})
+        self.assertEqual(runner.writes, [])
+
+    def test_hosting_inspection_rejects_denied_access_and_unsafe_history(self):
+        denied = Runner()
+        denied.doctor = Mock(side_effect=release.DeploymentError('api_http_access_denied_403'))
+        for runner in [denied, *(Runner(task=state) for state in ['failed', 'canceled', 'active', 'queued'])]:
+            with self.assertRaises(release.DeploymentError): release.inspect_release_state(runner)
+            self.assertEqual(runner.writes, [])
+        mismatch = Runner()
+        mismatch.tasks = lambda: [{'deploy_id': '17', 'timestamps': {'succeeded': '100'},
+                                  'repository_state': {'branch': release.BRANCH, 'identifier': NEW}}]
+        with self.assertRaisesRegex(release.DeploymentError, 'deployment_history_commit_mismatch'):
+            release.inspect_release_state(mismatch)
+        self.assertEqual(mismatch.writes, [])
+
+    def test_inspection_cli_needs_no_github_token_and_cannot_publish(self):
+        runner, output = Runner(), io.StringIO()
+        with patch.dict(os.environ, {'WHM_API_TOKEN': 'fixture-whm', 'GITHUB_TOKEN': ''}), \
+             patch.object(release, 'Deployment', return_value=runner), \
+             patch.object(release, 'GitHub') as github, contextlib.redirect_stdout(output):
+            self.assertEqual(release.main(['--inspect-state']), 0)
+        github.assert_not_called()
+        self.assertEqual(runner.writes, [])
+        self.assertFalse(json.loads(output.getvalue())['writes'])
+        self.assertNotIn('fixture-whm', output.getvalue())
+
+    def test_workflow_keeps_inspection_before_release_in_same_protected_job(self):
+        text = Path(__file__).parents[1].joinpath('.github/workflows/ci.yml').read_text()
+        job = text.split('\n  deploy:', 1)[1].split('\n  windows-agent:', 1)[0]
+        self.assertIn('needs: [validate, windows-agent]', job)
+        self.assertIn('environment: management-hub-production', job)
+        self.assertIn('group: management-hub-production', job)
+        self.assertIn("github.event_name == 'push'", job)
+        self.assertIn("github.ref == 'refs/heads/agent/room-item-assignments'", job)
+        self.assertLess(job.index('--inspect-state'), job.index('--expected-commit'))
+        self.assertNotIn('continue-on-error', job)
+        self.assertNotIn('always()', job)
+
     def test_deployment_summary_optional_branch_keeps_sha_and_conflict_checks(self):
         row = {'last_deployment': {'repository_state': {'identifier': OLD}}}
         self.assertEqual(release.deployed_commit(row), OLD)

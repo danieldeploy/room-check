@@ -202,15 +202,13 @@ def deployed_commit(row):
     return commit(state.get("identifier"))
 
 
-def release(runner, github, expected, check_health=health_check, check_backup=require_backup_gate):
-    expected = commit(expected)
-    check_backup()
-    github.require_head(expected)
+def inspect_release_state(runner):
+    """Read and validate hosting state without any update/deploy capability call."""
     diagnostic = runner.doctor()
     require(diagnostic.get("transport") == "whm"
             and diagnostic.get("cpanel_user") == "welcome", "release_account_not_allowed")
     row = runner.repository()
-    current = runner.inspect(row)
+    current = commit(runner.inspect(row))
     latest = latest_successful_task(runner)
     deployed = deployed_commit(row)
     if latest is not None:
@@ -219,6 +217,18 @@ def release(runner, github, expected, check_health=health_check, check_backup=re
                 "deployment_history_commit_not_verified")
         require(commit(state.get("identifier")) == deployed,
                 "deployment_history_commit_mismatch")
+    return {"mode": "inspect-state", "writes": False,
+            "current_commit": current, "last_deployed_commit": deployed,
+            "last_deploy_id": runner.task_id(latest) if latest is not None else None,
+            "last_deploy_state": "succeeded" if latest is not None else "none"}
+
+
+def release(runner, github, expected, check_health=health_check, check_backup=require_backup_gate):
+    expected = commit(expected)
+    check_backup()
+    github.require_head(expected)
+    inspected = inspect_release_state(runner)
+    current, deployed = inspected["current_commit"], inspected["last_deployed_commit"]
     if current == expected and deployed == expected:
         github.require_head(expected)
         health = check_health()
@@ -251,6 +261,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--expected-commit")
     mode.add_argument("--diagnostic", action="store_true")
+    mode.add_argument("--inspect-state", action="store_true")
     args = parser.parse_args(argv)
     secrets = [os.environ.get("WHM_API_TOKEN", ""), os.environ.get("GITHUB_TOKEN", "")]
 
@@ -264,6 +275,9 @@ def main(argv=None):
     try:
         config = Config(token=secrets[0], transport="whm", origin=WHM_ORIGIN, wait_timeout=600)
         runner = Deployment(CpanelAPI(config), config)
+        if args.inspect_state:
+            output({"ok": True, **inspect_release_state(runner)})
+            return 0
         if args.diagnostic:
             diagnostic = runner.doctor()
             readiness = diagnostic.get('repository', {}).get('deployment_readiness')
