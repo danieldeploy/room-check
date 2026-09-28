@@ -21,7 +21,7 @@ const dateShape = value => {
 };
 
 // Values needed for a read-only check stay in memory. Only categorical structure,
-// counts, allowlisted paths and a PDF signature result enter the private diagnostic.
+// allowlisted paths and a PDF signature result enter the private diagnostic.
 export async function inspectBookingInvoices(page, input) {
   const url = portalUrl('booking', page.url());
   const result = { validated: false, property_verified: url.hostname === 'admin.booking.com'
@@ -55,28 +55,25 @@ export async function inspectBookingInvoices(page, input) {
     const rows = Array.isArray(table.rows) ? table.rows.slice(0, 100) : [];
     const issueIndexes = headers.flatMap((kind, index) => kind === 'issue_date' ? [index] : []);
     const summary = { columns: headers.map((kind, index) => ({ index: index + 1, kind })),
-      row_count: rows.length, document_links: 0, matching_issue_month: 0,
       date_columns: [], issue_date_unambiguous: issueIndexes.length === 1 };
-    const formats = new Map();
+    const formats = new Set();
     for (const row of rows) {
       const cells = Array.isArray(row.cells) ? row.cells.slice(0, 20) : [];
       for (let index = 0; index < cells.length; index++) {
         const date = dateShape(cells[index]);
-        if (date) { const key = `${index + 1}:${date.format}`; formats.set(key, (formats.get(key) || 0) + 1); }
+        if (date) formats.add(`${index + 1}:${date.format}`);
       }
       const issueDate = issueIndexes.length === 1 ? dateShape(cells[issueIndexes[0]]) : null;
       const matches = issueDate?.iso.slice(0, 7) === input.period;
-      if (matches) summary.matching_issue_month++;
       try {
         const document = portalUrl('booking', row.document);
         if (document.origin !== url.origin || document.pathname !== '/fresa/extranet/finance/invoices/get_document'
           || document.searchParams.get('hotel_id') !== String(input.property)) continue;
-        summary.document_links++;
         if (!sample || matches && !sample.matches) sample = { url: document.href, matches };
       } catch { /* Unexpected links never become download candidates. */ }
     }
-    summary.date_columns = [...formats].map(([key, count]) => {
-      const [index, format] = key.split(':'); return { index: Number(index), format, count };
+    summary.date_columns = [...formats].map(key => {
+      const [index, format] = key.split(':'); return { index: Number(index), format };
     });
     result.tables.push(summary);
   }
@@ -89,16 +86,16 @@ export async function inspectBookingInvoices(page, input) {
     const check = await page.evaluate(async href => {
       const response = await fetch(href, { credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(30000) });
       if (!response.ok || Number(response.headers.get('content-length')) > 20 * 1024 * 1024) return false;
-      const reader = response.body.getReader(); let size = 0; const prefix = [];
-      for (;;) {
-        const { value, done } = await reader.read(); if (done) break;
-        size += value.length;
-        if (size > 20 * 1024 * 1024) { await reader.cancel(); return false; }
-        for (const byte of value) { if (prefix.length >= 5) break; prefix.push(byte); }
-      }
-      return size > 5 && String.fromCharCode(...prefix) === '%PDF-';
+      const reader = response.body.getReader(); const prefix = [];
+      try {
+        while (prefix.length < 5) {
+          const { value, done } = await reader.read(); if (done) break;
+          for (const byte of value) { if (prefix.length >= 5) break; prefix.push(byte); }
+        }
+        return String.fromCharCode(...prefix) === '%PDF-';
+      } finally { await reader.cancel().catch(() => {}); }
     }, sample.url);
-    result.sample_pdf = check === true ? 'verified_pdf' : 'not_pdf';
+    result.sample_pdf = check === true ? 'verified_pdf_signature' : 'not_pdf';
   } catch { result.sample_pdf = 'failed'; }
   return result;
 }

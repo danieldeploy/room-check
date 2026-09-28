@@ -21,10 +21,10 @@ test('invoice evidence selects an issue-month sample and never serializes source
   const result = await inspectBookingInvoices(page, input);
   assert.equal(result.validated, false);
   assert.equal(result.property_verified, true);
-  assert.equal(result.sample_pdf, 'verified_pdf');
+  assert.equal(result.sample_pdf, 'verified_pdf_signature');
   assert.equal(result.sample_matches_issue_month, true);
-  assert.equal(result.tables[0].matching_issue_month, 1);
-  assert.deepEqual(result.tables[0].date_columns, [{ index: 2, format: 'YYYY-MM-DD', count: 2 }]);
+  for (const key of ['row_count', 'document_links', 'matching_issue_month']) assert.ok(!Object.hasOwn(result.tables[0], key));
+  assert.deepEqual(result.tables[0].date_columns, [{ index: 2, format: 'YYYY-MM-DD' }]);
   assert.deepEqual(page.fetched, [pdf()]);
   assert.equal(result.pagination.tested, false);
   for (const value of ['PRIVATE', 'fixture-secret', 'fixture-pdf-secret', '2026-08-01', '2026-09-01'])
@@ -34,7 +34,6 @@ test('generic or ambiguous date headers cannot establish an issue month', async 
   for (const headers of [['Invoice number', 'Date', 'Amount'], ['Issue date', 'Issue date', 'Amount']]) {
     const result = await inspectBookingInvoices(pageFor(headers, [row('01/08/2026')]), input);
     assert.equal(result.tables[0].issue_date_unambiguous, false);
-    assert.equal(result.tables[0].matching_issue_month, 0);
     assert.equal(result.sample_matches_issue_month, false);
   }
 });
@@ -51,7 +50,6 @@ test('foreign origins, other properties and unexpected document paths are reject
   ]);
   const result = await inspectBookingInvoices(page, input);
   assert.equal(result.sample_pdf, 'no_link');
-  assert.equal(result.tables[0].document_links, 0);
   assert.deepEqual(page.fetched, []);
 });
 test('non-PDF samples and retrieval failures stay unvalidated', async () => {
@@ -69,7 +67,7 @@ test('the document probe reads a bounded response and checks its actual PDF sign
   const page = pageFor(['Invoice number', 'Issue date'], [row('2026-08-01')]);
   const evaluate = page.evaluate;
   page.evaluate = async (fn, href) => href ? fn(href) : evaluate(fn);
-  for (const [body, status] of [['%PDF-fixture', 'verified_pdf'], ['<html>login</html>', 'not_pdf'], ['', 'not_pdf']]) {
+  for (const [body, status] of [['%PDF-fixture', 'verified_pdf_signature'], ['<html>login</html>', 'not_pdf'], ['', 'not_pdf']]) {
     const fetch = mock.method(globalThis, 'fetch', async (href, options) => {
       assert.equal(href, pdf());
       assert.equal(options.redirect, 'error');
@@ -84,4 +82,24 @@ test('the document probe reads a bounded response and checks its actual PDF sign
   }));
   try { assert.equal((await inspectBookingInvoices(page, input)).sample_pdf, 'not_pdf'); }
   finally { oversized.mock.restore(); }
+});
+
+
+test('the signature probe cancels the stream before reading the invoice body', async () => {
+  const page = pageFor(['Invoice number', 'Issue date'], [row('2026-08-01')]);
+  const evaluate = page.evaluate;
+  page.evaluate = async (fn, href) => href ? fn(href) : evaluate(fn);
+  let reads = 0, cancelled = false;
+  const fetch = mock.method(globalThis, 'fetch', async () => ({ ok: true,
+    headers: new Headers(), body: { getReader: () => ({
+      read: async () => { reads++; assert.ok(reads <= 2); return { done: false,
+        value: new TextEncoder().encode(reads === 1 ? '%P' : 'DF-') }; },
+      cancel: async () => { cancelled = true; },
+    }) },
+  }));
+  try {
+    assert.equal((await inspectBookingInvoices(page, input)).sample_pdf, 'verified_pdf_signature');
+    assert.equal(reads, 2);
+    assert.equal(cancelled, true);
+  } finally { fetch.mock.restore(); }
 });
