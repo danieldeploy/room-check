@@ -258,9 +258,20 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         if (identifierSent) challengeVisibleAfter = challengeNow;
         else if (challengeVisibleBefore === null) challengeVisibleBefore = challengeNow;
       }
+      let captchaRestartedSignIn = false;
       if (challengeNow && await hooks.captchaTest?.attempt(page, humanChallenge)) {
         challengeNow = false;
-        if (new URL(page.url()).hostname === 'account.booking.com') identifierSent = false;
+        const resumed = new URL(page.url());
+        captchaRestartedSignIn = resumed.hostname === 'account.booking.com' && resumed.pathname === '/sign-in';
+        const restartedPassword = resumed.hostname === 'auth.booking.com' && resumed.pathname === '/u/login/password';
+        if (captchaRestartedSignIn || restartedPassword) {
+          // A consumed SMS code cannot be replayed. A new job obtains a fresh
+          // challenge through the existing broker instead of weakening its one-use contract.
+          if (otpSent) { stage = 'second_factor'; fail('needs_auth'); }
+          passwordSent = false;
+          if (captchaRestartedSignIn) identifierSent = false;
+          else resumedPasswordStep = true;
+        }
       }
       if (challengeNow) {
         stage = 'human_verification'; fail('human_verification');
@@ -277,6 +288,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         if (!identifier.info.action) fail('auth_unconfigured');
         portalUrl(portal, identifier.info.action);
         identifierPhase = 'typing';
+        if (captchaRestartedSignIn) await clearInput(page, identifier.input);
         await identifier.input.type(credentials.identifier); identifierSent = true;
         await restoreTypingAfterCookies(identifier.input, credentials.identifier);
         identifierPhase = 'button_lookup';

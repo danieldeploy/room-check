@@ -17,6 +17,8 @@
    desafio continuarem iguais. Confirma que o desafio desapareceu; isso, por si
    só, não valida login. Falhas mantêm `human_verification` e a aba persistente.
    Formatos desconhecidos, incluindo widgets sem `gokuProps`, não são enviados.
+   Se o portal reiniciar o login depois de consumir um SMS, termina em `needs_auth`
+   para obter um novo código num novo teste; nunca reutiliza o código consumido.
 5. **Aceitação:** testes determinísticos de API, timeout, resposta inválida,
    orçamento, proteção de dados e cofre; Chrome real Windows com páginas
    sintéticas para verificar a permissão e a continuação do login. CI obrigatória

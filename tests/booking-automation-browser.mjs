@@ -5,10 +5,16 @@ import { discoverPortal } from '../invoice-runner/discover-portal.mjs';
 
 // No network requests leave this synthetic browser test, including provider calls.
 export async function testBookingAutomation(browser) {
+  for (const afterPassword of [false, true]) await testBookingAutomationCase(browser, afterPassword);
+}
+
+async function testBookingAutomationCase(browser, afterPassword) {
   const context = await browser.createBrowserContext();
   // The production helper targets the default profile. Use a new default page.
   const page = await browser.newPage();
-  let sent = 0;
+  await page.browserContext().setCookie({ name: 'aws-waf-token', value: '',
+    domain: 'account.booking.com', path: '/', expires: 1 });
+  let sent = 0, passwordSubmitted = false;
   let permission;
   await page.setRequestInterception(true);
   page.on('request', request => {
@@ -16,8 +22,13 @@ export async function testBookingAutomation(browser) {
     let body = '<title>Synthetic extranet</title>';
     if (url.hostname === 'account.booking.com') {
       const solved = (request.headers().cookie || '').includes('aws-waf-token=fixture-token');
-      body = solved ? `<form class="nw-signin" action="https://auth.booking.com/u/login/password"><input autocomplete="username"><button>Continue</button></form>`
+      body = (solved || afterPassword && !passwordSubmitted) ? `<form class="nw-signin" action="https://auth.booking.com/u/login/password"><input autocomplete="username"><button>Continue</button></form>`
         : `<h1>Let's make sure you're human</h1><div id="captcha">Synthetic challenge</div><script>window.gokuProps={key:'fixture-key',iv:'fixture-iv',context:'fixture-context'};</script>`;
+    }
+    if (url.hostname === 'admin.booking.com' && afterPassword && !passwordSubmitted) {
+      passwordSubmitted = true;
+      void request.respond({ status: 302, headers: { location: 'https://account.booking.com/sign-in' }, body: '' });
+      return;
     }
     if (url.hostname === 'auth.booking.com') body = `<form action="https://admin.booking.com/hotel/home"><input type="password"><button>Login</button></form>`;
     void request.respond({ status: 200, contentType: 'text/html', body });
