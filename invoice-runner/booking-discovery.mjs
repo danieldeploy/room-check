@@ -15,7 +15,7 @@ async function waitForControl(page, names) {
   if (typeof page.waitForFunction !== 'function') return;
   await page.waitForFunction(labels => [...document.querySelectorAll('a,button,[role="button"]')]
     .some(el => el.getClientRects().length > 0 && !el.disabled
-      && labels.includes((el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\\s+/g, ' ').toLowerCase())),
+      && labels.includes((el.innerText || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').toLowerCase())),
   { timeout: 15000 }, names).catch(() => {});
 }
 async function uniqueControl(page, names) {
@@ -30,6 +30,31 @@ async function uniqueControl(page, names) {
     if (info.visible && names.includes(info.label)) matches.push({ control, info });
   }
   return matches.length === 1 ? matches[0] : null;
+}
+async function revealNavigationGroup(page, names) {
+  // At narrow widths Booking moves Finance under a top-level overflow menu.
+  // Follow the observed DOM relationship; never click a hidden submenu item.
+  const parents = [];
+  for (const control of await page.$$('.ext-navigation-top-item__link')) {
+    const related = await control.evaluate((el, labels) => {
+      const visible = node => node.getClientRects().length > 0 && !node.disabled;
+      if (el.tagName !== 'BUTTON' || !visible(el)) return false;
+      let container = el.parentElement;
+      for (let depth = 0; container && depth < 5; depth++, container = container.parentElement) {
+        const triggers = [...container.querySelectorAll('.ext-navigation-top-item__link')].filter(visible);
+        if (triggers.length !== 1 || triggers[0] !== el) break;
+        const targets = [...container.querySelectorAll('.ext-navigation-submenu-item__link')]
+          .filter(node => labels.includes((node.innerText || node.getAttribute('aria-label') || node.textContent || '')
+            .trim().replace(/\s+/g, ' ').toLowerCase()));
+        if (targets.length) return targets.length === 1 && !visible(targets[0]);
+      }
+      return false;
+    }, names);
+    if (related) parents.push(control);
+  }
+  if (parents.length !== 1) return false;
+  await clickAndSettle(page, parents[0]);
+  return true;
 }
 export async function navigateBookingInvoices(page, input, onStep) {
   const property = String(input.property || '');
@@ -118,7 +143,11 @@ export async function navigateBookingInvoices(page, input, onStep) {
   url = portalUrl('booking', page.url());
   if (url.hostname !== 'admin.booking.com') return 'property_navigation';
   await waitForControl(page, labels.finance);
-  const finance = await uniqueControl(page, labels.finance);
+  let finance = await uniqueControl(page, labels.finance);
+  if (!finance && await revealNavigationGroup(page, labels.finance)) {
+    await waitForControl(page, labels.finance);
+    finance = await uniqueControl(page, labels.finance);
+  }
   if (!finance) return 'finance_missing';
   if (finance.info.href) portalUrl('booking', finance.info.href);
   await clickAndSettle(page, finance.control);
