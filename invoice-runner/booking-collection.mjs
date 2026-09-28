@@ -65,7 +65,7 @@ export async function readBookingTable(page) {
 
 // Full-document verification is deliberately separate from structural discovery.
 // Actual documents travel only through the protected document-upload protocol.
-export async function collectBookingInvoices(page, input, target = null) {
+export async function collectBookingInvoices(page, input, target = null, trace = null) {
   if (input.accountId !== 1 || input.portal !== 'booking' || input.periodBasis !== 'issue_month'
       || !/^\d{1,12}$/.test(input.property || '')) fail('connector_unconfigured');
   assertProperty(page, input);
@@ -75,6 +75,7 @@ export async function collectBookingInvoices(page, input, target = null) {
   const documents = [], pages = new Set(), seen = new Map();
   let structure, total = 0, paginationMode = 'single_page';
   for (let index = 0; index < 20; index++) {
+    if (trace) trace.stage = 'table';
     const origin = assertProperty(page, input).origin;
     const raw = await readBookingTable(page);
     if (raw?.tables !== 1 || !Array.isArray(raw.headers) || raw.headers.length > 20
@@ -97,7 +98,8 @@ export async function collectBookingInvoices(page, input, target = null) {
       if (url.origin !== origin || url.pathname !== documentPath || url.searchParams.get('hotel_id') !== input.property) fail('account_mismatch');
       if (seen.has(number) && seen.get(number) !== issued) fail('portal_changed');
       if (issued.slice(0, 7) !== input.period || seen.has(number)) continue;
-      const content = await pdfContent(page, url.href, 'booking');
+      if (trace) trace.stage = 'pdf_download';
+      const content = await pdfContent(page, url.href, 'booking', trace ? check => { trace.download = check; } : null);
       if (!content) fail('invalid_document');
       total += Buffer.byteLength(content, 'base64');
       if (total > 20 * 1024 * 1024 || documents.length >= 100) fail('document_limit');
@@ -105,9 +107,11 @@ export async function collectBookingInvoices(page, input, target = null) {
       seen.set(number, issued);
     }
     if (!Array.isArray(raw.next) || raw.next.length > 1 || raw.pagination_present && !raw.next.length) fail('portal_changed');
+    if (trace) trace.stage = 'pagination';
     const next = raw.next[0];
     if (!next || next.disabled) {
       if (!target && !documents.length) fail('verification_sample_missing');
+      if (trace) trace.stage = 'complete';
       return { documents, verification: { version: 1, validated: false, strategy: 'booking-finance-v1',
         session_verified: true, property_verified: true, pagination_verified: true,
         pagination_mode: paginationMode, structure } };

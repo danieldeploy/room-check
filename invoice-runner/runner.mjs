@@ -13,6 +13,7 @@ let connected = false;
 let controlledPage;
 let releaseRequestGuard;
 let closing;
+let collectionTrace;
 async function cleanup() {
   if (closing) return closing;
   closing = (async () => {
@@ -39,6 +40,7 @@ try {
     if (raw.length > 2 * 1024 * 1024) throw new PortalError('browser_unavailable');
   }
   const input = JSON.parse(raw);
+  if (input.action === 'verify') collectionTrace = { stage: 'setup' };
   if (!['preflight', 'login', 'collect', 'discover', 'verify'].includes(input.action) || !path.isAbsolute(input.privateDir)
       || input.privateDir.split(path.sep).some(part => ['public_html', '..', '.'].includes(part))) throw new PortalError('browser_unavailable');
   const browserPurpose = controlledBrowserProfile(input);
@@ -122,6 +124,7 @@ try {
         const { collectBookingInvoices, validateBookingCollectionMap } = await import('./booking-collection.mjs');
         const target = input.action === 'verify' ? null : validateBookingCollectionMap(map, input);
         const { discoverPortal } = await import('./discover-portal.mjs');
+        if (collectionTrace) collectionTrace.stage = 'session';
         const login = await discoverPortal(page, { ...input, loginOnly: true }, loginHooks);
         if (login.authenticated_session !== true) {
           if (login.failure_code === 'human_verification') controlledPage = undefined;
@@ -129,11 +132,12 @@ try {
         }
         const active = await controlledBookingPage(browser, browserPurpose);
         const workPage = active.page;
+        if (collectionTrace) collectionTrace.stage = 'navigation';
         if (workPage !== page) await guard(workPage);
         workPage.setDefaultNavigationTimeout(30000); workPage.setDefaultTimeout(15000);
         const navigation = await discoverPortal(workPage, { ...input, loginOnly: false }, loginHooks);
         if (navigation.navigation_stage !== 'invoices_visible') throw new PortalError(navigation.failure_code || 'portal_changed');
-        ({ documents, verification } = await collectBookingInvoices(workPage, input, target));
+        ({ documents, verification } = await collectBookingInvoices(workPage, input, target, collectionTrace));
       } else if (map.version === 1 && input.portal === 'booking' && input.accountId === 1) {
         // Preserve the old validated password/session flow until its map is upgraded.
         const { login, target } = validateMap(map, input.property);
@@ -148,7 +152,7 @@ try {
       }
       const session = connected ? undefined : { cookies: safeCookies(input.portal, await browser.cookies()) };
       process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok', documents, session,
-        ...(input.action === 'verify' ? { verification } : {}) }));
+        ...(input.action === 'verify' ? { verification, collection_trace: collectionTrace } : {}) }));
       }
     }
   }
@@ -156,7 +160,7 @@ try {
   // Never emit error.message from Chrome, the portal, network or filesystem.
   const allowed = ['needs_auth', 'human_verification', 'connector_unconfigured', 'portal_changed', 'browser_unavailable', 'document_limit', 'auth_unconfigured', 'auth_timeout', 'auth_invalid', 'account_mismatch', 'invalid_document', 'network_error', 'verification_sample_missing'];
   const code = error instanceof PortalError && allowed.includes(error.message) ? error.message : 'browser_unavailable';
-  process.stdout.write(JSON.stringify({ code }));
+  process.stdout.write(JSON.stringify({ code, ...(collectionTrace ? { collection_trace: collectionTrace } : {}) }));
 } finally {
   clearTimeout(timer);
   await cleanup();

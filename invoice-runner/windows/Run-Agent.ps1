@@ -2,7 +2,7 @@ param([switch]$TestOnly, [switch]$OneShot)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $data = Join-Path $root 'data'
-$mutex = $null; $acquired = $false; $process = $null
+$mutex = $null; $acquired = $false; $process = $null; $processJob = $null
 try {
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $mutex = New-Object Threading.Mutex($false, ('Global\ManagementHub.InvoiceAgent.' + $sid))
@@ -26,7 +26,10 @@ try {
     $info.Arguments = '"' + (Join-Path (Split-Path $PSScriptRoot -Parent) 'windows-agent.mjs') + '"'
     $info.WorkingDirectory = Split-Path $PSScriptRoot -Parent
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true; $info.RedirectStandardInput = $true
+    . (Join-Path $PSScriptRoot 'Agent-Job.ps1')
+    $processJob = New-Object InvoiceAgentJob
     $process = [Diagnostics.Process]::Start($info)
+    $processJob.Attach($process.Handle)
     $bytes = [Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Compress))
     try { $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length); $process.StandardInput.BaseStream.Close() }
     finally { [Array]::Clear($bytes,0,$bytes.Length) }
@@ -43,4 +46,5 @@ try {
     }
     if ($acquired) { $mutex.ReleaseMutex() }
     if ($mutex) { $mutex.Dispose() }
+    if ($processJob) { $processJob.Dispose() }
 }

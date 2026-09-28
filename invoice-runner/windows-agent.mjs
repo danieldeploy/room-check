@@ -148,7 +148,7 @@ async function execute(client, root, runtime, job) {
     const reply = await request({ action: 'complete', result: payload });
     if (reply.accepted !== true) throw new AgentError('invalid_response');
     // Hub completion remains authoritative even if the local receipt cannot be written.
-    if (job.input.action === 'login') await writeTaskReceipt(root, job, result, reply,
+    if (['login', 'verify'].includes(job.input.action)) await writeTaskReceipt(root, job, result, reply,
       undefined, loginMetadataSaved).catch(() => {});
   } catch (error) {
     leaseError = error;
@@ -160,7 +160,7 @@ async function execute(client, root, runtime, job) {
     if (!completed || runnerError || !result) {
       const fallback = { code };
       const reply = await request({ action: 'complete', result: fallback }).catch(() => null);
-      if (reply?.accepted === true && job.input.action === 'login') {
+      if (reply?.accepted === true && ['login', 'verify'].includes(job.input.action)) {
         await writeTaskReceipt(root, job, fallback, reply).catch(() => {});
       }
     }
