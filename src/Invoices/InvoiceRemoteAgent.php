@@ -211,6 +211,7 @@ final class InvoiceRemoteAgent
             if ($job['kind']!=='preflight') {
                 $input['credentials']=$accounts->credentials($this->vault,(int)$account['id']);
                 $input['authMethod']=$account['auth_method'];
+                $input['automation']=$accounts->automationOptions($this->vault,(int)$account['id'],$job['kind']==='login');
                 if (($input['browserProfile'] ?? null)!=='fresh_login') {
                     $session=InvoiceAccounts::secretName((int)$account['id'],'session');
                     $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];

@@ -1,3 +1,5 @@
+import { blockBookingLoopback } from './booking-permissions.mjs';
+import { createBookingCaptchaTest } from './booking-captcha.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
@@ -86,7 +88,11 @@ try {
       releaseRequestGuard = async () => {
         for (const release of requestGuards.reverse()) await release().catch(() => {});
       };
+      const loopbackPermission = input.portal === 'booking'
+        ? await blockBookingLoopback(browser, input.automation?.deny_loopback !== false) : undefined;
+      const captchaTest = createBookingCaptchaTest(input);
       const loginHooks = {
+        loopbackPermission, captchaTest,
         registerBlockedValue: value => { blockedValues.push(value); },
         passwordTab: browserPurpose === 'fresh_login' ? async current => {
           const candidate = await controlledBookingPasswordPage(browser);

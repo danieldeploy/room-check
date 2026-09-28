@@ -1,3 +1,4 @@
+import { CAPTCHA_STATUSES } from './booking-captcha.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -25,6 +26,11 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
   const diagnostic = result.diagnostic;
   if (job.input.portal === 'booking' && typeof diagnostic?.cookie_consent_rejected === 'boolean') {
     receipt.cookie_consent_rejected = diagnostic.cookie_consent_rejected;
+  }
+  if (job.input.portal === 'booking') {
+    if (['blocked', 'disabled', 'unavailable'].includes(diagnostic?.loopback_permission))
+      receipt.loopback_permission = diagnostic.loopback_permission;
+    if (CAPTCHA_STATUSES.includes(diagnostic?.captcha_status)) receipt.captcha_status = diagnostic.captcha_status;
   }
   if (job.input.action === 'verify') {
     receipt.document_count = Array.isArray(result.documents) ? Math.min(result.documents.length, 100) : 0;

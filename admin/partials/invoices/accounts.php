@@ -43,6 +43,17 @@ if ($editing) {
 <fieldset <?= $a['portal']!=='email'?'data-auth-for="email"':'' ?> <?= $a['portal']!=='email' && $a['auth_method']!=='email'?'hidden disabled':'' ?>><h3><?= it($a['portal']==='email'?'mailbox_access':'method_email') ?></h3><details open><summary><?= it('advanced_email') ?></summary><div class="form-grid"><?php foreach (['imap_host','imap_user','imap_password','imap_mailbox','email_sender','email_recipient','email_subject'] as $field): ?><label class="field"><span><?= it($field) ?></span><input type="<?= $field==='imap_password'?'password':'text' ?>" name="<?= ie($field) ?>" autocomplete="new-password" maxlength="2048"></label><?php endforeach; ?></div></details></fieldset>
 <?php if ($a['portal']!=='email'): ?><fieldset data-auth-for="totp" <?= $a['auth_method']!=='totp'?'hidden disabled':'' ?>><h3><?= it('method_totp') ?></h3><p><?= it('totp_note') ?></p><label class="field"><span><?= it('totp_secret') ?></span><input type="password" name="totp_secret" autocomplete="new-password" maxlength="128"></label></fieldset><?php endif; ?>
 <div class="form-actions"><button class="primary-button"><?= it('save_credentials') ?></button></div></fieldset></form></details>
+<?php if ($a['portal']==='booking' && $vault): $automation=$repository->automationOptions($vault,$editId); ?>
+<details class="invoice-options"><summary><?= it('automation_options') ?></summary>
+<form method="post" autocomplete="off"><?php invoiceHidden('automation_options',$editId); ?>
+<label class="check-row"><input type="checkbox" name="deny_loopback" <?= $automation['deny_loopback']?'checked':'' ?>><span><?= it('deny_booking_loopback') ?></span></label>
+<p><?= it('captcha_test_note') ?></p>
+<label class="field"><span><?= it('captcha_test_mode') ?></span><select name="captcha_mode"><option value="disabled" <?= $automation['captcha_mode']==='disabled'?'selected':'' ?>><?= it('disabled') ?></option><option value="test" <?= $automation['captcha_mode']==='test'?'selected':'' ?>><?= it('captcha_manual_test') ?></option></select></label>
+<label class="field"><span><?= it('captcha_api_key') ?></span><input type="password" name="captcha_api_key" autocomplete="new-password" maxlength="32"></label>
+<p><?= it($automation['captcha_key_configured']?'captcha_key_saved':'captcha_key_missing') ?></p>
+<label class="check-row"><input type="checkbox" name="captcha_remove_key"><span><?= it('captcha_remove_key') ?></span></label>
+<div class="form-actions"><button class="primary-button"><?= it('save_automation_options') ?></button></div></form></details>
+<?php endif; ?>
 <form method="post"><?php invoiceHidden('login',$editId); ?><button class="primary-button" <?= !$repository->active($editId)?'disabled':'' ?>><?= it($a['portal']==='booking'?'booking_login':'login') ?></button></form>
 <?php if ($a['portal']==='booking' && $vault && $vault->has('account-'.$editId.'-login-diagnostic.enc')): $loginDraft=$vault->read('account-'.$editId.'-login-diagnostic.enc'); ?>
 <details class="invoice-options"><summary><?= it('login_diagnostic') ?></summary><pre class="invoice-diagnostic"><?= ie(json_encode($loginDraft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details>

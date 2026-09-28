@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } else {
             InvoiceService::assertGerente($currentUser);
             // Match the worker lock for changes to access, account membership and private files.
-            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','sms_token','schedule','approve_booking_map','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
+            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
                 if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
                 $locked=true;
                 if ($vault && $vault->has('windows-agent.enc')) {
@@ -124,11 +124,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
                 InvoiceBookingVerification::approve($pdo,$vault,$id,$period);
                 $returnTab='accounts'; $returnEdit=$id;
-            } elseif ($action==='credentials' || $action==='sms_token') {
+            } elseif ($action==='credentials' || $action==='sms_token' || $action==='automation_options') {
                 if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
                 if ($repository->lifecycle($id)['archived_at']) throw new RuntimeException('account_archived');
                 if ($action==='credentials') $repository->saveCredentials($vault,$id,$_POST);
+                elseif ($action==='automation_options') $repository->saveAutomationOptions($vault,$id,$_POST);
                 else $_SESSION['invoice_device_token']=['account'=>$id,'token'=>(new InvoiceAuth($pdo,$vault))->rotateSmsToken($id)];
                 $returnTab='accounts'; $returnEdit=$id;
             } elseif ($action==='schedule') {
