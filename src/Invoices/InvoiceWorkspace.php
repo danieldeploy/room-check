@@ -9,6 +9,14 @@ final class InvoiceWorkspace
     public const TASK_STATES = ['completed','failed','running','queued','retry','needs_auth','cancelled','waiting_auth'];
     public function __construct(private readonly PDO $pdo) {}
 
+    public static function diagnosticProperty(array $properties, mixed $selected = null): string
+    {
+        if (!$properties) throw new RuntimeException('properties_required');
+        if ($selected === null) return (string)array_key_first($properties);
+        if (!is_string($selected) || !array_key_exists($selected, $properties)) throw new RuntimeException('invalid_request');
+        return $selected;
+    }
+
     public static function filters(array $input): array
     {
         $period = (string)($input['period'] ?? (new DateTimeImmutable('first day of last month', new DateTimeZone('Europe/Lisbon')))->format('Y-m'));

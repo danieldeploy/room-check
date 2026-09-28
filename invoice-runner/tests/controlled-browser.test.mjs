@@ -50,6 +50,9 @@ test('fresh Booking login bounds CDP commands without changing the primary conne
   assert.deepEqual(controlledBrowserConnectOptions(endpoint, 'primary'), {
     browserWSEndpoint: endpoint, defaultViewport: null,
   });
+  for (const action of ['discover', 'collect']) assert.deepEqual(controlledBrowserConnectOptions(endpoint, 'fresh_login', action), {
+    browserWSEndpoint: endpoint, defaultViewport: null,
+  }, 'PDF fetches must retain the ordinary protocol timeout');
 });
 
 test('fixed persistent profiles keep their endpoint files and ports isolated',

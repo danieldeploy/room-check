@@ -10,6 +10,10 @@ test('URL hints omit credentials, query secrets and fragments', () => {
   assert.equal(publicLocation('booking', 'https://admin.booking.com/invoices/a1b2c3d4e5f6a7b8c9d0ef01?hotel_id=539828'),
     'https://admin.booking.com/invoices/:redacted?hotel_id=539828');
   assert.throws(() => publicLocation('booking', 'https://booking.com.evil.example/invoices'));
+  assert.equal(publicLocation('booking', 'https://admin.booking.com/manage/invoices.html?hotel_id=539828&ses=secret'),
+    'https://admin.booking.com/manage/invoices.html?hotel_id=539828');
+  assert.equal(publicLocation('booking', 'https://admin.booking.com/manage/abcdef0123456789abcdef.html?ses=secret'),
+    'https://admin.booking.com/manage/:redacted');
 });
 test('candidate selectors are restricted to simple stable identifiers', () => {
   assert.equal(candidateSelector('input', 'login-password'), '#login-password');

@@ -12,7 +12,8 @@ export function publicLocation(portal, value) {
   const pathname = url.pathname.split('/').map(segment => {
     if (!segment) return '';
     let decoded; try { decoded = decodeURIComponent(segment); } catch { return ':redacted'; }
-    return /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(decoded) && !/^[a-f0-9]{16,}$/i.test(decoded)
+    return ((/^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(decoded) && !/^[a-f0-9]{16,}$/i.test(decoded))
+      || ['home.html', 'index.html', 'invoices.html'].includes(decoded))
       ? segment : ':redacted';
   }).join('/');
   return url.origin + pathname + (allowed.size ? '?' + allowed : '');

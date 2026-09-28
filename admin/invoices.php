@@ -116,7 +116,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 if ($action==='discover' && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
                 if ($action==='login' && $repository->get($id)['portal']==='booking'
                     && (!$vault || (new InvoiceRemoteAgent($pdo,$config['invoices']))->mode()!=='windows')) throw new RuntimeException('agent_test_required');
-                $service->enqueue($action,(string)array_key_first($props),$period,(int)$currentUser['id'],null,$id);
+                $targetProperty=InvoiceWorkspace::diagnosticProperty($props,$action==='discover'?($_POST['diagnostic_property']??null):null);
+                $service->enqueue($action,$targetProperty,$period,(int)$currentUser['id'],null,$id);
                 $returnTab='activity'; $returnEdit=0; $message='requested';
             } elseif ($action==='credentials' || $action==='sms_token') {
                 if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');

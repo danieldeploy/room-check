@@ -2,6 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { navigateBookingInvoices } from '../booking-discovery.mjs';
 
+test('another property cannot reach Finance without a unique observed group entry', async () => {
+  const page = { url: () => 'https://admin.booking.com/manage/home.html?hotel_id=539828',
+    $$: async () => [], goto: async () => { throw new Error('unexpected navigation'); } };
+  assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'One' }, async () => {}),
+    'property_switch_missing');
+});
+
+test('switching properties returns through the observed group before the exact property link', async () => {
+  let step = 0;
+  const group = 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html?observed=fixture';
+  const target = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=539828';
+  const entry = { evaluate: async () => target, click: async () => { step = 2; } };
+  const row = { evaluate: async () => true, $$: async () => [entry] };
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  const page = { url: () => step === 0 ? target.replace('539828', '1140306') : step === 1 ? group : target,
+    goto: async href => { assert.equal(href, group); step = 1; }, waitForNavigation: async () => {},
+    $$: async selector => step === 0 ? [{ evaluate: async () => group }]
+      : selector === 'tr,[role="row"]' ? [row] : step === 2 ? [control('finance', 3)] : [control('invoices', 4)] };
+  const stages = [];
+  assert.equal(await navigateBookingInvoices(page, { property: '539828', propertyLabel: 'Two' },
+    async stage => stages.push(stage)), 'invoices_visible');
+  assert.deepEqual(stages, ['group', 'property', 'finance', 'invoices']);
+});
+
 test('Booking discovery stops before clicking an ambiguous property', async () => {
   let clicks = 0;
   const row = { evaluate: async () => true };

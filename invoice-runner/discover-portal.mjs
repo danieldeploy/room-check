@@ -4,6 +4,7 @@ import { SecondFactor } from './second-factor.mjs';
 import { PortalError } from './booking.mjs';
 import { navigateBookingInvoices } from './booking-discovery.mjs';
 import { sanitizeBookingLoginNameEvidence } from './booking-login-metadata.mjs';
+import { inspectBookingInvoices } from './booking-invoice-inspection.mjs';
 
 const fail = code => { throw new PortalError(code); };
 // Classify browser errors without ever returning their message, stack, or data
@@ -198,9 +199,11 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
           snapshots.push(await inspectPortalPage(page, portal));
         });
         if (navigationStage !== 'invoices_visible') snapshots.push(await inspectPortalPage(page, portal));
+        const invoiceInspection = navigationStage === 'invoices_visible' ? await inspectBookingInvoices(page, input) : undefined;
         return { version: 1, portal, validated: false, login_attempted: false,
           authenticated_session: true, navigation_stage: navigationStage,
-          location: publicLocation(portal, page.url()), snapshots: snapshots.slice(0, 6), responses };
+          location: publicLocation(portal, page.url()), snapshots: snapshots.slice(0, 6), responses,
+          invoice_inspection: invoiceInspection };
       }
     }
     if (authMethod === 'sms') await broker.prepare();

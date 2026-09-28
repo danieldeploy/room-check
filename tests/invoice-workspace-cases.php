@@ -5,6 +5,11 @@ $workspaceChecks=0;
 function checkWorkspace(bool $ok,string $label): void {global $workspaceChecks;if(!$ok)throw new RuntimeException($label);$workspaceChecks++;}
 function rejectWorkspace(callable $fn,string $code): void {try{$fn();}catch(RuntimeException $e){checkWorkspace($e->getMessage()===$code,'Expected '.$code);return;}throw new RuntimeException('Expected rejection: '.$code);}
 $accounts=new InvoiceAccounts($pdo);$service=new InvoiceService($pdo);$workspace=new InvoiceWorkspace($pdo);
+checkWorkspace(InvoiceWorkspace::diagnosticProperty(['1140306'=>'One','539828'=>'Two'])==='1140306','Legacy diagnostics default to the first associated property');
+checkWorkspace(InvoiceWorkspace::diagnosticProperty(['1140306'=>'One','539828'=>'Two'],'539828')==='539828','Diagnostics can select the second associated property');
+rejectWorkspace(fn()=>InvoiceWorkspace::diagnosticProperty(['1140306'=>'One'],'539828'),'invalid_request');
+rejectWorkspace(fn()=>InvoiceWorkspace::diagnosticProperty(['1140306'=>'One'],['1140306']),'invalid_request');
+rejectWorkspace(fn()=>InvoiceWorkspace::diagnosticProperty([]),'properties_required');
 $wa=$accounts->create('booking','Workspace A',['wa'=>'One','wb'=>'Two','wc'=>'Three'],'password');
 $wb=$accounts->create('booking','Workspace B',['wa'=>'Different property'],'password');
 checkWorkspace($accounts->active($wa)&&!(int)$accounts->get($wa)['enabled'],'Manual activity is independent of schedule');

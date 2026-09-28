@@ -48,7 +48,7 @@ if ($editing) {
 <details class="invoice-options"><summary><?= it('login_diagnostic') ?></summary><pre class="invoice-diagnostic"><?= ie(json_encode($loginDraft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details>
 <?php endif; ?>
 <?php if ($vault && $a['portal']!=='email'): ?>
-<form method="post"><?php invoiceHidden('discover',$editId); ?><button class="invoice-secondary" <?= !$repository->active($editId) || ($agentStatus['mode'] ?? '')!=='windows'?'disabled':'' ?>><?= it('discover_map') ?></button></form>
+<form method="post"><?php invoiceHidden('discover',$editId); ?><label class="field"><span><?= it('property') ?></span><select name="diagnostic_property"><?php foreach ($repository->collectionProperties($editId) as $propertyId=>$propertyLabel): ?><option value="<?= ie($propertyId) ?>"><?= ie($propertyLabel) ?></option><?php endforeach; ?></select></label><button class="invoice-secondary" <?= !$repository->active($editId) || ($agentStatus['mode'] ?? '')!=='windows'?'disabled':'' ?>><?= it('discover_map') ?></button></form>
 <?php $draftFile='account-'.$editId.'-map-diagnostic.enc'; if ($vault->has($draftFile)): $draft=$vault->read($draftFile); ?>
 <details class="invoice-options"><summary><?= it('map_diagnostic') ?></summary><p><?= it('map_diagnostic_note') ?></p><pre class="invoice-diagnostic"><?= ie(json_encode($draft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details>
 <?php endif; endif; ?>
