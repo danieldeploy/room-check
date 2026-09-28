@@ -30,6 +30,7 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $data 'agent.dpapi'))) { throw 'Protected configuration missing.' }
     # Exercise the real launcher with a local fixture that validates its private stdin.
     Copy-Item (Join-Path $repo 'invoice-runner\windows\Run-Agent.ps1') $scripts
+    Copy-Item (Join-Path $repo 'invoice-runner\windows\Agent-Job.ps1') $scripts
     Copy-Item (Join-Path $repo 'invoice-runner\windows\Test-PrivateDirectory.ps1') $scripts
     Copy-Item (Join-Path $repo 'tests\invoice-pairing-windows.mjs') (Join-Path $installed 'app\windows-agent.mjs')
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $scripts 'Run-Agent.ps1') -TestOnly

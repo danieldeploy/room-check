@@ -173,6 +173,7 @@ jobs:
           }
           & tests/invoice-agent-windows.ps1
           & tests/invoice-pairing-windows.ps1
+          & tests/invoice-agent-job-windows.ps1
       - name: Test agent protocol
         run: node --test invoice-runner/tests/*.test.mjs
       - name: Install locked runner and Chrome

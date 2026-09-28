@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceCompany.php';
 require_once __DIR__.'/InvoiceService.php';
+require_once __DIR__.'/InvoicePdfText.php';
 
 /** Explicit full-document verification, separate from structural diagnostics. */
 final class InvoiceBookingVerification
@@ -14,20 +15,7 @@ final class InvoiceBookingVerification
 
     public static function pdfText(string $file): string
     {
-        if (!function_exists('proc_open')) return '';
-        $process=@proc_open(['pdftotext','-layout','-enc','UTF-8',$file,'-'],
-            [0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['file','/dev/null','a']],$pipes);
-        if (!is_resource($process)) return '';
-        stream_set_blocking($pipes[1],false); $text=''; $deadline=microtime(true)+10; $status=null;
-        do {
-            $text.=stream_get_contents($pipes[1]); $status=proc_get_status($process);
-            if (!$status['running']) break;
-            usleep(10000);
-        } while (microtime(true)<$deadline && strlen($text)<5*1024*1024);
-        if ($status['running']) { proc_terminate($process,9); $text=''; }
-        else $text.=stream_get_contents($pipes[1]);
-        fclose($pipes[1]); proc_close($process);
-        return !$status['running'] && $status['exitcode']===0 && strlen($text)<5*1024*1024 ? $text : '';
+        return InvoicePdfText::read($file);
     }
 
     public static function issueDates(string $text): array

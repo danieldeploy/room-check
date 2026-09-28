@@ -32,6 +32,8 @@ function runBookingVerificationChecks(callable $check): void
     try {
         file_put_contents($file,bookingVerificationFixture('1140306'));
         $check(!in_array(false,InvoiceBookingVerification::checkPdf($file,'1140306',$meta,'2026-08'),true),'A complete generated PDF is parsed and checked');
+        $fallback=InvoicePdfText::read($file,false);
+        $check(!in_array(false,InvoiceBookingVerification::checkText($fallback,'1140306',$meta,'2026-08'),true),'The PHP parser verifies the same complete PDF without a system executable');
         file_put_contents($file,substr(bookingVerificationFixture('1140306'),0,-10));
         $check(!InvoiceBookingVerification::checkPdf($file,'1140306',$meta,'2026-08')['complete_pdf'],'A truncated signature-only PDF cannot pass');
     } finally { unlink($file); }

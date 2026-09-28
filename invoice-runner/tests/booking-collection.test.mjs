@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bookingStructure, collectBookingInvoices, validateBookingCollectionMap } from '../booking-collection.mjs';
+import { pdfContent } from '../portal.mjs';
 
 const input = { accountId: 1, portal: 'booking', property: '1140306', period: '2026-08', periodBasis: 'issue_month' };
 const headers = ['Type', 'Number', 'Date', 'Period', 'Due date', 'Paid', 'Status', 'Amount'];
@@ -74,4 +75,25 @@ test('map approval is bound to account, portal, property and issue-month semanti
   for (const changed of [{...map,validated:false},{...map,accountId:2},{...map,portal:'other'},{...map,properties:{}}])
     assert.throws(()=>validateBookingCollectionMap(changed,input),/connector_unconfigured/);
   assert.throws(()=>validateBookingCollectionMap(map,{...input,periodBasis:'service_month'}),/connector_unconfigured/);
+});
+
+test('full-download trace identifies rejected responses without retaining their body', async () => {
+  const original = globalThis.fetch;
+  const page = { url: () => 'https://admin.booking.com/invoices', evaluate: (fn, ...args) => fn(...args) };
+  try {
+    for (const [status, body, signature] of [[200, '%PDF-1.7 fixture\n%%EOF', true], [200, 'PRIVATE_ERROR_BODY', false], [403, 'PRIVATE_ERROR_BODY', false]]) {
+      globalThis.fetch = async () => new Response(body, { status });
+      let trace;
+      const content = await pdfContent(page, url('fixture'), 'booking', value => { trace = value; });
+      assert.equal(trace.status, status); assert.equal(trace.signature, signature);
+      assert.equal(content, signature ? Buffer.from(body).toString('base64') : null);
+      assert.equal(JSON.stringify(trace).includes(body), false);
+      assert.equal(trace.complete, status === 200);
+    }
+    globalThis.fetch = async () => new Response(new Uint8Array(20 * 1024 * 1024 + 1));
+    let oversized;
+    assert.equal(await pdfContent(page, url('fixture'), 'booking', value => { oversized = value; }), null);
+    assert.equal(oversized.complete, false);
+    assert.equal(oversized.bytes, 20 * 1024 * 1024 + 1);
+  } finally { globalThis.fetch = original; }
 });

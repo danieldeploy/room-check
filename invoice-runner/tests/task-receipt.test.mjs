@@ -61,3 +61,19 @@ test('accepted completion stores only a private atomic receipt', async () => {
     await assert.rejects(fs.access(path.join(root, 'task-47-receipt.json')));
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test('verification receipts distinguish runner failure from server rejection without invoice values', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'invoice-receipt-'));
+  try {
+    const job = { id: 52, input: { action: 'verify', portal: 'booking' } };
+    const result = { code: 'ok', documents: [{ content: 'PRIVATE_PDF', number: 'PRIVATE_NUMBER' }],
+      collection_trace: { stage: 'complete', url: 'PRIVATE_URL', download: { status: 200, signature: true, complete: true, bytes: 100, body: 'PRIVATE_BODY' } } };
+    await writeTaskReceipt(root, job, result, { accepted: true, state: 'failed' });
+    const raw = await fs.readFile(path.join(root, 'task-52-receipt.json'), 'utf8');
+    const receipt = JSON.parse(raw);
+    assert.equal(receipt.code, 'ok'); assert.equal(receipt.state, 'failed');
+    assert.equal(receipt.document_count, 1); assert.equal(receipt.stage, 'complete');
+    assert.deepEqual(receipt.download, { status: 200, signature: true, complete: true, bytes: 100 });
+    assert.equal(raw.includes('PRIVATE_'), false);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
