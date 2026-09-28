@@ -4,6 +4,10 @@ const labels = {
   finance: ['finance', 'finanças', 'financial'],
   invoices: ['invoices', 'faturas', 'invoices and payments', 'invoices and documents'],
 };
+const propertyEntryPaths = new Set([
+  '/hotel/hoteladmin/extranet_ng/manage/home.html',
+  '/hotel/hoteladmin/extranet_ng/manage/index.html',
+]);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function clickAndSettle(page, element) {
   const navigation = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 6000 }).catch(() => {});
@@ -131,7 +135,7 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
     }
     const entry = allowed.filter(item => {
       const u = new URL(item.href);
-      return u.hostname === 'admin.booking.com' && u.pathname === '/hotel/hoteladmin/extranet_ng/manage/home.html'
+      return u.hostname === 'admin.booking.com' && propertyEntryPaths.has(u.pathname)
         && u.searchParams.get('hotel_id') === property;
     });
     const exact = [...new Map(entry.map(item => [item.href, item])).values()];
@@ -164,7 +168,7 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
         try {
           const u = portalUrl('booking', candidate);
           if (u.hostname === 'admin.booking.com'
-              && u.pathname === '/hotel/hoteladmin/extranet_ng/manage/home.html'
+              && propertyEntryPaths.has(u.pathname)
               && u.searchParams.get('hotel_id') === property) observed.add(candidate);
         } catch { /* reject unexpected destination */ }
       }

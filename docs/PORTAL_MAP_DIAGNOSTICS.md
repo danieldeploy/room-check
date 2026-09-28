@@ -25,6 +25,8 @@ aberta noutra casa regressa por uma ligação de grupo observada na página. Se 
 página de faturas omitir essa ligação, volta uma vez à entrada pública Booking
 já usada no login, mantendo a sessão. Só prossegue se o portal permitir escolher
 a casa pedida; nunca constrói URLs privados nem altera tokens para trocar de casa.
+São aceites as entradas observadas `manage/home.html` e `manage/index.html`,
+sempre com o `hotel_id` exato. Ligações de mensagens ou reservas não são entradas.
 Ao regressar ao grupo, espera pelas leituras das respostas observadas nessa
 página antes de resolver a ligação da casa. Não exige repetir a tarefa para
 aproveitar uma resposta que ainda estava a chegar na primeira execução.
