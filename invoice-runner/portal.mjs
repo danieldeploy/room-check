@@ -108,23 +108,23 @@ export async function pdfContent(page, value, portal, report = null) {
   const result = await page.evaluate(async (href, detailed) => {
     const response = await fetch(href, { credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(30000) });
     const check = { status: response.status, signature: false, complete: false, bytes: 0 };
-    const done = content => detailed ? { content, check } : content;
-    if (!response.ok || Number(response.headers.get('content-length')) > 20 * 1024 * 1024) return done(null);
+    const downloadResult = content => detailed ? { content, check } : content;
+    if (!response.ok || Number(response.headers.get('content-length')) > 20 * 1024 * 1024) return downloadResult(null);
     const reader = response.body.getReader(); const parts = []; let length = 0;
     for (;;) {
       const { value, done } = await reader.read(); if (done) break;
       length += value.length;
       check.bytes = length;
-      if (length > 20 * 1024 * 1024) { await reader.cancel(); return done(null); }
+      if (length > 20 * 1024 * 1024) { await reader.cancel(); return downloadResult(null); }
       parts.push(value);
     }
     const bytes = new Uint8Array(length); let offset = 0;
     for (const part of parts) { bytes.set(part, offset); offset += part.length; }
     check.complete = true;
     check.signature = new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
-    if (!check.signature) return done(null);
+    if (!check.signature) return downloadResult(null);
     let text = ''; for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
-    return done(btoa(text));
+    return downloadResult(btoa(text));
   }, url.href, typeof report === 'function');
   if (typeof report === 'function') { report(result.check); return result.content; }
   return result;

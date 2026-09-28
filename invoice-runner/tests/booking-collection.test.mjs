@@ -90,5 +90,10 @@ test('full-download trace identifies rejected responses without retaining their 
       assert.equal(JSON.stringify(trace).includes(body), false);
       assert.equal(trace.complete, status === 200);
     }
+    globalThis.fetch = async () => new Response(new Uint8Array(20 * 1024 * 1024 + 1));
+    let oversized;
+    assert.equal(await pdfContent(page, url('fixture'), 'booking', value => { oversized = value; }), null);
+    assert.equal(oversized.complete, false);
+    assert.equal(oversized.bytes, 20 * 1024 * 1024 + 1);
   } finally { globalThis.fetch = original; }
 });
