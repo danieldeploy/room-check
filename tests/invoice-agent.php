@@ -4,5 +4,6 @@ declare(strict_types=1);
 require __DIR__.'/invoices.php';
 $pdo->exec('DROP TABLE invoice_auth_challenges');
 $pdo->exec("CREATE TABLE invoice_auth_challenges (id TEXT PRIMARY KEY,account_id INTEGER,task_id INTEGER,method TEXT,state TEXT DEFAULT 'waiting',created_at TEXT,expires_at TEXT,consumed_at TEXT,event_hash TEXT UNIQUE)");
+$pdo->exec("CREATE TABLE invoice_document_delivery (document_id INTEGER PRIMARY KEY,company_state TEXT DEFAULT 'review',company_name TEXT,drive_state TEXT DEFAULT 'pending',toconline_state TEXT DEFAULT 'pending',attempts INTEGER DEFAULT 0)");
 require __DIR__.'/invoice-agent-cases.php';
 runInvoiceAgentCases($pdo);
