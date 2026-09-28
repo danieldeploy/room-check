@@ -129,11 +129,13 @@ test('permission denial is scoped and failure never broadens permission changes'
   const browser = { target: () => ({ createCDPSession: async () => ({
     send: async (method, params) => commands.push({ method, params }), detach: async () => {},
   }) }) };
-  assert.equal(await blockBookingLoopback(browser), 'blocked');
+  const permission = await blockBookingLoopback(browser);
+  assert.equal(permission.status, 'blocked');
   assert.deepEqual(commands.map(c => c.params.origin), [...BOOKING_AUTH_ORIGINS]);
   assert.ok(commands.every(c => c.method === 'Browser.setPermission'
     && c.params.permission.name === 'loopback-network' && c.params.setting === 'denied'));
-  assert.equal(await blockBookingLoopback(browser, false), 'disabled');
+  assert.equal((await blockBookingLoopback(browser, false)).status, 'disabled');
   assert.equal(commands.length, 3);
-  assert.equal(await blockBookingLoopback({ target() { throw new Error('private error'); } }), 'unavailable');
+  assert.equal((await blockBookingLoopback({ target() { throw new Error('private error'); } })).status, 'unavailable');
+  await permission.release();
 });

@@ -9,6 +9,7 @@ export async function testBookingAutomation(browser) {
   // The production helper targets the default profile. Use a new default page.
   const page = await browser.newPage();
   let sent = 0;
+  let permission;
   await page.setRequestInterception(true);
   page.on('request', request => {
     const url = new URL(request.url());
@@ -22,7 +23,8 @@ export async function testBookingAutomation(browser) {
     void request.respond({ status: 200, contentType: 'text/html', body });
   });
   try {
-    assert.equal(await blockBookingLoopback(browser), 'blocked');
+    permission = await blockBookingLoopback(browser);
+    assert.equal(permission.status, 'blocked');
     await page.goto('https://account.booking.com/sign-in?op_token=fixture-private');
     assert.equal(await page.evaluate(async () => (await navigator.permissions.query({ name: 'loopback-network' })).state), 'denied');
     // An unrelated origin must not inherit Booking's override.
@@ -45,5 +47,8 @@ export async function testBookingAutomation(browser) {
     assert.equal(sent, 1);
     for (const secret of ['fixture-private', 'fixture-token', 'fixture-key', 'synthetic-password'])
       assert.equal(JSON.stringify(result).includes(secret), false);
-  } finally { await page.close(); await context.close(); }
+    await permission.release();
+    await page.goto('https://account.booking.com/sign-in');
+    assert.equal(await page.evaluate(async () => (await navigator.permissions.query({ name: 'loopback-network' })).state), 'prompt');
+  } finally { if (permission) await permission.release(); await page.close(); await context.close(); }
 }

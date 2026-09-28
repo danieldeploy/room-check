@@ -4,7 +4,7 @@ export const BOOKING_AUTH_ORIGINS = Object.freeze([
 
 // Native Chrome permission: no page button/coordinates, no global permission reset.
 export async function blockBookingLoopback(browser, enabled = true) {
-  if (!enabled) return 'disabled';
+  if (!enabled) return { status: 'disabled', release: async () => {} };
   let session;
   try {
     session = await browser.target().createCDPSession();
@@ -13,7 +13,9 @@ export async function blockBookingLoopback(browser, enabled = true) {
         permission: { name: 'loopback-network' }, setting: 'denied', origin,
       });
     }
-    return 'blocked';
-  } catch { return 'unavailable'; }
-  finally { if (session) await session.detach().catch(() => {}); }
+    return { status: 'blocked', release: () => session.detach().catch(() => {}) };
+  } catch {
+    if (session) await session.detach().catch(() => {});
+    return { status: 'unavailable', release: async () => {} };
+  }
 }

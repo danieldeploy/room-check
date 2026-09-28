@@ -14,6 +14,7 @@ let profile;
 let connected = false;
 let controlledPage;
 let releaseRequestGuard;
+let releasePermission;
 let closing;
 let collectionTrace;
 async function cleanup() {
@@ -21,6 +22,7 @@ async function cleanup() {
   closing = (async () => {
     if (browser) {
       if (releaseRequestGuard) await releaseRequestGuard().catch(() => {});
+      if (releasePermission) await releasePermission().catch(() => {});
       if (connected) {
         if (controlledPage) await controlledPage.close().catch(() => {});
         browser.disconnect();
@@ -90,9 +92,10 @@ try {
       };
       const loopbackPermission = input.portal === 'booking'
         ? await blockBookingLoopback(browser, input.automation?.deny_loopback !== false) : undefined;
+      releasePermission = loopbackPermission?.release;
       const captchaTest = createBookingCaptchaTest(input);
       const loginHooks = {
-        loopbackPermission, captchaTest,
+        loopbackPermission: loopbackPermission?.status, captchaTest,
         registerBlockedValue: value => { blockedValues.push(value); },
         passwordTab: browserPurpose === 'fresh_login' ? async current => {
           const candidate = await controlledBookingPasswordPage(browser);
