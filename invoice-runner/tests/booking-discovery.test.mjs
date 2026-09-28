@@ -2,14 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { navigateBookingInvoices } from '../booking-discovery.mjs';
 
-test('another property cannot reach Finance without a unique observed group entry', async () => {
+test('public entry cannot lead to Finance while the wrong property remains selected', async () => {
+  const visits = [];
   const page = { url: () => 'https://admin.booking.com/manage/home.html?hotel_id=539828',
-    $$: async () => [], goto: async () => { throw new Error('unexpected navigation'); } };
+    $$: async () => [], goto: async url => { visits.push(url); } };
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'One' }, async () => {}),
-    'property_switch_missing');
+    'property_navigation');
+  assert.deepEqual(visits, ['https://admin.booking.com/']);
 });
 
-test('switching properties returns through the observed group before the exact property link', async () => {
+for (const hasGroupLink of [true, false]) test(`switching properties uses ${hasGroupLink ? 'the observed group link' : 'the public entry'} before the exact property link`, async () => {
   let step = 0;
   const group = 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html?observed=fixture';
   const target = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=539828';
@@ -18,13 +20,22 @@ test('switching properties returns through the observed group before the exact p
   const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
     click: async () => { step = next; } });
   const page = { url: () => step === 0 ? target.replace('539828', '1140306') : step === 1 ? group : target,
-    goto: async href => { assert.equal(href, group); step = 1; }, waitForNavigation: async () => {},
-    $$: async selector => step === 0 ? [{ evaluate: async () => group }]
+    goto: async href => { assert.equal(href, hasGroupLink ? group : 'https://admin.booking.com/'); step = 1; }, waitForNavigation: async () => {},
+    $$: async selector => step === 0 ? (hasGroupLink ? [{ evaluate: async () => group }] : [])
       : selector === 'tr,[role="row"]' ? [row] : step === 2 ? [control('finance', 3)] : [control('invoices', 4)] };
   const stages = [];
   assert.equal(await navigateBookingInvoices(page, { property: '539828', propertyLabel: 'Two' },
     async stage => stages.push(stage)), 'invoices_visible');
   assert.deepEqual(stages, ['group', 'property', 'finance', 'invoices']);
+});
+
+test('ambiguous group entries are never resolved by choosing one or returning to the public entry', async () => {
+  const page = { url: () => 'https://admin.booking.com/manage/home.html?hotel_id=1140306',
+    $$: async () => ['one', 'two'].map(id => ({ evaluate: async () =>
+      `https://admin.booking.com/hotel/hoteladmin/groups/home/index.html?fixture=${id}` })),
+    goto: async () => { throw new Error('must not navigate'); } };
+  assert.equal(await navigateBookingInvoices(page, { property: '539828', propertyLabel: 'Two' }, async () => {}),
+    'property_switch_ambiguous');
 });
 
 test('Booking discovery stops before clicking an ambiguous property', async () => {

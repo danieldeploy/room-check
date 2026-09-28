@@ -86,8 +86,12 @@ export async function navigateBookingInvoices(page, input, onStep) {
           groups.set(candidate.href, candidate.href);
       } catch { /* Follow only a group entry observed in this authenticated page. */ }
     }
-    if (groups.size !== 1) return 'property_switch_missing';
-    await page.goto([...groups.values()][0], { waitUntil: 'domcontentloaded' });
+    if (groups.size > 1) return 'property_switch_ambiguous';
+    // Invoice pages may omit a group link. Re-enter through the same public
+    // Booking entry used for sign-in; authenticated cookies remain in place.
+    // Never construct another property's URL or alter an in-browser token.
+    await page.goto(groups.size === 1 ? [...groups.values()][0] : 'https://admin.booking.com/',
+      { waitUntil: 'domcontentloaded' });
     await onStep('group');
     url = portalUrl('booking', page.url());
   }
