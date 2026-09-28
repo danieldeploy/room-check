@@ -75,6 +75,22 @@ export async function navigateBookingInvoices(page, input, onStep) {
   const label = String(input.propertyLabel || '').trim();
   if (!/^\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
   let url = portalUrl('booking', page.url());
+  if (url.hostname === 'admin.booking.com' && !url.pathname.includes('/groups/home')
+      && url.searchParams.get('hotel_id') !== property) {
+    const groups = new Map();
+    for (const link of await page.$$('a[href]')) {
+      const href = await link.evaluate(el => el.href);
+      try {
+        const candidate = portalUrl('booking', href);
+        if (candidate.hostname === 'admin.booking.com' && candidate.pathname.startsWith('/hotel/hoteladmin/groups/home/'))
+          groups.set(candidate.href, candidate.href);
+      } catch { /* Follow only a group entry observed in this authenticated page. */ }
+    }
+    if (groups.size !== 1) return 'property_switch_missing';
+    await page.goto([...groups.values()][0], { waitUntil: 'domcontentloaded' });
+    await onStep('group');
+    url = portalUrl('booking', page.url());
+  }
   if (url.hostname === 'admin.booking.com' && url.pathname.includes('/groups/home')) {
     // The group table is populated asynchronously after DOMContentLoaded.
     if (typeof page.waitForFunction === 'function') {
@@ -155,7 +171,7 @@ export async function navigateBookingInvoices(page, input, onStep) {
     await onStep('property');
   }
   url = portalUrl('booking', page.url());
-  if (url.hostname !== 'admin.booking.com') return 'property_navigation';
+  if (url.hostname !== 'admin.booking.com' || url.searchParams.get('hotel_id') !== property) return 'property_navigation';
   await waitForControl(page, labels.finance);
   let finance = await uniqueControl(page, labels.finance);
   if (!finance && await revealNavigationGroup(page, labels.finance)) {
@@ -172,5 +188,7 @@ export async function navigateBookingInvoices(page, input, onStep) {
   if (invoices.info.href) portalUrl('booking', invoices.info.href);
   await clickAndSettle(page, invoices.control);
   await onStep('invoices');
+  url = portalUrl('booking', page.url());
+  if (url.hostname !== 'admin.booking.com' || url.searchParams.get('hotel_id') !== property) return 'property_navigation';
   return 'invoices_visible';
 }

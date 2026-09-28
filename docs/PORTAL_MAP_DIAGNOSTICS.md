@@ -18,8 +18,18 @@ O Gerente pode pedir **Observar portal e preparar mapa** em Portais e contas.
 A tarefa usa o agente Windows já emparelhado e as credenciais guardadas no cofre.
 Para Booking, começa em `https://admin.booking.com/`, aceita apenas destinos
 Booking, identifica um único campo de utilizador/password e um único campo SMS
-reconhecível. Se a estrutura for ambígua, pára com erro; não tenta CAPTCHA nem
-faz download de documentos. O rascunho fica cifrado no cofre e é mostrado apenas
+reconhecível. Se a estrutura for ambígua, pára com erro; não tenta CAPTCHA.
+O Gerente escolhe um alojamento associado à conta para cada observação. Antes de
+entrar nas finanças, a navegação confirma o `hotel_id` selecionado; uma sessão
+aberta noutra casa regressa apenas por uma ligação de grupo observada na página.
+Na página de faturas Booking, a observação classifica cabeçalhos, formatos de
+data, contagens e controlos de paginação. Uma data genérica não é tratada como
+data de emissão. Pode ler um PDF da mesma origem e alojamento, dando preferência
+ao mês de emissão pedido, com limite de 20 MiB/30 segundos e sem redirecionamentos.
+Só guarda o resultado da assinatura PDF; nunca guarda bytes, números, datas
+concretas, valores ou ligações com tokens no diagnóstico. Esta leitura não importa
+a fatura e não prova a paginação: ambos continuam por validar.
+O rascunho fica cifrado no cofre e é mostrado apenas
 ao Gerente. Este diagnóstico não marca o acesso como validado nem liga a agenda.
 
 A inspeção estrutural é comum aos portais permitidos, mas cada portal precisa

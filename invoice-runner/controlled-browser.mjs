@@ -17,9 +17,9 @@ export function usesControlledBrowser(input) {
     && ['login', 'discover', 'collect'].includes(input.action);
 }
 
-export function controlledBrowserConnectOptions(endpoint, purpose) {
+export function controlledBrowserConnectOptions(endpoint, purpose, action = 'login') {
   return { browserWSEndpoint: endpoint, defaultViewport: null,
-    ...(purpose === 'fresh_login' ? { protocolTimeout: 30000 } : {}) };
+    ...(purpose === 'fresh_login' && action === 'login' ? { protocolTimeout: 30000 } : {}) };
 }
 
 export async function controlledBrowserEndpoint(root, purpose = 'primary') {

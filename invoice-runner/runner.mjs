@@ -59,7 +59,7 @@ try {
     connected = usesControlledBrowser(input);
     if (connected) {
       browser = await puppeteer.connect(controlledBrowserConnectOptions(
-        await controlledBrowserEndpoint(root, browserPurpose), browserPurpose));
+        await controlledBrowserEndpoint(root, browserPurpose), browserPurpose, input.action));
     } else {
       profile = await fs.mkdtemp(path.join(root, '.browser-'));
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
