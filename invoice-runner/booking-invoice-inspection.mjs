@@ -6,10 +6,13 @@ const normalize = value => String(value || '').trim().replace(/\s+/g, ' ').toLow
 const columnNames = {
   issue_date: ['invoice date', 'issue date', 'date issued', 'data de emissão', 'data da fatura'],
   date: ['date', 'data'],
-  number: ['invoice number', 'document number', 'invoice no.', 'número da fatura', 'número do documento'],
+  due_date: ['due date', 'payment due date', 'data de vencimento'],
+  number: ['number', 'invoice number', 'document number', 'invoice no.', 'número', 'número da fatura', 'número do documento'],
+  document_type: ['type', 'document type', 'tipo', 'tipo de documento'],
   period: ['invoice period', 'period', 'período', 'período da fatura'],
   document: ['document', 'documents', 'download', 'documento', 'documentos'],
   amount: ['amount', 'total', 'invoice amount', 'valor'],
+  balance: ['balance', 'outstanding balance', 'saldo', 'saldo em dívida'],
   status: ['status', 'payment status', 'estado'],
 };
 const classify = value => Object.entries(columnNames).find(([, names]) => names.includes(normalize(value)))?.[0] || 'unknown';

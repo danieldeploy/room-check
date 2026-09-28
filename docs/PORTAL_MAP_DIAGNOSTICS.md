@@ -21,7 +21,10 @@ Booking, identifica um único campo de utilizador/password e um único campo SMS
 reconhecível. Se a estrutura for ambígua, pára com erro; não tenta CAPTCHA.
 O Gerente escolhe um alojamento associado à conta para cada observação. Antes de
 entrar nas finanças, a navegação confirma o `hotel_id` selecionado; uma sessão
-aberta noutra casa regressa apenas por uma ligação de grupo observada na página.
+aberta noutra casa regressa por uma ligação de grupo observada na página. Se a
+página de faturas omitir essa ligação, volta uma vez à entrada pública Booking
+já usada no login, mantendo a sessão. Só prossegue se o portal permitir escolher
+a casa pedida; nunca constrói URLs privados nem altera tokens para trocar de casa.
 Na página de faturas Booking, a observação classifica cabeçalhos, formatos de
 data e controlos de paginação, sem persistir contagens de faturas ou documentos.
 Uma data genérica não é tratada como

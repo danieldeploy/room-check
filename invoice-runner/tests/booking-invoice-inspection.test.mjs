@@ -37,6 +37,14 @@ test('generic or ambiguous date headers cannot establish an issue month', async 
     assert.equal(result.sample_matches_issue_month, false);
   }
 });
+
+test('document number, service period and due date remain distinct from a generic date', async () => {
+  const result = await inspectBookingInvoices(pageFor(
+    ['Type', 'Number', 'Date', 'Period', 'Due date', 'Total', 'Status', 'Balance'], []), input);
+  assert.deepEqual(result.tables[0].columns.map(c => c.kind),
+    ['document_type', 'number', 'date', 'period', 'due_date', 'amount', 'status', 'balance']);
+  assert.equal(result.tables[0].issue_date_unambiguous, false);
+});
 test('a mismatched property never reads table values or retrieves a document', async () => {
   const result = await inspectBookingInvoices({ url: () => location.replace('1140306', '539828'),
     evaluate: async () => { throw new Error('must not read another property'); } }, input);
