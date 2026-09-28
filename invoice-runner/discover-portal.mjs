@@ -57,6 +57,15 @@ async function uniqueInput(page, predicate) {
   }
   return matches.length === 1 ? matches[0] : null;
 }
+async function clearInput(page, input) {
+  await input.focus();
+  // Puppeteer press() accepts one key, not a chord string such as Control+A.
+  await page.keyboard.down('Control');
+  try { await page.keyboard.press('A'); }
+  finally { await page.keyboard.up('Control'); }
+  await input.press('Backspace');
+  if (await input.evaluate(el => document.activeElement === el && el.value.length === 0) !== true) fail('portal_changed');
+}
 async function submit(page, field, portal, identifierStep = false, onPhase = () => {}, keyboardIdentifier = false) {
   if (!field.info.action) fail('auth_unconfigured');
   portalUrl(portal, field.info.action);
@@ -174,8 +183,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
     if (!await dismissCookies()) return;
     // Rejecting the banner moves focus. Refill only before the first submit,
     // since its appearance may also have intercepted some typing.
-    await field.press('Control+A');
-    await field.press('Backspace');
+    await clearInput(page, field);
     await field.type(value);
   };
   const smsSignals = () => portal === 'booking' && loginOnly
@@ -307,10 +315,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         if (activePasswordStep) {
           // The password tab is persistent. Focus and clear through real keyboard
           // events so reruns never append a secret to a retained field value.
-          await password.input.press('Control+A');
-          await password.input.press('Backspace');
-          const cleared = await password.input.evaluate(el => document.activeElement === el && el.value.length === 0);
-          if (cleared !== true) fail('portal_changed');
+          await clearInput(page, password.input);
         }
         await password.input.type(credentials.password); passwordSent = true;
         await restoreTypingAfterCookies(password.input, credentials.password);

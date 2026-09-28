@@ -21,7 +21,7 @@ export async function testBookingCookieConsent(browser) {
       }, 100);</script>`;
     if (url.hostname === 'auth.booking.com') body = `<!doctype html><title>Synthetic password</title>
       <form action="https://admin.booking.com/hotel/hoteladmin/groups/home/">
-        <input type="password" autocomplete="current-password"><button type="submit">Sign in</button>
+        <input type="password" autocomplete="current-password" value="stale-fixture"><button type="submit">Sign in</button>
       </form>`;
     void request.respond({ status: 200, contentType: 'text/html', body });
   });
