@@ -201,3 +201,34 @@ test('Booking discovery does not choose between ambiguous overflow menus', async
 test('Booking discovery does not mistake the whole navigation bar for a menu group', async () => {
   assert.deepEqual(await overflowScenario(2, true), { result: 'finance_missing', clicks: [] });
 });
+
+async function menuBadgeScenario({ hidden = false, nested = false } = {}) {
+  let step = 0;
+  const clicks = [];
+  const financeNode = { tagName: 'BUTTON', innerText: 'Finance\nNew', textContent: 'FinanceNew',
+    getClientRects: () => [1], disabled: false, getAttribute: () => null,
+    matches: () => true };
+  financeNode.querySelectorAll = () => [{ children: [], innerText: 'Finance',
+    getClientRects: () => hidden ? [] : [1], closest: () => nested ? {} : financeNode }];
+  const finance = { evaluate: async (fn, arg) => fn(financeNode, arg),
+    click: async () => { clicks.push('finance'); step = 1; } };
+  const invoices = { evaluate: async () => ({ visible: true, label: 'invoices and documents', href: null }),
+    click: async () => clicks.push('invoices') };
+  const page = {
+    url: () => 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
+    waitForNavigation: async () => {},
+    $$: async selector => selector === '.ext-navigation-top-item__link' ? [] : step ? [invoices] : [finance],
+  };
+  const result = await navigateBookingInvoices(page,
+    { property: '1140306', propertyLabel: 'Welcome Guest House' }, async () => {});
+  return { result, clicks };
+}
+
+test('Booking menu labels remain identifiable beside a notification badge', async () => {
+  assert.deepEqual(await menuBadgeScenario(), { result: 'invoices_visible', clicks: ['finance', 'invoices'] });
+});
+
+test('Booking menu label matching ignores hidden text and another interactive control', async () => {
+  for (const options of [{ hidden: true }, { nested: true }])
+    assert.deepEqual(await menuBadgeScenario(options), { result: 'finance_missing', clicks: [] });
+});
