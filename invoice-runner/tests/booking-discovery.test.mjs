@@ -20,7 +20,10 @@ for (const hasGroupLink of [true, false]) test(`switching properties uses ${hasG
   const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
     click: async () => { step = next; } });
   const page = { url: () => step === 0 ? target.replace('539828', '1140306') : step === 1 ? group : target,
-    goto: async href => { assert.equal(href, hasGroupLink ? group : 'https://admin.booking.com/'); step = 1; }, waitForNavigation: async () => {},
+    goto: async href => {
+      assert.equal(href, step === 0 ? (hasGroupLink ? group : 'https://admin.booking.com/') : target);
+      step = step === 0 ? 1 : 2;
+    }, waitForNavigation: async () => {},
     $$: async selector => step === 0 ? (hasGroupLink ? [{ evaluate: async () => group }] : [])
       : selector === 'tr,[role="row"]' ? [row] : step === 2 ? [control('finance', 3)] : [control('invoices', 4)] };
   const stages = [];
@@ -38,10 +41,11 @@ test('ambiguous group entries are never resolved by choosing one or returning to
     'property_switch_ambiguous');
 });
 
-test('the observed index entry wins over other links in the same property row', async () => {
+test('the observed index entry stays in the controlled tab despite other row links and new-tab clicks', async () => {
   let step = 0;
   const index = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/index.html?hotel_id=539828';
-  const entry = { evaluate: async () => index, click: async () => { step = 1; } };
+  const entry = { evaluate: async () => index,
+    click: async () => { throw new Error('a new-tab link must be followed in the controlled page'); } };
   const messaging = { evaluate: async () => index.replace('index.html', 'messaging/inbox.html'),
     click: async () => { throw new Error('must not enter messages'); } };
   const wrongProperty = { evaluate: async () => index.replace('539828', '1140306'),
@@ -50,6 +54,7 @@ test('the observed index entry wins over other links in the same property row', 
   const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
     click: async () => { step = next; } });
   const page = { url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html' : index,
+    goto: async href => { assert.equal(href, index); step = 1; },
     waitForNavigation: async () => {},
     $$: async selector => selector === 'tr,[role="row"]' ? [row]
       : step === 1 ? [control('finance', 2)] : [control('invoices', 3)] };
@@ -80,6 +85,7 @@ test('Booking discovery follows a unique property, Finance and Invoices control'
     click: async () => { step = next; },
   });
   const page = {
+    goto: async href => { assert.equal(href, await links[0].evaluate()); step = 1; },
     url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/'
       : 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
     waitForNavigation: async () => {},
@@ -99,6 +105,7 @@ test('Booking discovery can select the unique property ID without a matching lab
   const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
     click: async () => { step = next; } });
   const page = {
+    goto: async href => { assert.equal(href, await propertyLink.evaluate()); step = 1; },
     url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/'
       : 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
     waitForNavigation: async () => {},
@@ -118,6 +125,7 @@ test('Booking discovery ignores duplicate links to the same property entry', asy
   const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
     click: async () => { step = next; } });
   const page = {
+    goto: async href => { assert.equal(href, await link().evaluate()); step = 1; },
     url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/'
       : 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
     waitForNavigation: async () => {},
@@ -136,6 +144,7 @@ test('Booking discovery waits for asynchronously populated group rows', async ()
   const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
     click: async () => { step = next; } });
   const page = {
+    goto: async href => { assert.equal(href, await link.evaluate()); step = 1; },
     url: () => step === 0 ? 'https://admin.booking.com/hotel/hoteladmin/groups/home/index.html'
       : 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
     waitForNavigation: async () => {},
