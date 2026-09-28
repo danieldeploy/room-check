@@ -144,6 +144,7 @@ async function execute(client, root, runtime, job) {
     const payload = { code: result.code, documents: ids };
     if (result.session) payload.session = result.session;
     if (['discover','login'].includes(job.input.action) && result.diagnostic) payload.diagnostic = result.diagnostic;
+    if (job.input.action === 'verify' && result.verification) payload.verification = result.verification;
     const reply = await request({ action: 'complete', result: payload });
     if (reply.accepted !== true) throw new AgentError('invalid_response');
     // Hub completion remains authoritative even if the local receipt cannot be written.

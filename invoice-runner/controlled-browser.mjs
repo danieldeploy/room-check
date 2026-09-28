@@ -6,7 +6,7 @@ import { assertPrivateDirectory } from './private-storage.mjs';
 // Never accept an endpoint, host or profile path from a portal or a Hub job.
 export function controlledBrowserProfile(input) {
   if (input.browserProfile === undefined) return 'primary';
-  if (input.browserProfile === 'fresh_login' && ['login', 'discover', 'collect'].includes(input.action)
+  if (input.browserProfile === 'fresh_login' && ['login', 'discover', 'collect', 'verify'].includes(input.action)
       && input.portal === 'booking' && input.accountId === 1
       && !Object.hasOwn(input, 'session')) return 'fresh_login';
   throw new Error('controlled_profile_invalid');
@@ -14,7 +14,7 @@ export function controlledBrowserProfile(input) {
 
 export function usesControlledBrowser(input) {
   return input.portal === 'booking' && input.accountId === 1
-    && ['login', 'discover', 'collect'].includes(input.action);
+    && ['login', 'discover', 'collect', 'verify'].includes(input.action);
 }
 
 export function controlledBrowserConnectOptions(endpoint, purpose, action = 'login') {

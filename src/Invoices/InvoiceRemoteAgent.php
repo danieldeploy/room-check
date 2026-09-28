@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 require_once __DIR__ . '/InvoiceAuth.php';
+require_once __DIR__ . '/InvoiceBookingVerification.php';
 
 /** One trusted Windows executor. Every mutation requires the existing MySQL worker lock. */
 final class InvoiceRemoteAgent
@@ -199,11 +200,11 @@ final class InvoiceRemoteAgent
             // Reuse the authenticated persistent profile for all Booking steps.
             // Keep its established name to preserve the owner's verified session.
             // The client cannot choose a profile through the agent request.
-            if (in_array($job['kind'],['login','discover','collect'],true)
+            if (in_array($job['kind'],['login','discover','collect','verify'],true)
                 && (int)$account['id']===1 && $account['portal']==='booking') {
                 $input['browserProfile']='fresh_login';
             }
-            if ($job['kind']==='discover' && $account['portal']==='booking') {
+            if (in_array($job['kind'],['discover','collect','verify'],true) && $account['portal']==='booking') {
                 $properties=$accounts->collectionProperties((int)$account['id']);
                 $input['propertyLabel']=(string)($properties[$job['property_id']] ?? '');
             }
@@ -214,7 +215,7 @@ final class InvoiceRemoteAgent
                     $session=InvoiceAccounts::secretName((int)$account['id'],'session');
                     $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];
                 }
-                if ($job['kind']!=='discover' && !($job['kind']==='login' && $account['portal']==='booking')
+                if (!in_array($job['kind'],['discover','verify'],true) && !($job['kind']==='login' && $account['portal']==='booking')
                     && $account['portal']!=='email') {
                     $map='account-'.$account['id'].'-map.json';
                     if (!$this->vault->has($map) && (int)$account['id']===1 && $account['portal']==='booking') $map='booking-map.json';
@@ -255,7 +256,7 @@ final class InvoiceRemoteAgent
         $id=$data['id'] ?? null; $offset=$data['offset'] ?? null; $size=$data['size'] ?? null;
         $hash=$data['sha256'] ?? ''; $meta=$data['metadata'] ?? null;
         $bytes=is_string($data['chunk'] ?? null) ? base64_decode($data['chunk'],true) : false;
-        if ($lease['job']['kind']!=='collect' || !is_int($id) || $id<0 || $id>=100 || !is_int($offset) || $offset<0
+        if (!in_array($lease['job']['kind'],['collect','verify'],true) || !is_int($id) || $id<0 || $id>=100 || !is_int($offset) || $offset<0
             || !is_int($size) || $size<8 || $size>self::TOTAL_BYTES || !is_string($hash) || !preg_match('/\A[a-f0-9]{64}\z/',$hash)
             || !is_array($meta) || strlen(json_encode($meta,JSON_THROW_ON_ERROR))>4096 || isset($meta['content']) || isset($meta['pdf'])
             || $bytes===false || strlen($bytes)<1 || strlen($bytes)>self::CHUNK_BYTES || $offset+strlen($bytes)>$size) {
@@ -357,9 +358,19 @@ final class InvoiceRemoteAgent
                             || ($result['diagnostic']['login_attempted'] ?? null)!==true)) throw new RuntimeException('invalid_document');
                     $ids=$result['documents'] ?? [];
                     if (!is_array($ids) || !array_is_list($ids) || count($ids)!==count(array_unique($ids,SORT_REGULAR))
-                        || ($job['kind']==='collect' && count($ids)!==count($lease['uploads']))
-                        || ($job['kind']!=='collect' && $ids)) throw new RuntimeException('invalid_document');
+                        || (in_array($job['kind'],['collect','verify'],true) && count($ids)!==count($lease['uploads']))
+                        || (!in_array($job['kind'],['collect','verify'],true) && $ids)) throw new RuntimeException('invalid_document');
                     foreach ($ids as $id) if (!is_int($id) || !isset($lease['uploads'][$id])) throw new RuntimeException('invalid_document');
+                    $verifiedFiles=[];
+                    if ($job['kind']==='verify' || ($lease['input']['map']['version']??null)===3) {
+                        foreach ($ids as $id) {
+                            $entry=$lease['uploads'][$id]; $file=$this->uploadPath($lease,$id); clearstatcache(true,$file);
+                            if (!is_file($file) || filesize($file)!==$entry['size'] || hash_file('sha256',$file)!==$entry['sha256']) throw new RuntimeException('invalid_document');
+                            $verifiedFiles[]=['path'=>$file,'metadata'=>$entry['metadata']];
+                            if ($job['kind']==='collect' && in_array(false,InvoiceBookingVerification::checkPdf($file,$job['property_id'],$entry['metadata'],$job['period']),true)) throw new RuntimeException('invalid_document');
+                        }
+                    }
+                    if ($job['kind']==='verify' && !InvoiceBookingVerification::finish($this->pdo,$this->vault,$job,$result['verification']??null,$verifiedFiles)) throw new RuntimeException('verification_failed');
                     $documents=(function() use ($ids,$lease): Generator {
                         foreach ($ids as $id) {
                             $entry=$lease['uploads'][$id]; $file=$this->uploadPath($lease,$id);

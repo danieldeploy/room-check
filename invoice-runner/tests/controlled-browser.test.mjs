@@ -21,7 +21,7 @@ test('Booking account-1 login, discovery and collection share the fixed profile 
   assert.equal(controlledBrowserProfile({ action: 'login', portal: 'booking', accountId: 1 }), 'primary');
   assert.equal(controlledBrowserProfile({ action: 'login', portal: 'booking', accountId: 1,
     browserProfile: 'fresh_login' }), 'fresh_login');
-  for (const action of ['login', 'discover', 'collect']) {
+  for (const action of ['login', 'discover', 'collect', 'verify']) {
     const input = { action, portal: 'booking', accountId: 1, browserProfile: 'fresh_login' };
     assert.equal(controlledBrowserProfile(input), 'fresh_login');
     assert.equal(usesControlledBrowser(input), true);

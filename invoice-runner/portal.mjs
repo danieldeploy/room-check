@@ -102,7 +102,7 @@ async function assertProperty(page, target, input) {
   if (marker !== target.propertyText) fail('account_mismatch');
 }
 
-async function pdfContent(page, value, portal) {
+export async function pdfContent(page, value, portal) {
   const url = portalUrl(portal, value);
   if (url.origin !== new URL(page.url()).origin) fail('portal_changed');
   return page.evaluate(async href => {

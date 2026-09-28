@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/src/Invoices/InvoiceRemoteAgent.php';
+require_once __DIR__.'/invoice-booking-verification.php';
 
 function runInvoiceAgentCases(PDO $pdo): void
 {
@@ -126,6 +127,37 @@ function runInvoiceAgentCases(PDO $pdo): void
             'Map inspection retains the authenticated Chrome profile and selected property');
         $send(['task_id'=>$discovery,'lease'=>$discoveryOffer['lease'],'action'=>'complete',
             'result'=>['code'=>'ok','documents'=>[],'diagnostic'=>$sessionDiagnostic]]);
+        $runVerification=static function(string $property,string $pdfDate='03/08/2026') use ($service,$send,$check,$pdo): array {
+            $id=$service->enqueue('verify',$property,'2026-08',1);
+            $offer=$send(['action'=>'claim','claim_id'=>bin2hex(random_bytes(16))])['job'];
+            $check($offer['id']===$id && !isset($offer['input']['map']) && $offer['input']['browserProfile']==='fresh_login'
+                && $offer['input']['property']===$property && isset($offer['input']['propertyLabel']),'Verification keeps the existing profile and receives only its associated property');
+            $identity=['task_id'=>$id,'lease'=>$offer['lease']]; $bytes=bookingVerificationFixture($property,$pdfDate);
+            $meta=['number'=>'FIXTURE-900','issued_on'=>'2026-08-03','period'=>'2026-08','period_basis'=>'issue_month','format'=>'pdf'];
+            $send($identity+['action'=>'upload','id'=>0,'offset'=>0,'size'=>strlen($bytes),'sha256'=>hash('sha256',$bytes),'metadata'=>$meta,'chunk'=>base64_encode($bytes)]);
+            $evidence=['version'=>1,'validated'=>false,'strategy'=>'booking-finance-v1','session_verified'=>true,'property_verified'=>true,
+                'pagination_verified'=>true,'pagination_mode'=>'single_page','structure'=>['headers_sha256'=>str_repeat('a',64),'number_column'=>1,'date_column'=>2,'date_format'=>'D MMM YYYY']];
+            $result=$send($identity+['action'=>'complete','result'=>['code'=>'ok','documents'=>[0],'verification'=>$evidence]]);
+            $check((int)$pdo->query('SELECT COUNT(*) FROM invoice_documents')->fetchColumn()===0,'Verification does not import a document');
+            return $result;
+        };
+        $reject(fn()=>InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08'),'verification_required');
+        $check($runVerification('1140306')['state']==='completed','Complete PDF verification passes for the first property');
+        $reject(fn()=>InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08'),'verification_required');
+        $check($runVerification('539828','03/09/2026')['state']==='failed','A PDF issue date outside the selected month cannot pass');
+        $reject(fn()=>InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08'),'verification_required');
+        $check($runVerification('539828')['state']==='completed','Both properties must pass independently');
+        InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08');
+        $approved=json_decode(file_get_contents($tmp.'/account-1-map.json'),true);
+        $check($approved['version']===3 && $approved['validated']===true && count($approved['properties'])===2,'Approval creates only the fully verified map');
+        $check((int)$pdo->query('SELECT enabled FROM invoice_accounts WHERE id=1')->fetchColumn()===0,'Map approval does not silently enable scheduling');
+        $check(!(glob($tmp.'/windows-*.part')?:[]),'Verification PDFs are removed after checking');
+        $report=$vault->read(InvoiceBookingVerification::reportName(1,'1140306'));
+        $check(!str_contains(json_encode($report),'FIXTURE-900') && !str_contains(json_encode($report),'03/08/2026'),'Verification reports contain no source invoice values');
+        $newer=$service->enqueue('verify','1140306','2026-08',1);
+        $reject(fn()=>InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08'),'verification_required');
+        $pdo->prepare("UPDATE invoice_tasks SET state='failed',active_key=NULL,result_code='portal_changed' WHERE id=?")->execute([$newer]);
+        $reject(fn()=>InvoiceBookingVerification::approve($pdo,$vault,1,'2026-08'),'verification_required');
         InvoiceVault::atomicWrite($tmp.'/account-1-map.json','{"version":2,"validated":false}');
         $job=$service->enqueue('collect','1140306','2026-08',1);
         $offer=$send(['action'=>'claim','claim_id'=>str_repeat('4',32)])['job'];

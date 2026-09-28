@@ -39,10 +39,10 @@ final class InvoiceTaskLifecycle
                 }
                 if ($count !== count($metadata)) throw new RuntimeException('invalid_document');
             }
-            if ($job['kind']!=='discover' && isset($result['session']) && is_array($result['session'])) {
+            if (!in_array($job['kind'],['discover','verify'],true) && isset($result['session']) && is_array($result['session'])) {
                 $vault->save(InvoiceAccounts::secretName((int)$job['account_id'], 'session'), $result['session']);
             }
-            if ($job['kind']!=='discover') {
+            if (!in_array($job['kind'],['discover','verify'],true)) {
                 $this->pdo->prepare("UPDATE invoice_accounts SET status='ready',login_verified_at=? WHERE id=?")
                     ->execute([InvoiceService::utcNow(), $job['account_id']]);
             }
@@ -56,7 +56,7 @@ final class InvoiceTaskLifecycle
         $allowed = ['private_storage_unavailable','private_storage_permissions','vault_key_unavailable','vault_read_failed',
             'vault_write_failed','worker_timeout','worker_unavailable','invalid_document','invoice_conflict','connector_unconfigured',
             'browser_unavailable','network_error','needs_auth','human_verification','auth_unconfigured','auth_timeout','auth_invalid','portal_changed',
-            'document_limit','account_mismatch','interrupted','worker_failed'];
+            'document_limit','account_mismatch','interrupted','worker_failed','verification_sample_missing','verification_failed'];
         if (!in_array($code, $allowed, true)) $code = 'worker_failed';
         $retry = (int)$job['attempts'] < 2 && in_array($code,
             ['auth_timeout','auth_invalid','network_error','worker_timeout','worker_unavailable','browser_unavailable','interrupted'], true);
@@ -66,7 +66,7 @@ final class InvoiceTaskLifecycle
                 $retry ? null : InvoiceService::utcNow(),$job['id']]);
         if ($job['kind'] === 'preflight') {
             $this->pdo->prepare('UPDATE invoice_settings SET browser_ready=0,browser_checked_at=? WHERE id=1')->execute([InvoiceService::utcNow()]);
-        } elseif ($job['kind']!=='discover') {
+        } elseif (!in_array($job['kind'],['discover','verify'],true)) {
             $this->pdo->prepare('UPDATE invoice_accounts SET status=? WHERE id=?')->execute([$retry ? 'retry' : $state,$job['account_id']]);
         }
         if (!$retry) $alerts->queue($job, $code);

@@ -152,7 +152,18 @@ final class InvoiceWorkspace
         if (!$vault) return 'integration_setup';
         $id=(int)$account['id'];
         $credentials=$vault->has(InvoiceAccounts::secretName($id,'credentials')) || ($id===1 && $vault->has('booking-credentials.enc'));
-        $map=is_file($vault->path('account-'.$id.'-map.json')) || ($id===1 && $account['portal']==='booking' && is_file($vault->path('booking-map.json')));
+        $mapFile=$vault->path('account-'.$id.'-map.json');
+        if (!is_file($mapFile) && $id===1 && $account['portal']==='booking') $mapFile=$vault->path('booking-map.json');
+        $map=false;
+        if (is_file($mapFile) && filesize($mapFile)<=131072) {
+            try {
+                $config=json_decode((string)file_get_contents($mapFile),true,32,JSON_THROW_ON_ERROR);
+                $map=($config['validated']??null)===true && in_array($config['version']??null,[1,2,3],true);
+                if (($config['version']??null)===1) $map=$map && $id===1 && $account['portal']==='booking';
+                if (($config['version']??null)!==1) $map=$map && ($config['accountId']??null)===$id && ($config['portal']??null)===$account['portal'];
+                if (($config['version']??null)===3) $map=$map && ($config['strategy']??null)==='booking-finance-v1' && !empty($config['properties']);
+            } catch (Throwable) { $map=false; }
+        }
         if (!$credentials || !$map) return 'integration_setup';
         return empty($account['login_verified_at']) ? 'access_to_test' : 'ready';
     }
