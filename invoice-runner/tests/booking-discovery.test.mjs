@@ -159,3 +159,45 @@ test('Booking discovery uses visible navigation text instead of hidden submenu t
   assert.equal(await navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'Welcome Guest House' },
     async () => {}), 'invoices_visible');
 });
+
+async function overflowScenario(parentCount = 1, sharedContainer = false) {
+  let open = false, invoices = false;
+  const clicks = [];
+  const node = (label, visible) => ({ tagName: 'BUTTON', innerText: label, textContent: label,
+    getAttribute: () => null, getClientRects: () => visible() ? [1] : [], disabled: false });
+  const financeNode = node('Finance', () => open);
+  const finance = { evaluate: async fn => fn(financeNode), click: async () => {
+    assert.equal(open, true, 'the hidden Finance item cannot be clicked');
+    clicks.push('finance'); invoices = true;
+  } };
+  const invoiceNode = node('Invoices', () => invoices);
+  const invoice = { evaluate: async fn => fn(invoiceNode), click: async () => clicks.push('invoices') };
+  const topNodes = Array.from({ length: parentCount }, () => node('More', () => true));
+  const parents = topNodes.map(top => {
+    top.parentElement = { parentElement: null, querySelectorAll: selector =>
+      selector === '.ext-navigation-top-item__link' ? (sharedContainer ? topNodes : [top]) : [financeNode] };
+    return { evaluate: async (fn, arg) => fn(top, arg), click: async () => { clicks.push('more'); open = true; } };
+  });
+  const page = {
+    url: () => 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306',
+    waitForNavigation: async () => {},
+    $$: async selector => selector === '.ext-navigation-top-item__link' ? parents
+      : invoices ? [invoice] : [...parents, finance],
+  };
+  const result = await navigateBookingInvoices(page,
+    { property: '1140306', propertyLabel: 'Welcome Guest House' }, async () => {});
+  return { result, clicks };
+}
+
+test('Booking discovery opens the unique visible parent of hidden Finance', async () => {
+  assert.deepEqual(await overflowScenario(),
+    { result: 'invoices_visible', clicks: ['more', 'finance', 'invoices'] });
+});
+
+test('Booking discovery does not choose between ambiguous overflow menus', async () => {
+  assert.deepEqual(await overflowScenario(2), { result: 'finance_missing', clicks: [] });
+});
+
+test('Booking discovery does not mistake the whole navigation bar for a menu group', async () => {
+  assert.deepEqual(await overflowScenario(2, true), { result: 'finance_missing', clicks: [] });
+});
