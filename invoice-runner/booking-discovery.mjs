@@ -70,7 +70,7 @@ async function revealNavigationGroup(page, names) {
   await clickAndSettle(page, parents[0]);
   return true;
 }
-export async function navigateBookingInvoices(page, input, onStep) {
+export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
   const property = String(input.property || '');
   const label = String(input.propertyLabel || '').trim();
   if (!/^\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
@@ -155,6 +155,10 @@ export async function navigateBookingInvoices(page, input, onStep) {
     }
     let observedUrl = null;
     if (!target && matches.length === 1 && Array.isArray(input.propertyEntryUrls)) {
+      // A group page entered during this navigation starts new response reads.
+      // Wait for those observed bodies after the row appears, not only before
+      // leaving the previous property's page.
+      if (typeof hooks.waitForPropertyEntries === 'function') await hooks.waitForPropertyEntries();
       const observed = new Set();
       for (const candidate of input.propertyEntryUrls) {
         try {
