@@ -23,10 +23,13 @@ O Gerente escolhe um alojamento associado à conta para cada observação. Antes
 entrar nas finanças, a navegação confirma o `hotel_id` selecionado; uma sessão
 aberta noutra casa regressa apenas por uma ligação de grupo observada na página.
 Na página de faturas Booking, a observação classifica cabeçalhos, formatos de
-data, contagens e controlos de paginação. Uma data genérica não é tratada como
+data e controlos de paginação, sem persistir contagens de faturas ou documentos.
+Uma data genérica não é tratada como
 data de emissão. Pode ler um PDF da mesma origem e alojamento, dando preferência
-ao mês de emissão pedido, com limite de 20 MiB/30 segundos e sem redirecionamentos.
-Só guarda o resultado da assinatura PDF; nunca guarda bytes, números, datas
+ao mês de emissão pedido, com limite de 30 segundos e sem redirecionamentos;
+recusa tamanhos declarados superiores a 20 MiB e cancela a resposta logo após
+ler os cinco bytes da assinatura. Só guarda o resultado da assinatura PDF,
+sem provar a transferência completa; nunca guarda bytes, números, datas
 concretas, valores ou ligações com tokens no diagnóstico. Esta leitura não importa
 a fatura e não prova a paginação: ambos continuam por validar.
 O rascunho fica cifrado no cofre e é mostrado apenas
