@@ -190,7 +190,8 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
     ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted,
       cookie_consent_rejected: cookieConsentRejected,
       ...(hooks.loopbackPermission ? { loopback_permission: hooks.loopbackPermission } : {}),
-      ...(hooks.captchaTest ? { captcha_status: hooks.captchaTest.status() } : {}) } : {};
+      ...(hooks.captchaTest ? { captcha_status: hooks.captchaTest.status(),
+        ...(hooks.captchaTest.stage ? { captcha_stage: hooks.captchaTest.stage() } : {}) } : {}) } : {};
   let stage = 'prepare';
   let identifierSubmit = null;
   let identifierPhase = null;

@@ -12,14 +12,16 @@ test('accepted completion stores only a private atomic receipt', async () => {
     const job = { id: 42, input: { action: 'login', portal: 'booking', credentials: { password: secret } } };
     const result = { code: 'portal_changed', diagnostic: { location: secret,
       sms_prompted: true, sms_submitted: false, sms_code: secret,
-      cookie_consent_rejected: true, cookie_value: secret }, session: { cookies: [secret] } };
+      cookie_consent_rejected: true, cookie_value: secret,
+      captcha_status: 'provider_widget_failed', captcha_stage: 'poll_task' }, session: { cookies: [secret] } };
     const reply = { accepted: true, state: 'failed', value: secret };
     await writeTaskReceipt(root, job, result, reply, () => new Date('2026-09-24T08:15:00.000Z'));
     const filename = path.join(root, 'task-42-receipt.json');
     const raw = await fs.readFile(filename, 'utf8');
     assert.deepEqual(JSON.parse(raw), { task_id: 42, action: 'login', code: 'portal_changed',
       state: 'failed', finished_at: '2026-09-24T08:15:00.000Z',
-      cookie_consent_rejected: true, sms_prompted: true, sms_submitted: false });
+      cookie_consent_rejected: true, sms_prompted: true, sms_submitted: false,
+      captcha_status: 'provider_widget_failed', captcha_stage: 'poll_task' });
     assert.equal(raw.includes(secret), false);
     assert.deepEqual(await fs.readdir(root), ['task-42-receipt.json']);
     if (process.platform !== 'win32') assert.equal((await fs.stat(filename)).mode & 0o077, 0);
@@ -36,12 +38,14 @@ test('accepted completion stores only a private atomic receipt', async () => {
     assert.equal(sessionReceipt.sms_submitted, false);
     await writeTaskReceipt(root, { ...job, id: 46 }, { code: 'human_verification',
       diagnostic: { sms_prompted: 'true', sms_submitted: false, sms_code: secret,
-        cookie_consent_rejected: secret } },
+        cookie_consent_rejected: secret, captcha_status: secret, captcha_stage: secret } },
       { accepted: true, state: 'needs_auth' }, () => new Date('2026-09-24T08:17:00.000Z'));
     const invalidSms = await fs.readFile(path.join(root, 'task-46-receipt.json'), 'utf8');
     assert.equal(JSON.parse(invalidSms).state, 'needs_auth');
     assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'sms_prompted'), false);
     assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'cookie_consent_rejected'), false);
+    assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'captcha_status'), false);
+    assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'captcha_stage'), false);
     assert.equal(invalidSms.includes(secret), false);
     await writeTaskReceipt(root, { ...job, id: 48 }, { code: 'ok',
       diagnostic: { sms_prompted: true, sms_submitted: true } },

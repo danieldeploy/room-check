@@ -1,6 +1,23 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 export class CaptchaError extends Error {}
+// Fixed categories only: provider descriptions may contain request values.
+const providerErrors = new Map([
+  ['ERROR_KEY_DOES_NOT_EXIST', [1, 'provider_key_invalid']],
+  ['ERROR_NO_SLOT_AVAILABLE', [2, 'provider_no_capacity']],
+  ['ERROR_ZERO_BALANCE', [10, 'provider_zero_balance']],
+  ['ERROR_IP_NOT_ALLOWED', [11, 'provider_ip_denied']],
+  ['ERROR_CAPTCHA_UNSOLVABLE', [12, 'provider_unsolvable']],
+  ['ERROR_NO_SUCH_CAPCHA_ID', [16, 'provider_task_missing']],
+  ['ERROR_IP_BLOCKED', [21, 'provider_ip_denied']],
+  ['ERROR_TASK_NOT_SUPPORTED', [23, 'provider_task_unsupported']],
+  ['ERROR_INCORRECT_SESSION_DATA', [24, 'provider_session_invalid']],
+  ['ERROR_TOKEN_EXPIRED', [34, 'provider_token_expired']],
+  ['ERROR_FAILED_LOADING_WIDGET', [52, 'provider_widget_failed']],
+  ['ERROR_ACCOUNT_SUSPENDED', [55, 'provider_account_suspended']],
+]);
+export const PROVIDER_ERROR_STATUSES = Object.freeze([...new Set(
+  [...providerErrors.values()].map(([, status]) => status))]);
 const fail = code => { throw new CaptchaError(code); };
 const textValue = value => typeof value === 'string' && value.length > 0 && value.length <= 16384
   && !/[\u0000-\u001f\u007f]/.test(value);
@@ -42,7 +59,7 @@ export function amazonTask(challenge) {
 
 // No automatic createTask retries: a lost response may already have incurred a charge.
 export async function solveAmazonCaptcha(challenge, apiKey, {
-  fetchImpl = fetch, sleep = delay, now = Date.now,
+  fetchImpl = fetch, sleep = delay, now = Date.now, onStage = () => {},
 } = {}) {
   if (typeof apiKey !== 'string' || !/^[a-f0-9]{32}$/i.test(apiKey)) fail('unconfigured');
   const task = amazonTask(challenge);
@@ -51,6 +68,7 @@ export async function solveAmazonCaptcha(challenge, apiKey, {
     const remaining = deadline - now();
     if (remaining <= 0) fail('timeout');
     try {
+      onStage(method === 'createTask' ? 'create_task' : 'poll_task');
       const response = await fetchImpl(`https://api.anti-captcha.com/${method}`, {
         method: 'POST', redirect: 'error', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ clientKey: apiKey, ...data }),
@@ -70,7 +88,10 @@ export async function solveAmazonCaptcha(challenge, apiKey, {
         }
       } finally { await reader.cancel().catch(() => {}); }
       const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      if (!result || result.errorId !== 0) fail('provider_error');
+      if (!result || result.errorId !== 0) {
+        const known = providerErrors.get(result?.errorCode);
+        fail(known && result.errorId === known[0] ? known[1] : 'provider_error');
+      }
       return result;
     } catch (error) {
       if (error instanceof CaptchaError) throw error;

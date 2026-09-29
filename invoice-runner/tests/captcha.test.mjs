@@ -75,6 +75,56 @@ test('invalid solution is never accepted', async () => {
   }
 });
 
+test('provider diagnostics allowlist matching error codes and identify create versus poll failure', async () => {
+  for (const [errorId, errorCode, expected] of [
+    [1, 'ERROR_KEY_DOES_NOT_EXIST', 'provider_key_invalid'],
+    [10, 'ERROR_ZERO_BALANCE', 'provider_zero_balance'],
+    [11, 'ERROR_IP_NOT_ALLOWED', 'provider_ip_denied'],
+    [12, 'ERROR_CAPTCHA_UNSOLVABLE', 'provider_unsolvable'],
+    [24, 'ERROR_INCORRECT_SESSION_DATA', 'provider_session_invalid'],
+    [52, 'ERROR_FAILED_LOADING_WIDGET', 'provider_widget_failed'],
+    [55, 'ERROR_ACCOUNT_SUSPENDED', 'provider_account_suspended'],
+    [1, 'ERROR_ZERO_BALANCE', 'provider_error'],
+    [1, key, 'provider_error'],
+  ]) {
+    for (const polling of [false, true]) {
+      let calls = 0;
+      const stages = [];
+      await assert.rejects(solveAmazonCaptcha(challenge, key, {
+        sleep: async () => {}, onStage: stage => stages.push(stage),
+        fetchImpl: async () => {
+          calls++;
+          return response(polling && calls === 1 ? { errorId: 0, taskId: 7 }
+            : { errorId, errorCode, errorDescription: key });
+        },
+      }), error => error.message === expected && !String(error).includes(key));
+      assert.deepEqual(stages, polling ? ['create_task', 'poll_task'] : ['create_task']);
+      assert.equal(calls, polling ? 2 : 1);
+    }
+  }
+});
+
+test('controller distinguishes local capture failure from sanitized provider rejection', async () => {
+  let calls = 0;
+  const local = createBookingCaptchaTest(input, {
+    read: async () => { throw new Error(key); }, solve: async () => { calls++; },
+  });
+  await local.attempt(pageFixture(), async () => true);
+  assert.equal(local.status(), 'browser_error');
+  assert.equal(local.stage(), 'capture');
+  assert.equal(calls, 0);
+  const remote = createBookingCaptchaTest(input, {
+    read: async () => challenge,
+    solve: (task, apiKey, deps) => solveAmazonCaptcha(task, apiKey, { ...deps,
+      fetchImpl: async () => response({ errorId: 10, errorCode: 'ERROR_ZERO_BALANCE', errorDescription: key }),
+    }),
+  });
+  await remote.attempt(pageFixture(), async () => true);
+  assert.equal(remote.status(), 'provider_zero_balance');
+  assert.equal(remote.stage(), 'create_task');
+  assert.equal(await remote.attempt(pageFixture(), async () => true), false);
+});
+
 function pageFixture() {
   let url = 'https://account.booking.com/sign-in?op_token=fixture-private';
   const cookies = [];
