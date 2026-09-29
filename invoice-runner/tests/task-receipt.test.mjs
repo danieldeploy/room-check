@@ -76,6 +76,18 @@ test('accepted completion stores only a private atomic receipt', async () => {
     assert.equal(JSON.parse(captureReceipt).captcha_status, 'browser_timeout');
     assert.equal(JSON.parse(captureReceipt).captcha_stage, 'capture_ready');
     assert.equal(captureReceipt.includes(secret), false);
+    await writeTaskReceipt(root, { ...job, id: 55 }, { code: 'human_verification',
+      diagnostic: { aws_waf_allowed: 2, aws_waf_blocked: 1, aws_waf_url: secret } }, reply);
+    const networkReceipt = await fs.readFile(path.join(root, 'task-55-receipt.json'), 'utf8');
+    assert.equal(JSON.parse(networkReceipt).aws_waf_allowed, 2);
+    assert.equal(JSON.parse(networkReceipt).aws_waf_blocked, 1);
+    assert.equal(networkReceipt.includes(secret), false);
+    await writeTaskReceipt(root, { ...job, id: 56 }, { code: 'human_verification',
+      diagnostic: { aws_waf_allowed: secret, aws_waf_blocked: 10001 } }, reply);
+    assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(path.join(root, 'task-56-receipt.json'), 'utf8')),
+      'aws_waf_allowed'), false);
+    assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(path.join(root, 'task-56-receipt.json'), 'utf8')),
+      'aws_waf_blocked'), false);
     await assert.rejects(writeTaskReceipt(root, { ...job, id: 47, input: { action: 'collect' } }, result, reply));
     await assert.rejects(fs.access(path.join(root, 'task-47-receipt.json')));
   } finally { await fs.rm(root, { recursive: true, force: true }); }

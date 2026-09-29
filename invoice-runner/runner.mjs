@@ -85,8 +85,11 @@ try {
     } else {
       const requestGuards = [];
       const blockedValues = [input.credentials?.password];
+      const requestGuardCounts = { aws_waf_allowed: 0, aws_waf_blocked: 0 };
       const guard = async target => {
-        requestGuards.push(await guardPortalRequests(target, input.portal, portalUrl, blockedValues));
+        requestGuards.push(await guardPortalRequests(target, input.portal, portalUrl, blockedValues,
+          kind => { if (Object.hasOwn(requestGuardCounts, kind))
+            requestGuardCounts[kind] = Math.min(10000, requestGuardCounts[kind] + 1); }));
       };
       await guard(page);
       releaseRequestGuard = async () => {
@@ -99,7 +102,7 @@ try {
       releaseCaptcha = () => captchaTest.release();
       await captchaTest.prepare(page);
       const loginHooks = {
-        loopbackPermission: loopbackPermission?.status, captchaTest,
+        loopbackPermission: loopbackPermission?.status, captchaTest, requestGuardCounts,
         registerBlockedValue: value => { blockedValues.push(value); },
         passwordTab: browserPurpose === 'fresh_login' ? async current => {
           const candidate = await controlledBookingPasswordPage(browser);
