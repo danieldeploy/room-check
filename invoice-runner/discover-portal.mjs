@@ -15,6 +15,7 @@ function browserErrorKind(error) {
   if (/node is detached|not attached to the (?:dom|document)/i.test(message)) return 'detached';
   if (/execution context was destroyed|cannot find context with specified id/i.test(message)) return 'context_lost';
   if (/target closed|session closed|connection closed/i.test(message)) return 'browser_closed';
+  if (/not clickable|not an element|not visible/i.test(message)) return 'not_clickable';
   if (error?.name === 'TimeoutError'
       || (error?.name === 'ProtocolError' && /timed out|timeout/i.test(message))) return 'timeout';
   return 'other';
@@ -198,6 +199,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
   let stage = 'prepare';
   let identifierSubmit = null;
   let identifierPhase = null;
+  let navigationPhase = null;
   try {
     stage = 'navigate';
     const currentUrl = new URL(page.url());
@@ -230,7 +232,8 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
         snapshots.push(await inspectPortalPage(page, portal));
         const navigationStage = await navigateBookingInvoices(page, { ...input, propertyEntryUrls: propertyUrls }, async () => {
           snapshots.push(await inspectPortalPage(page, portal));
-        }, { waitForPropertyEntries: () => Promise.allSettled(propertyReads) });
+        }, { waitForPropertyEntries: () => Promise.allSettled(propertyReads),
+          onPhase: phase => { navigationPhase = phase; } });
         if (navigationStage !== 'invoices_visible') snapshots.push(await inspectPortalPage(page, portal));
         const invoiceInspection = navigationStage === 'invoices_visible' ? await inspectBookingInvoices(page, input) : undefined;
         return { version: 1, portal, validated: false, login_attempted: false,
@@ -393,6 +396,9 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       failure_stage: stage, identifier_submit: identifierSubmit, responses,
       ...(portal === 'booking' && loginOnly && stage === 'identifier'
         ? { identifier_phase: identifierPhase,
+          browser_error_kind: error instanceof PortalError ? null : browserErrorKind(error) } : {}),
+      ...(portal === 'booking' && navigationPhase
+        ? { navigation_phase: navigationPhase,
           browser_error_kind: error instanceof PortalError ? null : browserErrorKind(error) } : {}),
       ...smsSignals(), ...privateLoginMetadata() };
   } finally {

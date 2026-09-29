@@ -75,6 +75,8 @@ async function revealNavigationGroup(page, names) {
   return true;
 }
 export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
+  const phase = name => hooks.onPhase?.(name);
+  phase('property');
   const property = String(input.property || '');
   const label = String(input.propertyLabel || '').trim();
   if (!/^\d{1,12}$/.test(property) || !label || label.length > 120) return 'property_missing';
@@ -187,7 +189,9 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
   }
   url = portalUrl('booking', page.url());
   if (url.hostname !== 'admin.booking.com' || url.searchParams.get('hotel_id') !== property) return 'property_navigation';
+  phase('finance_wait');
   await waitForControl(page, labels.finance);
+  phase('finance_lookup');
   let finance = await uniqueControl(page, labels.finance);
   if (!finance && await revealNavigationGroup(page, labels.finance)) {
     await waitForControl(page, labels.finance);
@@ -195,13 +199,19 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
   }
   if (!finance) return 'finance_missing';
   if (finance.info.href) portalUrl('booking', finance.info.href);
+  phase('finance_click');
   await clickAndSettle(page, finance.control);
+  phase('finance_inspect');
   await onStep('finance');
+  phase('invoices_wait');
   await waitForControl(page, labels.invoices);
+  phase('invoices_lookup');
   const invoices = await uniqueControl(page, labels.invoices);
   if (!invoices) return 'invoices_missing';
   if (invoices.info.href) portalUrl('booking', invoices.info.href);
+  phase('invoices_click');
   await clickAndSettle(page, invoices.control);
+  phase('invoices_inspect');
   await onStep('invoices');
   url = portalUrl('booking', page.url());
   if (url.hostname !== 'admin.booking.com' || url.searchParams.get('hotel_id') !== property) return 'property_navigation';
