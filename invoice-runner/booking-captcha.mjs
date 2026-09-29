@@ -4,14 +4,30 @@ import { createAwsWidgetObserver } from './booking-aws-widget.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export const CAPTCHA_STATUSES = Object.freeze(['disabled', 'unconfigured', 'unsupported',
-  'provider_error', 'browser_error', 'timeout', 'stale', 'not_accepted', 'challenge_cleared', 'not_needed',
+  'provider_error', 'browser_error', 'browser_timeout', 'browser_context_lost',
+  'browser_page_closed', 'browser_navigation_aborted', 'timeout', 'stale', 'not_accepted', 'challenge_cleared', 'not_needed',
   ...PROVIDER_ERROR_STATUSES]);
 export const CAPTCHA_STAGES = Object.freeze(['not_started', 'capture', 'provider',
-  'create_task', 'poll_task', 'validate', 'apply', 'verify']);
+  'capture_read', 'capture_restart_check', 'capture_reload', 'capture_ready',
+  'capture_verify', 'capture_wait', 'create_task', 'poll_task', 'validate', 'apply', 'verify']);
 export const CAPTCHA_STALE_REASONS = Object.freeze(['page_changed', 'page_unavailable',
   'challenge_cleared', 'challenge_changed', 'observer_missing', 'widget_replaced',
   'widget_completed', 'widget_expired', 'widget_removed', 'widget_hidden', 'widget_error',
   'widget_internal_error', 'widget_network_error', 'widget_token_error', 'widget_client_error']);
+
+// Only categorical results escape this boundary: never return browser messages,
+// stacks, URLs, or error objects, which may contain the private sign-in token.
+function captureErrorStatus(error) {
+  if (error?.name === 'TimeoutError') return 'browser_timeout';
+  const message = typeof error?.message === 'string' ? error.message : '';
+  if (message.startsWith('Execution context was destroyed')
+      || message.includes('Cannot find context with specified id')
+      || message.startsWith('Attempted to use detached Frame')) return 'browser_context_lost';
+  if (error?.name === 'TargetCloseError' || message.includes('Target closed')
+      || message.includes('Session closed')) return 'browser_page_closed';
+  if (message.startsWith('net::ERR_ABORTED')) return 'browser_navigation_aborted';
+  return 'browser_error';
+}
 
 export async function readBookingAwsChallenge(page) {
   const location = new URL(page.url());
@@ -70,26 +86,35 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
       try {
         stage = 'capture';
         const originalUrl = page.url();
+        stage = 'capture_read';
         let challenge = await readChallenge(page);
+        stage = 'capture_restart_check';
         if (!challenge && await widget.canRestart(page)) {
           const url = new URL(originalUrl);
           // Existing persistent tabs may have rendered before this job attached.
           // One explicit GET installs the observer before a new render; never reload a POST.
           if (url.hostname === 'account.booking.com' && url.pathname === '/sign-in'
               || url.hostname === 'auth.booking.com' && url.pathname === '/u/login/password') {
+            stage = 'capture_reload';
             await page.goto(originalUrl, { waitUntil: 'domcontentloaded' });
+            stage = 'capture_ready';
             await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });
+            stage = 'capture_verify';
             if (BOOKING_AUTH_ORIGINS.includes(new URL(page.url()).origin) && !await hasChallenge(page)) {
               status = 'not_needed'; return true;
             }
+            stage = 'capture_read';
             challenge = await readChallenge(page);
           }
         }
         if (!challenge) {
+          stage = 'capture_wait';
           await widget.waitForRender(page);
+          stage = 'capture_read';
           challenge = await readChallenge(page);
         }
         if (!challenge) { status = 'unsupported'; return false; }
+        stage = 'capture_verify';
         if (page.url() !== originalUrl) return stale('page_changed');
         if (!await hasChallenge(page)) return stale('challenge_cleared');
         stage = 'provider';
@@ -132,7 +157,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
         if (tokenReceived && !applying && !(error instanceof CaptchaError)) return stale('page_unavailable');
         status = error instanceof CaptchaError && CAPTCHA_STATUSES.includes(error.message)
           ? error.message : tokenReceived ? applying ? 'not_accepted' : 'stale'
-            : stage === 'capture' ? 'browser_error' : 'provider_error';
+            : stage === 'capture' || stage.startsWith('capture_') ? captureErrorStatus(error) : 'provider_error';
         return false;
       }
     },

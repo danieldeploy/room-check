@@ -112,6 +112,22 @@ utilizador voltou a receber 405 e a mostrar CAPTCHA. Isto não validou o login.
 
 Referência: [AWS: token nos pedidos protegidos](https://docs.aws.amazon.com/waf/latest/developerguide/waf-js-challenge-api-get-token.html).
 
+## Diagnóstico da captura (teste 72)
+
+O teste 72 parou com `browser_error` antes de chamar o fornecedor. A aplicação do
+token da versão anterior não chegou a ser exercitada nesse teste.
+
+1. **Comportamento:** identificar se a falha foi na leitura, recarga, espera pelo
+   documento, espera pelo widget ou verificação do desafio; classificar timeout,
+   contexto destruído, página fechada e navegação abortada.
+2. **Permissões:** manter o teste manual Booking já configurado e autorizado.
+3. **Dados:** só categorias fixas nos diagnósticos existentes; nunca mensagens,
+   stacks, URLs privadas, valores de campos ou objetos de erro.
+4. **Falhas:** manter uma tentativa por tarefa, sem nova chamada ao fornecedor
+   nem repetição automática do login para recolher o diagnóstico.
+5. **Aceitação:** testes simulam cada categoria com dados privados fictícios;
+   confirmar classificação correta e zero chamadas ao fornecedor em falhas locais.
+
 Referências técnicas: [Anti-Captcha AmazonTaskProxyless](https://anti-captcha.com/apidoc/task-types/AmazonTaskProxyless),
 [exemplo oficial Widget em Node.js](https://github.com/anti-captcha/anticaptcha-npm#amazon-waf),
 [contrato público AWS renderCaptcha/onSuccess](https://docs.aws.amazon.com/waf/latest/developerguide/waf-js-captcha-api-specification.html),

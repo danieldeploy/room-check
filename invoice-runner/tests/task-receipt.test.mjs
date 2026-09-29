@@ -69,6 +69,13 @@ test('accepted completion stores only a private atomic receipt', async () => {
       diagnostic: { captcha_status: 'stale', captcha_stage: 'validate', captcha_stale_reason: 'widget_expired' } },
       { accepted: true, state: 'needs_auth' });
     assert.equal(JSON.parse(await fs.readFile(path.join(root, 'task-53-receipt.json'), 'utf8')).captcha_stale_reason, 'widget_expired');
+    await writeTaskReceipt(root, { ...job, id: 54 }, { code: 'human_verification',
+      diagnostic: { captcha_status: 'browser_timeout', captcha_stage: 'capture_ready', browser_error: secret } },
+      { accepted: true, state: 'needs_auth' });
+    const captureReceipt = await fs.readFile(path.join(root, 'task-54-receipt.json'), 'utf8');
+    assert.equal(JSON.parse(captureReceipt).captcha_status, 'browser_timeout');
+    assert.equal(JSON.parse(captureReceipt).captcha_stage, 'capture_ready');
+    assert.equal(captureReceipt.includes(secret), false);
     await assert.rejects(writeTaskReceipt(root, { ...job, id: 47, input: { action: 'collect' } }, result, reply));
     await assert.rejects(fs.access(path.join(root, 'task-47-receipt.json')));
   } finally { await fs.rm(root, { recursive: true, force: true }); }
