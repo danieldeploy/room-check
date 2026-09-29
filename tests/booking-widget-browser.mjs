@@ -17,7 +17,10 @@ const widgetHtml = `<h1>Let's make sure you're human</h1><script src="${scriptUr
     apiKey: 'synthetic-widget-key', onSuccess(token) {
       window.fixtureCallbacks = (window.fixtureCallbacks || 0) + 1;
       if (token !== 'fixture-token') throw new Error('invalid fixture token');
-      sessionStorage.setItem('synthetic-solved', 'yes'); location.assign('/sign-in');
+      fetch('/fixture-proof-check', { method: 'POST' }).then(response => {
+        if (!response.ok) return;
+        sessionStorage.setItem('synthetic-solved', 'yes'); location.assign('/sign-in');
+      });
     }
   });
   if (sessionStorage.getItem('synthetic-solved')) document.body.innerHTML = ${JSON.stringify(form)};
@@ -27,10 +30,17 @@ const widgetHtml = `<h1>Let's make sure you're human</h1><script src="${scriptUr
 async function fixture(browser, afterPassword = false, renderDelay = 0) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
-  let passwordSubmitted = false, signIns = 0;
+  let passwordSubmitted = false, signIns = 0, verifiedRequests = 0;
   await page.setRequestInterception(true);
   page.on('request', request => {
     const url = new URL(request.url());
+    if (url.origin === 'https://account.booking.com' && url.pathname === '/fixture-proof-check') {
+      const values = (request.headers().cookie || '').split(';').map(value => value.trim());
+      const accepted = values.filter(value => value.startsWith('aws-waf-token=')).length === 1
+        && values.includes('aws-waf-token=fixture-token');
+      if (accepted) verifiedRequests++;
+      void request.respond({ status: accepted ? 200 : 405, contentType: 'text/plain', body: '' }); return;
+    }
     if (url.href === scriptUrl) {
       void request.respond({ status: 200, contentType: 'application/javascript', body: sdk }); return;
     }
@@ -48,14 +58,14 @@ async function fixture(browser, afterPassword = false, renderDelay = 0) {
     }
     void request.respond({ status: 200, contentType: 'text/html', body });
   });
-  return { page, context, signIns: () => signIns };
+  return { page, context, signIns: () => signIns, verifiedRequests: () => verifiedRequests };
 }
 
 export async function testBookingAwsWidget(browser) {
   const cases = [{ lateAttach: false, afterPassword: false, renderDelay: 150 },
     ...[false, true].flatMap(lateAttach => [false, true].map(afterPassword => ({ lateAttach, afterPassword })))];
   for (const { lateAttach, afterPassword, renderDelay } of cases) {
-      const { page, context, signIns } = await fixture(browser, afterPassword, renderDelay);
+      const { page, context, signIns, verifiedRequests } = await fixture(browser, afterPassword, renderDelay);
       let calls = 0;
       const controller = createBookingCaptchaTest(input, { solve: async challenge => {
         calls++;
@@ -66,6 +76,8 @@ export async function testBookingAwsWidget(browser) {
         return 'fixture-token';
       } });
       try {
+        await context.setCookie({ name: 'unrelated-session', value: 'preserve-fixture',
+          domain: 'account.booking.com', path: '/', secure: true });
         if (!lateAttach) await controller.prepare(page);
         await page.goto('https://account.booking.com/sign-in?op_token=fixture-private', { waitUntil: 'load' });
         if (lateAttach) await controller.prepare(page);
@@ -74,6 +86,14 @@ export async function testBookingAwsWidget(browser) {
         assert.equal(result.login_attempted, true);
         assert.equal(result.captcha_status, 'challenge_cleared');
         assert.equal(calls, 1);
+        assert.equal(verifiedRequests(), 1);
+        const cookies = await context.cookies();
+        assert.equal(cookies.find(cookie => cookie.name === 'unrelated-session')?.value, 'preserve-fixture');
+        const wafCookies = cookies.filter(cookie => cookie.name === 'aws-waf-token');
+        assert.equal(wafCookies.length, 1);
+        assert.equal(wafCookies[0].domain, 'account.booking.com');
+        assert.equal(wafCookies[0].secure, true);
+        assert.equal(wafCookies[0].sameSite, 'Lax');
         assert.equal(signIns(), 2 + (lateAttach && !afterPassword ? 1 : 0) + (afterPassword ? 1 : 0));
         for (const secret of ['fixture-private', 'fixture-token', 'synthetic-widget-key', 'synthetic-password'])
           assert.equal(JSON.stringify(result).includes(secret), false);
@@ -91,7 +111,10 @@ export async function testBookingAwsWidget(browser) {
       if (invalidation === 'same-url-navigation') await page.goto(page.url(), { waitUntil: 'load' });
       else await page.evaluate(kind => {
         if (kind === 'rerender') fixtureRender();
-        if (kind === 'human-success') fixtureConfig.onSuccess('fixture-token');
+        if (kind === 'human-success') {
+          document.cookie = 'aws-waf-token=fixture-token; Path=/; Secure; SameSite=Lax';
+          fixtureConfig.onSuccess('fixture-token');
+        }
         if (kind === 'timeout') fixtureConfig.onPuzzleTimeout();
         if (kind === 'error') fixtureConfig.onError({ kind: 'network_error' });
         if (kind === 'removed') document.getElementById('captcha').remove();
@@ -109,6 +132,23 @@ export async function testBookingAwsWidget(browser) {
       assert.equal(controller.staleReason(), expected[invalidation], invalidation);
       if (invalidation !== 'human-success')
         assert.equal(await page.evaluate(() => window.fixtureCallbacks || 0), 0);
+    } finally { await controller.release(); await context.close(); }
+  }
+
+  for (const conflict of ['http-only', 'parent-domain']) {
+    const { page, context, verifiedRequests } = await fixture(browser);
+    const controller = createBookingCaptchaTest(input, { solve: async () => 'fixture-token' });
+    try {
+      await context.setCookie({ name: 'aws-waf-token', value: 'existing-fixture', path: '/', secure: true,
+        domain: conflict === 'parent-domain' ? '.booking.com' : 'account.booking.com',
+        httpOnly: conflict === 'http-only' });
+      await controller.prepare(page);
+      await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
+      assert.equal(await controller.attempt(page, async () => true), false);
+      assert.equal(controller.status(), 'not_accepted', conflict);
+      assert.equal(verifiedRequests(), 0);
+      assert.equal(await page.evaluate(() => window.fixtureCallbacks || 0), 0);
+      assert.ok((await context.cookies()).some(cookie => cookie.value === 'existing-fixture'));
     } finally { await controller.release(); await context.close(); }
   }
 

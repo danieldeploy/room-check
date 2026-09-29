@@ -82,12 +82,21 @@ export function installAwsWidgetObserver(stateKey, origins) {
     canRestart: () => !current && loadedBeforeObserver && typeof window.AwsWafCaptcha?.renderCaptcha === 'function',
     complete(id, token) {
       const snapshot = read();
-      if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length) return false;
+      if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length
+          || token.length > 16384 || /[\s;,\u0000-\u001f\u007f]/.test(token)) return false;
       const entry = current;
       entry.used = true;
       entry.endReason = 'widget_completed';
+      // AWS normally updates this cookie before onSuccess. A provider token must
+      // also reach the next protected request, not merely dismiss the widget UI.
+      // Host-only: never widen the token to parent domains or change other cookies.
+      document.cookie = 'aws-waf-token=' + token + '; Path=/; Secure; SameSite=Lax';
+      const stored = document.cookie.split(';').map(value => value.trim())
+        .filter(value => value.startsWith('aws-waf-token='));
+      if (stored.length !== 1 || stored[0] !== 'aws-waf-token=' + token)
+        throw new Error('widget token cookie unavailable');
       // Use the callback registered by the site through the public AWS contract.
-      // No private callback guessing, cookie replacement, or credential POST replay.
+      // No private callback guessing or credential POST replay.
       Reflect.apply(entry.onSuccess, entry.configuration, [token]);
       return true;
     },

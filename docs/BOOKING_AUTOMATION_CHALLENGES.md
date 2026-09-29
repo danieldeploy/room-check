@@ -85,12 +85,32 @@ O pedido documentado é `AmazonTaskProxyless`, `wafType: widget`, `websiteKey`,
 Cada renderização tem uma identidade por documento. Navegação mesmo para o mesmo
 URL, nova renderização, sucesso humano, timeout, erro e remoção do widget impedem
 a aplicação de soluções antigas. O token é entregue uma vez ao callback público
-registado pelo portal; cookies não são substituídos para esta variante. É exigido
+registado pelo portal, depois de guardar `aws-waf-token` apenas no host atual,
+com `Secure`, `SameSite=Lax` e caminho `/`. Outros cookies são preservados. É exigido
 o desaparecimento do desafio e, separadamente, o login normal. A limpeza remove
 os scripts de observação e restaura o SDK sem desligar o Chrome persistente.
 Testes Chrome isolados cobrem carregamento novo/tardio, desafio antes/depois da
 password, cancelamento, navegação, limpeza e isolamento dos domínios. Nenhuma
 requisição desses testes chega ao Booking ou ao fornecedor.
+
+## Continuação depois do widget (29/09/2026)
+
+O teste 71 registou `challenge_cleared`, mas o pedido seguinte ao endpoint de
+utilizador voltou a receber 405 e a mostrar CAPTCHA. Isto não validou o login.
+
+1. **Comportamento:** guardar o token AWS no cookie documentado antes de executar
+   `onSuccess`, como acontece no fluxo normal do SDK. O desaparecimento visual do
+   widget não comprova que o servidor aceitou o pedido protegido seguinte.
+2. **Permissões:** só no teste manual Booking já autorizado e configurado.
+3. **Dados:** token temporário apenas no host Booking onde o widget foi capturado;
+   sem domínio pai, sem logs, sem alterações nos outros cookies ou credenciais.
+4. **Falhas:** se o cookie não puder ser guardado ou houver valores ambíguos, não
+   continuar o formulário. Mantêm-se as verificações de validade e uma tarefa por teste.
+5. **Aceitação:** em Chrome isolado, o servidor sintético só avança quando recebe
+   o cookie correto no pedido real; validar isolamento de domínio e preservação
+   dos cookies existentes. Confirmar separadamente a aceitação real no Booking.
+
+Referência: [AWS: token nos pedidos protegidos](https://docs.aws.amazon.com/waf/latest/developerguide/waf-js-challenge-api-get-token.html).
 
 Referências técnicas: [Anti-Captcha AmazonTaskProxyless](https://anti-captcha.com/apidoc/task-types/AmazonTaskProxyless),
 [exemplo oficial Widget em Node.js](https://github.com/anti-captcha/anticaptcha-npm#amazon-waf),
