@@ -157,6 +157,32 @@ function pageFixture() {
   return { cookies, url: () => url, browserContext: () => ({ setCookie: async c => cookies.push(c) }),
     goto: async value => { url = value; }, waitForFunction: async () => {} };
 }
+
+test('reload timeout continues only for the same completed document without another GET', async () => {
+  for (const state of ['complete', 'interactive', 'other-page']) {
+    const page = pageFixture();
+    let gets = 0, solves = 0, applied = false, reads = 0;
+    page.goto = async () => {
+      gets++;
+      if (state === 'other-page') page.url = () => 'https://account.booking.com/other';
+      throw Object.assign(new Error('private navigation ' + key), { name: 'TimeoutError' });
+    };
+    page.evaluate = async () => state;
+    const controller = createBookingCaptchaTest(input, {
+      widget: { read: async () => ++reads === 1 ? null : {
+        wafType: 'widget', websiteKey: 'fixture-widget-key', widgetId: 'fixture-id',
+        jsapiScript: 'https://a1b2c3.edge.captcha-sdk.awswaf.com/a1b2c3/jsapi.js',
+      }, canRestart: async () => true, complete: async () => { applied = true; return true; } },
+      read: async () => null,
+      solve: async () => { solves++; return 'fixture-token'; },
+    });
+    assert.equal(await controller.attempt(page, async () => !applied), state === 'complete');
+    assert.equal(gets, 1);
+    assert.equal(solves, state === 'complete' ? 1 : 0);
+    assert.equal(controller.status(), state === 'complete' ? 'challenge_cleared' : 'browser_timeout');
+    assert.equal(JSON.stringify({ status: controller.status(), stage: controller.stage() }).includes(key), false);
+  }
+});
 test('test mode never runs on collections; missing and unsupported configuration make no API calls', async () => {
   let count = 0;
   const deps = { solve: async () => { count++; }, read: async () => null };

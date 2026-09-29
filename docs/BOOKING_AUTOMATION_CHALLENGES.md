@@ -150,6 +150,18 @@ O evento AWS `onPuzzleTimeout` descreve a expiração do puzzle apresentado. Nã
 um relatório de validação do token independente devolvido pelo fornecedor. Este
 fluxo é experimental e mantém a aceitação do Booking como critério decisivo.
 
+## Timeout de navegação com documento carregado (teste 74)
+
+1. **Comportamento:** se o GET de captura indicar timeout mas o mesmo URL já
+   apresentar `document.readyState=complete`, continuar a inspeção desse documento.
+2. **Permissões:** manter o teste Booking e as credenciais configuradas.
+3. **Dados:** comparar URL apenas em memória; não persistir mensagens de erro,
+   tokens ou valores do formulário.
+4. **Falhas:** URL diferente, documento incompleto e outros erros continuam a
+   interromper. Não fazer um segundo GET nem criar mais tarefas do fornecedor.
+5. **Aceitação:** testar os estados completo, incompleto e navegação diferente;
+   reproduzir em Chrome um timeout após o GET real e comprovar uma única recarga.
+
 Referências técnicas: [Anti-Captcha AmazonTaskProxyless](https://anti-captcha.com/apidoc/task-types/AmazonTaskProxyless),
 [exemplo oficial Widget em Node.js](https://github.com/anti-captcha/anticaptcha-npm#amazon-waf),
 [contrato público AWS renderCaptcha/onSuccess](https://docs.aws.amazon.com/waf/latest/developerguide/waf-js-captcha-api-specification.html),
