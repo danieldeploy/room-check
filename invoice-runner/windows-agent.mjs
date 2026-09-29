@@ -9,6 +9,7 @@ import { AgentClient, AgentError, documentParts } from './agent-client.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
 import { writeTaskReceipt } from './task-receipt.mjs';
 import { removePrivateBookingLoginMetadata, writeBookingLoginReport } from './booking-login-report.mjs';
+import { prepareControlledBrowser } from './browser-supervisor.mjs';
 
 const runner = fileURLToPath(new URL('./runner.mjs', import.meta.url));
 let child; let stopping = false;
@@ -65,7 +66,7 @@ async function probe(client, root, runtime) {
   if (code !== 'ok') throw new AgentError(code);
 }
 
-async function execute(client, root, runtime, job) {
+async function execute(client, root, runtime, job, browserSupervisor) {
   if (!Number.isSafeInteger(job.id) || !/^[a-f0-9]{64}$/.test(job.lease) || !job.input
       || !Number.isSafeInteger(job.expires) || !Number.isSafeInteger(job.server_time)) throw new AgentError('invalid_response');
   // Monotonic deadline: an incorrect or adjusted Windows wall clock cannot prolong a lease.
@@ -81,7 +82,11 @@ async function execute(client, root, runtime, job) {
   };
   const exchange = await fs.mkdtemp(path.join(root, 'exchange-'));
   let completed = false; let result; let runnerError; let leaseError;
-  const processResult = runChild({ ...job.input, privateDir: root, exchangeDir: exchange, runtime })
+  const processResult = prepareControlledBrowser(job.input, root, browserSupervisor)
+    .then(() => {
+      if (leaseError || stopping || performance.now() >= deadline) throw new AgentError('lease_expired');
+      return runChild({ ...job.input, privateDir: root, exchangeDir: exchange, runtime });
+    })
     .then(value => { result = value; }, error => { runnerError = error; })
     .finally(() => { completed = true; });
   let challenge; let nextPulse = 0;
@@ -153,7 +158,7 @@ async function execute(client, root, runtime, job) {
   } catch (error) {
     leaseError = error;
     await terminateChild(); await processResult;
-    const allowed = ['worker_failed', 'worker_unavailable', 'invalid_document', 'document_limit', 'auth_invalid'];
+    const allowed = ['worker_failed', 'worker_unavailable', 'browser_unavailable', 'invalid_document', 'document_limit', 'auth_invalid'];
     const code = allowed.includes(error.message) ? error.message : 'network_error';
     // If a completion reply was lost, never replace it with a different result. Let the
     // existing receipt / fixed lease expiry recover it instead of creating a second outcome.
@@ -194,7 +199,7 @@ async function main() {
     try {
       if (performance.now() - lastProbe > 3600000) { await probe(client, root, runtime); lastProbe = performance.now(); }
       const reply = await client.request({ action: 'claim', claim_id: crypto.randomBytes(16).toString('hex') });
-      if (reply.job) await execute(client, root, runtime, reply.job);
+      if (reply.job) await execute(client, root, runtime, reply.job, config.browserSupervisor);
       failures = 0;
       if (config.oneShot === true) return;
       await delay(reply.job ? 1000 : 15000);

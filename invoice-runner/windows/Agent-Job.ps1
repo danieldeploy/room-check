@@ -1,6 +1,6 @@
 # Keep the Node worker in a Windows job owned by its PowerShell launcher.
 # Forced Task Scheduler stops close this handle and terminate the worker tree.
-# Persistent Booking Chrome is started separately, before this job is created.
+# Persistent Booking Chrome is started separately by the PowerShell owner.
 if (-not ('InvoiceAgentJob' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
