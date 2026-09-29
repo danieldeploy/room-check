@@ -25,16 +25,36 @@ export function installAwsWidgetObserver(stateKey, origins) {
     return { wafType: 'widget', websiteKey: current.apiKey,
       jsapiScript: matchingScripts.length === 1 ? matchingScripts[0] : undefined, widgetId: current.id };
   };
-  const storeToken = (id, token, allowPuzzleTimeout = false) => {
+  const storeToken = (id, token, scopes, allowPuzzleTimeout = false) => {
     const snapshot = read(allowPuzzleTimeout);
     if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length
         || token.length > 16384 || /[\s;,\u0000-\u001f\u007f]/.test(token)) return false;
-    // The cookie is host-only. Never widen it to parent domains or change other cookies.
-    document.cookie = 'aws-waf-token=' + token + '; Path=/; Secure; SameSite=Lax';
+    if (!Array.isArray(scopes) || !scopes.length || scopes.length > 8
+        || scopes.some(scope => scope.httpOnly || scope.partitioned || !scope.secure
+          || scope.domain !== null && (typeof scope.domain !== 'string'
+            || !(location.hostname === scope.domain.replace(/^\./, '')
+              || scope.domain.startsWith('.') && location.hostname.endsWith(scope.domain)))
+          || typeof scope.path !== 'string' || !scope.path.startsWith('/')
+          || /[;\u0000-\u001f\u007f]/.test(scope.path)
+          || ![undefined, 'Strict', 'Lax', 'None'].includes(scope.sameSite)))
+      throw new Error('widget token cookie unavailable');
+    // Update only scopes already used by the SDK on this page. In particular,
+    // don't add a host-only cookie beside an existing parent-domain cookie.
+    // Previous runs may already have created both; give both the same proof
+    // while preserving their scope and every unrelated cookie.
+    for (const scope of scopes) {
+      let cookie = 'aws-waf-token=' + token + '; Path=' + scope.path + '; Secure';
+      if (scope.domain?.startsWith('.')) cookie += '; Domain=' + scope.domain;
+      if (scope.sameSite) cookie += '; SameSite=' + scope.sameSite;
+      if (Number.isFinite(scope.expires) && scope.expires > 0)
+        cookie += '; Expires=' + new Date(scope.expires * 1000).toUTCString();
+      document.cookie = cookie;
+    }
     const stored = document.cookie.split(';').map(value => value.trim())
       .filter(value => value.startsWith('aws-waf-token='));
-    if (stored.length > 1) throw new Error('widget token cookie conflict');
-    if (stored.length !== 1 || stored[0] !== 'aws-waf-token=' + token)
+    if (stored.some(value => value !== 'aws-waf-token=' + token))
+      throw new Error('widget token cookie conflict');
+    if (!stored.length || stored.length !== scopes.length)
       throw new Error('widget token cookie unavailable');
     current.used = true;
     current.endReason = 'widget_completed';
@@ -96,17 +116,17 @@ export function installAwsWidgetObserver(stateKey, origins) {
       return 'challenge_changed';
     },
     canRestart: () => !current && loadedBeforeObserver && typeof window.AwsWafCaptcha?.renderCaptcha === 'function',
-    storeAfterPuzzleTimeout(id, token) {
+    storeAfterPuzzleTimeout(id, token, scopes) {
       // A newly returned provider token is not the local puzzle's answer. Let
       // the server validate it after a GET, without calling an expired callback.
       if (current?.endReason !== 'widget_expired') return false;
-      return storeToken(id, token, true);
+      return storeToken(id, token, scopes, true);
     },
-    complete(id, token) {
+    complete(id, token, scopes) {
       const entry = current;
       // AWS normally updates this cookie before onSuccess. A provider token must
       // also reach the next protected request, not merely dismiss the widget UI.
-      if (!storeToken(id, token)) return false;
+      if (!storeToken(id, token, scopes)) return false;
       // Use the callback registered by the site through the public AWS contract.
       // No private callback guessing or credential POST replay.
       try { Reflect.apply(entry.onSuccess, entry.configuration, [token]); }
@@ -136,6 +156,22 @@ export function installAwsWidgetObserver(stateKey, origins) {
 export function createAwsWidgetObserver() {
   const stateKey = '__hubAwsWidget_' + randomUUID().replaceAll('-', '');
   const pages = new Map();
+  const cookieScopes = async page => {
+    const url = new URL(page.url());
+    if (!BOOKING_AUTH_ORIGINS.includes(url.origin)) return [];
+    // Values remain inside the browser API result and are neither retained in
+    // this metadata nor sent to the solver, diagnostics or receipts.
+    const scopes = (await page.browserContext().cookies()).filter(cookie => {
+      const domain = cookie.domain.replace(/^\./, '');
+      return cookie.name === 'aws-waf-token'
+        && (url.hostname === domain || cookie.domain.startsWith('.') && url.hostname.endsWith('.' + domain))
+        && (url.pathname === cookie.path || url.pathname.startsWith(cookie.path)
+          && (cookie.path.endsWith('/') || url.pathname[cookie.path.length] === '/'));
+    }).map(cookie => ({ domain: cookie.domain, path: cookie.path, secure: cookie.secure,
+      httpOnly: cookie.httpOnly, partitioned: !!cookie.partitionKey,
+      sameSite: cookie.sameSite, expires: cookie.session ? undefined : cookie.expires }));
+    return scopes.length ? scopes : [{ domain: null, path: '/', secure: true, sameSite: 'Lax' }];
+  };
   return {
     async prepare(page) {
       if (pages.has(page)) return;
@@ -161,12 +197,14 @@ export function createAwsWidgetObserver() {
       await page.waitForFunction(key => !!window[key]?.read(), { timeout: 5000 }, stateKey).catch(() => {});
     },
     async complete(page, id, token) {
-      return page.evaluate((key, widgetId, solution) => window[key]?.complete(widgetId, solution) === true,
-        stateKey, id, token);
+      const scopes = await cookieScopes(page);
+      return page.evaluate((key, widgetId, solution, cookieScopes) =>
+        window[key]?.complete(widgetId, solution, cookieScopes) === true, stateKey, id, token, scopes);
     },
     async storeAfterPuzzleTimeout(page, id, token) {
-      return page.evaluate((key, widgetId, solution) => window[key]?.storeAfterPuzzleTimeout(widgetId, solution) === true,
-        stateKey, id, token);
+      const scopes = await cookieScopes(page);
+      return page.evaluate((key, widgetId, solution, cookieScopes) =>
+        window[key]?.storeAfterPuzzleTimeout(widgetId, solution, cookieScopes) === true, stateKey, id, token, scopes);
     },
     async release() {
       for (const [page, identifier] of pages) {

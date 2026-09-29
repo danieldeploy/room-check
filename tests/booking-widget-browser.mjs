@@ -37,8 +37,8 @@ async function fixture(browser, afterPassword = false, renderDelay = 0, resumeWi
     if (url.origin === 'https://account.booking.com' && url.pathname === '/fixture-proof-check') {
       callbackRequests++;
       const values = (request.headers().cookie || '').split(';').map(value => value.trim());
-      const accepted = values.filter(value => value.startsWith('aws-waf-token=')).length === 1
-        && values.includes('aws-waf-token=fixture-token');
+      const proofs = values.filter(value => value.startsWith('aws-waf-token='));
+      const accepted = proofs.length > 0 && proofs.every(value => value === 'aws-waf-token=fixture-token');
       if (accepted) verifiedRequests++;
       void request.respond({ status: accepted ? 200 : 405, contentType: 'text/plain', body: '' }); return;
     }
@@ -196,7 +196,7 @@ export async function testBookingAwsWidget(browser) {
     } finally { await controller.release(); await context.close(); }
   }
 
-  for (const conflict of ['http-only', 'parent-domain']) {
+  for (const conflict of ['http-only']) {
     const { page, context, verifiedRequests } = await fixture(browser);
     const controller = createBookingCaptchaTest(input, { solve: async () => 'fixture-token' });
     try {
@@ -206,12 +206,60 @@ export async function testBookingAwsWidget(browser) {
       await controller.prepare(page);
       await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
       assert.equal(await controller.attempt(page, async () => true), false);
-      assert.equal(controller.status(), conflict === 'parent-domain'
-        ? 'browser_cookie_conflict' : 'browser_cookie_unavailable', conflict);
+      assert.equal(controller.status(), 'browser_cookie_unavailable', conflict);
       assert.equal(verifiedRequests(), 0);
       assert.equal(await page.evaluate(() => window.fixtureCallbacks || 0), 0);
       assert.ok((await context.cookies()).some(cookie => cookie.value === 'existing-fixture'));
     } finally { await controller.release(); await context.close(); }
+  }
+
+  for (const layout of ['parent-domain', 'host-and-parent', 'path-and-parent']) {
+    const { page, context, verifiedRequests } = await fixture(browser);
+    const controller = createBookingCaptchaTest(input, { solve: async () => 'fixture-token' });
+    const records = [{ name: 'aws-waf-token', value: 'old-parent-proof', domain: '.booking.com',
+      path: '/', secure: true, sameSite: 'Lax' }];
+    if (layout !== 'parent-domain') records.push({ name: 'aws-waf-token', value: 'old-host-proof',
+      domain: 'account.booking.com', path: layout === 'path-and-parent' ? '/sign-in' : '/',
+      secure: true, sameSite: 'Strict' });
+    try {
+      await context.setCookie(...records, { name: 'unrelated-session', value: 'preserve-fixture',
+        domain: 'account.booking.com', path: '/', secure: true });
+      const before = (await context.cookies()).filter(cookie => cookie.name === 'aws-waf-token')
+        .map(({ domain, path, secure, sameSite }) => ({ domain, path, secure, sameSite }));
+      await controller.prepare(page);
+      await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
+      assert.equal(await controller.attempt(page,
+        async current => current.evaluate(() => !!document.getElementById('captcha'))), true, layout);
+      assert.equal(controller.status(), 'challenge_cleared', layout);
+      assert.equal(verifiedRequests(), 1, layout);
+      const after = await context.cookies();
+      const proofs = after.filter(cookie => cookie.name === 'aws-waf-token');
+      assert.equal(proofs.length, records.length, 'do not add or delete scopes');
+      assert.ok(proofs.every(cookie => cookie.value === 'fixture-token'));
+      assert.deepEqual(proofs.map(({ domain, path, secure, sameSite }) => ({ domain, path, secure, sameSite }))
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+      before.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+      assert.equal(after.find(cookie => cookie.name === 'unrelated-session')?.value, 'preserve-fixture');
+    } finally { await controller.release(); await context.close(); }
+  }
+
+  {
+    const { page, context, callbackRequests } = await fixture(browser);
+    const controller = createBookingCaptchaTest(input, { solve: async () => 'fixture-token' });
+    const cookies = context.cookies.bind(context);
+    try {
+      await controller.prepare(page);
+      await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
+      context.cookies = async () => {
+        context.cookies = cookies;
+        await page.goto(page.url(), { waitUntil: 'load' });
+        return cookies();
+      };
+      assert.equal(await controller.attempt(page, async () => true), false);
+      assert.equal(controller.staleReason(), 'widget_replaced');
+      assert.equal(callbackRequests(), 0);
+      assert.equal((await cookies()).some(cookie => cookie.name === 'aws-waf-token'), false);
+    } finally { context.cookies = cookies; await controller.release(); await context.close(); }
   }
 
   const { page, context } = await fixture(browser);
