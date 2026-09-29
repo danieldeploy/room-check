@@ -10,8 +10,9 @@ export function installAwsWidgetObserver(stateKey, origins) {
   const loadedBeforeObserver = typeof sdkValue?.renderCaptcha === 'function';
   const originalGlobal = Object.getOwnPropertyDescriptor(window, 'AwsWafCaptcha');
   const restores = [];
-  const read = () => {
-    if (!current || current.used || !current.container.isConnected
+  const read = (allowPuzzleTimeout = false) => {
+    if (!current || current.used && !(allowPuzzleTimeout && current.endReason === 'widget_expired')
+        || !current.container.isConnected
         || !current.container.getClientRects().length || current.url !== location.href) return null;
     const scripts = [...new Set([...document.scripts].map(script => script.src))];
     const matchingScripts = scripts.filter(src => {
@@ -23,6 +24,20 @@ export function installAwsWidgetObserver(stateKey, origins) {
     });
     return { wafType: 'widget', websiteKey: current.apiKey,
       jsapiScript: matchingScripts.length === 1 ? matchingScripts[0] : undefined, widgetId: current.id };
+  };
+  const storeToken = (id, token, allowPuzzleTimeout = false) => {
+    const snapshot = read(allowPuzzleTimeout);
+    if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length
+        || token.length > 16384 || /[\s;,\u0000-\u001f\u007f]/.test(token)) return false;
+    // The cookie is host-only. Never widen it to parent domains or change other cookies.
+    document.cookie = 'aws-waf-token=' + token + '; Path=/; Secure; SameSite=Lax';
+    const stored = document.cookie.split(';').map(value => value.trim())
+      .filter(value => value.startsWith('aws-waf-token='));
+    if (stored.length !== 1 || stored[0] !== 'aws-waf-token=' + token)
+      throw new Error('widget token cookie unavailable');
+    current.used = true;
+    current.endReason = 'widget_completed';
+    return true;
   };
   const wrap = sdk => {
     if (!sdk || typeof sdk.renderCaptcha !== 'function'
@@ -69,7 +84,7 @@ export function installAwsWidgetObserver(stateKey, origins) {
     configurable: true, enumerable: originalGlobal?.enumerable ?? true, get: getter, set: setter,
   });
   Object.defineProperty(window, stateKey, { configurable: true, value: {
-    read,
+    read: () => read(),
     invalidReason(id) {
       if (!current) return 'observer_missing';
       if (current.id !== id) return 'widget_replaced';
@@ -80,21 +95,17 @@ export function installAwsWidgetObserver(stateKey, origins) {
       return 'challenge_changed';
     },
     canRestart: () => !current && loadedBeforeObserver && typeof window.AwsWafCaptcha?.renderCaptcha === 'function',
+    storeAfterPuzzleTimeout(id, token) {
+      // A newly returned provider token is not the local puzzle's answer. Let
+      // the server validate it after a GET, without calling an expired callback.
+      if (current?.endReason !== 'widget_expired') return false;
+      return storeToken(id, token, true);
+    },
     complete(id, token) {
-      const snapshot = read();
-      if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length
-          || token.length > 16384 || /[\s;,\u0000-\u001f\u007f]/.test(token)) return false;
       const entry = current;
-      entry.used = true;
-      entry.endReason = 'widget_completed';
       // AWS normally updates this cookie before onSuccess. A provider token must
       // also reach the next protected request, not merely dismiss the widget UI.
-      // Host-only: never widen the token to parent domains or change other cookies.
-      document.cookie = 'aws-waf-token=' + token + '; Path=/; Secure; SameSite=Lax';
-      const stored = document.cookie.split(';').map(value => value.trim())
-        .filter(value => value.startsWith('aws-waf-token='));
-      if (stored.length !== 1 || stored[0] !== 'aws-waf-token=' + token)
-        throw new Error('widget token cookie unavailable');
+      if (!storeToken(id, token)) return false;
       // Use the callback registered by the site through the public AWS contract.
       // No private callback guessing or credential POST replay.
       Reflect.apply(entry.onSuccess, entry.configuration, [token]);
@@ -149,6 +160,10 @@ export function createAwsWidgetObserver() {
     },
     async complete(page, id, token) {
       return page.evaluate((key, widgetId, solution) => window[key]?.complete(widgetId, solution) === true,
+        stateKey, id, token);
+    },
+    async storeAfterPuzzleTimeout(page, id, token) {
+      return page.evaluate((key, widgetId, solution) => window[key]?.storeAfterPuzzleTimeout(widgetId, solution) === true,
         stateKey, id, token);
     },
     async release() {

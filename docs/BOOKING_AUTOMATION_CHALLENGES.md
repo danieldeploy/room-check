@@ -83,8 +83,9 @@ O pedido documentado é `AmazonTaskProxyless`, `wafType: widget`, `websiteKey`,
 `jsapiScript` e a origem pública em `websiteURL`.
 
 Cada renderização tem uma identidade por documento. Navegação mesmo para o mesmo
-URL, nova renderização, sucesso humano, timeout, erro e remoção do widget impedem
-a aplicação de soluções antigas. O token é entregue uma vez ao callback público
+URL, nova renderização, sucesso humano, erro e remoção do widget impedem
+a aplicação de soluções antigas. A expiração do puzzle local tem o tratamento
+separado descrito abaixo. O token é entregue uma vez ao callback público
 registado pelo portal, depois de guardar `aws-waf-token` apenas no host atual,
 com `Secure`, `SameSite=Lax` e caminho `/`. Outros cookies são preservados. É exigido
 o desaparecimento do desafio e, separadamente, o login normal. A limpeza remove
@@ -127,6 +128,27 @@ token da versão anterior não chegou a ser exercitada nesse teste.
    nem repetição automática do login para recolher o diagnóstico.
 5. **Aceitação:** testes simulam cada categoria com dados privados fictícios;
    confirmar classificação correta e zero chamadas ao fornecedor em falhas locais.
+
+## Token recebido depois da expiração do puzzle (teste 73)
+
+1. **Comportamento:** quando a API devolve um token novo após `onPuzzleTimeout`,
+   permitir que o servidor o valide num único GET ao mesmo formulário. Não chamar
+   o callback do puzzle expirado nem declarar o token aceite antes do login real.
+2. **Permissões:** apenas o teste manual Booking configurado, dentro da tentativa
+   já autorizada; sem chamadas adicionais ao fornecedor e sem ativar recolhas.
+3. **Dados:** manter domínio, URL, documento, identidade e contentor visível do
+   widget capturado. Guardar apenas o cookie temporário nesse host; sem logs do token.
+4. **Falhas:** se houver navegação, novo widget, sucesso humano, erro, remoção,
+   ocultação ou conflito de cookies, parar. Se o GET repetir o desafio, registar
+   `not_accepted`. Sem ciclos de repetição ou reenvio de POST com credenciais.
+5. **Aceitação:** testes Chrome com rede interceptada verificam receção do cookie
+   no GET, aceitação e rejeição pelo servidor sintético, zero callbacks expirados
+   e rejeição de contextos substituídos. A validação de produção exige CAPTCHA,
+   login, SMS e recolha real; os testes sintéticos não substituem esse ciclo.
+
+O evento AWS `onPuzzleTimeout` descreve a expiração do puzzle apresentado. Não é
+um relatório de validação do token independente devolvido pelo fornecedor. Este
+fluxo é experimental e mantém a aceitação do Booking como critério decisivo.
 
 Referências técnicas: [Anti-Captcha AmazonTaskProxyless](https://anti-captcha.com/apidoc/task-types/AmazonTaskProxyless),
 [exemplo oficial Widget em Node.js](https://github.com/anti-captcha/anticaptcha-npm#amazon-waf),
