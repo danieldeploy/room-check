@@ -15,12 +15,14 @@ let connected = false;
 let controlledPage;
 let releaseRequestGuard;
 let releasePermission;
+let releaseCaptcha;
 let closing;
 let collectionTrace;
 async function cleanup() {
   if (closing) return closing;
   closing = (async () => {
     if (browser) {
+      if (releaseCaptcha) await releaseCaptcha().catch(() => {});
       if (releaseRequestGuard) await releaseRequestGuard().catch(() => {});
       if (releasePermission) await releasePermission().catch(() => {});
       if (connected) {
@@ -94,6 +96,8 @@ try {
         ? await blockBookingLoopback(browser, input.automation?.deny_loopback !== false) : undefined;
       releasePermission = loopbackPermission?.release;
       const captchaTest = createBookingCaptchaTest(input);
+      releaseCaptcha = () => captchaTest.release();
+      await captchaTest.prepare(page);
       const loginHooks = {
         loopbackPermission: loopbackPermission?.status, captchaTest,
         registerBlockedValue: value => { blockedValues.push(value); },
@@ -102,6 +106,7 @@ try {
           if (!candidate || candidate === current) return null;
           candidate.setDefaultNavigationTimeout(30000); candidate.setDefaultTimeout(15000);
           await guard(candidate);
+          await captchaTest.prepare(candidate);
           return candidate;
         } : undefined,
       };
