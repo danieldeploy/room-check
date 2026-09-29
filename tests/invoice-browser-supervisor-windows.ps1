@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $root = Join-Path $env:TEMP ('invoice-supervisor-' + [char]0xE3 + '-' + [Guid]::NewGuid().ToString('N'))
 $data = Join-Path $root 'data'; $app = Join-Path $root 'app'; $scripts = Join-Path $app 'windows'
+$failure = $null
 try {
     [IO.Directory]::CreateDirectory($data) | Out-Null
     [IO.Directory]::CreateDirectory($scripts) | Out-Null
@@ -25,16 +26,22 @@ try {
     [IO.File]::WriteAllText((Join-Path $data 'controlled-booking-enabled'), 'enabled')
     & powershell.exe -NoProfile -NonInteractive -File (Join-Path $scripts 'Run-Agent.ps1') -OneShot
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $data 'supervisor-passed'))) { throw 'Browser supervision fixture failed.' }
-    $profileSwitch = '--user-data-dir="' + (Join-Path $data 'controlled-booking-login-chrome') + '"'
-    $chrome = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($profileSwitch) })
-    if ($chrome.Count -ne 1) { throw 'Persistent Chrome must survive its Node worker and launcher.' }
+    & node (Join-Path $app 'windows-agent.mjs') survival $data
+    if ($LASTEXITCODE -ne 0) { throw 'Persistent Chrome must survive its Node worker and launcher.' }
     if (Get-ChildItem -LiteralPath $data -Directory | Where-Object { $_.Name -like 'browser-supervisor-*' }) { throw 'Supervisor channel was not cleaned up.' }
     Write-Host 'Persistent Chrome survives launcher exit; temporary supervision channel removed.'
-} finally {
+} catch { $failure = $_ } finally {
     # Only processes whose command line contains this disposable fixture path.
     Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($root) } | ForEach-Object {
         & taskkill.exe /PID $_.ProcessId /T /F 2>$null | Out-Null
     }
-    if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    for ($attempt = 0; $attempt -lt 20 -and (Test-Path -LiteralPath $root); $attempt++) {
+        try { Remove-Item -LiteralPath $root -Recurse -Force }
+        catch {
+            if ($attempt -eq 19 -and -not $failure) { $failure = $_ }
+            Start-Sleep -Milliseconds 250
+        }
+    }
 }
+if ($failure) { throw $failure }
 exit 0

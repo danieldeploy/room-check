@@ -5,11 +5,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { prepareControlledBrowser } from './browser-supervisor.mjs';
 import { controlledBrowserEndpoint } from './controlled-browser.mjs';
 
-let raw = ''; for await (const chunk of process.stdin) raw += chunk;
-const config = JSON.parse(raw.replace(/^\uFEFF/, ''));
-const input = { portal: 'booking', accountId: 1, action: 'collect', browserProfile: 'fresh_login' };
-const prepare = () => prepareControlledBrowser(input, config.privateDir, config.browserSupervisor);
-const endpoint = () => controlledBrowserEndpoint(config.privateDir, 'fresh_login');
 async function connect(url) {
   const socket = new WebSocket(url);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -31,6 +26,19 @@ async function connect(url) {
     },
   };
 }
+
+if (process.argv[2] === 'survival') {
+  // A separate process proves the endpoint is live after the launcher exits.
+  const cdp = await connect(await controlledBrowserEndpoint(process.argv[3], 'fresh_login'));
+  assert.ok((await cdp.send('Target.getTargets')).targetInfos.length > 0);
+  await cdp.send('Browser.close'); cdp.close();
+  console.log('Persistent Chrome endpoint remains live after launcher exit.');
+} else {
+let raw = ''; for await (const chunk of process.stdin) raw += chunk;
+const config = JSON.parse(raw.replace(/^\uFEFF/, ''));
+const input = { portal: 'booking', accountId: 1, action: 'collect', browserProfile: 'fresh_login' };
+const prepare = () => prepareControlledBrowser(input, config.privateDir, config.browserSupervisor);
+const endpoint = () => controlledBrowserEndpoint(config.privateDir, 'fresh_login');
 
 // No portal traffic or credentials: about:blank and a synthetic cookie only.
 await prepare();
@@ -61,3 +69,4 @@ await prepare(); assert.equal(await endpoint(), second);
 cdp.close();
 await fs.writeFile(path.join(config.privateDir, 'supervisor-passed'), 'passed');
 console.log('Real launcher reopened closed Chrome, reused open Chrome and preserved its profile.');
+}
