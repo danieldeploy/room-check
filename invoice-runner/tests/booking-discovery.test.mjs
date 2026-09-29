@@ -2,6 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { navigateBookingInvoices } from '../booking-discovery.mjs';
 
+for (const mode of ['recover', 'ambiguous', 'hidden', 'changed_page', 'timeout']) {
+  test(`a non-clickable Finance control uses a fresh native keyboard target only when safe: ${mode}`, async () => {
+    let lookups = 0, opened = false, pressed = 0, changed = false;
+    const clickError = new Error(mode === 'timeout' ? 'Protocol timeout' : 'Node is either not clickable or not an Element');
+    const first = { evaluate: async () => ({ visible: true, label: 'finance' }),
+      click: async () => { changed = mode === 'changed_page'; throw clickError; },
+      press: async () => { throw new Error('must re-resolve the control'); } };
+    const fresh = { evaluate: async (_fn, names) => names
+      ? { visible: true, label: 'finance' } : mode !== 'hidden',
+      focus: async () => {},
+      press: async key => { assert.equal(key, 'Enter'); pressed++; opened = true; } };
+    const invoices = { evaluate: async () => ({ visible: true, label: 'invoices' }), click: async () => {} };
+    const page = {
+      url: () => `https://admin.booking.com/hotel/home?hotel_id=${changed ? '539828' : '1140306'}`,
+      waitForNavigation: async () => {},
+      $$: async () => opened ? [invoices] : ++lookups === 1 ? [first]
+        : mode === 'ambiguous' ? [fresh, fresh] : [fresh],
+    };
+    const run = () => navigateBookingInvoices(page, { property: '1140306', propertyLabel: 'One' }, async () => {});
+    if (mode === 'recover') assert.equal(await run(), 'invoices_visible');
+    else await assert.rejects(run, error => error === clickError);
+    assert.equal(pressed, mode === 'recover' ? 1 : 0);
+  });
+}
+
 test('public entry cannot lead to Finance while the wrong property remains selected', async () => {
   const visits = [];
   const page = { url: () => 'https://admin.booking.com/manage/home.html?hotel_id=539828',

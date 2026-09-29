@@ -9,11 +9,39 @@ const propertyEntryPaths = new Set([
   '/hotel/hoteladmin/extranet_ng/manage/index.html',
 ]);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function clickAndSettle(page, element) {
+async function clickAndSettle(page, element, keyboardFallback) {
   const navigation = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 6000 }).catch(() => {});
-  await element.click();
+  try { await element.click(); }
+  catch (error) {
+    // Puppeteer's clickablePoint throws this before dispatching any mouse input.
+    // Never repeat an action after a timeout or another uncertain browser error.
+    if (error?.message !== 'Node is either not clickable or not an Element' || !keyboardFallback) throw error;
+    const target = await keyboardFallback();
+    if (!target) throw error;
+    await target.press('Enter');
+  }
   await navigation;
   await pause(600);
+}
+async function activateMenu(page, names, match, onKeyboard) {
+  const location = page.url();
+  await clickAndSettle(page, match.control, async () => {
+    if (page.url() !== location) return null;
+    // Re-resolve the unique label after a layout change; never focus a stale,
+    // hidden, disabled or non-native control, or infer a destination URL.
+    const fresh = await uniqueControl(page, names);
+    if (!fresh) return null;
+    if (fresh.info.href) portalUrl('booking', fresh.info.href);
+    const usable = await fresh.control.evaluate(el => el.isConnected
+      && el.matches('button,a[href]') && !el.disabled && el.getAttribute('aria-disabled') !== 'true'
+      && getComputedStyle(el).visibility === 'visible'
+      && !el.closest('[inert],[hidden],[aria-hidden="true"]') && el.getClientRects().length > 0);
+    if (usable !== true || page.url() !== location) return null;
+    await fresh.control.focus();
+    if (await fresh.control.evaluate(el => document.activeElement === el) !== true) return null;
+    onKeyboard();
+    return fresh.control;
+  });
 }
 async function waitForControl(page, names) {
   if (typeof page.waitForFunction !== 'function') return;
@@ -200,7 +228,7 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
   if (!finance) return 'finance_missing';
   if (finance.info.href) portalUrl('booking', finance.info.href);
   phase('finance_click');
-  await clickAndSettle(page, finance.control);
+  await activateMenu(page, labels.finance, finance, () => phase('finance_keyboard'));
   phase('finance_inspect');
   await onStep('finance');
   phase('invoices_wait');
@@ -210,7 +238,7 @@ export async function navigateBookingInvoices(page, input, onStep, hooks = {}) {
   if (!invoices) return 'invoices_missing';
   if (invoices.info.href) portalUrl('booking', invoices.info.href);
   phase('invoices_click');
-  await clickAndSettle(page, invoices.control);
+  await activateMenu(page, labels.invoices, invoices, () => phase('invoices_keyboard'));
   phase('invoices_inspect');
   await onStep('invoices');
   url = portalUrl('booking', page.url());
