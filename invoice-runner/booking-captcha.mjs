@@ -97,7 +97,13 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
           if (url.hostname === 'account.booking.com' && url.pathname === '/sign-in'
               || url.hostname === 'auth.booking.com' && url.pathname === '/u/login/password') {
             stage = 'capture_reload';
-            await page.goto(originalUrl, { waitUntil: 'domcontentloaded' });
+            try { await page.goto(originalUrl, { waitUntil: 'domcontentloaded' }); }
+            catch (error) {
+              // Chrome can time out its navigation lifecycle after the expected
+              // document has loaded. Check that document; never issue another GET.
+              if (error?.name !== 'TimeoutError' || page.url() !== originalUrl
+                  || await page.evaluate(() => document.readyState) !== 'complete') throw error;
+            }
             stage = 'capture_ready';
             await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });
             stage = 'capture_verify';

@@ -69,6 +69,30 @@ async function fixture(browser, afterPassword = false, renderDelay = 0, resumeWi
 }
 
 export async function testBookingAwsWidget(browser) {
+  // Reproduce a lifecycle timeout after a real intercepted GET has completed.
+  // Recovery reads that document rather than issuing a second navigation.
+  {
+    const { page, context, signIns, verifiedRequests } = await fixture(browser);
+    let calls = 0, reloads = 0;
+    const controller = createBookingCaptchaTest(input, { solve: async () => { calls++; return 'fixture-token'; } });
+    try {
+      await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
+      await controller.prepare(page);
+      const goto = page.goto.bind(page);
+      page.goto = async (...args) => {
+        const response = await goto(...args);
+        if (++reloads === 1) throw Object.assign(new Error('synthetic navigation timeout'), { name: 'TimeoutError' });
+        return response;
+      };
+      assert.equal(await controller.attempt(page,
+        async current => current.evaluate(() => !!document.getElementById('captcha'))), true);
+      assert.equal(controller.status(), 'challenge_cleared');
+      assert.equal(calls, 1);
+      assert.equal(reloads, 1);
+      assert.equal(signIns(), 3); // initial document, recovery GET, normal callback continuation
+      assert.equal(verifiedRequests(), 1);
+    } finally { await controller.release(); await context.close(); }
+  }
   const cases = [{ lateAttach: false, afterPassword: false, renderDelay: 150 },
     ...[false, true].flatMap(lateAttach => [false, true].map(afterPassword => ({ lateAttach, afterPassword })))];
   for (const { lateAttach, afterPassword, renderDelay } of cases) {
