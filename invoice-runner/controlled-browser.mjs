@@ -102,8 +102,40 @@ export async function controlledBookingPage(browser, purpose = 'primary') {
     : { page: await context.newPage(), created: true };
 }
 
-export async function guardPortalRequests(page, portal, allowedUrl, blockedValues = []) {
+function awsWafDestination(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password
+      && (!url.port || url.port === '443') && url.hostname.endsWith('.awswaf.com');
+  } catch { return false; }
+}
+
+function allowedBookingWafRequest(request, portal, allowedUrl, blockedValues) {
+  if (portal !== 'booking' || request.isNavigationRequest()
+      || !['POST', 'OPTIONS'].includes(request.method())
+      || !['fetch', 'xhr', 'other'].includes(request.resourceType())
+      || !awsWafDestination(request.url())) return false;
+  try {
+    // Only the Booking document may initiate SDK traffic. AWS endpoints never
+    // become valid destinations for credential forms, navigation or downloads.
+    allowedUrl('booking', request.frame()?.url());
+    const body = request.postData();
+    if (request.method() === 'POST' && typeof body !== 'string') return false;
+    if (typeof body === 'string') {
+      let decoded = body;
+      for (let pass = 0; pass < 3; pass++) {
+        if (blockedValues.some(secret => typeof secret === 'string' && secret.length > 0
+            && (decoded.includes(secret) || decoded.includes(JSON.stringify(secret).slice(1, -1))))) return false;
+        try { decoded = decodeURIComponent(decoded); } catch { break; }
+      }
+    }
+    return true;
+  } catch { return false; }
+}
+
+export async function guardPortalRequests(page, portal, allowedUrl, blockedValues = [], report = () => {}) {
   await page.setRequestInterception(true);
+  const count = kind => { try { report(kind); } catch { /* Diagnostics cannot affect requests. */ } };
   const onRequest = request => {
     if (request.isInterceptResolutionHandled()) return;
     // The password form can be a GET SPA form. If its script fails to intercept
@@ -126,7 +158,13 @@ export async function guardPortalRequests(page, portal, allowedUrl, blockedValue
     } catch { /* The regular destination allowlist handles invalid URLs. */ }
     if (request.isNavigationRequest() || !['GET', 'HEAD'].includes(request.method())) {
       try { allowedUrl(portal, request.url()); }
-      catch { void request.abort().catch(() => {}); return; }
+      catch {
+        if (allowedBookingWafRequest(request, portal, allowedUrl, blockedValues)) count('aws_waf_allowed');
+        else {
+          if (portal === 'booking' && awsWafDestination(request.url())) count('aws_waf_blocked');
+          void request.abort().catch(() => {}); return;
+        }
+      }
     }
     void request.continue().catch(() => {});
   };

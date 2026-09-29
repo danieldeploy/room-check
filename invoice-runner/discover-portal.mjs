@@ -189,6 +189,8 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
   const smsSignals = () => portal === 'booking' && loginOnly
     ? { sms_prompted: smsPrompted, sms_submitted: smsSubmitted,
       cookie_consent_rejected: cookieConsentRejected,
+      ...(hooks.requestGuardCounts ? { aws_waf_allowed: hooks.requestGuardCounts.aws_waf_allowed,
+        aws_waf_blocked: hooks.requestGuardCounts.aws_waf_blocked } : {}),
       ...(hooks.loopbackPermission ? { loopback_permission: hooks.loopbackPermission } : {}),
       ...(hooks.captchaTest ? { captcha_status: hooks.captchaTest.status(),
         ...(hooks.captchaTest.staleReason?.() ? { captcha_stale_reason: hooks.captchaTest.staleReason() } : {}),

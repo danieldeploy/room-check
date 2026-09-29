@@ -3,11 +3,53 @@ import { blockBookingLoopback } from '../invoice-runner/booking-permissions.mjs'
 import { createBookingCaptchaTest } from '../invoice-runner/booking-captcha.mjs';
 import { discoverPortal } from '../invoice-runner/discover-portal.mjs';
 import { testBookingAwsWidget } from './booking-widget-browser.mjs';
+import { guardPortalRequests } from '../invoice-runner/controlled-browser.mjs';
+import { portalUrl } from '../invoice-runner/portal.mjs';
 
 // No network requests leave this synthetic browser test, including provider calls.
 export async function testBookingAutomation(browser) {
+  await testBookingWafRequests(browser);
   for (const afterPassword of [false, true]) await testBookingAutomationCase(browser, afterPassword);
   await testBookingAwsWidget(browser);
+}
+
+async function testBookingWafRequests(browser) {
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+  const counts = [];
+  const listeners = new Map();
+  // Exercise the production guard with real Chrome requests; approved requests
+  // receive fixture responses instead of going to Booking or AWS.
+  const fixturePage = {
+    setRequestInterception: enabled => page.setRequestInterception(enabled),
+    on(event, handler) {
+      const listener = request => handler({
+        isInterceptResolutionHandled: () => request.isInterceptResolutionHandled(),
+        isNavigationRequest: () => request.isNavigationRequest(),
+        method: () => request.method(), resourceType: () => request.resourceType(),
+        url: () => request.url(), frame: () => request.frame(), postData: () => request.postData(),
+        abort: () => request.abort(),
+        continue: () => request.respond({ status: 200, contentType: 'text/html',
+          headers: { 'access-control-allow-origin': 'https://account.booking.com' },
+          body: '<title>Synthetic AWS request test</title>' }),
+      });
+      listeners.set(handler, listener); page.on(event, listener);
+    },
+    off(event, handler) { page.off(event, listeners.get(handler)); },
+  };
+  const release = await guardPortalRequests(fixturePage, 'booking', portalUrl,
+    ['fixture-private-password'], kind => counts.push(kind));
+  try {
+    await page.goto('https://account.booking.com/sign-in');
+    const send = body => page.evaluate(async value => {
+      try { return (await fetch('https://a1b2.edge.captcha-sdk.awswaf.com/',
+        { method: 'POST', body: value })).ok; } catch { return false; }
+    }, body);
+    assert.equal(await send('{"challenge":"fixture"}'), true);
+    assert.equal(await send('{"password":"fixture-private-password"}'), false);
+    assert.equal(counts.filter(kind => kind === 'aws_waf_allowed').length, 1);
+    assert.equal(counts.filter(kind => kind === 'aws_waf_blocked').length, 1);
+  } finally { await release(); await context.close(); }
 }
 
 async function testBookingAutomationCase(browser, afterPassword) {

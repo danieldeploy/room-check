@@ -183,3 +183,27 @@ Referências técnicas: [Anti-Captcha AmazonTaskProxyless](https://anti-captcha.
 - Acceptance: controller tests cover each category and secret-containing errors;
   isolated Chrome checks distinguish parent-domain conflict from an HttpOnly cookie.
   A real login/SMS/collection cycle remains unverified until separately observed.
+
+## Pedidos do SDK AWS bloqueados pelo agente (29/09/2026)
+
+1. **Comportamento:** permitir POST/OPTIONS HTTPS de fetch/XHR do SDK AWS WAF,
+   iniciados por uma página Booking. A regra anterior só admitia POST para
+   booking.com e bloqueava esses pedidos do componente de autenticação.
+2. **Permissões:** a exceção limita-se ao serviço AWS WAF usado pelo Booking;
+   não torna AWS um destino válido de formulários, navegação ou downloads.
+3. **Dados:** manter bloqueio de passwords/OTP nos URLs e acrescentar esse
+   bloqueio aos corpos dos pedidos AWS. Guardar somente contadores limitados
+   de pedidos AWS permitidos/bloqueados, sem URLs, corpos ou tokens.
+4. **Falhas:** recusar esquemas/domínios parecidos, frames externos, navegação,
+   métodos inesperados e POST sem corpo inspecionável. Não repetir tarefas API.
+5. **Aceitação:** reproduzir o bloqueio com o código de produção anterior;
+   testar a exceção e os bloqueios em Node e num Chrome isolado com respostas
+   sintéticas. Atribuir causalidade ao login real apenas depois de o observar.
+
+Referência: https://docs.aws.amazon.com/waf/latest/developerguide/waf-javascript-api-csp.html
+
+A revisão também identificou um risco posterior: o prazo do recetor SMS começa
+antes do CAPTCHA e dura cerca de 150 s. Isso não explica os testes 71–76, que
+não chegaram ao SMS; requer validação do momento de registo do desafio no ciclo
+real. O fluxo atual reconhece o campo OTP, mas não implementa um ecrã adicional
+para escolher o canal ou clicar em enviar SMS caso o Booking o apresente.

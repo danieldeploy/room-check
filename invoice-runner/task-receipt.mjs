@@ -28,6 +28,9 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
     receipt.cookie_consent_rejected = diagnostic.cookie_consent_rejected;
   }
   if (job.input.portal === 'booking') {
+    for (const key of ['aws_waf_allowed', 'aws_waf_blocked'])
+      if (Number.isSafeInteger(diagnostic?.[key]) && diagnostic[key] >= 0 && diagnostic[key] <= 10000)
+        receipt[key] = diagnostic[key];
     if (['blocked', 'disabled', 'unavailable'].includes(diagnostic?.loopback_permission))
       receipt.loopback_permission = diagnostic.loopback_permission;
     if (CAPTCHA_STATUSES.includes(diagnostic?.captcha_status)) receipt.captcha_status = diagnostic.captcha_status;

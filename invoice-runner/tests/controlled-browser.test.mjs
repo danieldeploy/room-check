@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { portalUrl } from '../portal.mjs';
 import { parseControlledEndpoint, controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions,
   controlledBookingPage, guardPortalRequests, usesControlledBrowser } from '../controlled-browser.mjs';
 
@@ -223,4 +224,38 @@ test('request guard aborts password and OTP query leaks even on allowed Booking 
   assert.equal(aborted, 3);
   await release();
   assert.equal(page.listenerCount('request'), 0);
+});
+
+test('AWS SDK POST and preflight are allowed only from Booking without credentials', async () => {
+  const page = new EventEmitter();
+  page.setRequestInterception = async () => {};
+  const password = 'private-password';
+  const otp = '742619';
+  const counts = [];
+  const release = await guardPortalRequests(page, 'booking', portalUrl, [password, otp], kind => counts.push(kind));
+  const origin = 'https://a1b2.edge.captcha-sdk.awswaf.com/';
+  for (const [patch, expected] of [
+    [{}, 'continued'], [{ method: 'OPTIONS', body: undefined }, 'continued'],
+    [{ navigation: true }, 'aborted'], [{ frame: 'https://unrelated.test/' }, 'aborted'],
+    [{ frame: undefined }, 'aborted'], [{ method: 'DELETE' }, 'aborted'],
+    [{ url: 'http://a1b2.edge.captcha-sdk.awswaf.com/' }, 'aborted'],
+    [{ url: 'https://a1b2.edge.captcha-sdk.awswaf.com.evil.test/' }, 'aborted'],
+    [{ url: origin.replace('https://', 'https://user:secret@') }, 'aborted'],
+    [{ body: undefined }, 'aborted'], [{ body: JSON.stringify({ password }) }, 'aborted'],
+    [{ body: encodeURIComponent(JSON.stringify({ code: otp })) }, 'aborted'],
+    [{ url: origin + '?password=' + password }, 'aborted'],
+  ]) {
+    const data = { url: origin, method: 'POST', body: '{"challenge":"synthetic"}',
+      frame: 'https://account.booking.com/sign-in', navigation: false, ...patch };
+    let actual;
+    page.emit('request', { isInterceptResolutionHandled: () => false,
+      isNavigationRequest: () => data.navigation, method: () => data.method,
+      resourceType: () => 'fetch', url: () => data.url, postData: () => data.body,
+      frame: () => data.frame ? { url: () => data.frame } : null,
+      continue: async () => { actual = 'continued'; }, abort: async () => { actual = 'aborted'; } });
+    assert.equal(actual, expected, JSON.stringify(Object.keys(patch)));
+  }
+  assert.equal(counts.filter(kind => kind === 'aws_waf_allowed').length, 2);
+  assert.ok(counts.every(kind => ['aws_waf_allowed', 'aws_waf_blocked'].includes(kind)));
+  await release();
 });
