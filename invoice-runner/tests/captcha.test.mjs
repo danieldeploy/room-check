@@ -197,6 +197,29 @@ test('test mode never runs on collections; missing and unsupported configuration
   assert.equal(count, 0);
 });
 
+test('local apply exceptions are not reported as server rejection and never leak details', async () => {
+  for (const [message, expected] of [
+    ['widget token cookie conflict', 'browser_cookie_conflict'],
+    ['widget token cookie unavailable', 'browser_cookie_unavailable'],
+    ['widget callback failed', 'browser_callback_error'],
+    ['Execution context was destroyed: ' + key, 'browser_context_lost'],
+    ['private callback data ' + key, 'browser_error'],
+  ]) {
+    let calls = 0;
+    const controller = createBookingCaptchaTest(input, {
+      widget: { read: async () => ({ wafType: 'widget', websiteKey: 'fixture-widget-key',
+        widgetId: 'fixture-id', jsapiScript: 'https://a1b2c3.edge.captcha-sdk.awswaf.com/a1b2c3/jsapi.js' }),
+        complete: async () => { throw new Error(message); } },
+      solve: async () => { calls++; return 'fixture-token'; },
+    });
+    assert.equal(await controller.attempt(pageFixture(), async () => true), false);
+    assert.equal(controller.status(), expected);
+    assert.equal(controller.stage(), 'apply');
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify({ status: controller.status(), stage: controller.stage() }).includes(key), false);
+  }
+});
+
 test('one attempt per job and success requires challenge disappearance, not just a provider token', async () => {
   for (const remains of [true, false]) {
     let calls = 0, checks = 0;

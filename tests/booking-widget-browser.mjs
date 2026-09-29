@@ -206,7 +206,8 @@ export async function testBookingAwsWidget(browser) {
       await controller.prepare(page);
       await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
       assert.equal(await controller.attempt(page, async () => true), false);
-      assert.equal(controller.status(), 'not_accepted', conflict);
+      assert.equal(controller.status(), conflict === 'parent-domain'
+        ? 'browser_cookie_conflict' : 'browser_cookie_unavailable', conflict);
       assert.equal(verifiedRequests(), 0);
       assert.equal(await page.evaluate(() => window.fixtureCallbacks || 0), 0);
       assert.ok((await context.cookies()).some(cookie => cookie.value === 'existing-fixture'));

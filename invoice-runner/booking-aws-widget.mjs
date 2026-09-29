@@ -33,6 +33,7 @@ export function installAwsWidgetObserver(stateKey, origins) {
     document.cookie = 'aws-waf-token=' + token + '; Path=/; Secure; SameSite=Lax';
     const stored = document.cookie.split(';').map(value => value.trim())
       .filter(value => value.startsWith('aws-waf-token='));
+    if (stored.length > 1) throw new Error('widget token cookie conflict');
     if (stored.length !== 1 || stored[0] !== 'aws-waf-token=' + token)
       throw new Error('widget token cookie unavailable');
     current.used = true;
@@ -108,7 +109,8 @@ export function installAwsWidgetObserver(stateKey, origins) {
       if (!storeToken(id, token)) return false;
       // Use the callback registered by the site through the public AWS contract.
       // No private callback guessing or credential POST replay.
-      Reflect.apply(entry.onSuccess, entry.configuration, [token]);
+      try { Reflect.apply(entry.onSuccess, entry.configuration, [token]); }
+      catch { throw new Error('widget callback failed'); }
       return true;
     },
     dispose() {
