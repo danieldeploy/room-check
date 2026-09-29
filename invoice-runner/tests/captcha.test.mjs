@@ -189,6 +189,7 @@ test('expired challenge or human navigation never receives a stale provider toke
     });
     assert.equal(await controller.attempt(page, async () => true), false);
     assert.equal(controller.status(), 'stale');
+    assert.equal(controller.staleReason(), navigate ? 'page_changed' : 'challenge_changed');
     assert.equal(page.cookies.length, 0);
   }
 });

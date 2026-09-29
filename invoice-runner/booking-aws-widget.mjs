@@ -44,11 +44,15 @@ export function installAwsWidgetObserver(stateKey, origins) {
         const callback = configuration[name];
         config[name] = function(...args) {
           entry.used = true;
+          entry.endReason = name === 'onSuccess' ? 'widget_completed'
+            : name === 'onPuzzleTimeout' ? 'widget_expired' : 'widget_error';
+          if (name === 'onError' && ['internal_error', 'network_error', 'token_error', 'client_error'].includes(args[0]?.kind))
+            entry.endReason = 'widget_' + args[0].kind;
           if (typeof callback === 'function') return Reflect.apply(callback, this, args);
         };
       }
       try { return Reflect.apply(original, this, [container, config]); }
-      catch (error) { entry.used = true; throw error; }
+      catch (error) { entry.used = true; entry.endReason = 'widget_error'; throw error; }
     };
     try {
       sdk.renderCaptcha = wrapped;
@@ -66,12 +70,22 @@ export function installAwsWidgetObserver(stateKey, origins) {
   });
   Object.defineProperty(window, stateKey, { configurable: true, value: {
     read,
+    invalidReason(id) {
+      if (!current) return 'observer_missing';
+      if (current.id !== id) return 'widget_replaced';
+      if (current.used) return current.endReason || 'widget_completed';
+      if (current.url !== location.href) return 'page_changed';
+      if (!current.container.isConnected) return 'widget_removed';
+      if (!current.container.getClientRects().length) return 'widget_hidden';
+      return 'challenge_changed';
+    },
     canRestart: () => !current && loadedBeforeObserver && typeof window.AwsWafCaptcha?.renderCaptcha === 'function',
     complete(id, token) {
       const snapshot = read();
       if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length) return false;
       const entry = current;
       entry.used = true;
+      entry.endReason = 'widget_completed';
       // Use the callback registered by the site through the public AWS contract.
       // No private callback guessing, cookie replacement, or credential POST replay.
       Reflect.apply(entry.onSuccess, entry.configuration, [token]);
@@ -114,6 +128,10 @@ export function createAwsWidgetObserver() {
     async canRestart(page) {
       if (!pages.has(page)) return false;
       return page.evaluate(key => window[key]?.canRestart() === true, stateKey);
+    },
+    async invalidReason(page, id) {
+      if (!pages.has(page)) return 'observer_missing';
+      return page.evaluate((key, widgetId) => window[key]?.invalidReason(widgetId) ?? 'observer_missing', stateKey, id);
     },
     async waitForRender(page) {
       if (!pages.has(page)) return;
