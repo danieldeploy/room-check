@@ -159,7 +159,7 @@ function pageFixture() {
 }
 
 test('reload timeout continues only for the same completed document without another GET', async () => {
-  for (const state of ['complete', 'interactive', 'other-page']) {
+  for (const state of ['complete', 'loading', 'interactive', 'other-page', 'inspection-timeout', key]) {
     const page = pageFixture();
     let gets = 0, solves = 0, applied = false, reads = 0;
     page.goto = async () => {
@@ -167,7 +167,11 @@ test('reload timeout continues only for the same completed document without anot
       if (state === 'other-page') page.url = () => 'https://account.booking.com/other';
       throw Object.assign(new Error('private navigation ' + key), { name: 'TimeoutError' });
     };
-    page.evaluate = async () => state;
+    page.evaluate = async () => {
+      if (state === 'inspection-timeout')
+        throw Object.assign(new Error('private inspection ' + key), { name: 'TimeoutError' });
+      return state;
+    };
     const controller = createBookingCaptchaTest(input, {
       widget: { read: async () => ++reads === 1 ? null : {
         wafType: 'widget', websiteKey: 'fixture-widget-key', widgetId: 'fixture-id',
@@ -180,6 +184,11 @@ test('reload timeout continues only for the same completed document without anot
     assert.equal(gets, 1);
     assert.equal(solves, state === 'complete' ? 1 : 0);
     assert.equal(controller.status(), state === 'complete' ? 'challenge_cleared' : 'browser_timeout');
+    assert.equal(controller.stage(), state === 'complete' ? 'verify'
+      : state === 'other-page' ? 'capture_reload_changed_url'
+        : state === 'inspection-timeout' ? 'capture_reload_inspect'
+          : state === 'loading' ? 'capture_reload_loading'
+            : state === 'interactive' ? 'capture_reload_interactive' : 'capture_reload_unknown_state');
     assert.equal(JSON.stringify({ status: controller.status(), stage: controller.stage() }).includes(key), false);
   }
 });
