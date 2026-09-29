@@ -12,7 +12,7 @@ const sdk = `window.fixtureOriginal = function(container, config) {
   window.fixtureConfig = config; container.textContent = 'Synthetic widget';
 }; window.AwsWafCaptcha = { renderCaptcha: window.fixtureOriginal };`;
 const form = `<form class="nw-signin" action="https://auth.booking.com/u/login/password"><input autocomplete="username"><button>Continue</button></form>`;
-const widgetHtml = `<script src="${scriptUrl}"></script><div id="captcha"></div><script>
+const widgetHtml = `<h1>Let's make sure you're human</h1><script src="${scriptUrl}"></script><div id="captcha"></div><script>
   window.fixtureRender = () => AwsWafCaptcha.renderCaptcha(document.getElementById('captcha'), {
     apiKey: 'synthetic-widget-key', onSuccess(token) {
       window.fixtureCallbacks = (window.fixtureCallbacks || 0) + 1;
@@ -24,7 +24,7 @@ const widgetHtml = `<script src="${scriptUrl}"></script><div id="captcha"></div>
   else fixtureRender();
 </script>`;
 
-async function fixture(browser, afterPassword = false) {
+async function fixture(browser, afterPassword = false, renderDelay = 0) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   let passwordSubmitted = false, signIns = 0;
@@ -37,7 +37,9 @@ async function fixture(browser, afterPassword = false) {
     let body = '<title>Synthetic extranet</title>';
     if (url.hostname === 'account.booking.com') {
       if (request.resourceType() === 'document') signIns++;
-      body = afterPassword && !passwordSubmitted ? form : widgetHtml;
+      body = afterPassword && !passwordSubmitted ? form : renderDelay
+        ? widgetHtml.replace('else fixtureRender();', `else setTimeout(fixtureRender, ${renderDelay});`)
+        : widgetHtml;
     }
     if (url.hostname === 'auth.booking.com') body = `<form action="https://admin.booking.com/hotel/home"><input type="password"><button>Login</button></form>`;
     if (url.hostname === 'admin.booking.com' && afterPassword && !passwordSubmitted) {
@@ -50,9 +52,10 @@ async function fixture(browser, afterPassword = false) {
 }
 
 export async function testBookingAwsWidget(browser) {
-  for (const lateAttach of [false, true]) {
-    for (const afterPassword of [false, true]) {
-      const { page, context, signIns } = await fixture(browser, afterPassword);
+  const cases = [{ lateAttach: false, afterPassword: false, renderDelay: 150 },
+    ...[false, true].flatMap(lateAttach => [false, true].map(afterPassword => ({ lateAttach, afterPassword })))];
+  for (const { lateAttach, afterPassword, renderDelay } of cases) {
+      const { page, context, signIns } = await fixture(browser, afterPassword, renderDelay);
       let calls = 0;
       const controller = createBookingCaptchaTest(input, { solve: async challenge => {
         calls++;
@@ -79,7 +82,6 @@ export async function testBookingAwsWidget(browser) {
         await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
         assert.equal(await page.evaluate(() => AwsWafCaptcha.renderCaptcha === fixtureOriginal), true);
       } finally { await controller.release(); await context.close(); }
-    }
   }
 
   for (const invalidation of ['rerender', 'same-url-navigation', 'human-success', 'timeout', 'error', 'removed']) {

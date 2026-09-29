@@ -67,6 +67,10 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
             challenge = await readChallenge(page);
           }
         }
+        if (!challenge) {
+          await widget.waitForRender(page);
+          challenge = await readChallenge(page);
+        }
         if (!challenge) { status = 'unsupported'; return false; }
         if (page.url() !== originalUrl || !await hasChallenge(page)) { status = 'stale'; return false; }
         const token = await solve(challenge, options.captcha_api_key);

@@ -7,6 +7,7 @@ export function installAwsWidgetObserver(stateKey, origins) {
   if (!origins.includes(location.origin) || window[stateKey]) return;
   let current = null, sequence = 0, sdkValue = window.AwsWafCaptcha;
   const documentId = crypto.randomUUID();
+  const loadedBeforeObserver = typeof sdkValue?.renderCaptcha === 'function';
   const originalGlobal = Object.getOwnPropertyDescriptor(window, 'AwsWafCaptcha');
   const restores = [];
   const read = () => {
@@ -65,7 +66,7 @@ export function installAwsWidgetObserver(stateKey, origins) {
   });
   Object.defineProperty(window, stateKey, { configurable: true, value: {
     read,
-    canRestart: () => !current && typeof window.AwsWafCaptcha?.renderCaptcha === 'function',
+    canRestart: () => !current && loadedBeforeObserver && typeof window.AwsWafCaptcha?.renderCaptcha === 'function',
     complete(id, token) {
       const snapshot = read();
       if (!snapshot || snapshot.widgetId !== id || typeof token !== 'string' || !token.length) return false;
@@ -113,6 +114,11 @@ export function createAwsWidgetObserver() {
     async canRestart(page) {
       if (!pages.has(page)) return false;
       return page.evaluate(key => window[key]?.canRestart() === true, stateKey);
+    },
+    async waitForRender(page) {
+      if (!pages.has(page)) return;
+      // SPA widgets may render after the document's load event.
+      await page.waitForFunction(key => !!window[key]?.read(), { timeout: 5000 }, stateKey).catch(() => {});
     },
     async complete(page, id, token) {
       return page.evaluate((key, widgetId, solution) => window[key]?.complete(widgetId, solution) === true,

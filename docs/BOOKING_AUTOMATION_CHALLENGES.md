@@ -49,6 +49,8 @@ O observador é instalado apenas nos testes de acesso com fornecedor configurado
 antes da navegação, e preserva a função original de renderização. Uma aba antiga
 que já tenha renderizado pode fazer um único GET à mesma página de entrada para
 capturar uma renderização nova. Não repete POST nem consome outra tarefa paga.
+O observador aguarda até cinco segundos por widgets carregados depois do evento
+de carregamento da página, antes de considerar o formato não suportado.
 A chave é obtida em memória; não é pedida ao proprietário nem gravada em logs.
 O pedido documentado é `AmazonTaskProxyless`, `wafType: widget`, `websiteKey`,
 `jsapiScript` e a origem pública em `websiteURL`.
