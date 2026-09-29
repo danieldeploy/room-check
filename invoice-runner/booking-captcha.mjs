@@ -1,10 +1,13 @@
 import { BOOKING_AUTH_ORIGINS } from './booking-permissions.mjs';
-import { amazonTask, solveAmazonCaptcha, CaptchaError } from './captcha-provider.mjs';
+import { amazonTask, solveAmazonCaptcha, CaptchaError, PROVIDER_ERROR_STATUSES } from './captcha-provider.mjs';
 import { createAwsWidgetObserver } from './booking-aws-widget.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export const CAPTCHA_STATUSES = Object.freeze(['disabled', 'unconfigured', 'unsupported',
-  'provider_error', 'timeout', 'stale', 'not_accepted', 'challenge_cleared', 'not_needed']);
+  'provider_error', 'browser_error', 'timeout', 'stale', 'not_accepted', 'challenge_cleared', 'not_needed',
+  ...PROVIDER_ERROR_STATUSES]);
+export const CAPTCHA_STAGES = Object.freeze(['not_started', 'capture', 'provider',
+  'create_task', 'poll_task', 'validate', 'apply', 'verify']);
 
 export async function readBookingAwsChallenge(page) {
   const location = new URL(page.url());
@@ -30,6 +33,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
   read = readBookingAwsChallenge, widget = createAwsWidgetObserver() } = {}) {
   const options = input.automation ?? {};
   let used = false;
+  let stage = 'not_started';
   let status = input.portal === 'booking' && input.action === 'login' && options.captcha_mode === 'test' ? 'not_needed' : 'disabled';
   const readChallenge = async page => {
     const location = new URL(page.url());
@@ -40,6 +44,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
   };
   return {
     status: () => status,
+    stage: () => stage,
     prepare: page => status !== 'disabled' && options.captcha_provider === 'anti-captcha' && options.captcha_api_key
       ? widget.prepare(page) : Promise.resolve(),
     release: () => widget.release(),
@@ -51,6 +56,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
       }
       let tokenReceived = false, applying = false;
       try {
+        stage = 'capture';
         const originalUrl = page.url();
         let challenge = await readChallenge(page);
         if (!challenge && await widget.canRestart(page)) {
@@ -73,16 +79,22 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
         }
         if (!challenge) { status = 'unsupported'; return false; }
         if (page.url() !== originalUrl || !await hasChallenge(page)) { status = 'stale'; return false; }
-        const token = await solve(challenge, options.captcha_api_key);
+        stage = 'provider';
+        const token = await solve(challenge, options.captcha_api_key, {
+          onStage: value => { if (['create_task', 'poll_task'].includes(value)) stage = value; },
+        });
         tokenReceived = true;
+        stage = 'validate';
         // A human or the site may have moved on while the provider was solving.
         if (page.url() !== originalUrl || !await hasChallenge(page)
             || JSON.stringify(await readChallenge(page)) !== JSON.stringify(challenge)) {
           status = 'stale'; return false;
         }
         applying = true;
+        stage = 'apply';
         if (challenge.wafType === 'widget') {
           if (!await widget.complete(page, challenge.widgetId, token)) { status = 'stale'; return false; }
+          stage = 'verify';
           const deadline = Date.now() + 15000;
           do {
             try {
@@ -100,11 +112,13 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
         // Explicit GET, not reload: never replay a credential-bearing POST.
         await page.goto(originalUrl, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });
+        stage = 'verify';
         status = await hasChallenge(page) ? 'not_accepted' : 'challenge_cleared';
         return status === 'challenge_cleared';
       } catch (error) {
         status = error instanceof CaptchaError && CAPTCHA_STATUSES.includes(error.message)
-          ? error.message : tokenReceived ? applying ? 'not_accepted' : 'stale' : 'provider_error';
+          ? error.message : tokenReceived ? applying ? 'not_accepted' : 'stale'
+            : stage === 'capture' ? 'browser_error' : 'provider_error';
         return false;
       }
     },

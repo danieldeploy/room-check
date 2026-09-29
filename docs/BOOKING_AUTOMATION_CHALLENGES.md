@@ -30,6 +30,23 @@
 
 ## Operação
 
+### Diagnóstico do teste (29/09/2026)
+
+1. **Comportamento:** distinguir falha local de captura (`browser_error`) de
+   recusa do fornecedor; guardar a fase categórica em `captcha_stage`.
+2. **Permissões:** mantém o teste manual exclusivo do Gerente e o cofre existente.
+3. **Dados:** apenas códigos fixos, confirmados pelo par `errorId`/`errorCode`
+   documentado. Nunca guardar descrições livres do fornecedor ou valores pedidos.
+4. **Falhas:** desconhecidas continuam `provider_error`; sem repetição automática.
+   `create_task` indica uma tentativa de pedido, sem provar cobrança ou criação;
+   `poll_task` indica que o fornecedor devolveu um identificador válido de tarefa.
+5. **Aceitação:** testar recusa na criação e no polling, erro local sem pedido,
+   saneamento de códigos desconhecidos e recibos; publicar pelo CI antes do teste real.
+
+Referência: [erros oficiais Anti-Captcha](https://anti-captcha.com/apidoc/errors).
+
+### Configuração
+
 Portais e contas → Booking → Opções de automação. O campo da chave nunca devolve
 o valor guardado; vazio preserva-o e existe uma opção de remoção. Ativar o teste,
 guardar e usar «Testar acesso à conta». Cada clique pode criar uma tarefa paga.
