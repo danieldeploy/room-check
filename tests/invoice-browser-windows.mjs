@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { assertPrivateDirectory } from '../invoice-runner/private-storage.mjs';
 import { testBookingAutomation } from './booking-automation-browser.mjs';
 import { testBookingCookieConsent } from './booking-cookie-consent-browser.mjs';
+import { testBookingNavigation } from './booking-navigation-browser.mjs';
 
 const root = process.argv[2];
 assert.equal(process.platform, 'win32');
@@ -42,6 +43,8 @@ let consentBrowser;
 try {
   consentBrowser = await puppeteer.launch({ headless: true, userDataDir: consentProfile, timeout: 30000 });
   await testBookingCookieConsent(consentBrowser);
+  await testBookingNavigation(consentBrowser);
+  console.info('Repeated Finance/Invoices navigation passed with non-clickable native controls for both properties.');
   await testBookingAutomation(consentBrowser);
   console.info('Scoped loopback denial and synthetic CAPTCHA login continuation passed.');
   console.info('Delayed Booking cookie rejection and login continuation passed in sandboxed Windows Chrome.');
