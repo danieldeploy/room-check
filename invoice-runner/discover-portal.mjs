@@ -191,6 +191,7 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       cookie_consent_rejected: cookieConsentRejected,
       ...(hooks.loopbackPermission ? { loopback_permission: hooks.loopbackPermission } : {}),
       ...(hooks.captchaTest ? { captcha_status: hooks.captchaTest.status(),
+        ...(hooks.captchaTest.staleReason?.() ? { captcha_stale_reason: hooks.captchaTest.staleReason() } : {}),
         ...(hooks.captchaTest.stage ? { captcha_stage: hooks.captchaTest.stage() } : {}) } : {}) } : {};
   let stage = 'prepare';
   let identifierSubmit = null;

@@ -8,6 +8,10 @@ export const CAPTCHA_STATUSES = Object.freeze(['disabled', 'unconfigured', 'unsu
   ...PROVIDER_ERROR_STATUSES]);
 export const CAPTCHA_STAGES = Object.freeze(['not_started', 'capture', 'provider',
   'create_task', 'poll_task', 'validate', 'apply', 'verify']);
+export const CAPTCHA_STALE_REASONS = Object.freeze(['page_changed', 'page_unavailable',
+  'challenge_cleared', 'challenge_changed', 'observer_missing', 'widget_replaced',
+  'widget_completed', 'widget_expired', 'widget_removed', 'widget_hidden', 'widget_error',
+  'widget_internal_error', 'widget_network_error', 'widget_token_error', 'widget_client_error']);
 
 export async function readBookingAwsChallenge(page) {
   const location = new URL(page.url());
@@ -34,6 +38,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
   const options = input.automation ?? {};
   let used = false;
   let stage = 'not_started';
+  let staleReason = null;
   let status = input.portal === 'booking' && input.action === 'login' && options.captcha_mode === 'test' ? 'not_needed' : 'disabled';
   const readChallenge = async page => {
     const location = new URL(page.url());
@@ -42,9 +47,16 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
     if (raw) return { ...amazonTask({ ...raw, websiteURL: location.origin + '/' }), widgetId: raw.widgetId };
     return read(page);
   };
+  const stale = reason => {
+    staleReason = CAPTCHA_STALE_REASONS.includes(reason) ? reason : 'challenge_changed';
+    status = 'stale'; return false;
+  };
+  const changedReason = async (page, challenge) => challenge.wafType === 'widget'
+    && widget.invalidReason ? widget.invalidReason(page, challenge.widgetId) : 'challenge_changed';
   return {
     status: () => status,
     stage: () => stage,
+    staleReason: () => staleReason,
     prepare: page => status !== 'disabled' && options.captcha_provider === 'anti-captcha' && options.captcha_api_key
       ? widget.prepare(page) : Promise.resolve(),
     release: () => widget.release(),
@@ -78,7 +90,8 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
           challenge = await readChallenge(page);
         }
         if (!challenge) { status = 'unsupported'; return false; }
-        if (page.url() !== originalUrl || !await hasChallenge(page)) { status = 'stale'; return false; }
+        if (page.url() !== originalUrl) return stale('page_changed');
+        if (!await hasChallenge(page)) return stale('challenge_cleared');
         stage = 'provider';
         const token = await solve(challenge, options.captcha_api_key, {
           onStage: value => { if (['create_task', 'poll_task'].includes(value)) stage = value; },
@@ -86,14 +99,14 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
         tokenReceived = true;
         stage = 'validate';
         // A human or the site may have moved on while the provider was solving.
-        if (page.url() !== originalUrl || !await hasChallenge(page)
-            || JSON.stringify(await readChallenge(page)) !== JSON.stringify(challenge)) {
-          status = 'stale'; return false;
-        }
+        if (page.url() !== originalUrl) return stale('page_changed');
+        if (!await hasChallenge(page)) return stale('challenge_cleared');
+        if (JSON.stringify(await readChallenge(page)) !== JSON.stringify(challenge))
+          return stale(await changedReason(page, challenge));
         applying = true;
         stage = 'apply';
         if (challenge.wafType === 'widget') {
-          if (!await widget.complete(page, challenge.widgetId, token)) { status = 'stale'; return false; }
+          if (!await widget.complete(page, challenge.widgetId, token)) return stale(await changedReason(page, challenge));
           stage = 'verify';
           const deadline = Date.now() + 15000;
           do {
@@ -116,6 +129,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
         status = await hasChallenge(page) ? 'not_accepted' : 'challenge_cleared';
         return status === 'challenge_cleared';
       } catch (error) {
+        if (tokenReceived && !applying && !(error instanceof CaptchaError)) return stale('page_unavailable');
         status = error instanceof CaptchaError && CAPTCHA_STATUSES.includes(error.message)
           ? error.message : tokenReceived ? applying ? 'not_accepted' : 'stale'
             : stage === 'capture' ? 'browser_error' : 'provider_error';

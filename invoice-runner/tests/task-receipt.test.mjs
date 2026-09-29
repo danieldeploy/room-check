@@ -38,7 +38,7 @@ test('accepted completion stores only a private atomic receipt', async () => {
     assert.equal(sessionReceipt.sms_submitted, false);
     await writeTaskReceipt(root, { ...job, id: 46 }, { code: 'human_verification',
       diagnostic: { sms_prompted: 'true', sms_submitted: false, sms_code: secret,
-        cookie_consent_rejected: secret, captcha_status: secret, captcha_stage: secret } },
+        cookie_consent_rejected: secret, captcha_status: secret, captcha_stage: secret, captcha_stale_reason: secret } },
       { accepted: true, state: 'needs_auth' }, () => new Date('2026-09-24T08:17:00.000Z'));
     const invalidSms = await fs.readFile(path.join(root, 'task-46-receipt.json'), 'utf8');
     assert.equal(JSON.parse(invalidSms).state, 'needs_auth');
@@ -46,6 +46,7 @@ test('accepted completion stores only a private atomic receipt', async () => {
     assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'cookie_consent_rejected'), false);
     assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'captcha_status'), false);
     assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'captcha_stage'), false);
+    assert.equal(Object.hasOwn(JSON.parse(invalidSms), 'captcha_stale_reason'), false);
     assert.equal(invalidSms.includes(secret), false);
     await writeTaskReceipt(root, { ...job, id: 48 }, { code: 'ok',
       diagnostic: { sms_prompted: true, sms_submitted: true } },
@@ -64,6 +65,10 @@ test('accepted completion stores only a private atomic receipt', async () => {
       { accepted: true, state: 'needs_auth' }, () => new Date('2026-09-24T08:21:00.000Z'), true);
     assert.equal(JSON.parse(await fs.readFile(path.join(root, 'task-51-receipt.json'), 'utf8'))
       .booking_login_metadata_saved, true);
+    await writeTaskReceipt(root, { ...job, id: 53 }, { code: 'human_verification',
+      diagnostic: { captcha_status: 'stale', captcha_stage: 'validate', captcha_stale_reason: 'widget_expired' } },
+      { accepted: true, state: 'needs_auth' });
+    assert.equal(JSON.parse(await fs.readFile(path.join(root, 'task-53-receipt.json'), 'utf8')).captcha_stale_reason, 'widget_expired');
     await assert.rejects(writeTaskReceipt(root, { ...job, id: 47, input: { action: 'collect' } }, result, reply));
     await assert.rejects(fs.access(path.join(root, 'task-47-receipt.json')));
   } finally { await fs.rm(root, { recursive: true, force: true }); }

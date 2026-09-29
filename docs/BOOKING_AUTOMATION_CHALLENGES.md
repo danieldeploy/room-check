@@ -45,6 +45,16 @@
 
 Referência: [erros oficiais Anti-Captcha](https://anti-captcha.com/apidoc/errors).
 
+O teste 69 recebeu uma solução mas terminou `stale` na validação, antes de pedir
+SMS. O diagnóstico de ciclo de vida acrescenta cinco garantias:
+1. **Comportamento:** indicar a causa categórica de invalidação do widget.
+2. **Permissões:** manter o teste manual e os mesmos limites de execução.
+3. **Dados:** callbacks públicos AWS, presença/visibilidade e identidade do widget;
+   apenas motivos fixos nos diagnósticos, sem identificadores ou dados do desafio.
+4. **Falhas:** continuar a rejeitar soluções após navegação, expiração, erro,
+   conclusão humana ou substituição; não repetir automaticamente tarefas pagas.
+5. **Aceitação:** distinguir essas causas em Chrome isolado e sanear os recibos.
+
 ### Configuração
 
 Portais e contas → Booking → Opções de automação. O campo da chave nunca devolve

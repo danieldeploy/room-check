@@ -1,4 +1,4 @@
-import { CAPTCHA_STATUSES, CAPTCHA_STAGES } from './booking-captcha.mjs';
+import { CAPTCHA_STATUSES, CAPTCHA_STAGES, CAPTCHA_STALE_REASONS } from './booking-captcha.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -32,6 +32,7 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
       receipt.loopback_permission = diagnostic.loopback_permission;
     if (CAPTCHA_STATUSES.includes(diagnostic?.captcha_status)) receipt.captcha_status = diagnostic.captcha_status;
     if (CAPTCHA_STAGES.includes(diagnostic?.captcha_stage)) receipt.captcha_stage = diagnostic.captcha_stage;
+    if (CAPTCHA_STALE_REASONS.includes(diagnostic?.captcha_stale_reason)) receipt.captcha_stale_reason = diagnostic.captcha_stale_reason;
   }
   if (job.input.action === 'verify') {
     receipt.document_count = Array.isArray(result.documents) ? Math.min(result.documents.length, 100) : 0;

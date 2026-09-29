@@ -96,6 +96,7 @@ export async function testBookingAwsWidget(browser) {
         if (kind === 'error') fixtureConfig.onError({ kind: 'network_error' });
         if (kind === 'removed') document.getElementById('captcha').remove();
       }, invalidation);
+      if (invalidation === 'human-success') await page.waitForSelector('form.nw-signin');
       return 'fixture-token';
     } });
     try {
@@ -103,6 +104,9 @@ export async function testBookingAwsWidget(browser) {
       await page.goto('https://account.booking.com/sign-in', { waitUntil: 'load' });
       assert.equal(await controller.attempt(page, async () => true), false);
       assert.equal(controller.status(), 'stale', invalidation);
+      const expected = { rerender: 'widget_replaced', 'same-url-navigation': 'widget_replaced',
+        'human-success': 'observer_missing', timeout: 'widget_expired', error: 'widget_network_error', removed: 'widget_removed' };
+      assert.equal(controller.staleReason(), expected[invalidation], invalidation);
       if (invalidation !== 'human-success')
         assert.equal(await page.evaluate(() => window.fixtureCallbacks || 0), 0);
     } finally { await controller.release(); await context.close(); }
