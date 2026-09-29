@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 export const CAPTCHA_STATUSES = Object.freeze(['disabled', 'unconfigured', 'unsupported',
   'provider_error', 'browser_error', 'browser_timeout', 'browser_context_lost',
+  'browser_cookie_conflict', 'browser_cookie_unavailable', 'browser_callback_error',
   'browser_page_closed', 'browser_navigation_aborted', 'timeout', 'stale', 'not_accepted', 'challenge_cleared', 'not_needed',
   ...PROVIDER_ERROR_STATUSES]);
 export const CAPTCHA_STAGES = Object.freeze(['not_started', 'capture', 'provider',
@@ -28,6 +29,14 @@ function captureErrorStatus(error) {
       || message.includes('Session closed')) return 'browser_page_closed';
   if (message.startsWith('net::ERR_ABORTED')) return 'browser_navigation_aborted';
   return 'browser_error';
+}
+
+function applyErrorStatus(error) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  if (message === 'widget token cookie conflict') return 'browser_cookie_conflict';
+  if (message === 'widget token cookie unavailable') return 'browser_cookie_unavailable';
+  if (message === 'widget callback failed') return 'browser_callback_error';
+  return captureErrorStatus(error);
 }
 
 export async function readBookingAwsChallenge(page) {
@@ -180,7 +189,7 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
       } catch (error) {
         if (tokenReceived && !applying && !(error instanceof CaptchaError)) return stale('page_unavailable');
         status = error instanceof CaptchaError && CAPTCHA_STATUSES.includes(error.message)
-          ? error.message : tokenReceived ? applying ? 'not_accepted' : 'stale'
+          ? error.message : tokenReceived ? applying ? applyErrorStatus(error) : 'stale'
             : stage === 'capture' || stage.startsWith('capture_') ? captureErrorStatus(error) : 'provider_error';
         return false;
       }

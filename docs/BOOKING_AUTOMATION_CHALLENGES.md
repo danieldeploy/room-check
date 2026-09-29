@@ -169,3 +169,17 @@ Referências técnicas: [Anti-Captcha AmazonTaskProxyless](https://anti-captcha.
 [getTaskResult](https://anti-captcha.com/apidoc/methods/getTaskResult),
 [Chrome 145: separação das permissões locais](https://developer.chrome.com/release-notes/145),
 [CDP Browser.setPermission](https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-setPermission).
+
+## Application failure diagnostics (2026-09-29)
+
+- Behavior: classify local token-cookie conflicts, unavailable cookies and callback
+  errors separately from a challenge that remains after verification. Do not treat
+  an exception before verification as proof of server rejection.
+- Permissions: retain the existing manager-only, manually requested test mode.
+- Data: only three allowlisted status labels are added; no cookie values, callback
+  errors, URLs or provider tokens are persisted. Cookie scope is unchanged.
+- Failure: stop the job after the one provider attempt; do not delete cookies,
+  widen domains, replay callbacks or retry the solver.
+- Acceptance: controller tests cover each category and secret-containing errors;
+  isolated Chrome checks distinguish parent-domain conflict from an HttpOnly cookie.
+  A real login/SMS/collection cycle remains unverified until separately observed.
