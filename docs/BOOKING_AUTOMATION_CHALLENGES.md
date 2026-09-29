@@ -1,5 +1,23 @@
 # Booking: permissões locais e teste CAPTCHA
 
+## Diagnóstico do timeout do teste 78
+
+1. **Comportamento:** distinguir URL alterado, documento em `loading` ou
+   `interactive`, estado desconhecido e falha na consulta do documento após um
+   timeout de recarga. O teste 78 falhou nesta fase antes de chamar a API.
+2. **Permissões:** manter o teste de acesso já autorizado, exclusivo do Gerente.
+3. **Dados:** guardar só fases de uma lista fixa; nunca URL completa, estado livre,
+   mensagem de erro, tokens ou cookies.
+4. **Falhas:** manter os mesmos critérios de interrupção e continuação. Esta
+   alteração não repete navegação, não cria pedidos adicionais e não relaxa a
+   verificação de identidade da página.
+5. **Aceitação:** simular cada ramo do timeout e verificar uma única navegação,
+   zero pedidos ao fornecedor nas falhas e ausência de dados privados no resultado.
+
+O teste 77 confirmou `browser_cookie_conflict` na aplicação de um token recebido.
+A correção dos âmbitos dos cookies passou em Chrome sintético e foi instalada;
+o teste 78 não chegou à aplicação e, portanto, não validou essa correção no Booking.
+
 1. **Comportamento:** negar `loopback-network` nos três domínios Booking usados
    pelo agente, antes de navegar. Opção ativa por defeito. Acrescentar um adaptador
    reutilizável Anti-Captcha/AWS WAF, desativado por defeito, disponível apenas no

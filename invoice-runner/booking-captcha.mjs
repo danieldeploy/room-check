@@ -10,6 +10,8 @@ export const CAPTCHA_STATUSES = Object.freeze(['disabled', 'unconfigured', 'unsu
   ...PROVIDER_ERROR_STATUSES]);
 export const CAPTCHA_STAGES = Object.freeze(['not_started', 'capture', 'provider',
   'capture_read', 'capture_restart_check', 'capture_reload', 'capture_ready',
+  'capture_reload_changed_url', 'capture_reload_inspect', 'capture_reload_loading',
+  'capture_reload_interactive', 'capture_reload_unknown_state',
   'capture_verify', 'capture_wait', 'create_task', 'poll_task', 'validate', 'apply', 'verify',
   'apply_after_puzzle_timeout', 'verify_after_puzzle_timeout']);
 export const CAPTCHA_STALE_REASONS = Object.freeze(['page_changed', 'page_unavailable',
@@ -110,8 +112,19 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
             catch (error) {
               // Chrome can time out its navigation lifecycle after the expected
               // document has loaded. Check that document; never issue another GET.
-              if (error?.name !== 'TimeoutError' || page.url() !== originalUrl
-                  || await page.evaluate(() => document.readyState) !== 'complete') throw error;
+              if (error?.name !== 'TimeoutError') throw error;
+              if (page.url() !== originalUrl) {
+                stage = 'capture_reload_changed_url';
+                throw error;
+              }
+              stage = 'capture_reload_inspect';
+              const readyState = await page.evaluate(() => document.readyState);
+              if (readyState !== 'complete') {
+                stage = readyState === 'loading' ? 'capture_reload_loading'
+                  : readyState === 'interactive' ? 'capture_reload_interactive'
+                    : 'capture_reload_unknown_state';
+                throw error;
+              }
             }
             stage = 'capture_ready';
             await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });
