@@ -29,7 +29,7 @@ async function connect(url) {
 
 if (process.argv[2] === 'survival') {
   // A separate process proves the endpoint is live after the launcher exits.
-  const cdp = await connect(await controlledBrowserEndpoint(process.argv[3], 'fresh_login'));
+  const cdp = await connect(await controlledBrowserEndpoint(await fs.realpath(process.argv[3]), 'fresh_login'));
   assert.ok((await cdp.send('Target.getTargets')).targetInfos.length > 0);
   await cdp.send('Browser.close'); cdp.close();
   console.log('Persistent Chrome endpoint remains live after launcher exit.');

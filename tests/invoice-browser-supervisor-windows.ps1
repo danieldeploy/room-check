@@ -31,8 +31,10 @@ try {
     if (Get-ChildItem -LiteralPath $data -Directory | Where-Object { $_.Name -like 'browser-supervisor-*' }) { throw 'Supervisor channel was not cleaned up.' }
     Write-Host 'Persistent Chrome survives launcher exit; temporary supervision channel removed.'
 } catch { $failure = $_ } finally {
-    # Only processes whose command line contains this disposable fixture path.
-    Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($root) } | ForEach-Object {
+    # TEMP may use the short RUNNER~1 alias while Chrome expands it. Match only
+    # the unique disposable profile suffix, independent of that parent alias.
+    $profileSuffix = (Split-Path $root -Leaf) + '\data\controlled-booking-login-chrome'
+    Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($profileSuffix) -and $_.CommandLine -notmatch ' --type=' } | ForEach-Object {
         & taskkill.exe /PID $_.ProcessId /T /F 2>$null | Out-Null
     }
     for ($attempt = 0; $attempt -lt 20 -and (Test-Path -LiteralPath $root); $attempt++) {
