@@ -9,7 +9,8 @@ export const CAPTCHA_STATUSES = Object.freeze(['disabled', 'unconfigured', 'unsu
   ...PROVIDER_ERROR_STATUSES]);
 export const CAPTCHA_STAGES = Object.freeze(['not_started', 'capture', 'provider',
   'capture_read', 'capture_restart_check', 'capture_reload', 'capture_ready',
-  'capture_verify', 'capture_wait', 'create_task', 'poll_task', 'validate', 'apply', 'verify']);
+  'capture_verify', 'capture_wait', 'create_task', 'poll_task', 'validate', 'apply', 'verify',
+  'apply_after_puzzle_timeout', 'verify_after_puzzle_timeout']);
 export const CAPTCHA_STALE_REASONS = Object.freeze(['page_changed', 'page_unavailable',
   'challenge_cleared', 'challenge_changed', 'observer_missing', 'widget_replaced',
   'widget_completed', 'widget_expired', 'widget_removed', 'widget_hidden', 'widget_error',
@@ -126,8 +127,25 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
         // A human or the site may have moved on while the provider was solving.
         if (page.url() !== originalUrl) return stale('page_changed');
         if (!await hasChallenge(page)) return stale('challenge_cleared');
-        if (JSON.stringify(await readChallenge(page)) !== JSON.stringify(challenge))
-          return stale(await changedReason(page, challenge));
+        if (JSON.stringify(await readChallenge(page)) !== JSON.stringify(challenge)) {
+          const reason = await changedReason(page, challenge);
+          const url = new URL(originalUrl);
+          const safeGet = url.hostname === 'account.booking.com' && url.pathname === '/sign-in'
+            || url.hostname === 'auth.booking.com' && url.pathname === '/u/login/password';
+          if (reason !== 'widget_expired' || !safeGet || !widget.storeAfterPuzzleTimeout)
+            return stale(reason);
+          applying = true;
+          stage = 'apply_after_puzzle_timeout';
+          // Re-check the same document, widget, URL and visible container while
+          // storing the newly received token. Never revive an expired callback.
+          if (!await widget.storeAfterPuzzleTimeout(page, challenge.widgetId, token))
+            return stale(await changedReason(page, challenge));
+          await page.goto(originalUrl, { waitUntil: 'domcontentloaded' });
+          await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 });
+          stage = 'verify_after_puzzle_timeout';
+          status = await hasChallenge(page) ? 'not_accepted' : 'challenge_cleared';
+          return status === 'challenge_cleared';
+        }
         applying = true;
         stage = 'apply';
         if (challenge.wafType === 'widget') {

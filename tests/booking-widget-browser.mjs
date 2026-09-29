@@ -27,14 +27,15 @@ const widgetHtml = `<h1>Let's make sure you're human</h1><script src="${scriptUr
   else fixtureRender();
 </script>`;
 
-async function fixture(browser, afterPassword = false, renderDelay = 0) {
+async function fixture(browser, afterPassword = false, renderDelay = 0, resumeWithCookie = false) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
-  let passwordSubmitted = false, signIns = 0, verifiedRequests = 0;
+  let passwordSubmitted = false, signIns = 0, verifiedRequests = 0, resumedRequests = 0, callbackRequests = 0;
   await page.setRequestInterception(true);
   page.on('request', request => {
     const url = new URL(request.url());
     if (url.origin === 'https://account.booking.com' && url.pathname === '/fixture-proof-check') {
+      callbackRequests++;
       const values = (request.headers().cookie || '').split(';').map(value => value.trim());
       const accepted = values.filter(value => value.startsWith('aws-waf-token=')).length === 1
         && values.includes('aws-waf-token=fixture-token');
@@ -47,7 +48,12 @@ async function fixture(browser, afterPassword = false, renderDelay = 0) {
     let body = '<title>Synthetic extranet</title>';
     if (url.hostname === 'account.booking.com') {
       if (request.resourceType() === 'document') signIns++;
-      body = afterPassword && !passwordSubmitted ? form : renderDelay
+      const cookieValues = (request.headers().cookie || '').split(';').map(value => value.trim());
+      const acceptedResume = resumeWithCookie && request.resourceType() === 'document' && request.method() === 'GET'
+        && cookieValues.filter(value => value.startsWith('aws-waf-token=')).length === 1
+        && cookieValues.includes('aws-waf-token=fixture-token');
+      if (acceptedResume) resumedRequests++;
+      body = acceptedResume || afterPassword && !passwordSubmitted ? form : renderDelay
         ? widgetHtml.replace('else fixtureRender();', `else setTimeout(fixtureRender, ${renderDelay});`)
         : widgetHtml;
     }
@@ -58,7 +64,8 @@ async function fixture(browser, afterPassword = false, renderDelay = 0) {
     }
     void request.respond({ status: 200, contentType: 'text/html', body });
   });
-  return { page, context, signIns: () => signIns, verifiedRequests: () => verifiedRequests };
+  return { page, context, signIns: () => signIns, verifiedRequests: () => verifiedRequests,
+    resumedRequests: () => resumedRequests, callbackRequests: () => callbackRequests };
 }
 
 export async function testBookingAwsWidget(browser) {
@@ -104,22 +111,48 @@ export async function testBookingAwsWidget(browser) {
       } finally { await controller.release(); await context.close(); }
   }
 
-  for (const invalidation of ['rerender', 'same-url-navigation', 'human-success', 'timeout', 'error', 'removed']) {
+  for (const accepted of [true, false]) {
+    const { page, context, signIns, resumedRequests, callbackRequests } = await fixture(browser, false, 0, accepted);
+    let calls = 0;
+    const controller = createBookingCaptchaTest(input, { solve: async () => {
+      calls++;
+      await page.evaluate(() => fixtureConfig.onPuzzleTimeout());
+      return 'fixture-token';
+    } });
+    try {
+      await controller.prepare(page);
+      await page.goto('https://account.booking.com/sign-in?op_token=fixture-private', { waitUntil: 'load' });
+      assert.equal(await controller.attempt(page,
+        async current => current.evaluate(() => !!document.getElementById('captcha'))), accepted);
+      assert.equal(controller.status(), accepted ? 'challenge_cleared' : 'not_accepted');
+      assert.equal(controller.stage(), 'verify_after_puzzle_timeout');
+      assert.equal(calls, 1);
+      assert.equal(signIns(), 2);
+      assert.equal(resumedRequests(), accepted ? 1 : 0);
+      assert.equal(callbackRequests(), 0, 'never invoke the expired callback');
+      assert.equal(await controller.attempt(page, async () => true), false);
+    } finally { await controller.release(); await context.close(); }
+  }
+
+  for (const invalidation of ['rerender', 'same-url-navigation', 'human-success', 'error', 'removed',
+    'timeout-rerender', 'timeout-removed', 'timeout-hidden', 'timeout-same-url-navigation']) {
     const { page, context } = await fixture(browser);
     const observer = createAwsWidgetObserver();
     const controller = createBookingCaptchaTest(input, { widget: observer, solve: async () => {
-      if (invalidation === 'same-url-navigation') await page.goto(page.url(), { waitUntil: 'load' });
+      const kind = invalidation.replace(/^timeout-/, '');
+      if (invalidation.startsWith('timeout-')) await page.evaluate(() => fixtureConfig.onPuzzleTimeout());
+      if (kind === 'same-url-navigation') await page.goto(page.url(), { waitUntil: 'load' });
       else await page.evaluate(kind => {
         if (kind === 'rerender') fixtureRender();
         if (kind === 'human-success') {
           document.cookie = 'aws-waf-token=fixture-token; Path=/; Secure; SameSite=Lax';
           fixtureConfig.onSuccess('fixture-token');
         }
-        if (kind === 'timeout') fixtureConfig.onPuzzleTimeout();
         if (kind === 'error') fixtureConfig.onError({ kind: 'network_error' });
         if (kind === 'removed') document.getElementById('captcha').remove();
-      }, invalidation);
-      if (invalidation === 'human-success') await page.waitForSelector('form.nw-signin');
+        if (kind === 'hidden') document.getElementById('captcha').style.display = 'none';
+      }, kind);
+      if (kind === 'human-success') await page.waitForSelector('form.nw-signin');
       return 'fixture-token';
     } });
     try {
@@ -128,10 +161,14 @@ export async function testBookingAwsWidget(browser) {
       assert.equal(await controller.attempt(page, async () => true), false);
       assert.equal(controller.status(), 'stale', invalidation);
       const expected = { rerender: 'widget_replaced', 'same-url-navigation': 'widget_replaced',
-        'human-success': 'observer_missing', timeout: 'widget_expired', error: 'widget_network_error', removed: 'widget_removed' };
+        'human-success': 'observer_missing', error: 'widget_network_error', removed: 'widget_removed',
+        'timeout-rerender': 'widget_replaced', 'timeout-removed': 'widget_expired',
+        'timeout-hidden': 'widget_expired', 'timeout-same-url-navigation': 'widget_replaced' };
       assert.equal(controller.staleReason(), expected[invalidation], invalidation);
       if (invalidation !== 'human-success')
         assert.equal(await page.evaluate(() => window.fixtureCallbacks || 0), 0);
+      if (invalidation.startsWith('timeout-'))
+        assert.equal((await context.cookies()).some(cookie => cookie.name === 'aws-waf-token'), false);
     } finally { await controller.release(); await context.close(); }
   }
 
