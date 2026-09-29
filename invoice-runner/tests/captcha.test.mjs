@@ -111,7 +111,7 @@ test('controller distinguishes local capture failure from sanitized provider rej
   });
   await local.attempt(pageFixture(), async () => true);
   assert.equal(local.status(), 'browser_error');
-  assert.equal(local.stage(), 'capture');
+  assert.equal(local.stage(), 'capture_read');
   assert.equal(calls, 0);
   const remote = createBookingCaptchaTest(input, {
     read: async () => challenge,
@@ -123,6 +123,32 @@ test('controller distinguishes local capture failure from sanitized provider rej
   assert.equal(remote.status(), 'provider_zero_balance');
   assert.equal(remote.stage(), 'create_task');
   assert.equal(await remote.attempt(pageFixture(), async () => true), false);
+});
+
+test('capture diagnostics distinguish reload, readiness and context failures without leaking error details', async () => {
+  for (const [where, name, message, expected] of [
+    ['read', 'Error', 'Execution context was destroyed: ' + key, 'browser_context_lost'],
+    ['reload', 'Error', 'net::ERR_ABORTED at https://account.booking.com/?op_token=' + key, 'browser_navigation_aborted'],
+    ['ready', 'TimeoutError', 'Waiting failed: ' + key, 'browser_timeout'],
+    ['read', 'TargetCloseError', 'private ' + key, 'browser_page_closed'],
+    ['read', 'Error', 'private ' + key, 'browser_error'],
+  ]) {
+    const page = pageFixture();
+    let calls = 0;
+    const fail = async () => { throw Object.assign(new Error(message), { name }); };
+    if (where === 'reload') page.goto = fail;
+    if (where === 'ready') page.waitForFunction = fail;
+    const controller = createBookingCaptchaTest(input, {
+      widget: { read: where === 'read' ? fail : async () => null, canRestart: async () => true },
+      read: async () => null, solve: async () => { calls++; },
+    });
+    assert.equal(await controller.attempt(page, async () => true), false);
+    assert.equal(controller.status(), expected);
+    assert.equal(controller.stage(), 'capture_' + where);
+    assert.equal(calls, 0);
+    assert.equal(JSON.stringify({ status: controller.status(), stage: controller.stage() }).includes(key), false);
+    assert.equal(await controller.attempt(page, async () => true), false);
+  }
 });
 
 function pageFixture() {
