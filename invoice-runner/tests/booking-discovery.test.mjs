@@ -11,6 +11,7 @@ for (const mode of ['recover', 'ambiguous', 'hidden', 'changed_page', 'timeout']
       press: async () => { throw new Error('must re-resolve the control'); } };
     const fresh = { evaluate: async (_fn, names) => names
       ? { visible: true, label: 'finance' } : mode !== 'hidden',
+      focus: async () => {},
       press: async key => { assert.equal(key, 'Enter'); pressed++; opened = true; } };
     const invoices = { evaluate: async () => ({ visible: true, label: 'invoices' }), click: async () => {} };
     const page = {

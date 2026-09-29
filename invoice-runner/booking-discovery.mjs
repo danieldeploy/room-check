@@ -35,8 +35,10 @@ async function activateMenu(page, names, match, onKeyboard) {
     const usable = await fresh.control.evaluate(el => el.isConnected
       && el.matches('button,a[href]') && !el.disabled && el.getAttribute('aria-disabled') !== 'true'
       && getComputedStyle(el).visibility === 'visible'
-      && [...el.getClientRects()].some(rect => rect.width > 0 && rect.height > 0));
+      && !el.closest('[inert],[hidden],[aria-hidden="true"]') && el.getClientRects().length > 0);
     if (usable !== true || page.url() !== location) return null;
+    await fresh.control.focus();
+    if (await fresh.control.evaluate(el => document.activeElement === el) !== true) return null;
     onKeyboard();
     return fresh.control;
   });
