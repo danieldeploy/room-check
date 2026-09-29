@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { blockBookingLoopback } from '../invoice-runner/booking-permissions.mjs';
 import { createBookingCaptchaTest } from '../invoice-runner/booking-captcha.mjs';
 import { discoverPortal } from '../invoice-runner/discover-portal.mjs';
+import { testBookingAwsWidget } from './booking-widget-browser.mjs';
 
 // No network requests leave this synthetic browser test, including provider calls.
 export async function testBookingAutomation(browser) {
   for (const afterPassword of [false, true]) await testBookingAutomationCase(browser, afterPassword);
+  await testBookingAwsWidget(browser);
 }
 
 async function testBookingAutomationCase(browser, afterPassword) {

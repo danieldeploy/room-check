@@ -102,13 +102,32 @@ test('one attempt per job and success requires challenge disappearance, not just
     const controller = createBookingCaptchaTest(input, {
       read: async () => amazonTask(challenge), solve: async () => { calls++; return 'fixture-token'; },
     });
-    assert.equal(await controller.attempt(page, async () => ++checks === 1 || remains), !remains);
+    assert.equal(await controller.attempt(page, async () => ++checks <= 2 || remains), !remains);
     assert.equal(controller.status(), remains ? 'not_accepted' : 'challenge_cleared');
     assert.equal(page.cookies.length, 1);
     assert.equal(page.cookies[0].domain, 'account.booking.com');
     assert.equal(await controller.attempt(page, async () => true), false);
     assert.equal(calls, 1);
   }
+});
+
+test('AWS widget provider payload uses documented fields and excludes callback/private data', async () => {
+  const task = amazonTask({ websiteURL: challenge.websiteURL, websiteKey: 'widget-fixture-key',
+    wafType: 'widget', jsapiScript: 'https://a1b2c3.edge.captcha-sdk.awswaf.com/a1b2c3/jsapi.js',
+    widgetId: 'private-capture-id', onSuccess: 'private-callback', iv: 'not-for-widget', password: 'private' });
+  assert.deepEqual(task, { type: 'AmazonTaskProxyless', websiteURL: challenge.websiteURL,
+    websiteKey: 'widget-fixture-key', wafType: 'widget',
+    jsapiScript: 'https://a1b2c3.edge.captcha-sdk.awswaf.com/a1b2c3/jsapi.js' });
+  let calls = 0;
+  for (const jsapiScript of ['https://evil.test/jsapi.js',
+    'https://a1b2c3.edge.captcha-sdk.awswaf.com.evil.test/a1b2c3/jsapi.js',
+    'https://a1b2c3.edge.captcha-sdk.awswaf.com/other/jsapi.js',
+    task.jsapiScript + '?token=private', task.jsapiScript + '#private']) {
+    await assert.rejects(solveAmazonCaptcha({ ...task, jsapiScript }, key, {
+      fetchImpl: async () => { calls++; throw new Error('unexpected'); },
+    }), /unsupported/);
+  }
+  assert.equal(calls, 0);
 });
 
 test('expired challenge or human navigation never receives a stale provider token', async () => {

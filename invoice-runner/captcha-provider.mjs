@@ -12,9 +12,19 @@ export function amazonTask(challenge) {
   if (url.protocol !== 'https:' || url.username || url.password || url.port
       || url.search || url.hash || url.pathname !== '/') fail('unsupported');
   const task = { type: 'AmazonTaskProxyless', websiteURL: url.href };
-  for (const key of ['websiteKey', 'iv', 'context']) {
+  if (challenge.wafType !== undefined && challenge.wafType !== 'widget') fail('unsupported');
+  for (const key of challenge.wafType === 'widget' ? ['websiteKey'] : ['websiteKey', 'iv', 'context']) {
     if (!textValue(challenge[key])) fail('unsupported');
     task[key] = challenge[key];
+  }
+  if (challenge.wafType === 'widget') {
+    let script;
+    try { script = new URL(challenge.jsapiScript); } catch { fail('unsupported'); }
+    if (script.protocol !== 'https:' || script.username || script.password || script.port
+        || script.search || script.hash || script.href.length > 2048
+        || !/^[a-f0-9]+\.edge\.captcha-sdk\.awswaf\.com$/i.test(script.hostname)
+        || script.pathname !== '/' + script.hostname.split('.')[0] + '/jsapi.js') fail('unsupported');
+    return { ...task, wafType: 'widget', jsapiScript: script.href };
   }
   for (const [key, subdomain, file] of [['captchaScript', 'captcha', 'captcha.js'],
     ['challengeScript', 'token', 'challenge.js']]) {
