@@ -35,7 +35,26 @@ try {
     # the unique disposable profile suffix, independent of that parent alias.
     $profileSuffix = (Split-Path $root -Leaf) + '\data\controlled-booking-login-chrome'
     Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($profileSuffix) -and $_.CommandLine -notmatch ' --type=' } | ForEach-Object {
-        & taskkill.exe /PID $_.ProcessId /T /F 2>$null | Out-Null
+        # Chrome was already asked to close. A child can disappear while taskkill
+        # walks the tree; its stderr must not abort the finally block in PS 5.1.
+        # Verify actual process/file cleanup below instead of trusting that exit code.
+        $terminator = $null
+        try {
+            $info = New-Object Diagnostics.ProcessStartInfo
+            $info.FileName = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+            $info.Arguments = '/PID ' + [int]$_.ProcessId + ' /T /F'
+            $info.UseShellExecute = $false; $info.CreateNoWindow = $true
+            $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
+            $terminator = [Diagnostics.Process]::Start($info)
+            $terminator.BeginOutputReadLine(); $terminator.BeginErrorReadLine()
+            if (-not $terminator.WaitForExit(10000)) { throw 'Temporary Chrome cleanup timed out.' }
+        } catch { if (-not $failure) { $failure = $_ } }
+        finally {
+            if ($terminator) {
+                if (-not $terminator.HasExited) { $terminator.Kill() }
+                $terminator.Dispose()
+            }
+        }
     }
     for ($attempt = 0; $attempt -lt 20 -and (Test-Path -LiteralPath $root); $attempt++) {
         try { Remove-Item -LiteralPath $root -Recurse -Force }
@@ -44,6 +63,9 @@ try {
             Start-Sleep -Milliseconds 250
         }
     }
+    $remaining = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($profileSuffix) -and $_.CommandLine -notmatch ' --type=' }
+    if ($remaining -and -not $failure) { $failure = 'Temporary Chrome process still running after cleanup.' }
+    if ((Test-Path -LiteralPath $root) -and -not $failure) { $failure = 'Temporary Chrome profile was not removed.' }
 }
 if ($failure) { throw $failure }
 exit 0
