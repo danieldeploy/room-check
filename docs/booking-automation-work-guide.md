@@ -18,7 +18,7 @@ evidência separada de implementação, publicação e teste real.
 
 | Ordem | Melhoria e comportamento esperado | Critério de aceitação | Estado |
 | --- | --- | --- | --- |
-| 1 | Antes de cada tarefa, verificar o Chrome dedicado e abri-lo se estiver fechado; preservar o perfil. | Browser aberto reutilizado; fechado reaberto sem reiniciar o agente; repetição nas duas casas sem duplicados. | Em implementação |
+| 1 | Antes de cada tarefa, verificar o Chrome dedicado e abri-lo se estiver fechado; preservar o perfil. | Browser aberto reutilizado; fechado reaberto sem reiniciar o agente; repetição nas duas casas sem duplicados. | Implementado; validação e publicação registadas no PR #144 |
 | 2 | Reutilizar sessão válida e recuperar sessão expirada com cofre e SMS; identificar o passo de intervenção quando houver desafio. | Testar sessão expirada, escolha do canal, envio e receção SMS, código inválido/expirado e desafio humano, com tentativas limitadas. | Pendente |
 | 3 | Monitorizar ligação do agente e recuperação após reinício do Windows. | Estado offline visível; reconexão recupera tarefas pendentes; teste após reinício e entrada na sessão Windows. | Pendente |
 | 4 | Recuperar falhas transitórias com espera e limite, preservando a mesma tarefa. | Sem tarefas/documentos duplicados, sem ciclos infinitos e sem bloquear a outra propriedade. | Pendente; já existe uma repetição após 2 minutos |
@@ -44,6 +44,9 @@ evidência separada de implementação, publicação e teste real.
 
 ## Evidência e limites conhecidos
 
+- A evidência da primeira entrega — resultados de CI, commit publicado e pedidos
+  reais — fica na descrição do [PR #144](https://github.com/danieldeploy/room-check/pull/144).
+  Distinguir sempre código implementado, versão instalada e cenário comprovado.
 - Base publicada: `57dbff7bd342fa337fa845804a075700b159ecae`.
 - Pedidos reais #6 e #7 de agosto de 2026 concluídos em 29/09: ambas as casas,
   zero novas faturas e duas já existentes por pedido. Validam navegação e deduplicação
