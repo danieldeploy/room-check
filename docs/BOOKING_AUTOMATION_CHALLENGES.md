@@ -207,3 +207,29 @@ antes do CAPTCHA e dura cerca de 150 s. Isso não explica os testes 71–76, que
 não chegaram ao SMS; requer validação do momento de registo do desafio no ciclo
 real. O fluxo atual reconhece o campo OTP, mas não implementa um ecrã adicional
 para escolher o canal ou clicar em enviar SMS caso o Booking o apresente.
+
+## Conflito de cookies confirmado — teste 77 (29/09/2026)
+
+O teste 77 recebeu um token do fornecedor e terminou em
+`browser_cookie_conflict`, fase `apply`, antes de executar a continuação do
+login. Os contadores AWS foram 0 permitidos/0 bloqueados. Portanto, o filtro
+corrigido não foi o bloqueio observado nesse teste; existiam vários cookies
+`aws-waf-token` visíveis e a gravação anterior exigia exatamente um.
+
+1. **Comportamento:** consultar apenas os âmbitos dos cookies AWS aplicáveis à
+   página e atualizar esses âmbitos com a mesma resposta. Não criar um cookie
+   host-only quando já existe um cookie do SDK num domínio pai. Corrigir também
+   duplicados deixados por tentativas anteriores, sem acrescentar/remover âmbitos.
+2. **Permissões:** manter o teste manual, o mesmo perfil persistente e as mesmas
+   credenciais. Não limpar a sessão nem alterar cookies de autenticação.
+3. **Dados:** metadados de domínio/caminho/atributos ficam em memória. Valores
+   antigos não são incluídos nesses metadados nem enviados ao fornecedor/logs.
+   Cookie novo continua host-only quando não existe nenhum âmbito aplicável.
+4. **Falhas:** preservar Secure/SameSite/expiração; recusar HttpOnly, partições e
+   contextos substituídos. Só executar o callback quando todos os valores visíveis
+   forem iguais ao token novo. Não aceitar uma solução se a página mudou durante
+   a leitura dos metadados. Máximo de oito âmbitos, uma chamada ao fornecedor.
+5. **Aceitação:** Chrome isolado com cookie pai, pai+host e pai+caminho específico;
+   confirmar âmbito/atributos preservados e token no pedido HTTP real. Testar
+   navegação durante a leitura e preservação de HttpOnly/cookies não relacionados.
+   Confirmar depois o resultado do login real, separadamente dos testes simulados.
