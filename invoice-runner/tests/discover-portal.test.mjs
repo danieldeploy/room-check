@@ -7,6 +7,26 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { discoverPortal, bookingLoginCode } from '../discover-portal.mjs';
 
+test('a navigation failure identifies the Finance operation without exposing the browser error', async () => {
+  const page = new EventEmitter();
+  page.url = () => 'https://admin.booking.com/hotel/home?hotel_id=1140306&ses=PRIVATE_FIXTURE';
+  page.reload = async () => {};
+  page.evaluate = async () => [];
+  page.waitForFunction = async () => {};
+  page.waitForNavigation = async () => {};
+  page.$$ = async () => [{
+    evaluate: async () => ({ visible: true, label: 'finance', href: null }),
+    click: async () => { throw new Error('Node is detached from document PRIVATE_FIXTURE'); },
+  }];
+  const result = await discoverPortal(page, { portal: 'booking', property: '1140306',
+    propertyLabel: 'One', period: '2026-08', authMethod: 'password' });
+  assert.equal(result.failure_code, 'browser_unavailable');
+  assert.equal(result.navigation_phase, 'finance_click');
+  assert.equal(result.browser_error_kind, 'detached');
+  assert.equal(JSON.stringify(result).includes('PRIVATE_FIXTURE'), false);
+  assert.equal(page.listenerCount('response'), 0);
+});
+
 test('a property switch awaits group responses that begin after the authenticated reload', async () => {
   const page = new EventEmitter();
   const target = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=539828&ses=PRIVATE_FIXTURE';
