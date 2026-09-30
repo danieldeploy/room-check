@@ -76,6 +76,8 @@ try {
  $accounts->saveAutomationOptions($vault,$wa,['deny_loopback'=>'on','captcha_mode'=>'test','captcha_api_key'=>'']);
  checkWorkspace($accounts->automationOptions($vault,$wa,true)['captcha_api_key']===str_repeat('a',32),'Blank provider key retains saved secret');
  checkWorkspace((int)$accounts->get($wa)['enabled']===1&&!empty($accounts->get($wa)['login_verified_at']),'Automation settings preserve validation and schedule');
+ $accounts->saveAutomationOptions($vault,$wa,['deny_loopback'=>'on','captcha_mode'=>'collection']);
+ checkWorkspace($accounts->automationOptions($vault,$wa,true)['captcha_api_key']===str_repeat('a',32) && $accounts->automationOptions($vault,$wa)['captcha_mode']==='collection','Explicit collection mode preserves the encrypted provider key');
  $accounts->saveAutomationOptions($vault,$wa,['captcha_mode'=>'disabled','captcha_remove_key'=>'on']);
  checkWorkspace(!$accounts->automationOptions($vault,$wa)['captcha_key_configured'],'Provider key can be removed');
  $accounts->saveCredentials($vault,$wa,['password'=>'changed-fixture']);

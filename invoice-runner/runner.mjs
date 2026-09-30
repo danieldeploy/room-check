@@ -6,7 +6,7 @@ import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
 import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
 import { controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions, controlledBookingPage,
-  controlledBookingPasswordPage, guardPortalRequests, usesControlledBrowser } from './controlled-browser.mjs';
+  controlledBookingPasswordPage, startBookingCollection, guardPortalRequests, usesControlledBrowser } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
@@ -73,7 +73,8 @@ try {
       browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
         userDataDir: profile, timeout: 30000, dumpio: false });
     }
-    const selection = connected ? await controlledBookingPage(browser, browserPurpose)
+    const selection = connected ? await controlledBookingPage(browser, browserPurpose,
+      { fromEntry: ['collect', 'verify'].includes(input.action) })
       : { page: await browser.newPage(), created: false };
     const page = selection.page;
     if (connected && selection.created) controlledPage = page;
@@ -101,6 +102,7 @@ try {
       const captchaTest = createBookingCaptchaTest(input);
       releaseCaptcha = () => captchaTest.release();
       await captchaTest.prepare(page);
+      await startBookingCollection(page, input);
       const loginHooks = {
         loopbackPermission: loopbackPermission?.status, captchaTest, requestGuardCounts,
         registerBlockedValue: value => { blockedValues.push(value); },

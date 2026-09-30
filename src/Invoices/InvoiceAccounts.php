@@ -159,10 +159,10 @@ final class InvoiceAccounts
         $name = self::secretName($id, 'automation');
         $saved = $vault->has($name) ? $vault->read($name) : [];
         $options = ['deny_loopback' => ($saved['deny_loopback'] ?? true) === true,
-            'captcha_mode' => ($saved['captcha_mode'] ?? '') === 'test' ? 'test' : 'disabled',
+            'captcha_mode' => in_array($saved['captcha_mode'] ?? '', ['test','collection'], true) ? $saved['captcha_mode'] : 'disabled',
             'captcha_provider' => 'anti-captcha',
             'captcha_key_configured' => !empty($saved['captcha_api_key'])];
-        if ($withSecret && $options['captcha_mode'] === 'test') $options['captcha_api_key'] = $saved['captcha_api_key'] ?? '';
+        if ($withSecret && $options['captcha_mode'] !== 'disabled') $options['captcha_api_key'] = $saved['captcha_api_key'] ?? '';
         return $options;
     }
 
@@ -172,12 +172,12 @@ final class InvoiceAccounts
         $name = self::secretName($id, 'automation');
         $saved = $vault->has($name) ? $vault->read($name) : [];
         $mode = $input['captcha_mode'] ?? 'disabled';
-        if (!in_array($mode, ['disabled', 'test'], true)) throw new RuntimeException('invalid_request');
+        if (!in_array($mode, ['disabled', 'test', 'collection'], true)) throw new RuntimeException('invalid_request');
         $key = $input['captcha_api_key'] ?? '';
         if (!is_string($key) || ($key !== '' && !preg_match('/\A[a-f0-9]{32}\z/i', $key))) throw new RuntimeException('invalid_request');
         if ($key === '') $key = $saved['captcha_api_key'] ?? '';
         if (isset($input['captcha_remove_key'])) $key = '';
-        if ($mode === 'test' && $key === '') throw new RuntimeException('auth_unconfigured');
+        if ($mode !== 'disabled' && $key === '') throw new RuntimeException('auth_unconfigured');
         $vault->save($name, ['deny_loopback' => isset($input['deny_loopback']),
             'captcha_mode' => $mode, 'captcha_provider' => 'anti-captcha', 'captcha_api_key' => $key]);
     }

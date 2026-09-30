@@ -293,3 +293,13 @@ test('permission denial is scoped and failure never broadens permission changes'
   assert.equal((await blockBookingLoopback({ target() { throw new Error('private error'); } })).status, 'unavailable');
   await permission.release();
 });
+
+
+test('collection CAPTCHA requires explicit collection mode, including scheduled collect actions', () => {
+  for (const action of ['login','collect','verify','discover']) {
+    const controller=createBookingCaptchaTest({...input,action,automation:{...input.automation,captcha_mode:'collection'}});
+    assert.equal(controller.status(),'not_needed');
+  }
+  for (const portal of ['airbnb','email']) assert.equal(createBookingCaptchaTest({...input,portal,action:'collect',automation:{...input.automation,captcha_mode:'collection'}}).status(),'disabled');
+  for (const action of ['collect','verify','discover','preflight']) assert.equal(createBookingCaptchaTest({...input,action}).status(),'disabled');
+});

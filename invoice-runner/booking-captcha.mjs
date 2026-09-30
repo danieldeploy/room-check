@@ -67,7 +67,10 @@ export function createBookingCaptchaTest(input, { solve = solveAmazonCaptcha,
   let used = false;
   let stage = 'not_started';
   let staleReason = null;
-  let status = input.portal === 'booking' && input.action === 'login' && options.captcha_mode === 'test' ? 'not_needed' : 'disabled';
+  const enabled = input.portal === 'booking' && (input.action === 'login'
+    && ['test', 'collection'].includes(options.captcha_mode)
+    || ['collect', 'verify', 'discover'].includes(input.action) && options.captcha_mode === 'collection');
+  let status = enabled ? 'not_needed' : 'disabled';
   const readChallenge = async page => {
     const location = new URL(page.url());
     if (!BOOKING_AUTH_ORIGINS.includes(location.origin)) return null;

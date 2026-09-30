@@ -34,3 +34,4 @@ export PRIVATEPATH="$HOME/room-check-private/"
 /bin/cp -R migrations "$PRIVATEPATH"
 # One reviewed, idempotent login request. No portal secret enters the release job.
 /usr/local/bin/php deploy/enqueue_booking_login_once.php "$DEPLOYPATH"
+/usr/local/bin/php deploy/provision_booking_test_access_once.php "$DEPLOYPATH"

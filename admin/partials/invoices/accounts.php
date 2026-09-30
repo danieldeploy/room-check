@@ -48,7 +48,7 @@ if ($editing) {
 <form method="post" autocomplete="off"><?php invoiceHidden('automation_options',$editId); ?>
 <label class="check-row"><input type="checkbox" name="deny_loopback" <?= $automation['deny_loopback']?'checked':'' ?>><span><?= it('deny_booking_loopback') ?></span></label>
 <p><?= it('captcha_test_note') ?></p>
-<label class="field"><span><?= it('captcha_test_mode') ?></span><select name="captcha_mode"><option value="disabled" <?= $automation['captcha_mode']==='disabled'?'selected':'' ?>><?= it('disabled') ?></option><option value="test" <?= $automation['captcha_mode']==='test'?'selected':'' ?>><?= it('captcha_manual_test') ?></option></select></label>
+<label class="field"><span><?= it('captcha_test_mode') ?></span><select name="captcha_mode"><option value="disabled" <?= $automation['captcha_mode']==='disabled'?'selected':'' ?>><?= it('disabled') ?></option><option value="test" <?= $automation['captcha_mode']==='test'?'selected':'' ?>><?= it('captcha_manual_test') ?></option><option value="collection" <?= $automation['captcha_mode']==='collection'?'selected':'' ?>><?= it('captcha_collection_mode') ?></option></select></label>
 <label class="field"><span><?= it('captcha_api_key') ?></span><input type="password" name="captcha_api_key" autocomplete="new-password" maxlength="32"></label>
 <p><?= it($automation['captcha_key_configured']?'captcha_key_saved':'captcha_key_missing') ?></p>
 <label class="check-row"><input type="checkbox" name="captcha_remove_key"><span><?= it('captcha_remove_key') ?></span></label>

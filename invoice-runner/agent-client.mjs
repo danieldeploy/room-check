@@ -38,7 +38,7 @@ export class AgentClient {
         let value;
         try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AgentError('invalid_response', response.status >= 500); }
         if (!response.ok) {
-          const codes = ['forbidden', 'lease_expired', 'upload_conflict', 'completion_conflict', 'document_limit', 'auth_invalid'];
+          const codes = ['forbidden', 'invalid_request', 'worker_busy', 'lease_expired', 'upload_conflict', 'completion_conflict', 'document_limit', 'auth_invalid'];
           const code = codes.includes(value.error) ? value.error : 'connection_failed';
           throw new AgentError(code, response.status >= 500 || (response.status === 409 && value.error === 'worker_busy'));
         }
