@@ -71,12 +71,12 @@ try {
     $notificationTest->dispatch($sender); checkInvoice($sent===1,'Uncertain sends are never retried automatically');
     $failedReceipt=$vault->read('notification-test-'.str_repeat('f',32).'.enc');
     $failedReceipt['requested_at']=gmdate('Y-m-d H:i:s',time()-61); $vault->save('notification-test-'.str_repeat('f',32).'.enc',$failedReceipt);
-    $send(array_replace($testRequest,['request_id'=>str_repeat('a',32)]));
+    $send(array_replace($testRequest,['request_id'=>str_repeat('1',32)]));
     $pdo->exec('UPDATE users SET is_active=0 WHERE id=7'); $notificationTest->dispatch($sender);
     checkInvoice($notificationTest->status()['state']==='cancelled' && $sent===1,'Deactivated owner cancels a queued test');
     $pdo->exec('UPDATE users SET is_active=1 WHERE id=7');
-    $crashed=$vault->read('notification-test-'.str_repeat('a',32).'.enc'); $crashed['state']='sending';
-    $vault->save('notification-test-'.str_repeat('a',32).'.enc',$crashed); $notificationTest->dispatch($sender);
+    $crashed=$vault->read('notification-test-'.str_repeat('1',32).'.enc'); $crashed['state']='sending';
+    $vault->save('notification-test-'.str_repeat('1',32).'.enc',$crashed); $notificationTest->dispatch($sender);
     checkInvoice($sent===1 && $notificationTest->status()['state']==='unconfirmed','Interrupted send is reported without resending');
     $vault->save('account-1-automation.enc',['captcha_mode'=>'test','captcha_api_key'=>str_repeat('a',32),'deny_loopback'=>true]);
     $send(['action'=>'control_enable_captcha']);
