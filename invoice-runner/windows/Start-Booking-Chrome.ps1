@@ -65,7 +65,8 @@ function Start-ControlledProfile {
         Start-Process -FilePath $chrome -ArgumentList $arguments | Out-Null
     }
     $clock = [Diagnostics.Stopwatch]::StartNew()
-    while ($clock.Elapsed.TotalSeconds -lt 15) {
+    # Cold profile initialization can outlast 15 seconds on a loaded computer.
+    while ($clock.Elapsed.TotalSeconds -lt 30) {
         if (Test-ControlledEndpoint -EndpointFile $endpointFile) { return }
         Start-Sleep -Milliseconds 200
     }

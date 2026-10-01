@@ -18,7 +18,9 @@ function Invoke-BookingBrowserRequest {
         $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
         $helper = [Diagnostics.Process]::Start($info)
         $helper.BeginOutputReadLine(); $helper.BeginErrorReadLine()
-        if ($helper.WaitForExit(25000) -and $helper.ExitCode -eq 0) { $code = 'ready' }
+        # Includes the 30-second Chrome readiness window plus private-profile
+        # validation and cold PowerShell startup, bounded by the Node deadline.
+        if ($helper.WaitForExit(45000) -and $helper.ExitCode -eq 0) { $code = 'ready' }
     } catch { }
     finally {
         if ($helper) {
