@@ -30,7 +30,24 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Persistent Chrome must survive its Node worker and launcher.' }
     if (Get-ChildItem -LiteralPath $data -Directory | Where-Object { $_.Name -like 'browser-supervisor-*' }) { throw 'Supervisor channel was not cleaned up.' }
     Write-Host 'Persistent Chrome survives launcher exit; temporary supervision channel removed.'
-} catch { $failure = $_ } finally {
+} catch {
+    $failure = $_
+    # Diagnose the disposable, credential-free fixture without printing raw errors.
+    # A successful probe does not turn the failed cold-launch test into a pass.
+    $helperCode = 'not_probed'; $helperExit = $null
+    if (Test-Path -LiteralPath (Join-Path $scripts 'Start-Booking-Chrome.ps1')) {
+        $ErrorActionPreference = 'Continue'
+        $probeOutput = & powershell.exe -NoProfile -NonInteractive -File (Join-Path $scripts 'Start-Booking-Chrome.ps1') -DataDirectory $data 2>&1
+        $helperExit = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
+        $helperCode = if ($helperExit -eq 0) { 'ready' } else { 'unknown_failure' }
+        $probeText = $probeOutput | Out-String
+        foreach ($code in @('interactive_session_required','controlled_chrome_disabled','chrome_unavailable','private_profile_permissions','controlled_endpoint_invalid','controlled_chrome_not_ready')) {
+            if ($probeText.Contains($code)) { $helperCode = $code; break }
+        }
+    }
+    @{fixture='browser_supervisor';helper_code=$helperCode;helper_exit=$helperExit;interactive_session=[Environment]::UserInteractive;endpoint_exists=(Test-Path -LiteralPath (Join-Path $data 'controlled-booking-login-chrome\DevToolsActivePort'))} | ConvertTo-Json -Compress | Write-Host
+} finally {
     # TEMP may use the short RUNNER~1 alias while Chrome expands it. Match only
     # the unique disposable profile suffix, independent of that parent alias.
     $profileSuffix = (Split-Path $root -Leaf) + '\data\controlled-booking-login-chrome'
