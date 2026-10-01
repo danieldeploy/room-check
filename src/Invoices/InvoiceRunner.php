@@ -5,6 +5,7 @@ require_once __DIR__ . '/InvoiceAuth.php';
 require_once __DIR__ . '/InvoiceAlerts.php';
 require_once __DIR__ . '/InvoiceDrive.php';
 require_once __DIR__ . '/InvoiceTaskLifecycle.php';
+require_once __DIR__ . '/InvoiceNotificationTest.php';
 
 final class InvoiceRunner
 {
@@ -15,6 +16,10 @@ final class InvoiceRunner
     {
         require_once __DIR__ . '/InvoiceRemoteAgent.php';
         $remote = new InvoiceRemoteAgent($this->pdo, $this->config);
+        try {
+            (new InvoiceNotificationTest($this->pdo,new InvoiceVault((string)($this->config['private_dir']??'')),
+                $this->config['whatsapp']??[]))->dispatch();
+        } catch (Throwable) {}
         if ($remote->mode() !== 'local') {
             $remote->maintenance();
             try { $this->archive(); } catch (Throwable) {}

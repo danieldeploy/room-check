@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceWorkspace.php';
 require_once dirname(__DIR__).'/Auth/Auth.php';
+require_once __DIR__.'/InvoiceNotificationTest.php';
 
 /** Explicit delegation to the already paired PC, not a browser/admin login. Caller holds the worker lock. */
 final class InvoiceTestControl
@@ -56,12 +57,19 @@ final class InvoiceTestControl
             'control_status'=>['action','period'],
             'control_pause','control_resume','control_revoke','control_enable_captcha'=>['action'],
             'control_enable_alerts'=>['action','recipient'],
+            'control_test_alert'=>['action','recipient','request_id'],
             'control_collect','control_login'=>['action','period','request_id'],
             default=>throw new RuntimeException('invalid_request',400),
         };
         if (array_diff(array_keys($data),$fields) || array_diff($fields,array_keys($data))) throw new RuntimeException('invalid_request',400);
         if (array_key_exists('period',$data) && (!is_string($data['period']) || !InvoiceService::validPeriod($data['period']))) throw new RuntimeException('invalid_request',400);
         if ($action==='control_status') return $this->status($data['period'],(int)$owner['id']);
+        if ($action==='control_test_alert') {
+            if (!is_int($data['recipient']) || $data['recipient']!==(int)$owner['id']) throw new RuntimeException('forbidden',403);
+            if (!is_string($data['request_id'])) throw new RuntimeException('invalid_request',400);
+            $result=(new InvoiceNotificationTest($this->pdo,$this->vault,$this->whatsapp))->queue((int)$owner['id'],$data['request_id']);
+            return ['control'=>'test_alert','test'=>$result];
+        }
         if ($action==='control_enable_captcha') {
             $this->agent->assertIdle();
             $accounts=new InvoiceAccounts($this->pdo);
@@ -163,6 +171,7 @@ final class InvoiceTestControl
             'documents'=>(int)$s->fetchColumn(),'period'=>$period,'tasks'=>$tasks,
             'automation'=>(new InvoiceAccounts($this->pdo))->automationOptions($this->vault,1),
             'notifications'=>$this->notificationStatus($owner),
+            'notification_test'=>(new InvoiceNotificationTest($this->pdo,$this->vault,$this->whatsapp))->status(),
             'schedule'=>['enabled'=>(bool)$account['enabled'],'day'=>(int)$account['schedule_day'],'time'=>$account['schedule_time'],'timezone'=>'Europe/Lisbon']];
     }
 }
