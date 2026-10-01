@@ -113,6 +113,11 @@ final class InvoiceRemoteAgent
     public function handle(string $token, array $data): array
     {
         $this->authenticate($token);
+        if (is_string($data['action']??null) && str_starts_with($data['action'],'control_')) {
+            require_once __DIR__.'/InvoiceTestControl.php';
+            // Control traffic is not an agent heartbeat and cannot claim or complete a job.
+            return (new InvoiceTestControl($this->pdo,$this->vault,$this,$this->config['whatsapp'] ?? []))->handle($token,$data);
+        }
         $this->maintenance();
         $s = $this->settings();
         $s['last_seen'] = InvoiceService::utcNow();
@@ -211,7 +216,9 @@ final class InvoiceRemoteAgent
             if ($job['kind']!=='preflight') {
                 $input['credentials']=$accounts->credentials($this->vault,(int)$account['id']);
                 $input['authMethod']=$account['auth_method'];
-                $input['automation']=$accounts->automationOptions($this->vault,(int)$account['id'],$job['kind']==='login');
+                $options=$accounts->automationOptions($this->vault,(int)$account['id']);
+                $input['automation']=$accounts->automationOptions($this->vault,(int)$account['id'],
+                    $job['kind']==='login' || ($options['captcha_mode'] ?? '')==='collection');
                 if (($input['browserProfile'] ?? null)!=='fresh_login') {
                     $session=InvoiceAccounts::secretName((int)$account['id'],'session');
                     $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];

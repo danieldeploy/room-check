@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { portalUrl } from '../portal.mjs';
 import { parseControlledEndpoint, controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions,
-  controlledBookingPage, guardPortalRequests, usesControlledBrowser } from '../controlled-browser.mjs';
+  controlledBookingPage, startBookingCollection, guardPortalRequests, usesControlledBrowser } from '../controlled-browser.mjs';
 
 test('Booking control endpoint is pinned to local Chrome', () => {
   assert.equal(parseControlledEndpoint('38617\n/devtools/browser/12345678-abcd-1234-abcd-123456789012\n'),
@@ -258,4 +258,19 @@ test('AWS SDK POST and preflight are allowed only from Booking without credentia
   assert.equal(counts.filter(kind => kind === 'aws_waf_allowed').length, 2);
   assert.ok(counts.every(kind => ['aws_waf_allowed', 'aws_waf_blocked'].includes(kind)));
   await release();
+});
+
+
+test('new collection reuses Booking entry tabs and resets once without retrying an uncertain GET', async () => {
+  const entry = { url: () => 'https://admin.booking.com/' };
+  const foreign = { url: () => 'https://admin.booking.com.evil.test/' };
+  const browser = { defaultBrowserContext: () => ({ pages: async () => [foreign, entry],
+    newPage: async () => { throw new Error('must reuse'); } }) };
+  assert.deepEqual(await controlledBookingPage(browser, 'fresh_login', {fromEntry:true}), {page:entry,created:false});
+  let calls = 0;
+  const page = { goto: async (url) => { calls++; assert.equal(url,'https://admin.booking.com/'); throw new Error('uncertain'); } };
+  await assert.rejects(startBookingCollection(page,{portal:'booking',accountId:1,action:'collect'}), /uncertain/);
+  assert.equal(calls,1);
+  for (const action of ['login','discover']) await startBookingCollection(page,{portal:'booking',accountId:1,action});
+  assert.equal(calls,1,'access-test continuation must retain its page');
 });

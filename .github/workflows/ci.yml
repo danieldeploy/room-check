@@ -83,6 +83,7 @@ jobs:
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           php tests/booking-login-smoke.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoice-agent.php
+          TEST_NODE_BINARY=$(command -v node) php tests/invoice-test-control.php
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
           php tests/run.php

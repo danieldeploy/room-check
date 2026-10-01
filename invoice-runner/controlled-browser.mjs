@@ -74,9 +74,20 @@ export async function controlledBookingPasswordPage(browser) {
 
 // Both discovery and login use the dedicated persistent Chrome profile. A fresh
 // incognito context discards the human verification already completed there.
-export async function controlledBookingPage(browser, purpose = 'primary') {
+export async function controlledBookingPage(browser, purpose = 'primary', { fromEntry = false } = {}) {
   const context = browser.defaultBrowserContext();
   const pages = await context.pages();
+  if (fromEntry) {
+    // A new collection starts from the public entry in this fixed private profile.
+    // Do not inspect stale password forms or use a personal Chrome context.
+    const hosts = ['admin.booking.com', 'account.booking.com', 'auth.booking.com'];
+    const booking = pages.find(candidate => {
+      try { const u = new URL(candidate.url()); return u.protocol === 'https:' && hosts.includes(u.hostname); }
+      catch { return false; }
+    });
+    return booking ? { page: booking, created: false }
+      : { page: await context.newPage(), created: true };
+  }
   const existing = pages.find(candidate => {
     try {
       const url = new URL(candidate.url());
@@ -100,6 +111,14 @@ export async function controlledBookingPage(browser, purpose = 'primary') {
   const selected = existing || passwordContinuation || identifierContinuation;
   return selected ? { page: selected, created: false }
     : { page: await context.newPage(), created: true };
+}
+
+export async function startBookingCollection(page, input) {
+  if (usesControlledBrowser(input) && ['collect', 'verify'].includes(input.action)) {
+    // Exactly once, before login begins. Never restart a navigation after a timeout,
+    // nor reset during the subsequent password, CAPTCHA, SMS or property steps.
+    await page.goto('https://admin.booking.com/', { waitUntil: 'domcontentloaded' });
+  }
 }
 
 function awsWafDestination(value) {
