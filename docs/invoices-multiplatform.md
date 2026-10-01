@@ -30,8 +30,17 @@ The app requests drive.file, verifies the authenticated account, and creates a p
 Management Hub - Faturas destination. An arbitrary existing folder may be unavailable
 with this limited scope; use the folder created by the app.
 
-Archive hierarchy: platform / account with stable account ID / property or account-wide
-export / year / month. Server-side database stores pre-generated remote file IDs before
+Archive hierarchy: accounting root / year / Portuguese month_year / online.
+Reuse existing month folders using either an underscore or a space (for example,
+Junho_2026 or Junho 2026); ambiguous matching folders stop with drive_conflict.
+The configured root must contain the years, not point to one month's online folder.
+Filenames use portal_property_month, for example booking_city_center_junho.pdf.
+An occupied filename gets an invoice-number/document-ID suffix; existing Drive
+files are never replaced. The worker waits for a successful destination test
+(state ready) before attempting delivery. Existing pending remote identities are
+preserved across retries. The existing drive.file authorization does not grant
+access to arbitrary pre-existing accounting folders: authorize their access in
+Google before enabling this destination and verify it with the real API. Server-side database stores pre-generated remote file IDs before
 upload so ambiguous network outcomes reuse the same identity. The original is removed
 only after remote ID, parent, size and MD5 match, and local SHA-256 matches the collected
 record. Shared content-addressed originals stay until every referencing document is verified.

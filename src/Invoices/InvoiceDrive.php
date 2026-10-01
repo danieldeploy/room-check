@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/InvoiceDriveClient.php';
 require_once __DIR__ . '/InvoiceCompany.php';
+require_once __DIR__ . '/InvoiceDriveLayout.php';
 
 /** Caller holds room_check_invoices advisory lock, including manual retries. */
 final class InvoiceDrive
@@ -24,19 +25,25 @@ final class InvoiceDrive
         $s->execute([$id]);
         if ($s->rowCount() !== 1) throw new RuntimeException('invalid_request');
     }
-    private function folder(string $parent, string $name): string
+    private function folder(string $parent, array $names): string
     {
+        $name = $names[0];
         $key = hash('sha256', $parent . "\0" . $name);
         $s = $this->pdo->prepare('SELECT drive_id FROM invoice_drive_folders WHERE path_key = ?'); $s->execute([$key]);
         $id = $s->fetchColumn();
         if (!$id) {
-            $id = $this->client->newId();
+            $matches = $this->client->namedItems($parent, $names, true);
+            if (count($matches) > 1) throw new RuntimeException('drive_conflict');
+            $id = $matches[0]['id'] ?? $this->client->newId();
             $this->pdo->prepare('INSERT INTO invoice_drive_folders (path_key, drive_id, parent_id, name) VALUES (?, ?, ?, ?)')->execute([$key, $id, $parent, $name]);
         }
         $this->client->folder($id, $parent, $name); return $id;
     }
     public function run(?int $clock = null): void
     {
+        $settings = $this->pdo->query('SELECT * FROM invoice_drive_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        // Configuration and a successful destination check precede all uploads.
+        if (($settings['state'] ?? '') !== 'ready' || empty($settings['folder_id'])) return;
         $now = $clock ?? time(); $date = gmdate('Y-m-d H:i:s', $now);
         // Adopt interrupted uploads without consuming an additional retry early.
         $stale = $this->pdo->query("SELECT d.*, x.attempts, x.last_attempt_at FROM invoice_document_delivery x JOIN invoice_documents d ON d.id=x.document_id WHERE x.drive_state='uploading'")->fetchAll(PDO::FETCH_ASSOC);
@@ -65,8 +72,7 @@ final class InvoiceDrive
                 if (!$root || ($root['trashed'] ?? true) || ($root['mimeType'] ?? '') !== 'application/vnd.google-apps.folder'
                     || !in_array('daniel.ciorcas@welcomehostel.pt', array_column($root['owners'] ?? [], 'emailAddress'), true)) throw new RuntimeException('drive_account_mismatch');
                 if (!$d['drive_parent']) {
-                    foreach ([$d['portal'], $d['account_label'] . ' [' . $d['account_id'] . ']',
-                        ($d['property_label'] ?? $d['property_id']) . ' [' . $d['property_id'] . ']', substr($d['period'],0,4), substr($d['period'],5,2)] as $folder) $parent = $this->folder($parent, $folder);
+                    foreach (InvoiceDriveLayout::folders($d['period']) as $names) $parent = $this->folder($parent, $names);
                     $d['drive_parent'] = $parent;
                     $this->pdo->prepare('UPDATE invoice_document_delivery SET drive_parent=? WHERE document_id=?')->execute([$parent, $d['id']]);
                 }
@@ -74,7 +80,13 @@ final class InvoiceDrive
                     $d['drive_id'] = $this->client->newId();
                     $this->pdo->prepare('UPDATE invoice_document_delivery SET drive_id=? WHERE document_id=?')->execute([$d['drive_id'], $d['id']]);
                 }
-                $filename = preg_replace('/[^\pL\pN._-]+/u', '-', $d['invoice_number']) . '.' . $d['format'];
+                $filename = InvoiceDriveLayout::filename($d);
+                $matches = $this->client->namedItems($d['drive_parent'], [$filename]);
+                if (array_filter($matches, static fn(array $item): bool => $item['id'] !== $d['drive_id'])) {
+                    $filename = InvoiceDriveLayout::filename($d, true);
+                    $matches = $this->client->namedItems($d['drive_parent'], [$filename]);
+                    if (array_filter($matches, static fn(array $item): bool => $item['id'] !== $d['drive_id'])) throw new RuntimeException('drive_conflict');
+                }
                 $meta = $this->client->upload($d['drive_id'], $d['drive_parent'], $filename, $path, $d['format']);
                 if (!self::verify($meta, $d, $path)) throw new RuntimeException('drive_verify');
                 $this->pdo->prepare("UPDATE invoice_document_delivery SET drive_state='verified', verified_at=?, next_attempt_at=NULL, last_error=NULL WHERE document_id=?")

@@ -58,6 +58,18 @@ final class InvoiceDriveClient
         $id = (string) ($r['ids'][0] ?? '');
         self::assertId($id); return $id;
     }
+    public function namedItems(string $parent, array $names, bool $foldersOnly = false): array
+    {
+        self::assertId($parent);
+        $quote = static fn(string $value): string => "'" . str_replace(["\\", "'"], ["\\\\", "\\'"], $value) . "'";
+        $query = $quote($parent) . ' in parents and trashed = false and ('
+            . implode(' or ', array_map(static fn(string $name): string => 'name = '.$quote($name), $names)) . ')';
+        if ($foldersOnly) $query .= " and mimeType = 'application/vnd.google-apps.folder'";
+        $result = $this->api('GET', 'files?'.http_build_query(['q'=>$query, 'pageSize'=>100,
+            'fields'=>'nextPageToken,files(id,name)', 'spaces'=>'drive']));
+        if (!empty($result['nextPageToken'])) throw new RuntimeException('drive_conflict');
+        return $result['files'] ?? [];
+    }
     public static function assertId(string $id): void
     {
         if (!preg_match('/\A[a-zA-Z0-9_-]{10,128}\z/', $id)) throw new RuntimeException('drive_invalid_id');

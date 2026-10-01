@@ -299,7 +299,7 @@ final class InvoiceText
         'processing_details' => ['Regras de processamento', 'Processing details'],
         'toconline_setup_pending' => ['TOConline: envio ainda não ativado.', 'TOConline: submission not enabled yet.'],
         'drive_note' => ['Destino: daniel.ciorcas@welcomehostel.pt. Cópias privadas no servidor são mantidas até confirmação integral do upload. Uma tentativa inicial + 8 repetições de 3 em 3 horas.', 'Destination: daniel.ciorcas@welcomehostel.pt. Private server copies remain until the upload is fully verified. One initial attempt + 8 retries every 3 hours.'],
-        'folder_id' => ['Identificador da pasta Drive', 'Drive folder ID'],
+        'folder_id' => ['Identificador da pasta principal de contabilidade (contém os anos)', 'Accounting root folder ID (contains the years)'],
         'drive_test' => ['Verificar ligação e pasta', 'Verify connection and folder'],
         'drive_pending' => ['Envio para Drive pendente', 'Drive upload pending'],
         'drive_retry' => ['Envio pendente — nova tentativa agendada', 'Upload pending — retry scheduled'],
