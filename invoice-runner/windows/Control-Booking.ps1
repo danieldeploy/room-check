@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('status','pause','resume','revoke','login','collect','enable-captcha','enable-alerts')][string]$Action,
+    [Parameter(Mandatory=$true)][ValidateSet('status','pause','resume','revoke','login','collect','enable-captcha','enable-alerts','test-alert')][string]$Action,
     [string]$Period,
     [string]$RequestId,
     [int]$Recipient = 0
@@ -11,11 +11,11 @@ try {
         if ($Period -cnotmatch '^20[0-9]{2}-(0[1-9]|1[0-2])$') { throw 'invalid_period' }
         $request.period = $Period
     }
-    if ($Action -in @('login','collect')) {
+    if ($Action -in @('login','collect','test-alert')) {
         if ($RequestId -cnotmatch '^[a-f0-9]{32}$') { throw 'request_id_required' }
         $request.request_id = $RequestId
     }
-    if ($Action -eq 'enable-alerts') { $request.recipient = $Recipient }
+    if ($Action -in @('enable-alerts','test-alert')) { $request.recipient = $Recipient }
     $app = Split-Path $PSScriptRoot -Parent
     $data = Join-Path (Split-Path $app -Parent) 'data'
     & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'Test-PrivateDirectory.ps1') -Directory $data

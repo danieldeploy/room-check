@@ -39,7 +39,7 @@ final class WhatsAppCloudClient
         $decoded = is_string($body) ? json_decode($body, true) : null;
         if ($status < 200 || $status >= 300) {
             $message = is_array($decoded) ? (string) ($decoded['error']['message'] ?? '') : '';
-            throw new RuntimeException($message !== '' ? $message : ($error !== '' ? $error : "Meta devolveu HTTP {$status}."));
+            throw new RuntimeException($message !== '' ? $message : ($error !== '' ? $error : "Meta devolveu HTTP {$status}."), $status);
         }
         $id = is_array($decoded) ? (string) ($decoded['messages'][0]['id'] ?? '') : '';
         if ($id === '') throw new RuntimeException('A Meta não devolveu o identificador da mensagem.');
