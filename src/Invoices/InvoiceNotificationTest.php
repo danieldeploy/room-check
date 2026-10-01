@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceAlerts.php';
 require_once dirname(__DIR__).'/Auth/Auth.php';
+require_once dirname(__DIR__).'/I18n/InvoiceText.php';
 
 /** Explicit owner test, separate from real invoice failures. Caller holds the worker lock. */
 final class InvoiceNotificationTest
@@ -89,9 +90,9 @@ final class InvoiceNotificationTest
             $receipt['finished_at']=gmdate('Y-m-d H:i:s'); $this->vault->save($name,$receipt); return;
         }
         $receipt['state']='sending'; $this->vault->save($name,$receipt);
-        $values=['Booking.com','Teste do Management Hub','Teste',
-            'Teste controlado do alerta WhatsApp. Não existe uma nova falha de recolha.',
-            'Confirme a receção desta mensagem de teste.'];
+        $values=['Booking.com',InvoiceText::TEXT['notification_test_name'][0],
+            InvoiceText::TEXT['notification_test_period'][0],InvoiceText::TEXT['notification_test_reason'][0],
+            InvoiceText::TEXT['notification_test_action'][0]];
         try {
             $id=$sender ? $sender($recipient['mobile'],$values,$recipient['template_name'])
                 : (new WhatsAppCloudClient($this->config))->sendTemplate($recipient['mobile'],$values,'pt_PT',$recipient['template_name']);

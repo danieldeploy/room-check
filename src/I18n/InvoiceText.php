@@ -5,6 +5,10 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'notification_test_name' => ['Teste do Management Hub', 'Management Hub test'],
+        'notification_test_period' => ['Teste', 'Test'],
+        'notification_test_reason' => ['Teste controlado do alerta WhatsApp. Não existe uma nova falha de recolha.', 'Controlled WhatsApp alert test. There is no new collection failure.'],
+        'notification_test_action' => ['Confirme a receção desta mensagem de teste.', 'Confirm receipt of this test message.'],
         'discover_map' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
         'discover' => ['Observar portal e preparar mapa', 'Inspect portal and prepare map'],
         'verify' => ['Verificar PDFs e datas do Booking', 'Verify Booking PDFs and dates'],
