@@ -47,6 +47,15 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 
 ## Release and verification
 
+- Standing owner authorization, reaffirmed on 2026-10-01: for requested work
+  in this Management Hub project, merge reviewed PRs after `validate` and
+  `windows-agent` pass, publish through the guarded automatic deployment, and
+  perform the necessary production acceptance checks without asking again for
+  routine merge or deployment permission. The owner also authorizes controlled
+  WhatsApp alert tests to their existing configured recipient when necessary
+  to verify the requested workflow. This authorization remains in effect until
+  revoked; it does not authorize unrelated work, new recipients, or bypassing
+  platform approval review, required checks, or deployment safeguards.
 - When the request authorizes a change, complete implementation, CI, PR merge,
   and the automatic production deployment without asking for repeated cPanel
   login or permission at each routine step. `HUB_DEPLOY_ENABLED=true` may stay

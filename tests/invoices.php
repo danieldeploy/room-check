@@ -34,6 +34,30 @@ try {
     rejectsInvoice(fn() => new InvoiceVault($tmp . '/public-link'), 'Symlink into web root rejected');
     rejectsInvoice(fn() => new InvoiceVault($tmp . '/public_html'), 'Web root rejected');
 
+    // Cron normally starts in the account home, above the private vault.
+    // An empty or absent DOCUMENT_ROOT must not turn that home into a web root.
+    $cwd = getcwd();
+    $hadDocumentRoot = array_key_exists('DOCUMENT_ROOT', $_SERVER);
+    $documentRoot = $_SERVER['DOCUMENT_ROOT'] ?? null;
+    try {
+        chdir(dirname($tmp));
+        $_SERVER['DOCUMENT_ROOT'] = '';
+        checkInvoice((new InvoiceVault($tmp))->root === realpath($tmp), 'CLI vault accepts empty document root from its parent directory');
+        unset($_SERVER['DOCUMENT_ROOT']);
+        checkInvoice((new InvoiceVault($tmp))->root === realpath($tmp), 'CLI vault accepts absent document root from its parent directory');
+        chdir($tmp);
+        $_SERVER['DOCUMENT_ROOT'] = '';
+        checkInvoice((new InvoiceVault($tmp))->root === realpath($tmp), 'CLI vault accepts its own working directory');
+        $_SERVER['DOCUMENT_ROOT'] = $tmp;
+        rejectsInvoice(fn() => new InvoiceVault($tmp), 'Configured document root itself remains rejected');
+        $_SERVER['DOCUMENT_ROOT'] = dirname($tmp);
+        rejectsInvoice(fn() => new InvoiceVault($tmp), 'Vault beneath a configured document root remains rejected');
+    } finally {
+        chdir($cwd);
+        if ($hadDocumentRoot) $_SERVER['DOCUMENT_ROOT'] = $documentRoot;
+        else unset($_SERVER['DOCUMENT_ROOT']);
+    }
+
     $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec("CREATE TABLE invoice_settings (id INTEGER PRIMARY KEY, enabled INTEGER, schedule_day INTEGER, schedule_time TEXT, browser_ready INTEGER, browser_checked_at TEXT, worker_seen_at TEXT, login_verified_at TEXT);
         INSERT INTO invoice_settings VALUES (1, 0, 5, '04:00', 0, NULL, NULL, NULL);

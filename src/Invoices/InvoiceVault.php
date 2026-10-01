@@ -17,7 +17,10 @@ final class InvoiceVault
             || preg_match('~/public_html(?:/|$)~', $resolved)) {
             throw new RuntimeException('private_storage_unavailable');
         }
-        $web = realpath((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
+        // CLI cron has no document root. realpath('') resolves the working
+        // directory, which can be the parent of this private vault.
+        $documentRoot = (string) ($_SERVER['DOCUMENT_ROOT'] ?? '');
+        $web = $documentRoot === '' ? false : realpath($documentRoot);
         if ($web && ($resolved === $web || str_starts_with($resolved, $web . '/'))) {
             throw new RuntimeException('private_storage_unavailable');
         }
