@@ -26,9 +26,12 @@ Provision client_id and client_secret via InvoiceVault::save('drive-oauth.enc', 
 from a PRIVATE CLI setup, preserving refresh_token on subsequent updates. Never commit
 credentials or expose them through public_html or JavaScript. No tokens in URL query logs.
 The manager uses Connect Google Drive and signs in as daniel.ciorcas@welcomehostel.pt.
-The app requests drive.file, verifies the authenticated account, and creates a private
-Management Hub - Faturas destination. An arbitrary existing folder may be unavailable
-with this limited scope; use the folder created by the app.
+The app requests drive.file plus drive.metadata.readonly, verifies the authenticated
+account, and requires Google consent. Metadata access lets it discover the existing
+accounting folders and detect filename collisions; it does not grant download or
+content-write access to unrelated documents. File creation stays under drive.file.
+Set the existing accounting root and run the real destination test before enabling
+uploads. A previously connected account must reconnect to grant metadata access.
 
 Archive hierarchy: accounting root / year / Portuguese month_year / online.
 Reuse existing month folders using either an underscore or a space (for example,
@@ -38,9 +41,9 @@ Filenames use portal_property_month, for example booking_city_center_junho.pdf.
 An occupied filename gets an invoice-number/document-ID suffix; existing Drive
 files are never replaced. The worker waits for a successful destination test
 (state ready) before attempting delivery. Existing pending remote identities are
-preserved across retries. The existing drive.file authorization does not grant
-access to arbitrary pre-existing accounting folders: authorize their access in
-Google before enabling this destination and verify it with the real API. Server-side database stores pre-generated remote file IDs before
+preserved across retries. The Google authorization must include metadata access to pre-existing folders;
+verify folder discovery and a complete upload with the real API before claiming
+that the connection works. Server-side database stores pre-generated remote file IDs before
 upload so ambiguous network outcomes reuse the same identity. The original is removed
 only after remote ID, parent, size and MD5 match, and local SHA-256 matches the collected
 record. Shared content-addressed originals stay until every referencing document is verified.

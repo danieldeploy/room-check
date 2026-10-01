@@ -330,7 +330,7 @@ final class InvoiceText
         'drive_interrupted' => ['Upload interrompido; será retomado.', 'Upload interrupted; it will be retried.'],
         'drive_conflict' => ['O ficheiro Drive precisa de verificação.', 'The Drive file needs verification.'],
         'drive_connect' => ['Ligar conta Google Drive', 'Connect Google Drive account'],
-        'drive_setup_note' => ['A ligação requer uma aplicação OAuth Google configurada pelo administrador no cofre privado.', 'Connection requires a Google OAuth application configured by the administrator in the private vault.'],
+        'drive_setup_note' => ['A ligação requer uma aplicação OAuth Google configurada no cofre privado. Ao ligar, autorize a consulta dos nomes e da estrutura das pastas existentes e a criação dos ficheiros desta integração.', 'Connection requires a Google OAuth application configured in the private vault. When connecting, authorize reading existing folder/file names and structure and creating this integration’s files.'],
         'alert_pending' => ['Aviso WhatsApp por enviar', 'WhatsApp alert pending'],
         'alert_retry' => ['Aviso WhatsApp — nova tentativa agendada', 'WhatsApp alert — retry scheduled'],
         'alert_sending' => ['Aviso WhatsApp a enviar', 'Sending WhatsApp alert'],

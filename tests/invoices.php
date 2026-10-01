@@ -27,6 +27,10 @@ try {
     file_put_contents($tmp . '/master.key', random_bytes(32));
     chmod($tmp . '/master.key', 0600);
     $vault = new InvoiceVault($tmp);
+    $vault->save('drive-oauth.enc', ['client_id'=>'synthetic-client-id', 'client_secret'=>'synthetic-client-secret']);
+    parse_str((string)parse_url((new InvoiceDriveClient($vault))->authorizationUrl('test-state'), PHP_URL_QUERY), $driveAuthorization);
+    checkInvoice($driveAuthorization['scope'] === 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly', 'Drive requests existing metadata and app file access');
+    checkInvoice($driveAuthorization['redirect_uri'] === InvoiceDriveClient::CALLBACK && !isset($driveAuthorization['client_secret']), 'Drive OAuth callback and private secret separation');
     $vault->save('credentials.enc', ['password' => 'test-only-sensitive-value']);
     checkInvoice(!str_contains((string) file_get_contents($tmp . '/credentials.enc'), 'test-only-sensitive-value'), 'Plaintext leaked');
     checkInvoice($vault->read('credentials.enc')['password'] === 'test-only-sensitive-value', 'Vault round trip');
