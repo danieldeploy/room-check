@@ -10,22 +10,35 @@ $job=['id'=>1,'account_id'=>$account,'property_id'=>'account','period'=>'2026-08
 $content="Invoice,Company\nINV-12,Active Lines\n";
 $service->import($vault,$job,['number'=>'csv-2026-08','period'=>'2026-08','period_basis'=>'export_month','format'=>'csv','content'=>base64_encode($content)]);
 $doc=(int)$pdo->query('SELECT MAX(id) FROM invoice_documents')->fetchColumn();
-$pdo->exec("UPDATE invoice_drive_settings SET folder_id='testroot00000001' WHERE id=1");
+$pdo->exec("UPDATE invoice_drive_settings SET folder_id='testroot00000001',state='ready' WHERE id=1");
 $client=new class {
- public bool $fail=true; public bool $corrupt=false; public array $uploads=[]; private int $counter=0;
+ public bool $fail=true; public bool $corrupt=false; public array $uploads=[]; public array $folderNames=[]; public array $fileNames=[]; private int $counter=0;
  public function connect(): string {return 'daniel.ciorcas@welcomehostel.pt';}
  public function newId(): string {return 'testid'.str_pad((string)++$this->counter,12,'0',STR_PAD_LEFT);}
- public function folder(string $id,string $parent,string $name): void {}
+ public function folder(string $id,string $parent,string $name): void {$this->folderNames[]=$name;}
+ public function namedItems(string $parent,array $names,bool $foldersOnly=false): array {
+  if($foldersOnly && $names[0]==='2026')return [['id'=>'existingyear00001','name'=>'2026']];
+  if(!$foldersOnly && $names[0]==='airbnb_test_airbnb_agosto.csv')return [['id'=>'unrelatedexistingfile','name'=>$names[0]]];
+  return [];
+ }
  public function metadata(string $id): array {return ['id'=>$id,'trashed'=>false,'mimeType'=>'application/vnd.google-apps.folder','owners'=>[['emailAddress'=>'daniel.ciorcas@welcomehostel.pt']]];}
  public function upload(string $id,string $parent,string $name,string $path,string $format): array {
   $this->uploads[]=$id;
+  $this->fileNames[]=$name;
   if($this->fail)throw new RuntimeException('drive_network');
   return ['id'=>$id,'parents'=>[$parent],'trashed'=>false,'size'=>filesize($path),'md5Checksum'=>$this->corrupt?'incorrect':hash_file('md5',$path)];
  }
 };
 $drive=new InvoiceDrive($pdo,$vault,$client);$now=time();
 try {
+ $pdo->exec("UPDATE invoice_drive_settings SET state='not_configured' WHERE id=1");
  $drive->run($now);
+ if($client->uploads || (int)$pdo->query("SELECT COUNT(*) FROM invoice_document_delivery WHERE attempts>0")->fetchColumn())throw new RuntimeException('Unconfigured destination consumed an upload attempt');
+ $pdo->exec("UPDATE invoice_drive_settings SET state='ready' WHERE id=1");
+ $drive->run($now);
+ if($client->folderNames!==['2026','Agosto_2026','online'])throw new RuntimeException('Accounting hierarchy');
+ if($pdo->query("SELECT drive_id FROM invoice_drive_folders WHERE name='2026'")->fetchColumn()!=='existingyear00001')throw new RuntimeException('Existing year not reused');
+ if($client->fileNames[0]!=='airbnb_test_airbnb_agosto_csv_2026_08_'.$doc.'.csv')throw new RuntimeException('Existing monthly filename not protected');
  $row=$pdo->query("SELECT * FROM invoice_document_delivery WHERE document_id=$doc")->fetch(PDO::FETCH_ASSOC);
  if((int)$row['attempts']!==1 || $row['drive_state']!=='retry' || strtotime($row['next_attempt_at'].' UTC')!==$now+10800)throw new RuntimeException('Initial retry schedule');
  $drive->run($now+10799);

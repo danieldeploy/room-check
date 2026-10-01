@@ -13,12 +13,24 @@ function rejectsInvoice(callable $fn, string $message): void {
     try { $fn(); } catch (Throwable) { checkInvoice(true, $message); return; }
     checkInvoice(false, $message);
 }
+checkInvoice(InvoiceDriveLayout::folders('2026-06') === [['2026'], ['Junho_2026','Junho 2026'], ['online']], 'Accounting June folder aliases');
+checkInvoice(InvoiceDriveLayout::folders('2027-03')[1] === ['Março_2027','Março 2027'], 'Accounting accented month and year rollover');
+rejectsInvoice(fn()=>InvoiceDriveLayout::folders('2026-13'), 'Invalid accounting month rejected');
+$namingDocument=['id'=>1,'portal'=>'booking','property_label'=>'City Center Guest House','period'=>'2026-06','invoice_number'=>'INV/1','format'=>'pdf'];
+checkInvoice(InvoiceDriveLayout::filename($namingDocument)==='booking_city_center_junho.pdf', 'Owner requested Booking filename');
+checkInvoice(InvoiceDriveLayout::filename($namingDocument,true)==='booking_city_center_junho_inv_1_1.pdf', 'Additional invoices have stable distinct names');
+$namingDocument['property_label']='Welcome Guest House';
+checkInvoice(InvoiceDriveLayout::filename($namingDocument)==='booking_welcome_junho.pdf', 'Welcome filename');
 $tmp = sys_get_temp_dir() . '/invoice-test-' . bin2hex(random_bytes(8));
 mkdir($tmp, 0700);
 try {
     file_put_contents($tmp . '/master.key', random_bytes(32));
     chmod($tmp . '/master.key', 0600);
     $vault = new InvoiceVault($tmp);
+    $vault->save('drive-oauth.enc', ['client_id'=>'synthetic-client-id', 'client_secret'=>'synthetic-client-secret']);
+    parse_str((string)parse_url((new InvoiceDriveClient($vault))->authorizationUrl('test-state'), PHP_URL_QUERY), $driveAuthorization);
+    checkInvoice($driveAuthorization['scope'] === 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly', 'Drive requests existing metadata and app file access');
+    checkInvoice($driveAuthorization['redirect_uri'] === InvoiceDriveClient::CALLBACK && !isset($driveAuthorization['client_secret']), 'Drive OAuth callback and private secret separation');
     $vault->save('credentials.enc', ['password' => 'test-only-sensitive-value']);
     checkInvoice(!str_contains((string) file_get_contents($tmp . '/credentials.enc'), 'test-only-sensitive-value'), 'Plaintext leaked');
     checkInvoice($vault->read('credentials.enc')['password'] === 'test-only-sensitive-value', 'Vault round trip');

@@ -15,7 +15,10 @@ final class InvoiceDriveClient
         if (empty($c['client_id']) || empty($c['client_secret'])) throw new RuntimeException('drive_not_configured');
         return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
             'client_id'=>$c['client_id'], 'redirect_uri'=>self::CALLBACK, 'response_type'=>'code',
-            'scope'=>'https://www.googleapis.com/auth/drive.file', 'access_type'=>'offline', 'prompt'=>'consent',
+            // Read existing folder/file metadata to reuse the accounting tree;
+            // content writes remain limited to files created/opened by this app.
+            'scope'=>'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly',
+            'access_type'=>'offline', 'prompt'=>'consent',
             'state'=>$state, 'login_hint'=>'daniel.ciorcas@welcomehostel.pt'
         ]);
     }
@@ -57,6 +60,18 @@ final class InvoiceDriveClient
         $r = $this->api('GET', 'files/generateIds?count=1&space=drive&type=files');
         $id = (string) ($r['ids'][0] ?? '');
         self::assertId($id); return $id;
+    }
+    public function namedItems(string $parent, array $names, bool $foldersOnly = false): array
+    {
+        self::assertId($parent);
+        $quote = static fn(string $value): string => "'" . str_replace(["\\", "'"], ["\\\\", "\\'"], $value) . "'";
+        $query = $quote($parent) . ' in parents and trashed = false and ('
+            . implode(' or ', array_map(static fn(string $name): string => 'name = '.$quote($name), $names)) . ')';
+        if ($foldersOnly) $query .= " and mimeType = 'application/vnd.google-apps.folder'";
+        $result = $this->api('GET', 'files?'.http_build_query(['q'=>$query, 'pageSize'=>100,
+            'fields'=>'nextPageToken,files(id,name)', 'spaces'=>'drive']));
+        if (!empty($result['nextPageToken'])) throw new RuntimeException('drive_conflict');
+        return $result['files'] ?? [];
     }
     public static function assertId(string $id): void
     {

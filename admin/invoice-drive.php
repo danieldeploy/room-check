@@ -24,13 +24,9 @@ try {
     if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
     try {
         $client->finishAuthorization($_GET['code']);
-        // Create the destination with drive.file scope; no access to unrelated Drive files.
+        // Use the owner's existing accounting root, never create another archive.
         $settings=$pdo->query('SELECT * FROM invoice_drive_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);
-        if (empty($settings['folder_id'])) {
-            $client->connect(); $folder=$client->newId();
-            $client->api('POST','files?fields=id',['id'=>$folder,'name'=>'Management Hub - Faturas','mimeType'=>'application/vnd.google-apps.folder']);
-            $pdo->prepare('UPDATE invoice_drive_settings SET folder_id=? WHERE id=1')->execute([$folder]);
-        }
+        InvoiceDriveClient::assertId((string)($settings['folder_id'] ?? ''));
         $pdo->prepare("UPDATE invoice_drive_settings SET state='configured',checked_at=? WHERE id=1")->execute([gmdate('Y-m-d H:i:s')]);
         Auth::audit($pdo,(int)$user['id'],'invoices_drive_connected',[]);
     } finally { $pdo->query("SELECT RELEASE_LOCK('room_check_invoices')"); }

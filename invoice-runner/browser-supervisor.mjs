@@ -6,7 +6,7 @@ import { controlledBrowserProfile, usesControlledBrowser } from './controlled-br
 
 // The PowerShell owner launches persistent Chrome outside the kill-on-close
 // worker job. Only a nonce/status crosses this private, per-launch channel.
-export async function prepareControlledBrowser(input, root, channel, { timeoutMs = 35000, pollMs = 200 } = {}) {
+export async function prepareControlledBrowser(input, root, channel, { timeoutMs = 60000, pollMs = 200 } = {}) {
   if (!usesControlledBrowser(input) || controlledBrowserProfile(input) !== 'fresh_login') return;
   // Compatibility for direct diagnostic invocations and older launchers.
   if (channel === undefined) return;
