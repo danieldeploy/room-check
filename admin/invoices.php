@@ -6,6 +6,7 @@ require_once $root.'/src/UI/SessionBar.php';
 require_once $root.'/src/Invoices/InvoiceWorkspace.php';
 require_once $root.'/src/Invoices/InvoiceAuth.php';
 require_once $root.'/src/Invoices/InvoiceDrive.php';
+require_once $root.'/src/Invoices/InvoiceDriveSetup.php';
 require_once $root.'/src/Invoices/InvoiceRemoteAgent.php';
 require_once $root.'/src/I18n/InvoiceText.php';
 $config=require $root.'/config.php';
@@ -80,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } else {
             InvoiceService::assertGerente($currentUser);
             // Match the worker lock for changes to access, account membership and private files.
-            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
+            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','drive_client','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke'],true)) {
                 if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
                 $locked=true;
                 if ($vault && $vault->has('windows-agent.enc')) {
@@ -137,6 +138,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 if (isset($_POST['enabled']) && ($readiness[$id] ?? '')!=='ready') throw new RuntimeException('login_required');
                 $service->saveSchedule(isset($_POST['enabled']),(int)($_POST['day'] ?? 0),(string)($_POST['time'] ?? ''),$id);
                 $returnTab='accounts'; $returnEdit=$id;
+            } elseif ($action==='drive_client') {
+                if (!$vault) throw new RuntimeException('private_storage_unavailable');
+                (new InvoiceDriveSetup($vault))->installUpload($_FILES['drive_oauth_json']??[],$currentUser,
+                    !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
+                $returnTab='settings'; $returnEdit=0; $message='drive_client_saved';
             } elseif (in_array($action,['drive_settings','drive_test','drive_retry'],true)) {
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
                 $client=new InvoiceDriveClient($vault);

@@ -22,8 +22,13 @@ Expedia and HostelsClub remain disabled. Existing room management is unchanged.
 
 Register a Google OAuth web client with exact callback
 `https://check.welcomehostel.pt/admin/invoice-drive.php`.
-Provision client_id and client_secret via InvoiceVault::save('drive-oauth.enc', ...)
-from a PRIVATE CLI setup, preserving refresh_token on subsequent updates. Never commit
+For first-time setup, the manager imports the downloaded Web application client JSON
+in Invoices > Settings over HTTPS. The CSRF-protected form validates the Google endpoints,
+client fields and exact callback, and stores only client_id and client_secret in
+`drive-oauth.enc`. It never echoes credentials or imports tokens from the uploaded file.
+Reimporting identical credentials preserves the encrypted file and refresh_token;
+changing an existing client requires a PRIVATE CLI setup via InvoiceVault::save,
+preserving refresh_token only when the OAuth client stays unchanged. Never commit
 credentials or expose them through public_html or JavaScript. No tokens in URL query logs.
 The manager uses Connect Google Drive and signs in as daniel.ciorcas@welcomehostel.pt.
 The app requests drive.file plus drive.metadata.readonly, verifies the authenticated

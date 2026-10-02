@@ -15,6 +15,7 @@ CREATE TABLE invoice_batch_tasks(batch_id INTEGER,task_id INTEGER,PRIMARY KEY(ba
 require __DIR__.'/invoice-workspace-cases.php';
 // Render each real view in both languages with warnings promoted to failures.
 require_once dirname(__DIR__).'/src/I18n/InvoiceText.php';
+require_once dirname(__DIR__).'/src/Invoices/InvoiceDriveSetup.php';
 require_once dirname(__DIR__).'/src/Security/Csrf.php';
 require_once dirname(__DIR__).'/admin/partials/invoices/helpers.php';
 define('INVOICE_VIEW',true);
@@ -47,5 +48,27 @@ foreach (['pt','en'] as $locale) {
   if($scenario==='booking')checkWorkspace(!str_contains($html,'name="hostel_number"'),'Booking form omits Hostelworld-only field');
  }
 }
+$driveViewTmp=sys_get_temp_dir().'/drive-view-test-'.bin2hex(random_bytes(6)); mkdir($driveViewTmp,0700);
+file_put_contents($driveViewTmp.'/master.key',random_bytes(32)); chmod($driveViewTmp.'/master.key',0600);
+try {
+ $vault=new InvoiceVault($driveViewTmp); $isGerente=true;
+ foreach(['pt','en'] as $locale) {
+  $_SESSION['locale']=$locale;
+  foreach(['missing','client','folder','unreadable'] as $scenario) {
+   if($vault->has('drive-oauth.enc'))unlink($vault->path('drive-oauth.enc'));
+   $driveSettings=[];
+   if(in_array($scenario,['client','folder'],true)) $vault->save('drive-oauth.enc',[
+    'client_id'=>'123456789012-fixtureclient0001.apps.googleusercontent.com',
+    'client_secret'=>'fixture-view-secret-never-visible','refresh_token'=>'fixture-view-token-never-visible']);
+   if($scenario==='folder')$driveSettings=['folder_id'=>'fixtureRoot000001','state'=>'configured'];
+   if($scenario==='unreadable')InvoiceVault::atomicWrite($vault->path('drive-oauth.enc'),'{}');
+   ob_start();require $viewRoot.'/settings.php';$html=ob_get_clean();
+   checkWorkspace(!str_contains($html,'fixtureclient') && !str_contains($html,'fixture-view-'),'Drive setup renders no saved credentials');
+   checkWorkspace(str_contains($html,'name="drive_oauth_json"')===in_array($scenario,['missing','unreadable'],true),'Import shown only when initial client setup is needed');
+   if(!preg_match('~<form[^>]+action="invoice-drive\.php"[^>]*>(.*?)</form>~s',$html,$connectForm))throw new RuntimeException('Drive connect form missing');
+   checkWorkspace(str_contains($connectForm[1],'disabled')===($scenario!=='folder'),'Connect requires a readable client and a saved folder');
+  }
+ }
+} finally {foreach(glob($driveViewTmp.'/*')?:[] as $file)unlink($file);rmdir($driveViewTmp);$vault=null;}
 restore_error_handler();
 echo "Workspace views render in PT/EN for manager and view-only roles.\n";

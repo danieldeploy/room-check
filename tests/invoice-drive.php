@@ -17,3 +17,4 @@ CREATE TABLE invoice_drive_folders (path_key TEXT PRIMARY KEY,drive_id TEXT,pare
 CREATE TABLE invoice_drive_alerts (id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER,period TEXT,error_code TEXT,created_at TEXT,UNIQUE(account_id,period,error_code));");
 $service=new InvoiceService($pdo);
 require __DIR__.'/invoice-drive-cases.php';
+require __DIR__.'/invoice-drive-setup.php';
