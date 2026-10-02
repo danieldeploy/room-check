@@ -155,6 +155,46 @@ final class InvoiceTestControl
             'credentials_configured'=>!empty($secret['phone_number_id']) && !empty($secret['access_token'])];
     }
 
+    /** Local evidence only: status never contacts Google or changes archive readiness. */
+    private function driveStatus(string $period): array
+    {
+        $settings=$this->pdo->query('SELECT state,folder_id FROM invoice_drive_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC) ?: [];
+        $state=$settings['state']??'not_configured';
+        if (!in_array($state,['not_configured','configured','ready'],true)) $state='unknown';
+        $oauth=[]; $oauthState='missing';
+        if ($this->vault->has('drive-oauth.enc')) {
+            try { $oauth=$this->vault->read('drive-oauth.enc'); $oauthState='stored'; }
+            catch (Throwable) { $oauthState='unreadable'; }
+        }
+        $configured=static fn(string $key): bool => is_string($oauth[$key]??null) && trim($oauth[$key])!=='';
+        $delivery=array_fill_keys(['pending','uploading','retry','failed','verified','unknown'],0);
+        $s=$this->pdo->prepare("SELECT COALESCE(x.drive_state,'pending') AS state,COUNT(*) AS total
+            FROM invoice_documents d LEFT JOIN invoice_document_delivery x ON x.document_id=d.id
+            WHERE d.account_id=1 AND d.period=? GROUP BY COALESCE(x.drive_state,'pending')");
+        $s->execute([$period]);
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $key=array_key_exists($row['state'],$delivery) ? $row['state'] : 'unknown';
+            $delivery[$key]+=(int)$row['total'];
+        }
+        $allowedErrors=['drive_not_configured','drive_auth','drive_account_mismatch','drive_invalid_id','drive_not_found',
+            'drive_permission','drive_quota','drive_network','drive_upload','drive_verify','drive_transport',
+            'drive_local_missing','drive_conflict','drive_interrupted'];
+        $errors=[];
+        $s=$this->pdo->prepare("SELECT x.last_error,COUNT(*) AS total FROM invoice_document_delivery x
+            JOIN invoice_documents d ON d.id=x.document_id WHERE d.account_id=1 AND d.period=?
+            AND x.drive_state IN ('retry','failed') AND x.last_error IS NOT NULL GROUP BY x.last_error");
+        $s->execute([$period]);
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $code=in_array($row['last_error'],$allowedErrors,true) ? $row['last_error'] : 'unknown';
+            $errors[$code]=($errors[$code]??0)+(int)$row['total'];
+        }
+        ksort($errors,SORT_STRING);
+        return ['connection_state'=>$state,
+            'folder_configured'=>is_string($settings['folder_id']??null) && preg_match('/\A[a-zA-Z0-9_-]{10,128}\z/',$settings['folder_id'])===1,
+            'oauth_storage'=>$oauthState,'oauth_client_configured'=>$configured('client_id') && $configured('client_secret'),
+            'oauth_authorization_stored'=>$configured('refresh_token'),'delivery'=>$delivery,'errors'=>$errors];
+    }
+
     private function status(string $period,int $owner): array
     {
         $s=$this->pdo->prepare('SELECT id,kind,property_id,period,state,result_code,imported_count,duplicate_count FROM invoice_tasks WHERE account_id=1 AND period=? ORDER BY id DESC LIMIT 20');
@@ -172,6 +212,7 @@ final class InvoiceTestControl
             'automation'=>(new InvoiceAccounts($this->pdo))->automationOptions($this->vault,1),
             'notifications'=>$this->notificationStatus($owner),
             'notification_test'=>(new InvoiceNotificationTest($this->pdo,$this->vault,$this->whatsapp))->status(),
+            'drive'=>$this->driveStatus($period),
             'schedule'=>['enabled'=>(bool)$account['enabled'],'day'=>(int)$account['schedule_day'],'time'=>$account['schedule_time'],'timezone'=>'Europe/Lisbon']];
     }
 }
