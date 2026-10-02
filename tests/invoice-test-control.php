@@ -7,10 +7,13 @@ $pdo->exec("CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT,display_name
 INSERT INTO users VALUES(7,'gerente','Fixture owner','351900000001','gerente',1);
 CREATE TABLE auth_audit_log(id INTEGER PRIMARY KEY,actor_user_id INTEGER,action TEXT,details_json TEXT,ip_key TEXT);
 CREATE TABLE role_permissions(role TEXT,permission TEXT);
+CREATE TABLE invoice_drive_settings(id INTEGER PRIMARY KEY,state TEXT,folder_id TEXT);
+INSERT INTO invoice_drive_settings VALUES(1,'not_configured',NULL);
+CREATE TABLE invoice_document_delivery(document_id INTEGER PRIMARY KEY,drive_state TEXT,last_error TEXT,drive_id TEXT,drive_parent TEXT);
 ALTER TABLE invoice_notification_settings ADD COLUMN recipient_user_id INTEGER;
 ALTER TABLE invoice_notification_settings ADD COLUMN template_name TEXT;
 UPDATE invoice_notification_settings SET enabled=0,template_name='invoice_collection_failed';
-DELETE FROM invoice_tasks; DELETE FROM invoice_batches; DELETE FROM invoice_batch_tasks;
+DELETE FROM invoice_tasks; DELETE FROM invoice_batches; DELETE FROM invoice_batch_tasks; DELETE FROM invoice_documents;
 DELETE FROM invoice_account_settings; DELETE FROM invoice_property_settings;
 DELETE FROM invoice_account_properties WHERE account_id=1;
 INSERT INTO invoice_account_properties VALUES(1,'1140306','Welcome'),(1,'539828','City');
@@ -34,6 +37,40 @@ try {
     $status=$send(['action'=>'control_status','period'=>'2026-07']);
     checkInvoice($before===$vault->read('windows-agent.enc'),'Status is not a worker heartbeat');
     checkInvoice($status['notifications']['owner_id']===7 && $status['notifications']['owner_mobile_suffix']==='0001','Only fixed owner metadata is returned');
+    checkInvoice($status['drive']['connection_state']==='not_configured' && $status['drive']['oauth_storage']==='missing'
+        && !$status['drive']['oauth_client_configured'] && !$status['drive']['oauth_authorization_stored']
+        && !$status['drive']['folder_configured'] && array_sum($status['drive']['delivery'])===0,'Missing Drive configuration is distinguishable from a stored authorization');
+    $vault->save('drive-oauth.enc',['client_id'=>'fixture-private-client','client_secret'=>'fixture-private-secret']);
+    $pdo->exec("UPDATE invoice_drive_settings SET state='configured',folder_id='fixture-private-root';
+        INSERT INTO invoice_documents(id,account_id,period) VALUES(1001,1,'2026-07'),(1002,1,'2026-07'),(1003,1,'2026-07'),(1004,1,'2026-06'),(1005,2,'2026-07'),(1006,1,'2026-07');
+        INSERT INTO invoice_document_delivery VALUES(1001,'verified',NULL,'fixture-private-file','fixture-private-parent'),
+            (1002,'retry','drive_permission',NULL,NULL),(1003,'fixture-private-state',NULL,NULL,NULL),
+            (1004,'verified',NULL,NULL,NULL),(1005,'failed','drive_quota',NULL,NULL);");
+    $drive=$send(['action'=>'control_status','period'=>'2026-07'])['drive'];
+    checkInvoice($drive['connection_state']==='configured' && $drive['folder_configured'] && $drive['oauth_client_configured']
+        && !$drive['oauth_authorization_stored'],'Configured OAuth client does not imply completed Google authorization');
+    checkInvoice($drive['delivery']===['pending'=>1,'uploading'=>0,'retry'=>1,'failed'=>0,'verified'=>1,'unknown'=>1]
+        && $drive['errors']===['drive_permission'=>1],'Delivery evidence is scoped to the fixed account and requested issue month, including missing delivery rows');
+    $vault->save('drive-oauth.enc',['client_id'=>'fixture-private-client','client_secret'=>'fixture-private-secret','refresh_token'=>'fixture-private-refresh']);
+    $pdo->exec("UPDATE invoice_drive_settings SET state='ready'; UPDATE invoice_document_delivery SET drive_state='failed',last_error='fixture-private-error' WHERE document_id=1003;");
+    $dbBefore=$pdo->query('SELECT * FROM invoice_drive_settings')->fetchAll(PDO::FETCH_ASSOC);
+    $deliveryBefore=$pdo->query('SELECT * FROM invoice_document_delivery ORDER BY document_id')->fetchAll(PDO::FETCH_ASSOC);
+    $auditBefore=(int)$pdo->query('SELECT COUNT(*) FROM auth_audit_log')->fetchColumn();
+    $vaultBefore=hash_file('sha256',$vault->path('drive-oauth.enc'));
+    $drive=$send(['action'=>'control_status','period'=>'2026-07'])['drive'];
+    checkInvoice($drive['oauth_authorization_stored'] && $drive['connection_state']==='ready'
+        && $drive['delivery']['failed']===1 && $drive['errors']===['drive_permission'=>1,'unknown'=>1],'Stored authorization and verified readiness remain separate evidence');
+    checkInvoice(!str_contains(json_encode($drive),'fixture-private'),'Status excludes OAuth secrets, identifiers, unknown states and raw errors');
+    checkInvoice($dbBefore===$pdo->query('SELECT * FROM invoice_drive_settings')->fetchAll(PDO::FETCH_ASSOC)
+        && $deliveryBefore===$pdo->query('SELECT * FROM invoice_document_delivery ORDER BY document_id')->fetchAll(PDO::FETCH_ASSOC)
+        && $auditBefore===(int)$pdo->query('SELECT COUNT(*) FROM auth_audit_log')->fetchColumn()
+        && $vaultBefore===hash_file('sha256',$vault->path('drive-oauth.enc')),'Drive diagnostics do not change readiness, queues, audit state or OAuth storage');
+    $pdo->exec("UPDATE invoice_drive_settings SET state='fixture-private-state',folder_id='invalid';");
+    InvoiceVault::atomicWrite($vault->path('drive-oauth.enc'),'fixture-invalid-envelope');
+    $drive=$send(['action'=>'control_status','period'=>'2026-07'])['drive'];
+    checkInvoice($drive['connection_state']==='unknown' && !$drive['folder_configured'] && $drive['oauth_storage']==='unreadable'
+        && !$drive['oauth_client_configured'] && !$drive['oauth_authorization_stored'],'Unreadable stored authorization returns bounded diagnostics without exposing the error');
+    unlink($vault->path('drive-oauth.enc')); $pdo->exec('DELETE FROM invoice_document_delivery; DELETE FROM invoice_documents;');
     $reject(fn()=>$send(['action'=>'control_status','period'=>null]),'invalid_request');
     $reject(fn()=>$send(['action'=>'control_status','period'=>'2026-07','account_id'=>2]),'invalid_request');
     $reject(fn()=>$send(['action'=>'control_enable_alerts','recipient'=>8]),'forbidden');
