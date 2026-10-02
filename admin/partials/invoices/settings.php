@@ -8,9 +8,17 @@
 <?php if ($agentStatus['paired']): ?><form method="post"><?php invoiceHidden('agent_revoke'); ?><button class="invoice-secondary"><?= it('agent_revoke') ?></button></form><?php endif; ?>
 </details></section>
 <section class="card"><h2><?= it('drive') ?></h2><p class="invoice-destination">daniel.ciorcas@welcomehostel.pt</p><div class="invoice-status-line"><?php invoiceStatus($driveSettings['state'] ?? 'not_configured',match($driveSettings['state'] ?? ''){'ready'=>'drive_connection_ready','configured'=>'drive_connection_pending',default=>'drive_not_configured'}); ?></div>
-<?php $driveCanConnect=$vault && $vault->has('drive-oauth.enc'); if (!$driveCanConnect): ?><p><?= it('drive_setup_pending') ?></p><?php endif; ?>
+<?php $driveClientConfigured=$vault && (new InvoiceDriveSetup($vault))->clientConfigured();
+$driveFolderConfigured=preg_match('/\A[a-zA-Z0-9_-]{10,128}\z/',(string)($driveSettings['folder_id']??''))===1;
+$driveCanConnect=$driveClientConfigured && $driveFolderConfigured;
+if (!$driveClientConfigured): ?><p><?= it('drive_setup_pending') ?></p><?php elseif (!$driveFolderConfigured): ?><p><?= it('drive_folder_pending') ?></p><?php endif; ?>
 <form method="post" action="invoice-drive.php"><?php invoiceHidden('connect'); ?><button class="primary-button" <?= !$driveCanConnect?'disabled':'' ?>><?= it('drive_connect') ?></button></form>
-<details class="invoice-options"><summary><?= it('drive_manage') ?></summary><form method="post"><?php invoiceHidden('drive_settings'); ?><fieldset><label class="field"><span><?= it('folder_id') ?></span><input type="text" name="folder_id" value="<?= ie($driveSettings['folder_id'] ?? '') ?>" maxlength="128" required></label><div class="form-actions"><button class="primary-button" name="action" value="drive_settings"><?= it('save') ?></button><button class="primary-button" name="action" value="drive_test"><?= it('drive_test') ?></button></div></fieldset></form><p><?= it('drive_setup_note') ?></p></details>
+<details class="invoice-options" <?= !$driveCanConnect?'open':'' ?>><summary><?= it('drive_manage') ?></summary>
+<?php if (!$driveClientConfigured): ?>
+<p><?= it('drive_client_note') ?></p><p><?= it('drive_client_callback') ?>: <code translate="no"><?= ie(InvoiceDriveClient::CALLBACK) ?></code></p>
+<form method="post" enctype="multipart/form-data"><?php invoiceHidden('drive_client'); ?><label class="field"><span><?= it('drive_client_file') ?></span><input type="file" name="drive_oauth_json" accept=".json,application/json" required aria-describedby="drive-client-private"></label><p id="drive-client-private"><?= it('drive_client_private') ?></p><button class="primary-button" <?= !$vault?'disabled':'' ?>><?= it('drive_client_import') ?></button></form>
+<?php endif; ?>
+<form method="post"><?php invoiceHidden('drive_settings'); ?><fieldset><label class="field"><span><?= it('folder_id') ?></span><input type="text" name="folder_id" value="<?= ie($driveSettings['folder_id'] ?? '') ?>" maxlength="128" required></label><div class="form-actions"><button class="primary-button" name="action" value="drive_settings"><?= it('save') ?></button><button class="primary-button" name="action" value="drive_test" <?= !$driveClientConfigured?'disabled':'' ?>><?= it('drive_test') ?></button></div></fieldset></form><p><?= it('drive_setup_note') ?></p></details>
 <details><summary><?= it('storage_rules') ?></summary><p><?= it('drive_note') ?></p></details></section>
 <section class="card"><h2>TOConline</h2><p><?= it('toconline_setup_pending') ?></p><details><summary><?= it('processing_details') ?></summary><p><?= it('toconline_note') ?></p><p><?= it('airbnb_pipeline') ?></p></details></section>
 <section class="card"><h2><?= it('failure_alerts') ?></h2><div class="invoice-status-line"><?php invoiceStatus(!empty($notifications['enabled'])?'enabled':'disabled',!empty($notifications['enabled'])?'alerts_enabled':'alerts_disabled'); ?></div><p><?= it('alerts_summary') ?></p>

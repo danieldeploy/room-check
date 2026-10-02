@@ -56,6 +56,12 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   to verify the requested workflow. This authorization remains in effect until
   revoked; it does not authorize unrelated work, new recipients, or bypassing
   platform approval review, required checks, or deployment safeguards.
+- Source publication authorization, reaffirmed on 2026-10-02: the owner authorizes
+  publishing scoped source, test, and documentation changes for requested
+  Management Hub work to `danieldeploy/room-check`, currently a public repository,
+  without asking for routine publication approval for each change. This remains
+  valid until revoked. It does not authorize publishing credentials, private
+  invoices, unrelated data, or bypassing platform approval review.
 - When the request authorizes a change, complete implementation, CI, PR merge,
   and the automatic production deployment without asking for repeated cPanel
   login or permission at each routine step. `HUB_DEPLOY_ENABLED=true` may stay
