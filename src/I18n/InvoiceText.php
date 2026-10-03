@@ -5,6 +5,7 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'toc_ledger_missing' => ['Histórico de envio indisponível. Envios bloqueados para evitar duplicados.', 'Sending history unavailable. Sending blocked to prevent duplicates.'],
         'toc_email_note' => ['Envio dos PDFs do Booking para NIF@my.toconline.pt após validação da empresa e confirmação do arquivo no Drive.', 'Send Booking PDFs to NIF@my.toconline.pt after company validation and verified Drive archival.'],
         'toc_nif' => ['NIF da empresa destinatária', 'Recipient company tax number'],
         'toc_sender' => ['E-mail do remetente autorizado no TOConline', 'Sender email authorised in TOConline'],

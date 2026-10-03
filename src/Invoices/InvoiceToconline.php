@@ -34,7 +34,10 @@ final class InvoiceToconline
 
     private function ledger(): array
     {
-        return $this->vault->has('toconline-ledger.enc') ? $this->vault->read('toconline-ledger.enc') : [];
+        if ($this->vault->has('toconline-ledger.enc')) return $this->vault->read('toconline-ledger.enc');
+        // Missing history after a partial restore must stop delivery, never reset deduplication.
+        if ((int)$this->pdo->query("SELECT COUNT(*) FROM invoice_document_delivery WHERE toconline_state IN ('toc_sending','toc_submitted','toc_uncertain','toc_accepted','toc_duplicate')")->fetchColumn()>0) throw new RuntimeException('toc_ledger_missing');
+        return [];
     }
 
     public static function keys(array $d, string $nif): array

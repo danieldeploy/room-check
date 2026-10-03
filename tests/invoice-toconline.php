@@ -59,6 +59,8 @@ try {
     $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
     tocCheck(!$toc->settings()['pilot_verified'],'sender change invalidates pilot');
     tocReject(fn()=>$toc->confirm(1),'old sender receipt cannot validate new sender');
+    unlink($vault->path('toconline-ledger.enc'));
+    tocReject(fn()=>$toc->run(7),'missing ledger fails closed');
     echo "TOConline email safeguards passed\n";
 } finally {
     foreach(glob($dir.'/*') as $file) unlink($file); rmdir($dir);
