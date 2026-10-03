@@ -5,6 +5,8 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'drive_complete' => ['Concluir ligação', 'Complete connection'],
+        'drive_session_ended' => ['Sessão terminada. Entre no Management Hub e volte a ligar o Drive.', 'Session ended. Sign in to Management Hub and reconnect Drive.'],
         'notification_test_name' => ['Teste do Management Hub', 'Management Hub test'],
         'notification_test_period' => ['Teste', 'Test'],
         'notification_test_reason' => ['Teste controlado do alerta WhatsApp. Não existe uma nova falha de recolha.', 'Controlled WhatsApp alert test. There is no new collection failure.'],

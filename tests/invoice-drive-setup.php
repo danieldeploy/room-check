@@ -57,3 +57,49 @@ try {
 } finally {
     foreach(glob($setupTmp.'/*')?:[] as $file)unlink($file); rmdir($setupTmp);
 }
+
+
+// Exercise the actual cross-site landing without a database or authenticated
+// session. It must never start/replace a Strict session, including invalid input.
+$returnEndpoint=dirname(__DIR__).'/admin/invoice-drive.php';
+$runReturn=static function(array $query, bool $https=true) use ($returnEndpoint): array {
+    $script='$_SERVER["REQUEST_METHOD"]="GET";$_SERVER["HTTPS"]='.var_export($https?'on':'off',true).';'
+        .'$_GET='.var_export($query,true).';ob_start();'
+        .'register_shutdown_function(static function(){ $body=ob_get_clean();'
+        .'echo json_encode(["body"=>$body,"status"=>http_response_code(),"session"=>session_status()]); });'
+        .'require '.var_export($returnEndpoint,true).';';
+    $pipes=[];
+    $process=proc_open([PHP_BINARY,'-r',$script],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
+    if(!is_resource($process))throw new RuntimeException('Cannot test OAuth return');
+    fclose($pipes[0]); $output=stream_get_contents($pipes[1]); fclose($pipes[1]);
+    $errors=stream_get_contents($pipes[2]); fclose($pipes[2]);
+    if(proc_close($process)!==0 || $errors!=='')throw new RuntimeException('OAuth return subprocess failed: '.$errors);
+    return json_decode($output,true,512,JSON_THROW_ON_ERROR);
+};
+$returnState=str_repeat('a',64);
+$returnCode='fixture-only-code"><script>alert(1)</script>&';
+$returnResult=$runReturn(['state'=>$returnState,'code'=>$returnCode]);
+if($returnResult['session']!==PHP_SESSION_NONE
+    || !str_contains($returnResult['body'],'method="post" action="invoice-drive.php"')
+    || !str_contains($returnResult['body'],'name="oauth_return" value="1"')
+    || !str_contains($returnResult['body'],htmlspecialchars($returnCode,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'))
+    || str_contains($returnResult['body'],$returnCode)
+    || !str_contains($returnResult['body'],'history.replaceState')
+    || !str_contains($returnResult['body'],'Concluir ligação / Complete connection')) {
+    throw new RuntimeException('OAuth bridge changed session or failed to contain/escape callback input');
+}
+foreach([
+    [], ['state'=>[],'code'=>'fixture'], ['state'=>'bad','code'=>'fixture'],
+    ['state'=>$returnState,'code'=>[]], ['state'=>$returnState,'code'=>''],
+    ['state'=>$returnState,'code'=>str_repeat('x',4097)]
+] as $invalidReturn) {
+    $result=$runReturn($invalidReturn);
+    if($result['status']!==400 || $result['session']!==PHP_SESSION_NONE || str_contains($result['body'],'<form')) {
+        throw new RuntimeException('Invalid OAuth return rendered a bridge or started a session');
+    }
+}
+$insecureReturn=$runReturn(['state'=>$returnState,'code'=>'fixture'],false);
+if($insecureReturn['status']!==400 || $insecureReturn['session']!==PHP_SESSION_NONE) {
+    throw new RuntimeException('Insecure OAuth return accepted');
+}
+echo "OAuth callback bridge preserves Strict session and rejects unsafe input before session/database access.\n";
