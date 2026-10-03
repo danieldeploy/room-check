@@ -113,6 +113,26 @@ final class InvoiceDriveClient
         if (!$meta) throw new RuntimeException('drive_verify');
         return $meta;
     }
+    /** Retrieve only an already archived PDF; bounded response, no redirects, exact content hash. */
+    public function verifiedPdf(array $d): string
+    {
+        $id=(string)($d['drive_id']??''); self::assertId($id);
+        $meta=$this->metadata($id);
+        $size=(int)($d['size_bytes']??0);
+        if (!$meta || ($meta['trashed']??true) || $size<5 || $size>10*1024*1024
+            || (int)($meta['size']??-1)!==$size || !in_array($d['drive_parent'],$meta['parents']??[],true)) throw new RuntimeException('drive_verify');
+        $h=curl_init('https://www.googleapis.com/drive/v3/files/'.$id.'?alt=media'); $pdf='';
+        curl_setopt_array($h,[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_TIMEOUT=>90,
+            CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$this->token],
+            CURLOPT_WRITEFUNCTION=>static function($h,string $chunk) use (&$pdf,$size): int {
+                if (strlen($pdf)+strlen($chunk)>$size) return 0; $pdf.=$chunk; return strlen($chunk);
+            }]);
+        $ok=curl_exec($h); $status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE); curl_close($h);
+        if ($ok===false || $status!==200 || strlen($pdf)!==$size || !str_starts_with($pdf,'%PDF-')
+            || !hash_equals((string)$d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
+        return $pdf;
+    }
+
     private function request(string $method, string $url, ?string $body, array $headers, array &$responseHeaders = []): array
     {
         if (!function_exists('curl_init')) throw new RuntimeException('drive_transport');
