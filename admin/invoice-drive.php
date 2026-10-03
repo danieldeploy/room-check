@@ -19,7 +19,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
         || !is_string($_GET['code'] ?? null) || $_GET['code'] === ''
         || strlen($_GET['code']) > 4096) {
         http_response_code(400);
-        echo 'Pedido inválido. / Invalid request.';
+        echo htmlspecialchars(implode(' / ', InvoiceText::TEXT['invalid_request']), ENT_QUOTES, 'UTF-8');
         exit;
     }
     $nonce = base64_encode(random_bytes(24));
@@ -32,7 +32,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
     echo '<input type="hidden" name="oauth_return" value="1">';
     echo '<input type="hidden" name="state" value="'.$escape($_GET['state']).'">';
     echo '<input type="hidden" name="code" value="'.$escape($_GET['code']).'">';
-    echo '<button type="submit">Concluir ligação / Complete connection</button></form>';
+    echo '<button type="submit">'.$escape(implode(' / ', InvoiceText::TEXT['drive_complete'])).'</button></form>';
     echo '<script nonce="'.$escape($nonce).'">history.replaceState(null,"","invoice-drive.php");document.getElementById("drive-return").submit();</script>';
     echo '</body></html>';
     exit;
@@ -67,7 +67,7 @@ try {
 } catch (Throwable $e) {
     http_response_code(400);
     if ($e->getCode() === 401) {
-        echo 'Sessão terminada. Entre no Management Hub e volte a ligar o Drive. / Session ended. Sign in and reconnect Drive.';
+        echo htmlspecialchars(InvoiceText::get('drive_session_ended'), ENT_QUOTES, 'UTF-8');
     } else echo htmlspecialchars(InvoiceText::get(isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'drive_auth'),ENT_QUOTES,'UTF-8');
     echo '<p><a href="invoices.php">Management Hub</a></p>';
 }
