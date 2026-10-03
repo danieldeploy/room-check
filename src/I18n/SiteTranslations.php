@@ -426,6 +426,7 @@ final class SiteTranslations
         ];
 
         $coverage = require __DIR__ . '/SiteTranslationsCoverage.php';
-        return array_replace(InvoiceText::catalog(), $catalog, is_array($coverage) ? $coverage : []);
+        $publicText = require __DIR__ . '/HubPublicText.php';
+        return array_replace(InvoiceText::catalog(), array_column(array_values($publicText), 1, 0), $catalog, is_array($coverage) ? $coverage : []);
     }
 }
