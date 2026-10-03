@@ -2,10 +2,13 @@
 declare(strict_types=1);
 
 // Public information only: never bootstrap an authenticated session or database.
+require_once dirname(__DIR__) . '/src/I18n/SiteTranslations.php';
+SiteTranslations::boot();
 $text = require dirname(__DIR__) . '/src/I18n/HubPublicText.php';
 $lang = ($_GET['lang'] ?? '') === 'en' ? 'en' : 'pt';
 $page = in_array($_GET['page'] ?? '', ['privacy', 'terms'], true) ? $_GET['page'] : 'home';
-$t = static fn(string $key): string => htmlspecialchars($text[$key][$lang === 'en' ? 1 : 0], ENT_QUOTES, 'UTF-8');
+Translator::setLocale($lang, false); // Request-local locale; no session or cookie is created.
+$t = static fn(string $key): string => htmlspecialchars(Translator::localized(...$text[$key]), ENT_QUOTES, 'UTF-8');
 $titleKey = ['home'=>'homeTitle', 'privacy'=>'privacyTitle', 'terms'=>'termsTitle'][$page];
 $sections = [
     'home' => [['homeTitle', 'intro', 'features', 'drive']],
