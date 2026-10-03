@@ -12,6 +12,7 @@
 $driveFolderConfigured=preg_match('/\A[a-zA-Z0-9_-]{10,128}\z/',(string)($driveSettings['folder_id']??''))===1;
 $driveCanConnect=$driveClientConfigured && $driveFolderConfigured;
 if (!$driveClientConfigured): ?><p><?= it('drive_setup_pending') ?></p><?php elseif (!$driveFolderConfigured): ?><p><?= it('drive_folder_pending') ?></p><?php endif; ?>
+<p><a href="about.php?page=privacy&amp;lang=<?= Translator::locale() === 'en' ? 'en' : 'pt' ?>"><?= ie(Translator::localized('Política de privacidade — Google Drive', 'Privacy policy — Google Drive')) ?></a></p>
 <form method="post" action="invoice-drive.php"><?php invoiceHidden('connect'); ?><button class="primary-button" <?= !$driveCanConnect?'disabled':'' ?>><?= it('drive_connect') ?></button></form>
 <details class="invoice-options" <?= !$driveCanConnect?'open':'' ?>><summary><?= it('drive_manage') ?></summary>
 <?php if (!$driveClientConfigured): ?>
