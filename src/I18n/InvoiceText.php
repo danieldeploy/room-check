@@ -5,6 +5,33 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'toc_ledger_missing' => ['Histórico de envio indisponível. Envios bloqueados para evitar duplicados.', 'Sending history unavailable. Sending blocked to prevent duplicates.'],
+        'toc_email_note' => ['Envio dos PDFs do Booking para NIF@my.toconline.pt após validação da empresa e confirmação do arquivo no Drive.', 'Send Booking PDFs to NIF@my.toconline.pt after company validation and verified Drive archival.'],
+        'toc_nif' => ['NIF da empresa destinatária', 'Recipient company tax number'],
+        'toc_sender' => ['E-mail do remetente autorizado no TOConline', 'Sender email authorised in TOConline'],
+        'toc_sender_note' => ['Use um endereço welcomehostel.pt ou citycenterhostel.pt registado ou autorizado no TOConline. O envio utiliza o serviço de correio do alojamento; a entrega deve ser validada com uma primeira fatura.', 'Use a welcomehostel.pt or citycenterhostel.pt address registered or authorised in TOConline. Sending uses the hosting mail service; delivery must be validated with a first invoice.'],
+        'toc_authorized' => ['Confirmo o NIF de destino e que este remetente está autorizado a enviar documentos para esta empresa no TOConline.', 'I confirm the recipient tax number and that this sender is authorised to send documents to this company in TOConline.'],
+        'toc_enable' => ['Enviar automaticamente os PDFs elegíveis pendentes e futuros', 'Automatically send eligible pending and future PDFs'],
+        'toc_auto_enabled' => ['Envio automático por e-mail ativo', 'Automatic email sending enabled'],
+        'toc_auto_disabled' => ['Envio automático por e-mail desativado', 'Automatic email sending disabled'],
+        'toc_pilot_note' => ['Guarde a configuração e envie uma primeira fatura no separador Documentos. Após verificar a resposta de aceitação do TOConline, registe essa confirmação no documento para permitir a ativação automática.', 'Save the settings and send a first invoice in Documents. After checking the TOConline acceptance reply, record that confirmation on the document to allow automatic activation.'],
+        'toc_limits' => ['O Hub bloqueia reenvios da mesma fatura ou ficheiro. Um resultado incerto exige conferência; não é repetido automaticamente. A aceitação pelo TOConline é confirmada manualmente pela resposta recebida. Envios feitos fora do Hub não são detetados.', 'The Hub blocks repeat submissions of the same invoice or file. An uncertain outcome requires reconciliation and is not retried automatically. TOConline acceptance is confirmed manually from its reply. Submissions outside the Hub are not detected.'],
+        'toc_send_pilot' => ['Enviar esta fatura por e-mail ao TOConline', 'Email this invoice to TOConline'],
+        'toc_receipt' => ['Verifiquei na resposta do TOConline que esta fatura foi aceite.', 'I checked the TOConline reply and this invoice was accepted.'],
+        'toc_confirm' => ['Registar aceitação confirmada', 'Record confirmed acceptance'],
+        'toc_pending' => ['Aguarda envio ou configuração de e-mail', 'Awaiting sending or email setup'],
+        'toc_submitted' => ['Entregue ao serviço de e-mail; aceitação TOConline por confirmar', 'Submitted to mail service; TOConline acceptance unconfirmed'],
+        'toc_uncertain' => ['Envio incerto — conferir antes de qualquer reenvio', 'Uncertain submission — reconcile before any resend'],
+        'toc_sending' => ['Envio em curso — não repetir', 'Sending — do not resend'],
+        'toc_accepted' => ['Aceitação TOConline confirmada manualmente', 'TOConline acceptance manually confirmed'],
+        'toc_duplicate' => ['Duplicado bloqueado pelo Hub', 'Duplicate blocked by Hub'],
+        'toc_retry' => ['Falha antes do envio — aguarda nova tentativa', 'Pre-send failure — awaiting retry'],
+        'toc_invalid_settings' => ['Verifique o NIF, o remetente e a autorização de envio.', 'Check the tax number, sender and sending authorisation.'],
+        'toc_pilot_required' => ['Confirme primeiro a aceitação de uma fatura com este remetente e destino.', 'First confirm acceptance of an invoice with this sender and destination.'],
+        'toc_ineligible' => ['Documento não elegível para esta operação.', 'Document is not eligible for this action.'],
+        'toc_receipt_required' => ['É necessário verificar a resposta de aceitação do TOConline.', 'You must verify the TOConline acceptance reply.'],
+        'toc_settings_error' => ['Não foi possível ler a configuração de envio TOConline.', 'Unable to read TOConline sending settings.'],
+
         'drive_complete' => ['Concluir ligação', 'Complete connection'],
         'drive_session_ended' => ['Sessão terminada. Entre no Management Hub e volte a ligar o Drive.', 'Session ended. Sign in to Management Hub and reconnect Drive.'],
         'notification_test_name' => ['Teste do Management Hub', 'Management Hub test'],
@@ -382,3 +409,4 @@ final class InvoiceText
         return array_column(array_values(self::TEXT), 1, 0);
     }
 }
+
