@@ -9,6 +9,13 @@ final class BookingLoginStatus
      *
      * @return array{phase:string,title:string,detail:string,next:string}
      */
+    /** @return array{phase:string,title:string,detail:string,next:string} */
+    public static function waiting(): array
+    {
+        return ['phase'=>'unknown','title'=>'booking_login_no_diagnostic',
+            'detail'=>'booking_login_no_diagnostic_detail','next'=>'booking_login_run_test'];
+    }
+
     public static function summarize(array $diagnostic): array
     {
         if (isset($diagnostic['diagnostic']) && is_array($diagnostic['diagnostic'])) {
