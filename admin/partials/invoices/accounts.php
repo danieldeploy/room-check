@@ -55,7 +55,13 @@ if ($editing) {
 <div class="form-actions"><button class="primary-button"><?= it('save_automation_options') ?></button></div></form></details>
 <?php endif; ?>
 <form method="post"><?php invoiceHidden('login',$editId); ?><button class="primary-button" <?= !$repository->active($editId)?'disabled':'' ?>><?= it($a['portal']==='booking'?'booking_login':'login') ?></button></form>
-<?php if ($a['portal']==='booking' && $vault && $vault->has('account-'.$editId.'-login-diagnostic.enc')): $loginDraft=$vault->read('account-'.$editId.'-login-diagnostic.enc'); ?>
+<?php if ($a['portal']==='booking' && $vault && $vault->has('account-'.$editId.'-login-diagnostic.enc')): $loginDraft=$vault->read('account-'.$editId.'-login-diagnostic.enc'); $loginSummary=BookingLoginStatus::summarize($loginDraft); ?>
+<div class="invoice-login-summary invoice-login-summary--<?= ie($loginSummary['phase']) ?>" role="status">
+<p class="invoice-kicker"><?= it('booking_login_current_state') ?></p>
+<h3><?= it($loginSummary['title']) ?></h3>
+<p><?= it($loginSummary['detail']) ?></p>
+<p><strong><?= it('booking_login_next') ?>:</strong> <?= it($loginSummary['next']) ?></p>
+</div>
 <details class="invoice-options"><summary><?= it('login_diagnostic') ?></summary><pre class="invoice-diagnostic"><?= ie(json_encode($loginDraft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details>
 <?php endif; ?>
 <?php if ($vault && $a['portal']!=='email'): ?>
