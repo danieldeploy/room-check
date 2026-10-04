@@ -1,0 +1,41 @@
+name: Hosting connectivity
+
+on:
+  push:
+    branches:
+      - codex/cpanel-api-deployment
+    paths:
+      - .github/workflows/hosting-connectivity.yml
+      - deploy/cpanel_api.py
+      - deploy/hosting_connectivity.py
+      - tests/test_hosting_connectivity.py
+  pull_request:
+    paths:
+      - .github/workflows/ci.yml
+      - .github/workflows/hosting-connectivity.yml
+      - deploy/cpanel_api.py
+      - deploy/automated_release.py
+      - deploy/hosting_connectivity.py
+      - tests/test_hosting_connectivity.py
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity:
+    if: >-
+      github.repository == 'danieldeploy/room-check' &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout without saved credentials
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      - name: Check WHM network access without credentials
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/hosting_connectivity.py
