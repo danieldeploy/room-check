@@ -30,10 +30,13 @@ configuration, previous packages, private backup permissions and two accepted
 pilot journals. It backs up the current configuration, creates the private live
 journal directory and installs the three PHP files. Registration is last.
 
-After activation, both known test plugin directories move out of the public
+After activation, the nine verified test plugin files move out of the public
 Roundcube directory to `roundcube-smtp2go-private/retired-tests-20261004/`.
-Their exact contents and permissions are verified again there. There is no
-deletion. Keys, historical journals and private configuration backups remain.
+This includes both plugin entrypoints, test UI scripts and configurations.
+Their exact contents and permissions are verified again there. Additional
+unreviewed files in the old directories are preserved without reading or moving
+them. Neither old plugin remains registered or has its public entrypoint.
+There is no deletion. Keys, historical journals and private backups remain.
 Historical Roundcube test workflows are archived outside `.github/workflows`;
 their source helpers remain for forensic verification and reversibility.
 No Management Hub TOConline test controls are removed.
@@ -42,12 +45,13 @@ No Management Hub TOConline test controls are removed.
 
 Run the workflow on `agent/room-item-assignments` with operation `verify` for a
 read-only package/backup/retirement check and public login health check. Neither
-proves authenticated sending. Operation `rollback` restores the old plugin
-directories before restoring the byte-exact pre-production main configuration;
+proves authenticated sending. Operation `rollback` restores all nine old plugin
+files before restoring the byte-exact pre-production main configuration;
 the exhausted pilot remains exhausted and ordinary messages use the former
 SMTP route. It does not erase successful sends or production journals.
 
-On failure, inspect read-only before any retry. Unknown content, permissions,
-files, moved-folder duplication or changed core/configuration block mutations.
+On failure, inspect read-only before any retry. Changed known content or
+permissions, new files in the production/private archive directories, duplicated
+test files, or changed core/configuration block mutations.
 Only reviewed fixed paths can be written or renamed. Never rerun retired
 activation jobs or reset message journals to force another delivery attempt.
