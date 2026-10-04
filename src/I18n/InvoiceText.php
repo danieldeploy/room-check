@@ -402,7 +402,7 @@ final class InvoiceText
         'template_name' => ['Template WhatsApp', 'WhatsApp template'],
         'enable_alerts' => ['Ativar avisos', 'Enable alerts'],
         'retry' => ['Nova tentativa agendada', 'Retry scheduled'],
-        'waiting_auth' => ['A aguardar 2FA automático', 'Waiting for automatic 2FA'],
+        'waiting_auth' => ['Autenticação do Booking em curso — consulte o estado específico na conta', 'Booking authentication in progress — check the account for its specific status'],
         'auth_unconfigured' => ['Configure o método de autenticação desta conta.', 'Configure this account authentication method.'],
         'auth_timeout' => ['O código não chegou dentro do prazo.', 'The code did not arrive in time.'],
         'auth_invalid' => ['Código inválido, ambíguo ou já utilizado.', 'Invalid, ambiguous or already used code.'],
