@@ -108,6 +108,25 @@ class SafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(p.PreparationError, 'symlink'):
                 client.stat(p.CONFIG, 'file')
 
+    def test_missing_optional_path_uses_parent_inventory(self):
+        client = p.Client('test-token')
+        with patch.object(client, 'call', return_value=[]) as call:
+            self.assertIsNone(client.stat(p.PRIVATE, 'dir', optional=True))
+            call.assert_called_once_with('list', directory='/home/welcome')
+
+    def test_existing_optional_path_still_checks_permissions(self):
+        client = p.Client('test-token')
+        with patch.object(client, 'call', side_effect=[
+                [{'file': 'roundcube-smtp2go-private'}],
+                [{'exists': 1, 'type': 'dir', 'mode': 0o40700}]]):
+            self.assertEqual(client.stat(p.PRIVATE, 'dir', optional=True), 0o700)
+
+    def test_failed_inventory_never_means_missing(self):
+        client = p.Client('test-token')
+        with patch.object(client, 'call', return_value=None):
+            with self.assertRaisesRegex(p.PreparationError, 'inventory'):
+                client.stat(p.PRIVATE, 'dir', optional=True)
+
 
 if __name__ == '__main__':
     unittest.main()
