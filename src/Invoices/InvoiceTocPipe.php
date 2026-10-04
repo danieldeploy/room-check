@@ -66,7 +66,7 @@ final class InvoiceTocPipe
         try { $parts=0; $text=self::text($raw,0,$parts); }
         catch (RuntimeException) { return ['from'=>'no_reply@toconline.pt','text'=>'','hash'=>$hash]; }
         $references=implode(' ',array_merge($headers['references']??[],$headers['in-reply-to']??[]));
-        preg_match_all('/(?:booking-|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$m);
+        preg_match_all('/(?:booking[-_]|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$m);
         $tokens=array_unique(array_map('strtolower',$m[1]));
         // Too many correlations are ambiguous, never truncate to a seemingly exact match.
         $safe=count($tokens)>20?'':implode("\n",array_map(static fn($key)=>'booking-'.$key.'.pdf',$tokens));
