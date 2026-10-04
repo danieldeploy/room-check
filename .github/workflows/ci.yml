@@ -87,6 +87,7 @@ jobs:
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
           php tests/invoice-toconline.php
+          php tests/invoice-toc-pipe.php
           php tests/run.php
           php tests/i18n.php
           php tests/transversal-i18n-contract.php
@@ -189,4 +190,5 @@ jobs:
           $ErrorActionPreference = 'Stop'
           & tests/invoice-agent-windows.ps1 -Browser
           & tests/invoice-browser-supervisor-windows.ps1
+
 
