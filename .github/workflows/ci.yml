@@ -88,6 +88,7 @@ jobs:
           php tests/invoice-drive.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
+          php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
           php tests/run.php
           php tests/i18n.php
@@ -127,6 +128,7 @@ jobs:
       - name: Test mail pipe on production PHP
         run: |
           php tests/invoice-toc-pipe.php
+          php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
 
   deploy:
@@ -203,5 +205,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           & tests/invoice-agent-windows.ps1 -Browser
           & tests/invoice-browser-supervisor-windows.ps1
+
 
 

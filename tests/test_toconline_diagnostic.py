@@ -36,7 +36,7 @@ class DiagnosticTests(unittest.TestCase):
         shutil.copyfile(ROOT / 'cron/toconline-reply.php', self.script)
         self.app = self.account / 'public_html/check'
         (self.app / 'src/Invoices').mkdir(parents=True)
-        for name in ('InvoiceVault.php', 'InvoiceTocPipe.php'):
+        for name in ('InvoiceVault.php', 'InvoiceTocPipe.php', 'InvoiceTocAuthentication.php'):
             shutil.copyfile(ROOT / 'src/Invoices' / name, self.app / 'src/Invoices' / name)
         shutil.copyfile(ROOT / 'config.php', self.app / 'config.php')
         self.status = self.private / 'toconline-pipe-diagnostic.json'

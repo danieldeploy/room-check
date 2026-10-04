@@ -13,6 +13,19 @@ final class InvoiceText
         'toc_diagnostic_cooldown' => ['Aguarde 10 minutos após o último teste e atualize a página. Confira entretanto a receção nas definições.', 'Wait 10 minutes after the last test and refresh the page. Meanwhile check reception in Settings.'],
         'toc_diagnostic_uncertain' => ['Tentativa registada com envio incerto. Novo envio bloqueado até investigação da entrega.', 'Attempt recorded with uncertain delivery. Further sending is blocked pending investigation.'],
         'toc_diagnostic_unavailable' => ['Teste indisponível ou formulário já utilizado. Atualize a página e confira o estado antes de testar novamente.', 'Test unavailable or form already used. Refresh the page and check the status before testing again.'],
+        'toc_auth_label' => ['Autenticidade da última resposta', 'Last reply authenticity'],
+        'toc_auth_outcome' => ['Resultado automático da última resposta', 'Last automatic reply outcome'],
+        'toc_auth_verified' => ['Assinatura TOConline verificada', 'TOConline signature verified'],
+        'toc_auth_not_checked' => ['Resposta anterior à verificação de assinatura', 'Reply predates signature verification'],
+        'toc_auth_unsigned' => ['Sem assinatura verificável — revisão necessária', 'No verifiable signature — review required'],
+        'toc_auth_unsupported' => ['Formato de assinatura por validar — revisão necessária', 'Signature format needs validation — review required'],
+        'toc_auth_unaligned' => ['Assinatura de outro domínio — revisão necessária', 'Signature from another domain — review required'],
+        'toc_auth_unsigned_fields' => ['Campos essenciais sem assinatura — revisão necessária', 'Essential fields unsigned — review required'],
+        'toc_auth_expired' => ['Data ou assinatura fora da validade — revisão necessária', 'Date or signature outside validity — review required'],
+        'toc_auth_dns_unavailable' => ['Chave pública indisponível — revisão necessária', 'Public key unavailable — review required'],
+        'toc_auth_body_mismatch' => ['Integridade do conteúdo não confirmada — revisão necessária', 'Content integrity unconfirmed — review required'],
+        'toc_auth_signature_mismatch' => ['Assinatura não confirmada — revisão necessária', 'Signature unconfirmed — review required'],
+        'toc_auth_unverified' => ['Autenticidade não confirmada — revisão necessária', 'Authenticity unconfirmed — review required'],
         'toc_pipe_0' => ['Respostas diretas do servidor', 'Direct server replies'],
         'toc_pipe_1' => ['Receção sem palavra-passe de e-mail. Requer um filtro cPanel com Pipe to a Program e uma cópia mantida na caixa de correio. A publicação do programa não ativa o filtro.', 'Reception without an email password. Requires a cPanel Pipe to a Program filter and a retained mailbox copy. Deploying the program does not activate the filter.'],
         'toc_pipe_2' => ['Última resposta processada', 'Last processed reply'],
@@ -20,7 +33,7 @@ final class InvoiceText
         'toc_pipe_4' => ['Associadas a uma fatura', 'Matched to an invoice'],
         'toc_pipe_5' => ['Sem associação — conferir e-mail', 'Unmatched — check mailbox'],
         'toc_pipe_6' => ['Estado de receção indisponível.', 'Reception status unavailable.'],
-        'toc_pipe_7' => ['As respostas associadas ficam para revisão. Receber um e-mail não confirma a sua autenticidade nem a contabilização da fatura.', 'Matched replies require review. Receiving an email does not confirm its authenticity or that the invoice was posted to accounting.'],
+        'toc_pipe_7' => ['Respostas com assinatura TOConline verificada, identificação exata e resultado reconhecido atualizam o relatório automaticamente. As restantes ficam para revisão. Arquivo aceite não significa lançamento contabilístico.', 'Replies with a verified TOConline signature, exact identity and recognized outcome update the report automatically. Other replies require review. Archive acceptance does not mean an accounting posting.'],
         'toc_existing' => ['Já existente no arquivo TOConline — confirmado', 'Already in TOConline archive — confirmed'],
         'toc_rejected' => ['Rejeitado pelo TOConline — confirmado', 'Rejected by TOConline — confirmed'],
         'toc_review' => ['Resposta recebida — revisão necessária', 'Reply received — review required'],
@@ -447,6 +460,7 @@ final class InvoiceText
         return array_column(array_values(self::TEXT), 1, 0);
     }
 }
+
 
 
 
