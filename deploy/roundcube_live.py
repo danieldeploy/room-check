@@ -22,6 +22,9 @@ JOURNAL = b.PRIVATE + '/live'
 ARCHIVE = b.PRIVATE + '/retired-tests-20261004'
 OLD = (b.PLUGIN, p.PLUGIN)
 MOVED = {x: ARCHIVE + '/' + x.rsplit('/', 1)[1] for x in OLD}
+TEST_FILES = {b.PLUGIN: (*b.HASHES, 'config.inc.php'), p.PLUGIN: p.FILES}
+MOVE_FILES = {folder + '/' + name: MOVED[folder] + '/' + name
+              for folder, files in TEST_FILES.items() for name in files}
 ARCHIVED_FILES = {MOVED[b.PLUGIN] + '/' + n for n in (*b.HASHES, 'config.inc.php')} | {
     MOVED[p.PLUGIN] + '/' + n for n in p.FILES}
 DIRECTORIES = {PLUGIN, JOURNAL, ARCHIVE, *MOVED.values()}
@@ -67,10 +70,10 @@ class Client(owner.Client):
                 'cpanel.module': 'Fileman', 'cpanel.function': 'save_file_content', 'dir': directory,
                 'file': filename, 'content': content, 'from_charset': 'UTF-8', 'to_charset': 'UTF-8'}, 3, post=True)
         if operation == 'mkdir_live':
-            b.require(set(values) == {'path'} and path in {PLUGIN, JOURNAL, ARCHIVE}, 'mkdir_not_allowed')
+            b.require(set(values) == {'path'} and path in DIRECTORIES, 'mkdir_not_allowed')
             parent, name = path.rsplit('/', 1)
             params = {'cpanel_jsonapi_func': 'mkdir', 'path': parent, 'name': name,
-                      'permissions': '0755' if path == PLUGIN else '0700'}
+                      'permissions': '0755' if path in {PLUGIN, *MOVED.values()} else '0700'}
         elif operation == 'backup_live':
             b.require(not values, 'copy_not_allowed')
             params = {'cpanel_jsonapi_func': 'fileop', 'op': 'copy',
@@ -83,7 +86,7 @@ class Client(owner.Client):
         elif operation == 'move_test':
             pair = (values.get('source'), values.get('destination'))
             b.require(set(values) == {'source', 'destination'} and pair in
-                      set(MOVED.items()) | {(v, k) for k, v in MOVED.items()}, 'move_not_allowed')
+                      set(MOVE_FILES.items()) | {(v, k) for k, v in MOVE_FILES.items()}, 'move_not_allowed')
             params = {'cpanel_jsonapi_func': 'fileop', 'op': 'rename',
                       'sourcefiles': pair[0].removeprefix('/home/welcome/'), 'destfiles': pair[1], 'doubledecode': 0}
         else:
@@ -132,25 +135,34 @@ def inspect(client, report, parser=a.parse_config):
         archived = names(client, ARCHIVE)
         b.require(archived <= {x.rsplit('/', 1)[1] for x in OLD}, 'unexpected_archive_content')
     locations = {}
+    preserved_extras = 0
+    retired = 0
     for folder in OLD:
         name = folder.rsplit('/', 1)[1]
-        b.require((name in public) != (name in archived), 'test_folder_missing_or_duplicated')
-        locations[folder] = MOVED[folder] if name in archived else folder
-        b.require(client.stat(locations[folder], 'dir') == 0o755, 'test_directory_permissions_changed')
-    sandbox = locations[b.PLUGIN]
-    b.require(names(client, sandbox) == set(b.HASHES) | {'config.inc.php'}, 'unexpected_sandbox_files')
+        b.require(name in public and client.stat(folder, 'dir') == 0o755, 'test_directory_permissions_changed')
+        present = names(client, folder)
+        saved = set()
+        if name in archived:
+            b.require(client.stat(MOVED[folder], 'dir') == 0o755, 'archive_child_permissions_changed')
+            saved = names(client, MOVED[folder])
+            b.require(saved <= set(TEST_FILES[folder]), 'unexpected_archive_files')
+        preserved_extras += len(present - set(TEST_FILES[folder]))
+        for filename in TEST_FILES[folder]:
+            b.require((filename in present) != (filename in saved), 'test_file_missing_or_duplicated')
+            source = folder + '/' + filename
+            locations[source] = MOVE_FILES[source] if filename in saved else source
+        retired += saved == set(TEST_FILES[folder])
     for name, expected in b.HASHES.items():
-        path = sandbox + '/' + name
+        path = locations[b.PLUGIN + '/' + name]
         b.require(client.stat(path, 'file') == 0o644 and b.digest(client.read(path)) == expected, 'sandbox_package_changed')
     before_sandbox, before, sandbox_config = p.configurations(
-        original, summary, client.read(sandbox + '/config.inc.php.dist'))
-    b.require(client.stat(sandbox + '/config.inc.php', 'file') == 0o644 and
-              client.read(sandbox + '/config.inc.php') == sandbox_config, 'sandbox_config_changed')
+        original, summary, client.read(locations[b.PLUGIN + '/config.inc.php.dist']))
+    config_path = locations[b.PLUGIN + '/config.inc.php']
+    b.require(client.stat(config_path, 'file') == 0o644 and
+              client.read(config_path) == sandbox_config, 'sandbox_config_changed')
     old_package, owner_package = owner.packages()
-    pilot = locations[p.PLUGIN]
-    b.require(names(client, pilot) == set(p.FILES), 'unexpected_pilot_files')
     for name, expected in owner_package.items():
-        path = pilot + '/' + name
+        path = locations[p.PLUGIN + '/' + name]
         b.require(client.stat(path, 'file') == 0o644 and client.read(path) == expected, 'pilot_package_changed')
     for path, content in {p.BACKUP: before_sandbox, **{owner.BACKUPS[n]: old_package[n] for n in owner.CHANGED}}.items():
         b.require(client.stat(path, 'file') == 0o600 and client.read(path) == content, 'historical_backup_changed')
@@ -177,13 +189,16 @@ def inspect(client, report, parser=a.parse_config):
     if journal: b.require(client.stat(JOURNAL, 'dir') == 0o700, 'journal_requires_0700')
     active = current == after
     b.require(not active or (backup and journal and installed == set(FILES)), 'active_installation_incomplete')
-    b.require(not archived or active, 'tests_archived_before_activation')
+    moved = sum(source != location for source, location in locations.items())
+    b.require(not moved or active, 'tests_archived_before_activation')
     report.update(production_active=active, backup_verified=backup, installed_files=len(installed),
-                  retired_test_plugins=len(archived), pilot_accepted=2, core_verified=True,
+                  retired_test_plugins=retired, archived_test_files=moved,
+                  preserved_unreviewed_files=preserved_extras, pilot_accepted=2, core_verified=True,
                   original_plugins=summary['plugins'], key_read=False, email_sent=False)
     return {'before': before, 'after': after, 'active': active, 'backup': backup, 'files': installed,
             'plugin_present': PLUGIN.rsplit('/', 1)[1] in public, 'journal': journal,
-            'archive_present': ARCHIVE.rsplit('/', 1)[1] in private, 'locations': locations}
+            'archive_present': ARCHIVE.rsplit('/', 1)[1] in private,
+            'archive_children': archived, 'locations': locations}
 
 
 def install(client, report, parser=a.parse_config, lint=b.lint):
@@ -234,7 +249,12 @@ def retire(client, report, parser=a.parse_config):
         report['last_write_attempt'] = 'create_private_archive'
         client.call('mkdir_live', path=ARCHIVE)
         b.require(client.stat(ARCHIVE, 'dir') == 0o700, 'archive_requires_0700')
-    for source, destination in MOVED.items():
+    for destination in MOVED.values():
+        if destination.rsplit('/', 1)[1] not in state['archive_children']:
+            report['last_write_attempt'] = 'create_test_archive_directory'
+            client.call('mkdir_live', path=destination)
+            b.require(client.stat(destination, 'dir') == 0o755, 'archive_child_permissions_changed')
+    for source, destination in MOVE_FILES.items():
         if state['locations'][source] == source:
             b.require(client.read(b.CONFIG) == state['after'], 'config_changed_before_retirement')
             move(client, source, destination, report)
@@ -249,8 +269,8 @@ def verify(client, report, parser=a.parse_config):
 
 def rollback(client, report, parser=a.parse_config):
     state = inspect(client, report, parser)
-    # Restore both old directories before selecting the backed-up configuration.
-    for public, archived in MOVED.items():
+    # Restore all verified old files before selecting the backed-up configuration.
+    for public, archived in MOVE_FILES.items():
         if state['locations'][public] == archived: move(client, archived, public, report)
     if state['active']:
         b.require(client.read(b.CONFIG) == state['after'], 'config_changed_before_rollback')

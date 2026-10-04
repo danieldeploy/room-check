@@ -23,18 +23,14 @@ class Fake(prior.Fake):
         if operation == 'backup_live': self.files[live.BACKUP] = self.files[live.b.CONFIG]
         elif operation == 'mkdir_live':
             self.dirs.add(values['path'])
-            self.modes[values['path']] = 0o755 if values['path'] == live.PLUGIN else 0o700
+            self.modes[values['path']] = 0o755 if values['path'] in {live.PLUGIN, *live.MOVED.values()} else 0o700
         elif operation == 'chmod_live':
             self.modes[values['path']] = 0o600 if values['path'] == live.BACKUP else 0o644
         elif operation == 'write': self.files[values['path']] = values['content']
         elif operation == 'move_test':
             source, dest = values['source'], values['destination']
-            self.dirs.remove(source); self.dirs.add(dest)
-            for path in list(self.files):
-                if path.startswith(source + '/'):
-                    target = dest + path[len(source):]
-                    self.files[target] = self.files.pop(path)
-                    self.modes[target] = self.modes.pop(path, 0o644)
+            self.files[dest] = self.files.pop(source)
+            self.modes[dest] = self.modes.pop(source, 0o644)
         else: raise AssertionError(operation)
 
 
@@ -73,11 +69,11 @@ class LiveTests(unittest.TestCase):
         f = self.fixture(); before = dict(f.files)
         self.run_command(f); result = self.run_command(f, live.retire)
         self.assertEqual(result['retired_test_plugins'], 2)
-        self.assertFalse(set(live.OLD) & f.dirs)
+        self.assertFalse(set(live.MOVE_FILES) & set(f.files))
         f.writes.clear(); self.run_command(f, live.verify); self.assertEqual(f.writes, [])
         self.run_command(f, live.retire); self.assertEqual(f.writes, [])
         self.run_command(f, live.rollback)
-        self.assertEqual([x[0] for x in f.writes], ['move_test', 'move_test', 'write'])
+        self.assertEqual([x[0] for x in f.writes], ['move_test'] * 9 + ['write'])
         for path, value in before.items(): self.assertEqual(f.files[path], value)
         self.assertIn(live.JOURNAL, f.dirs)
 
@@ -96,17 +92,15 @@ class LiveTests(unittest.TestCase):
         with patch.object(f, 'call', side_effect=interrupt), self.assertRaises(live.b.PreparationError):
             self.run_command(f, live.retire)
         f.writes.clear(); result = self.run_command(f, live.inspect)
-        self.assertEqual(result['retired_test_plugins'], 1); self.assertEqual(f.writes, [])
+        self.assertEqual(result['archived_test_files'], 1); self.assertEqual(f.writes, [])
         self.run_command(f, live.rollback)
         self.assertEqual([x[0] for x in f.writes], ['move_test', 'write'])
 
     def test_unknown_files_configs_backups_and_permissions_block_mutation(self):
-        for case in ('main', 'backup', 'sandbox_extra', 'pilot_extra', 'live_extra', 'key_mode', 'original', 'journal'):
+        for case in ('main', 'backup', 'live_extra', 'key_mode', 'original', 'journal'):
             f = self.fixture()
             if case == 'main': f.files[live.b.CONFIG] = 'foreign'
             elif case == 'backup': f.files[live.BACKUP] = 'foreign'; f.modes[live.BACKUP] = 0o600
-            elif case == 'sandbox_extra': f.files[live.b.PLUGIN + '/foreign.php'] = 'foreign'
-            elif case == 'pilot_extra': f.files[live.p.PLUGIN + '/foreign.php'] = 'foreign'
             elif case == 'live_extra': f.dirs.add(live.PLUGIN); f.files[live.PLUGIN + '/foreign.php'] = 'foreign'
             elif case == 'key_mode': f.modes[live.a.KEY] = 0o644
             elif case == 'original': f.files[live.owner.BACKUPS['config.inc.php']] = 'foreign'
@@ -115,6 +109,19 @@ class LiveTests(unittest.TestCase):
                 f.files[path] = f.files[path].splitlines()[0] + '\n'
             with self.subTest(case=case), self.assertRaises(live.b.PreparationError): self.run_command(f)
             self.assertEqual(f.writes, [])
+
+    def test_only_verified_test_files_are_moved_unknown_files_are_preserved(self):
+        f = self.fixture()
+        extras = {live.b.PLUGIN + '/unreviewed.php': 'unknown sandbox file',
+                  live.p.PLUGIN + '/notes.txt': 'unknown pilot file'}
+        f.files.update(extras)
+        self.run_command(f)
+        result = self.run_command(f, live.retire)
+        self.assertEqual(result['preserved_unreviewed_files'], 2)
+        self.assertEqual(result['archived_test_files'], 9)
+        for path, value in extras.items(): self.assertEqual(f.files[path], value)
+        self.run_command(f, live.rollback)
+        for path, value in extras.items(): self.assertEqual(f.files[path], value)
 
     def test_uncertain_registration_is_read_only_inspectable(self):
         f = self.fixture(); call = f.call
