@@ -54,19 +54,21 @@
             'sms_timeout', 'sms_rejected', 'credentials', 'credentials_rejected', 'timeout', 'blocked', 'unknown'];
         const apply = data => {
             if (!data || typeof data.title !== 'string' || typeof data.detail !== 'string' || typeof data.next !== 'string') return;
-            title.textContent = data.title;
-            detail.textContent = data.detail;
-            next.textContent = data.next;
+            if (title.textContent !== data.title) title.textContent = data.title;
+            if (detail.textContent !== data.detail) detail.textContent = data.detail;
+            if (next.textContent !== data.next) next.textContent = data.next;
             const phase = phaseNames.includes(data.phase) ? data.phase : 'unknown';
             summary.className = 'invoice-login-summary invoice-login-summary--' + phase;
             if (Number.isInteger(data.updated_at) && data.updated_at > 0) {
                 const date = new Date(data.updated_at * 1000);
                 updated.dateTime = date.toISOString();
-                updated.textContent = new Intl.DateTimeFormat(document.documentElement.lang || 'pt-PT',
+                const label = new Intl.DateTimeFormat(document.documentElement.lang || 'pt-PT',
                     { dateStyle: 'short', timeStyle: 'short' }).format(date);
+                if (updated.textContent !== label) updated.textContent = label;
             } else {
                 updated.removeAttribute('datetime');
-                updated.textContent = data.available ? '' : widget.dataset.noDiagnostic;
+                const label = data.available ? '' : widget.dataset.noDiagnostic;
+                if (updated.textContent !== label) updated.textContent = label;
             }
         };
         const schedule = () => {
@@ -83,9 +85,9 @@
                 });
                 if (!response.ok) throw new Error('status_unavailable');
                 apply(await response.json());
-                refresh.textContent = widget.dataset.refreshReady;
+                if (refresh.textContent !== widget.dataset.refreshReady) refresh.textContent = widget.dataset.refreshReady;
             } catch {
-                refresh.textContent = widget.dataset.refreshError;
+                if (refresh.textContent !== widget.dataset.refreshError) refresh.textContent = widget.dataset.refreshError;
             } finally {
                 inFlight = false;
                 schedule();
