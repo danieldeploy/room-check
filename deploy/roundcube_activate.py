@@ -11,16 +11,22 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from datetime import datetime, timezone
 import roundcube_prepare as base
 from roundcube_prepare import ORIGIN, LIMIT, require, PreparationError
 
-EXPIRES = 1791121500  # 2026-10-04 13:45 UTC / 14:45 Europe/Lisbon
+PREVIOUS_EXPIRES = 1791121500  # First window: 13:45 UTC / 14:45 Lisbon
+EXPIRES = 1791123600  # Reopened window: 14:20 UTC / 15:20 Lisbon
+EXPIRES_UTC = datetime.fromtimestamp(EXPIRES, timezone.utc).isoformat()
 KEY = base.PRIVATE + '/sandbox-key.txt'
 CONFIRM = base.PRIVATE + '/sandbox-confirmed.txt'
 TARGET = base.PLUGIN + '/config.inc.php'
 ATTESTATION = 'SANDBOXED;AUDITING=OFF\n'
 # User confirmed the saved MIME permission at 12:52 UTC; screenshots at 12:50
 # show Sandboxed and empty Email Auditing. This is an operator attestation.
+# Owner explicitly requested reopening at 13:53 UTC. Reuse the existing
+# confirmation written at 13:26 UTC, without refreshing its one-hour lifetime.
+# This second window ends before that existing local attestation expires.
 CORE_HASHES = {'program/lib/Roundcube/rcube.php': '3ceada3855e31a957c72b6904959432e7e94bd8766461f379633e5725f8a74c9', 'program/lib/Roundcube/rcube_mime.php': 'c9aa94c490221c938831ebc87cf1c998fe486f4ceb4abe8cddbc659100c1dc8a', 'program/actions/mail/send.php': '1892d5ffe2bd3909026e19dc1b246737cf8e48b7b949d40bb677ceeddb42cb76', 'program/include/rcmail_sendmail.php': '081d7b5403c0e849f632fd69078188be9c550703c6d2beb277a922beba4dcc36'}
 # Reviewed installation-only difference: the HTML wrapper concatenates
 # '<html><head><meta charset="utf-8">' and '</head>'. Reconstructing only this
@@ -142,15 +148,15 @@ def core_diagnostic(filename, source, expected):
             'redacted_structure_diff': delta[:80], 'diff_truncated': len(delta) > 80}
 
 
-def configurations(original, summary, disabled):
+def configurations(original, summary, disabled, expires=EXPIRES):
     suffix = ('' if summary['php_open'] else '\n<?php\n') + '''
 // WELCOME SMTP2GO dated Sandbox window; automatically inactive after expiry.
 if (time() < %d && !in_array('welcome_smtp2go', (array) ($config['plugins'] ?? []), true)) {
     $config['plugins'][] = 'welcome_smtp2go';
 }
-''' % EXPIRES
+''' % expires
     enabled = disabled.replace("$config['welcome_smtp2go_enabled'] = false;",
-                               "$config['welcome_smtp2go_enabled'] = time() < %d;" % EXPIRES)
+                               "$config['welcome_smtp2go_enabled'] = time() < %d;" % expires)
     base.require(enabled != disabled, 'disabled_config_not_recognized')
     return original + suffix, enabled
 
@@ -200,41 +206,38 @@ def activate(client, report, now=time.time, lint_check=base.lint, parser=parse_c
         base.require(not any(hook in source for hook in ('message_before_send', 'message_ready', 'message_outgoing_headers',
                      'message_outgoing_body', 'smtp_connect', 'message_sent')), 'existing_mail_hook_requires_review')
     expected_main, enabled = configurations(original, summary, sources['config.inc.php.dist'])
+    previous_main, previous_plugin = configurations(original, summary, sources['config.inc.php.dist'], PREVIOUS_EXPIRES)
     lint_check(expected_main)
     lint_check(enabled)
     current_main = client.read(base.CONFIG)
     current_plugin = client.read(TARGET)
-    base.require(current_main in (original, expected_main), 'main_config_changed_requires_review')
-    base.require(current_plugin in (sources['config.inc.php.dist'], enabled), 'plugin_config_changed_requires_review')
-    if current_main == expected_main and current_plugin == enabled:
-        base.require(client.stat(CONFIRM, 'file') == 0o600 and client.read(CONFIRM) == ATTESTATION, 'confirmation_requires_review')
-        report.update(ok=True, already_prepared=True, expires_utc='2026-10-04T13:45:00Z')
-        return
-    # Fresh operator attestation is bounded by the same fixed expiry; never extend it.
+    base.require(current_main in (original, previous_main, expected_main), 'main_config_changed_requires_review')
+    base.require(current_plugin in (sources['config.inc.php.dist'], previous_plugin, enabled), 'plugin_config_changed_requires_review')
+    if current_main == previous_main or current_plugin == previous_plugin:
+        base.require(now() >= PREVIOUS_EXPIRES, 'previous_window_still_active')
+    # Reopening never creates or refreshes the attestation. Its original
+    # one-hour runtime guard and the original backup remain untouched.
     inventory = client.call('list', directory=base.PRIVATE)
     rows = inventory.get('files') if isinstance(inventory, dict) else inventory
     base.require(isinstance(rows, list), 'invalid_private_inventory')
-    if any(row.get('file') == 'sandbox-confirmed.txt' for row in rows):
-        base.require(client.stat(CONFIRM, 'file') == 0o600 and client.read(CONFIRM) == ATTESTATION, 'existing_confirmation_requires_review')
-    else:
-        report['last_write_attempt'] = 'write_sandbox_attestation'
-        client.call('write', path=CONFIRM, content=ATTESTATION)
-        report['last_write_attempt'] = 'protect_sandbox_attestation'
-        client.call('protect_confirmation')
-        base.require(client.stat(CONFIRM, 'file') == 0o600 and client.read(CONFIRM) == ATTESTATION, 'confirmation_verification_failed')
+    base.require(any(row.get('file') == 'sandbox-confirmed.txt' for row in rows), 'existing_confirmation_required')
+    base.require(client.stat(CONFIRM, 'file') == 0o600 and client.read(CONFIRM) == ATTESTATION, 'existing_confirmation_requires_review')
+    if current_main == expected_main and current_plugin == enabled:
+        report.update(ok=True, already_prepared=True, expires_utc=EXPIRES_UTC, confirmation_refreshed=False)
+        return
     base.require(now() < EXPIRES - 300, 'sandbox_window_expired_or_too_short')
-    if current_main == original:
-        base.require(client.read(base.CONFIG) == original, 'main_config_changed_before_write')
+    if current_main != expected_main:
+        base.require(client.read(base.CONFIG) == current_main, 'main_config_changed_before_write')
         report['last_write_attempt'] = 'register_timed_sandbox_plugin'
         client.call('write', path=base.CONFIG, content=expected_main)
         base.require(client.read(base.CONFIG) == expected_main, 'main_write_requires_review')
     if current_plugin != enabled:
-        base.require(client.read(TARGET) == sources['config.inc.php.dist'], 'plugin_config_changed_before_write')
+        base.require(client.read(TARGET) == current_plugin, 'plugin_config_changed_before_write')
         report['last_write_attempt'] = 'enable_timed_sandbox'
         client.call('write', path=TARGET, content=enabled)
     base.require(client.read(TARGET) == enabled and client.read(base.CONFIG) == expected_main,
                  'activation_requires_review')
-    report.update(ok=True, expires_utc='2026-10-04T13:45:00Z', rollback='automatic_time_limit',
+    report.update(ok=True, expires_utc=EXPIRES_UTC, rollback='automatic_time_limit', confirmation_refreshed=False,
                   php_lint='passed', hosted_php_tested=False, email_sent=False, integration_tested=False)
 
 
