@@ -57,3 +57,8 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: python3 deploy/roundcube_activate.py
+      - name: Verify private Sandbox evidence after activation
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_verify.py
