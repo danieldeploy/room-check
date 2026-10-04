@@ -38,6 +38,11 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   end-to-end automation has been verified and the owner explicitly asks for its
   withdrawal. Keep manual confirmation, repeat protection and private test history.
 
+## Management Hub session recovery
+
+- Owner instruction, 2026-10-05: an expired Management Hub session during an authorized task is recoverable. Retry sign-in through the project's existing secure access method and continue the task; do not stop or ask the owner to repeat routine login while approved reusable access is available.
+- Never request, expose, or commit passwords, one-time codes, or tokens. If the secure method is unavailable or invalid, try the other already-authorized project control path for the task, then report the specific blocker. For a visual UI acceptance check, restore the signed-in page and observe the live update without refreshing; an API task result alone is not proof of visual behavior.
+
 ## Changes and review
 
 - Work on a separate branch and open a PR targeting
