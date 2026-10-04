@@ -71,6 +71,7 @@ try {
     tocCheck($toc->receive('attacker@example.org','',$body,$hash)['result']==='ignored','wrong sender ignored');
     tocCheck($toc->receive('no_reply@toconline.pt','','invoice.pdf',$hash)['result']==='unmatched','generic filename never guessed');
     tocCheck($toc->receive('no_reply@toconline.pt','',$body,$hash)['document_id']===9 && $state(9)==='toc_review','correlated receipt requires review');
+    tocCheck($toc->receive('no_reply@toconline.pt','',str_replace('booking-','booking_',$body),hash('sha256','normalized receipt'))['document_id']===9 && $state(9)==='toc_review','normalized filename matches exact identity without accepting');
     $toc->confirm(9,'toc_existing',42); tocCheck($state(9)==='toc_existing','external duplicate distinct from accepted');
     $before=count($sent); $toc->run(9); tocCheck(count($sent)===$before,'existing never resent');
     $toc->receive('no_reply@toconline.pt','',$body,$hash); tocCheck($state(9)==='toc_existing','later receipt cannot undo final confirmation');

@@ -105,7 +105,7 @@ final class InvoiceToconline
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
         if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
         $ledger=$this->ledger(); $settings=$this->settings(); $matches=[];
-        preg_match_all('/(?:booking-|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
+        preg_match_all('/(?:booking[-_]|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
         foreach (array_unique($tokens[1]) as $key) {
             $entry=$ledger[strtolower($key)]??null;
             if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(int)$entry['document_id']]=true;
