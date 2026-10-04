@@ -21,15 +21,28 @@ foreach ($tokens as $token) {
     } else { $code .= $token; }
 }
 $reference = '~\$config\s*\[\s*([\'\"])plugins\1\s*\]~';
-if ($hasInclude || preg_match_all($reference, $code) !== 1) { exit(2); }
-$assignment = '~\$config\s*\[\s*([\'\"])plugins\1\s*\]\s*=\s*(?:array\s*\(([^()]*)\)|\[([^\[\]]*)\])\s*;~s';
-if (!preg_match($assignment, $code, $matches)) { exit(2); }
-$body = ($matches[2] ?? '') !== '' ? $matches[2] : ($matches[3] ?? '');
+if ($hasInclude) { exit(2); }
+$refCount = preg_match_all($reference, $code);
+// Accept one static list followed by static [] additions (common custom-plugin setup).
+$statement = '~\$config\s*\[\s*([\'\"])plugins\1\s*\]\s*(?:(\[\s*\])\s*=\s*([\'\"])([a-z][a-z0-9_]*)\3|=\s*(?:array\s*\(([^()]*)\)|\[([^\[\]]*)\]))\s*;~s';
+$count = preg_match_all($statement, $code, $statements, PREG_SET_ORDER);
+if ($count !== $refCount || $count < 1) { exit(2); }
 $names = [];
-foreach (explode(',', $body) as $item) {
-    $item = trim($item);
-    if ($item === '') { continue; }
-    if (!preg_match('~^([\'\"])([a-z][a-z0-9_]*)\1$~D', $item, $match)) { exit(2); }
-    $names[] = $match[2];
+$assigned = false;
+foreach ($statements as $matches) {
+    if (($matches[2] ?? '') !== '') {
+        if (!$assigned) { exit(2); }
+        $names[] = $matches[4];
+        continue;
+    }
+    if ($assigned) { exit(2); }
+    $assigned = true;
+    $body = ($matches[5] ?? '') !== '' ? $matches[5] : ($matches[6] ?? '');
+    foreach (explode(',', $body) as $item) {
+        $item = trim($item);
+        if ($item === '') { continue; }
+        if (!preg_match('~^([\'\"])([a-z][a-z0-9_]*)\1$~D', $item, $match)) { exit(2); }
+        $names[] = $match[2];
+    }
 }
 echo json_encode(['plugins' => array_values(array_unique($names)), 'php_open' => $open]);
