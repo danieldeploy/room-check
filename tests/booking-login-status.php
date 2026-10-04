@@ -2,6 +2,11 @@
 declare(strict_types=1);
 require_once dirname(__DIR__).'/src/Invoices/BookingLoginStatus.php';
 
+$waiting = BookingLoginStatus::waiting();
+if ($waiting['phase'] !== 'unknown' || $waiting['title'] !== 'booking_login_no_diagnostic') {
+    throw new RuntimeException('A missing diagnostic must be shown as waiting for a login test');
+}
+
 $cases = [
     [['authenticated_session'=>true,'login_attempted'=>true,'sms_prompted'=>false,'captcha_status'=>'not_needed'], 'authenticated'],
     [['authenticated_session'=>false,'sms_prompted'=>true,'sms_submitted'=>false], 'sms_waiting'],
