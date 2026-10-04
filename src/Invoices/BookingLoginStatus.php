@@ -10,6 +10,17 @@ final class BookingLoginStatus
      * @return array{phase:string,title:string,detail:string,next:string}
      */
     /** @return array{phase:string,title:string,detail:string,next:string} */
+    public static function inProgress(string $state): array
+    {
+        if ($state === 'queued') {
+            return ['phase'=>'queued','title'=>'booking_login_queued',
+                'detail'=>'booking_login_queued_detail','next'=>'booking_login_running_next'];
+        }
+        return ['phase'=>'in_progress','title'=>'booking_login_in_progress',
+            'detail'=>'booking_login_in_progress_detail','next'=>'booking_login_running_next'];
+    }
+
+    /** @return array{phase:string,title:string,detail:string,next:string} */
     public static function waiting(): array
     {
         return ['phase'=>'unknown','title'=>'booking_login_no_diagnostic',
