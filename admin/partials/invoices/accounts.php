@@ -56,7 +56,7 @@ if ($editing) {
 <?php endif; ?>
 <form method="post"><?php invoiceHidden('login',$editId); ?><button class="primary-button" <?= !$repository->active($editId)?'disabled':'' ?>><?= it($a['portal']==='booking'?'booking_login':'login') ?></button></form>
 <?php if ($a['portal']==='booking' && $vault): $loginDiagnosticFile='account-'.$editId.'-login-diagnostic.enc'; $hasLoginDiagnostic=$vault->has($loginDiagnosticFile); $loginDraft=$hasLoginDiagnostic?$vault->read($loginDiagnosticFile):[]; $loginSummary=$hasLoginDiagnostic?BookingLoginStatus::summarize($loginDraft):BookingLoginStatus::waiting(); $loginUpdated=$hasLoginDiagnostic?filemtime($vault->path($loginDiagnosticFile)):false; ?>
-<div data-booking-login-live data-status-url="invoices.php?ajax=booking_login_status&amp;account_id=<?= $editId ?>" data-refresh-error="<?= ie(InvoiceText::get('booking_login_refresh_error')) ?>" data-refresh-ready="<?= ie(InvoiceText::get('booking_login_auto_refresh')) ?>">
+<div data-booking-login-live data-status-url="invoices.php?ajax=booking_login_status&amp;account_id=<?= $editId ?>" data-refresh-error="<?= ie(InvoiceText::get('booking_login_refresh_error')) ?>" data-refresh-ready="<?= ie(InvoiceText::get('booking_login_auto_refresh')) ?>" data-no-diagnostic="<?= ie(InvoiceText::get('booking_login_not_checked')) ?>">
 <div class="invoice-login-summary invoice-login-summary--<?= ie($loginSummary['phase']) ?>" data-login-summary role="status" aria-live="polite">
 <p class="invoice-kicker"><?= it('booking_login_current_state') ?></p>
 <h3 data-login-title><?= it($loginSummary['title']) ?></h3>
