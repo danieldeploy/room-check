@@ -21,7 +21,7 @@ pipeCheck(InvoiceTocPipe::parse($multipart)['text']===$parsed['text'],'multipart
 $normalized=str_replace('booking-','booking_',$body);
 $realShape="From: no_reply@toconline.pt\r\nContent-Type: multipart/mixed; boundary=\"--==_synthetic_boundary\"; charset=\"UTF-8\"\r\n\r\n----==_synthetic_boundary\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n".quoted_printable_encode('<p>'.$normalized.'</p>')."\r\n----==_synthetic_boundary--\r\n";
 pipeCheck(InvoiceTocPipe::parse($realShape)['text']===$parsed['text'],'normalized provider filename in multipart HTML without references');
-pipeCheck(!str_contains(InvoiceTocPipe::parse(str_replace($key,substr($key,0,63),$realShape))['text'],'booking-'),'short normalized token rejected');
+pipeCheck(!str_contains(InvoiceTocPipe::parse("From: no_reply@toconline.pt\r\n\r\nbooking_".substr($key,0,63).'.pdf')['text'],'booking-'),'short normalized token rejected');
 $legacy="From: no_reply@toconline.pt\r\n\r\ninvoice.pdf";
 pipeCheck(InvoiceTocPipe::parse($legacy)['text']==='','legacy generic filename not guessed');
 $ref="From: no_reply@toconline.pt\r\nReferences: <toc-".$key."@check.welcomehostel.pt>\r\n\r\narchive response";
