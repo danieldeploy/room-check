@@ -109,7 +109,7 @@ final class InvoiceText
         'booking_login_running_next' => ['Aguarde: o estado será atualizado automaticamente quando o agente enviar o resultado.', 'Please wait: the status will update automatically when the agent sends its result.'],
         'booking_login_no_diagnostic' => ['Ainda sem teste de login registado', 'No login test recorded yet'],
         'booking_login_no_diagnostic_detail' => ['O Hub está à espera do primeiro resultado do teste de login do Booking.', 'The Hub is waiting for the first result from a Booking login test.'],
-        'booking_login_run_test' => ['Execute «Testar login automático Booking»; o estado aparecerá aqui sem recarregar a página.', 'Use the “Testar login automático Booking” button; the status will appear here without reloading the page.'],
+        'booking_login_run_test' => ['Execute «Testar login automático Booking»; o estado aparecerá aqui sem recarregar a página.', 'Use the «Testar login automático Booking» button; the status will appear here without reloading the page.'],
         'booking_login_not_checked' => ['À espera do primeiro resultado', 'Waiting for the first result'],
         'booking_login_checked_at' => ['Último diagnóstico recebido', 'Latest diagnostic received'],
         'booking_login_auto_refresh' => ['Estado atualizado automaticamente a cada 5 segundos enquanto esta página estiver visível.', 'Status refreshes automatically every 5 seconds while this page is visible.'],
