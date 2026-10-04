@@ -135,7 +135,7 @@ final class InvoiceText
         'booking_login_blocked_detail' => ['O teste não confirmou uma sessão e não detetou um pedido de SMS ou uma verificação CAPTCHA.', 'The test did not confirm a session and did not detect an SMS prompt or CAPTCHA verification.'],
         'booking_login_blocked_next' => ['Abra os detalhes do diagnóstico para verificar a etapa observada e volte a testar.', 'Open the diagnostic details to review the observed step, then retry.'],
         'booking_login_unknown' => ['Estado do login indeterminado', 'Login status undetermined'],
-        'booking_login_unknown_detail' => ['O diagnóstico mais recente não tem sinais suficientes para identificar a etapa atual do Booking.', 'The latest diagnostic does not contain enough evidence to identify Booking's current step.'],
+        'booking_login_unknown_detail' => ['O diagnóstico mais recente não tem sinais suficientes para identificar a etapa atual do Booking.', 'The latest diagnostic does not contain enough evidence to identify the current Booking step.'],
         'map_diagnostic_note' => ['Pistas estruturais por confirmar. Este resultado não ativa o conector nem valida o login ou as faturas.', 'Unverified structural hints. This result does not activate the connector or validate login or invoices.'],
         'agent_title' => ['Computador de automação', 'Automation computer'],
         'agent_description' => ['O Windows executa a recolha e comunica com o Hub por HTTPS. As faturas e o histórico continuam no Hub.', 'Windows runs collection and communicates with the Hub over HTTPS. Invoices and history remain in the Hub.'],
