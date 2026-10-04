@@ -49,4 +49,13 @@ $success=$headers;$success[2]='Subject: Ficheiros arquivados com sucesso - Activ
 authCheck(InvoiceTocPipe::parse($sign($success,'booking_'.$token.".pdf\r\n"))['outcome']==='toc_accepted','success subject with exact body identity');
 authCheck(InvoiceTocPipe::parse($sign($success,$body))['outcome']==='toc_review','contradictory success and duplicate stays manual');
 authCheck(InvoiceTocPipe::parse($sign($headers,$body.' booking_'.str_repeat('b',64).'.pdf'))['outcome']==='toc_review','multiple documents stay manual');
+$relay="DKIM-Signature: v=1; a=rsa-sha256; d=relay.example.invalid; s=relay; h=from; bh=invalid; b=invalid\r\n";
+authCheck(InvoiceTocAuthentication::verify($relay.$raw,$resolver,$now)['verified'],'valid aligned signature survives unrelated relay signature');
+authCheck(InvoiceTocAuthentication::verify($raw.$relay,$resolver,$now)['code']==='body_mismatch','relay text appended to body is not a signature');
+$badAligned=str_replace('d=relay.example.invalid','d=toconline.pt',$relay);
+authCheck(InvoiceTocAuthentication::verify($badAligned.$raw,$resolver,$now)['verified'],'invalid aligned signature cannot mask a valid one');
+authCheck(!InvoiceTocAuthentication::verify(str_replace('Ficheiros recusados','tampered',$relay.$raw),$resolver,$now)['verified'],'multiple signatures never bypass tampered subject');
+$multiple=InvoiceTocAuthentication::verify($relay.$raw,$resolver,$now);
+authCheck($multiple['facts']['signature_count']===2 && $multiple['facts']['signed_to']===true,'sanitized structural evidence');
+authCheck(!InvoiceTocAuthentication::verify(str_repeat($relay,6).$raw,$resolver,$now)['verified'],'signature count bounded');
 echo "TOConline cryptographic authentication tests passed\n";

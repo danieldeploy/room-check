@@ -25,8 +25,41 @@ final class InvoiceTocAuthentication
         return strtolower($name).':'.trim(preg_replace('/[ \t]+/',' ',$value)," \t");
     }
 
-    /** Resolver injection is for synthetic offline tests only; production uses DNS TXT. */
+    /** Each aligned signature is verified against the original, unchanged message.
+     * Multiple signatures are common with mail relays; unaligned signatures cannot
+     * grant trust. Never remove headers to manufacture a different signed message.
+     */
     public static function verify(string $raw, ?callable $resolver=null, ?int $now=null): array
+    {
+        $fallback=['verified'=>false,'code'=>'unverified'];
+        try {
+            if (strlen($raw)>262144 || str_contains($raw,"\0")) return $fallback;
+            $head=preg_split('/\r?\n\r?\n/',$raw,2)[0];
+            if (strlen($head)>32768) return $fallback;
+            $head=preg_replace('/\r?\n[ \t]+/',' ',$head);
+            preg_match_all('/^dkim-signature:[ \t]*(.*)$/mi',$head,$signatures);
+            $count=count($signatures[1]);
+            if ($count===0) return ['verified'=>false,'code'=>'unsigned','facts'=>['signature_count'=>0]];
+            if ($count>5) return ['verified'=>false,'code'=>'unsupported','facts'=>['signature_count'=>$count]];
+            $best=['verified'=>false,'code'=>'unaligned','facts'=>['signature_count'=>$count]];
+            foreach ($signatures[1] as $index=>$signature) {
+                try { $tags=self::tags(trim($signature)); } catch (Throwable) { continue; }
+                if (($tags['d']??'')!=='toconline.pt') continue;
+                $signed=array_map('strtolower',explode(':',preg_replace('/\s+/','',$tags['h']??'')));
+                $facts=['signature_count'=>$count,'aligned_signer'=>true,
+                    'rsa_sha256'=>($tags['a']??'')==='rsa-sha256','partial_body'=>isset($tags['l']),
+                    'signed_to'=>in_array('to',$signed,true),'signed_subject'=>in_array('subject',$signed,true)];
+                $result=self::verifySignature($raw,$resolver,$now,$index);
+                $result['facts']=$facts;
+                if ($result['verified']) return $result;
+                $best=$result;
+            }
+            return $best;
+        } catch (Throwable) { return $fallback; }
+    }
+
+    /** Resolver injection is for synthetic offline tests only; production uses DNS TXT. */
+    private static function verifySignature(string $raw, ?callable $resolver, ?int $now, int $signatureIndex): array
     {
         $failure=['verified'=>false,'code'=>'unverified'];
         try {
@@ -42,11 +75,10 @@ final class InvoiceTocAuthentication
                 $headers[strtolower($m[1])][]=$line;
             }
             if (empty($headers['dkim-signature'])) return ['verified'=>false,'code'=>'unsigned'];
-            // One signature only initially. Do not guess between competing identities.
-            if (count($headers['dkim-signature'])!==1) return ['verified'=>false,'code'=>'unsupported'];
+            if (!isset($headers['dkim-signature'][$signatureIndex])) return $failure;
             foreach (['from','to','subject','date'] as $required) if (count($headers[$required]??[])!==1) return $failure;
             foreach (['message-id','mime-version','content-type','content-transfer-encoding'] as $single) if (count($headers[$single]??[])>1) return $failure;
-            $signature=$headers['dkim-signature'][0]; $tags=self::tags(explode(':',$signature,2)[1]);
+            $signature=$headers['dkim-signature'][$signatureIndex]; $tags=self::tags(explode(':',$signature,2)[1]);
             if (($tags['d']??'')!=='toconline.pt') return ['verified'=>false,'code'=>'unaligned'];
             if (($tags['v']??'')!=='1' || ($tags['a']??'')!=='rsa-sha256' || isset($tags['l'])
                 || ($tags['q']??'dns/txt')!=='dns/txt') return ['verified'=>false,'code'=>'unsupported'];
@@ -62,6 +94,8 @@ final class InvoiceTocAuthentication
             $modes=explode('/',$tags['c']??'simple/simple'); $hMode=$modes[0]; $bMode=$modes[1]??'simple';
             if (count($modes)>2 || !in_array($hMode,['simple','relaxed'],true) || !in_array($bMode,['simple','relaxed'],true)) return $failure;
             $signed=array_map('strtolower',explode(':',preg_replace('/\s+/','',$tags['h']??'')));
+            // Chained DKIM signatures require additional header-selection validation.
+            if (in_array('dkim-signature',$signed,true)) return ['verified'=>false,'code'=>'unsupported'];
             // All fields used to interpret/classify this receipt must be protected.
             foreach (['from','to','subject','date','message-id','mime-version','content-type','content-transfer-encoding'] as $name) {
                 if (isset($headers[$name]) && !in_array($name,$signed,true)) return ['verified'=>false,'code'=>'unsigned_fields'];
