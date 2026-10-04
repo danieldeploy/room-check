@@ -67,4 +67,14 @@ authCheck(!$noDate['verified'] && $noDate['facts']['unsigned_fields']===['date']
 $unsignedEncoding="Content-Transfer-Encoding: 8bit\r\n".$raw;
 $encodingResult=InvoiceTocAuthentication::verify($unsignedEncoding,$resolver,$now);
 authCheck(!$encodingResult['verified'] && $encodingResult['facts']['unsigned_fields']===['content-transfer-encoding'],'decoding controls must remain signed');
+$multipartHeaders=$headers;
+$multipartHeaders[4]='Content-Type: multipart/alternative; boundary="synthetic-boundary"';
+$multipartBody="--synthetic-boundary\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".base64_encode($body)."\r\n--synthetic-boundary--\r\n";
+$multipartRaw="Content-Transfer-Encoding: 8bit\r\n".$sign($multipartHeaders,$multipartBody);
+$multipartResult=InvoiceTocAuthentication::verify($multipartRaw,$resolver,$now);
+authCheck($multipartResult['verified'] && $multipartResult['facts']['multipart'],'outer multipart transport encoding is not a decoding instruction');
+authCheck(InvoiceTocPipe::parse($multipartRaw)['outcome']==='toc_existing','signed child MIME encoding preserves classification');
+authCheck(!InvoiceTocAuthentication::verify(str_replace('Content-Transfer-Encoding: base64','Content-Transfer-Encoding: 7bit',$multipartRaw),$resolver,$now)['verified'],'changing child encoding breaks signed body integrity');
+authCheck(!InvoiceTocAuthentication::verify(str_replace('Content-Transfer-Encoding: 8bit','Content-Transfer-Encoding: base64',$multipartRaw),$resolver,$now)['verified'],'encoded outer multipart is unsupported');
+authCheck(!InvoiceTocAuthentication::verify(str_replace('boundary="synthetic-boundary"','boundary="tampered"',$multipartRaw),$resolver,$now)['verified'],'multipart boundary remains signature protected');
 echo "TOConline cryptographic authentication tests passed\n";

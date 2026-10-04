@@ -100,11 +100,21 @@ final class InvoiceTocAuthentication
             // Message-ID and MIME-Version are not used for identity, dates, MIME
             // decoding or outcome classification. Requiring their signatures would
             // reject valid mail without protecting any decision made by this code.
+            $contentType=isset($headers['content-type']) ? trim(explode(':',$headers['content-type'][0],2)[1]) : 'text/plain';
+            $multipart=preg_match('/\Amultipart\//i',$contentType)===1;
+            $encoding=isset($headers['content-transfer-encoding']) ? strtolower(trim(explode(':',$headers['content-transfer-encoding'][0],2)[1])) : '7bit';
+            $facts=['multipart'=>$multipart,'transfer_encoding'=>in_array($encoding,['7bit','8bit','binary','base64','quoted-printable'],true)?$encoding:'other'];
+            // The MIME parser ignores transport encoding on the outer multipart
+            // container. Its signed Content-Type fixes the boundaries and every
+            // child encoding header is covered by the full signed body hash.
+            // Only RFC-compatible identity encodings are allowed on that container.
+            if ($multipart && !in_array($encoding,['7bit','8bit','binary'],true)) return ['verified'=>false,'code'=>'unsupported','facts'=>$facts];
             $unsigned=[];
             foreach (['from','to','subject','date','content-type','content-transfer-encoding'] as $name) {
+                if ($name==='content-transfer-encoding' && $multipart) continue;
                 if (isset($headers[$name]) && !in_array($name,$signed,true)) $unsigned[]=$name;
             }
-            if ($unsigned) return ['verified'=>false,'code'=>'unsigned_fields','facts'=>['unsigned_fields'=>$unsigned]];
+            if ($unsigned) return ['verified'=>false,'code'=>'unsigned_fields','facts'=>array_merge($facts,['unsigned_fields'=>$unsigned])];
             $from=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['from'][0],2)[1]));
             if (!preg_match('/\A(?:[^<>]*<no_reply@toconline\.pt>|no_reply@toconline\.pt)\z/i',$from)) return $failure;
             $to=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['to'][0],2)[1]));
@@ -144,7 +154,7 @@ final class InvoiceTocAuthentication
             if (($details['type']??-1)!==OPENSSL_KEYTYPE_RSA || ($details['bits']??0)<1024) return $failure;
             $signatureBytes=base64_decode(preg_replace('/\s+/','',$tags['b']??''),true);
             if ($signatureBytes===false || @openssl_verify($data,$signatureBytes,$public,OPENSSL_ALGO_SHA256)!==1) return ['verified'=>false,'code'=>'signature_mismatch'];
-            return ['verified'=>true,'code'=>'verified','recipient'=>$recipient,'signed_at'=>gmdate('c',$date)];
+            return ['verified'=>true,'code'=>'verified','recipient'=>$recipient,'signed_at'=>gmdate('c',$date),'facts'=>$facts];
         } catch (Throwable) { return $failure; }
     }
 }
