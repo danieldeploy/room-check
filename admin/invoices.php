@@ -36,6 +36,15 @@ if (($_GET['ajax'] ?? '') === 'booking_login_status') {
         $statusSummary=$available
             ? BookingLoginStatus::summarize($statusVault->read($statusFile))
             : BookingLoginStatus::waiting();
+        $activeLogin=$pdo->prepare("SELECT state,created_at FROM invoice_tasks
+            WHERE account_id=? AND kind='login' AND state IN ('queued','running','waiting_auth')
+            ORDER BY id DESC LIMIT 1");
+        $activeLogin->execute([(int)$statusAccountId]);
+        $activeLoginTask=$activeLogin->fetch(PDO::FETCH_ASSOC);
+        $activeLoginStarted=$activeLoginTask ? (strtotime((string)$activeLoginTask['created_at'].' UTC') ?: 0) : 0;
+        if ($activeLoginTask && ($diagnosticUpdated===false || $activeLoginStarted >= (int)$diagnosticUpdated)) {
+            $statusSummary=BookingLoginStatus::inProgress((string)$activeLoginTask['state']);
+        }
         echo json_encode([
             'available'=>$available,
             'phase'=>$statusSummary['phase'],
