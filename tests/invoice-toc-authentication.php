@@ -58,4 +58,13 @@ authCheck(!InvoiceTocAuthentication::verify(str_replace('Ficheiros recusados','t
 $multiple=InvoiceTocAuthentication::verify($relay.$raw,$resolver,$now);
 authCheck($multiple['facts']['signature_count']===2 && $multiple['facts']['signed_to']===true,'sanitized structural evidence');
 authCheck(!InvoiceTocAuthentication::verify(str_repeat($relay,6).$raw,$resolver,$now)['verified'],'signature count bounded');
+$unused="Message-ID: <synthetic@relay.example.invalid>\r\nMIME-Version: 1.0\r\n";
+$withUnused=$unused.$raw;
+authCheck(InvoiceTocAuthentication::verify($withUnused,$resolver,$now)['verified'],'unused unsigned metadata cannot invalidate protected interpretation');
+authCheck(InvoiceTocPipe::parse($withUnused)['outcome']===InvoiceTocPipe::parse($raw)['outcome'],'unused metadata cannot change classification');
+$noDate=InvoiceTocAuthentication::verify($sign($headers,$body,'relaxed','','from:to:subject:content-type'),$resolver,$now);
+authCheck(!$noDate['verified'] && $noDate['facts']['unsigned_fields']===['date'],'unsigned required field has precise safe evidence');
+$unsignedEncoding="Content-Transfer-Encoding: 8bit\r\n".$raw;
+$encodingResult=InvoiceTocAuthentication::verify($unsignedEncoding,$resolver,$now);
+authCheck(!$encodingResult['verified'] && $encodingResult['facts']['unsigned_fields']===['content-transfer-encoding'],'decoding controls must remain signed');
 echo "TOConline cryptographic authentication tests passed\n";

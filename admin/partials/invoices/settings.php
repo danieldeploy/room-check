@@ -43,7 +43,7 @@ try { if ($vault) $pipeStatus=(new InvoiceTocPipe($vault))->status(); } catch (T
 <p><?= it('toc_pipe_2') ?>: <?= ie(invoiceTime($pipeStatus['received_at'])) ?></p>
 <dl class="invoice-facts"><div><dt><?= it('toc_pipe_3') ?></dt><dd><?= (int)$pipeStatus['pending'] ?></dd></div><div><dt><?= it('toc_pipe_4') ?></dt><dd><?= (int)$pipeStatus['matched'] ?></dd></div><div><dt><?= it('toc_pipe_5') ?></dt><dd><?= (int)$pipeStatus['unmatched'] ?></dd></div></dl>
 <p><?= it('toc_auth_label') ?>: <?= it('toc_auth_'.($pipeStatus['authentication']??'not_checked')) ?></p>
-<?php if (!empty($pipeStatus['authentication_facts'])): ?><details><summary><?= it('toc_auth_label') ?></summary><pre translate="no"><?= ie(json_encode(array_intersect_key($pipeStatus['authentication_facts'],array_flip(['signature_count','aligned_signer','rsa_sha256','partial_body','signed_to','signed_subject'])),JSON_PRETTY_PRINT)) ?></pre></details><?php endif; ?>
+<?php if (!empty($pipeStatus['authentication_facts'])): ?><details><summary><?= it('toc_auth_label') ?></summary><pre translate="no"><?= ie(json_encode(array_intersect_key($pipeStatus['authentication_facts'],array_flip(['signature_count','aligned_signer','rsa_sha256','partial_body','signed_to','signed_subject','unsigned_fields'])),JSON_PRETTY_PRINT)) ?></pre></details><?php endif; ?>
 <p><?= it('toc_auth_outcome') ?>: <?= it($pipeStatus['outcome']??'toc_review') ?></p>
 <?php else: ?><p><?= it('toc_pipe_6') ?></p><?php endif; ?>
 <p><?= it('toc_pipe_7') ?></p>

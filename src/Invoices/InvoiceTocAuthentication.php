@@ -50,7 +50,7 @@ final class InvoiceTocAuthentication
                     'rsa_sha256'=>($tags['a']??'')==='rsa-sha256','partial_body'=>isset($tags['l']),
                     'signed_to'=>in_array('to',$signed,true),'signed_subject'=>in_array('subject',$signed,true)];
                 $result=self::verifySignature($raw,$resolver,$now,$index);
-                $result['facts']=$facts;
+                $result['facts']=array_merge($facts,$result['facts']??[]);
                 if ($result['verified']) return $result;
                 $best=$result;
             }
@@ -96,10 +96,15 @@ final class InvoiceTocAuthentication
             $signed=array_map('strtolower',explode(':',preg_replace('/\s+/','',$tags['h']??'')));
             // Chained DKIM signatures require additional header-selection validation.
             if (in_array('dkim-signature',$signed,true)) return ['verified'=>false,'code'=>'unsupported'];
-            // All fields used to interpret/classify this receipt must be protected.
-            foreach (['from','to','subject','date','message-id','mime-version','content-type','content-transfer-encoding'] as $name) {
-                if (isset($headers[$name]) && !in_array($name,$signed,true)) return ['verified'=>false,'code'=>'unsigned_fields'];
+            // Protect every top-level field the classifier actually consumes.
+            // Message-ID and MIME-Version are not used for identity, dates, MIME
+            // decoding or outcome classification. Requiring their signatures would
+            // reject valid mail without protecting any decision made by this code.
+            $unsigned=[];
+            foreach (['from','to','subject','date','content-type','content-transfer-encoding'] as $name) {
+                if (isset($headers[$name]) && !in_array($name,$signed,true)) $unsigned[]=$name;
             }
+            if ($unsigned) return ['verified'=>false,'code'=>'unsigned_fields','facts'=>['unsigned_fields'=>$unsigned]];
             $from=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['from'][0],2)[1]));
             if (!preg_match('/\A(?:[^<>]*<no_reply@toconline\.pt>|no_reply@toconline\.pt)\z/i',$from)) return $failure;
             $to=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['to'][0],2)[1]));
