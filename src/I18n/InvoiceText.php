@@ -5,13 +5,6 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
-        'toc_diagnostic_title' => ['Diagnóstico temporário da resposta TOConline', 'Temporary TOConline reply diagnostic'],
-        'toc_diagnostic_note' => ['Permite um único reenvio desta fatura para testar a receção da resposta. Pode originar uma resposta de ficheiro já existente. Não altera o envio automático nem o resultado já registado. Disponível até 06/10/2026 às 01:00 de Lisboa.', 'Allows one resend of this invoice to test reply reception. It may produce an already-existing-file reply. Automatic sending and the recorded outcome remain unchanged. Available until 06/10/2026 at 01:00 Lisbon time.'],
-        'toc_diagnostic_confirm' => ['Confirmo este único reenvio ao TOConline para diagnóstico.', 'I confirm this single resend to TOConline for diagnostics.'],
-        'toc_diagnostic_send' => ['Reenviar uma vez para diagnóstico', 'Resend once for diagnostics'],
-        'toc_diagnostic_submitted' => ['Reenvio de diagnóstico entregue ao serviço de e-mail. A resposta do TOConline ainda não foi verificada. Opção consumida.', 'Diagnostic resend submitted to the mail service. The TOConline reply has not yet been verified. Option consumed.'],
-        'toc_diagnostic_uncertain' => ['Tentativa de diagnóstico registada, com resultado de envio incerto. Não repetir; verificar a entrega e o diagnóstico.', 'Diagnostic attempt recorded with an uncertain send result. Do not repeat; check delivery and diagnostics.'],
-        'toc_diagnostic_unavailable' => ['Reenvio de diagnóstico indisponível: confirme a seleção, a validade e se já foi utilizado.', 'Diagnostic resend unavailable: check confirmation, expiry and whether it has already been used.'],
         'toc_pipe_0' => ['Respostas diretas do servidor', 'Direct server replies'],
         'toc_pipe_1' => ['Receção sem palavra-passe de e-mail. Requer um filtro cPanel com Pipe to a Program e uma cópia mantida na caixa de correio. A publicação do programa não ativa o filtro.', 'Reception without an email password. Requires a cPanel Pipe to a Program filter and a retained mailbox copy. Deploying the program does not activate the filter.'],
         'toc_pipe_2' => ['Última resposta processada', 'Last processed reply'],
@@ -446,6 +439,5 @@ final class InvoiceText
         return array_column(array_values(self::TEXT), 1, 0);
     }
 }
-
 
 

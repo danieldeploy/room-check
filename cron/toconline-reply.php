@@ -55,6 +55,7 @@ try {
     $stage='input';
     $raw=stream_get_contents(STDIN,InvoiceTocPipe::MAX_BYTES+1);
     if (!is_string($raw)) { $diagnostic($stage, 'stdin_unavailable'); exit(75); }
+    $facts+=InvoiceTocPipe::inputFacts($raw);
     $stage='vault';
     $pipe=new InvoiceTocPipe(new InvoiceVault($privateDir));
     $stage='queue';
@@ -64,7 +65,9 @@ try {
 } catch (Throwable $failure) {
     $known = ['private_storage_unavailable', 'private_storage_permissions',
         'invalid_private_name', 'vault_key_unavailable', 'vault_write_failed',
-        'private_write_failed', 'toc_pipe_invalid', 'toc_pipe_queue'];
+        'private_write_failed', 'toc_pipe_invalid', 'toc_pipe_queue',
+        'toc_pipe_header_separator', 'toc_pipe_header_size', 'toc_pipe_header_line',
+        'toc_pipe_message_size', 'toc_pipe_message_nul'];
     $code = in_array($failure->getMessage(), $known, true)
         ? $failure->getMessage() : 'runtime_failure';
     $diagnostic($stage, $code);
