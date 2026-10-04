@@ -1,0 +1,51 @@
+name: Roundcube read-only inspection
+
+on:
+  pull_request:
+    paths:
+      - deploy/roundcube_inspect.py
+      - tests/test_roundcube_inspect.py
+      - .github/workflows/roundcube-inspection.yml
+  push:
+    branches:
+      - agent/room-item-assignments
+    paths:
+      - deploy/roundcube_inspect.py
+      - tests/test_roundcube_inspect.py
+      - .github/workflows/roundcube-inspection.yml
+
+permissions:
+  contents: read
+
+jobs:
+  safety-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Validate read-only routes and sanitized reporting
+        run: python3 -m unittest discover -s tests -p test_roundcube_inspect.py -v
+
+  inspect:
+    needs: safety-tests
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Inspect only Roundcube directory entries
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_inspect.py
