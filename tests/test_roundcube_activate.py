@@ -118,5 +118,6 @@ class ActivationTests(unittest.TestCase):
         parsed = a.parse_config(source)
         self.assertEqual(parsed, {'plugins': ['archive', 'welcome_ui'], 'php_open': True})
         self.assertFalse(Path('/tmp/should-never-exist').exists())
+        self.assertEqual(a.parse_config("<?php $config['plugins'] = array('archive'); $config['plugins'][] = 'welcome_ui'; ?>")['plugins'], ['archive', 'welcome_ui'])
         with self.assertRaises(b.PreparationError):
             a.parse_config("<?php $config['plugins'] = getenv('PLUGINS');")
