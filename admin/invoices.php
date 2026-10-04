@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } else {
             InvoiceService::assertGerente($currentUser);
             // Match the worker lock for changes to access, account membership and private files.
-            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','drive_client','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke','toc_settings','toc_pilot','toc_diagnostic_resend','toc_confirm','toc_mailbox','toc_mail_poll'],true)) {
+            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','drive_client','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke','toc_settings','toc_pilot','toc_confirm','toc_mailbox','toc_mail_poll'],true)) {
                 if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
                 $locked=true;
                 if ($vault && $vault->has('windows-agent.enc')) {
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                         ->execute([$folder,$action==='drive_test'?'ready':'configured',$action==='drive_test'?gmdate('Y-m-d H:i:s'):null]);
                     $returnTab='settings';
                 }
-            } elseif (in_array($action,['toc_settings','toc_pilot','toc_diagnostic_resend','toc_confirm','toc_mailbox','toc_mail_poll'],true)) {
+            } elseif (in_array($action,['toc_settings','toc_pilot','toc_confirm','toc_mailbox','toc_mail_poll'],true)) {
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
                 $toc=new InvoiceToconline($pdo,$vault,new InvoiceDriveClient($vault));
                 if ($action==='toc_settings') $toc->configure($_POST);
@@ -176,7 +176,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     $documentId=(int)($_POST['document_id']??0);
                     if ($documentId<1) throw new RuntimeException('invalid_request');
                     if ($action==='toc_pilot') $toc->run($documentId);
-                    elseif ($action==='toc_diagnostic_resend') $message='toc_diagnostic_'.$toc->diagnosticResend($documentId,$currentUser,!empty($_POST['toc_diagnostic_confirm']));
                     else {
                         if (empty($_POST['toc_receipt'])) throw new RuntimeException('toc_receipt_required');
                         $toc->confirm($documentId,(string)($_POST['toc_outcome']??''),(int)$currentUser['id']);
@@ -191,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     ->execute([(int)isset($_POST['enabled']),$recipient ?: null,$template]); $returnTab='settings';
             } else throw new RuntimeException('invalid_request');
         }
-        Auth::audit($pdo,(int)$currentUser['id'],'invoices_'.$action,['account_id'=>$id]+($action==='toc_diagnostic_resend'?['document_id'=>$documentId,'result'=>$message]:[]));
+        Auth::audit($pdo,(int)$currentUser['id'],'invoices_'.$action,['account_id'=>$id]);
         $_SESSION['invoice_flash']=$message;
         header('Location: invoices.php?'.http_build_query(array_merge($filters,['tab'=>$returnTab,'edit'=>$returnEdit])),true,303);
         if ($locked) $pdo->query("SELECT RELEASE_LOCK('room_check_invoices')");
@@ -207,9 +206,9 @@ if ($isGerente && $vault) {
     try { $agentStatus=(new InvoiceRemoteAgent($pdo,$config['invoices']))->status(); }
     catch (Throwable) { $agentStatus=['mode'=>'paused','paired'=>false]; }
 }
-$tocSettings=[]; $tocMailbox=[]; $tocDiagnosticStatus='unavailable';
+$tocSettings=[]; $tocMailbox=[];
 if ($vault) {
-    try { $tocService=new InvoiceToconline($pdo,$vault,new InvoiceDriveClient($vault)); $tocSettings=$tocService->settings(); if ($isGerente) $tocDiagnosticStatus=$tocService->diagnosticStatus(InvoiceToconline::DIAGNOSTIC_DOCUMENT_ID); if ($isGerente) $tocMailbox=(new InvoiceTocMailbox($vault,$tocService))->status(); }
+    try { $tocService=new InvoiceToconline($pdo,$vault,new InvoiceDriveClient($vault)); $tocSettings=$tocService->settings(); if ($isGerente) $tocMailbox=(new InvoiceTocMailbox($vault,$tocService))->status(); }
     catch (Throwable) { $error='toc_settings_error'; }
 }
 $tocStats=[];
@@ -245,6 +244,5 @@ $viewRoot=__DIR__.'/partials/invoices'; define('INVOICE_VIEW',true);
 <?php if (strtotime(($settings['worker_seen_at'] ?? '').' UTC')<time()-300): ?><div class="notice"><?= it('worker_stale') ?></div><?php endif; ?>
 <?php require $viewRoot.'/'.$tab.'.php'; ?>
 <?php endif; ?></main></body></html>
-
 
 

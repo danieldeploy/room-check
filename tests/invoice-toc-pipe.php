@@ -8,6 +8,18 @@ $plain="From: TOConline <no_reply@toconline.pt>\r\nContent-Type: text/plain; cha
 $parsed=InvoiceTocPipe::parse($plain);
 pipeCheck(str_contains($parsed['text'],$key) && str_contains($parsed['text'],'por já constarem'),'plain receipt');
 pipeCheck(!str_contains($parsed['text'],'Foram recusados'),'no raw prose retained');
+// Default Exim pipe envelope, absent from ordinary exported .eml messages.
+$envelope="From envelope@example.invalid Sun Oct  4 15:35:13 2026\n";
+$wrapped=$envelope.$plain;
+pipeCheck(InvoiceTocPipe::parse($wrapped)===$parsed,'Exim envelope removed before headers/hash');
+pipeCheck(InvoiceTocPipe::parse(str_replace("\n","\r\n",$envelope).$plain)===$parsed,'CRLF envelope accepted');
+pipeCheck(InvoiceTocPipe::parse(str_replace('15:35:13','16:35:13',$envelope).$plain)===$parsed,'delivery-time changes do not defeat replay deduplication');
+pipeCheck(InvoiceTocPipe::parse("From no_reply@toconline.pt Sun Oct  4 15:35:13 2026\n".str_replace('no_reply@toconline.pt','attacker@example.invalid',$plain))===null,'envelope sender is not trusted');
+pipeCheck(InvoiceTocPipe::parse($envelope."Subject: missing actual sender\n\n".$body)===null,'envelope cannot replace From header');
+pipeCheck(InvoiceTocPipe::parse($envelope."From: no_reply@toconline.pt\r\n".$plain)===null,'duplicate From remains rejected under envelope');
+try {InvoiceTocPipe::parse($envelope.$wrapped);throw new LogicException('multiple envelope lines');} catch (RuntimeException $e) {pipeCheck($e->getMessage()==='toc_pipe_header_line','only one leading envelope removed');}
+try {InvoiceTocPipe::parse("Bad header line\n".$plain);throw new LogicException('invalid headers');} catch (RuntimeException $e) {pipeCheck($e->getMessage()==='toc_pipe_header_line','arbitrary malformed header remains rejected');}
+
 pipeCheck(InvoiceTocPipe::parse(str_replace('no_reply@toconline.pt','attacker@example.org',$plain))===null,'wrong sender');
 pipeCheck(InvoiceTocPipe::parse("From: no_reply@toconline.pt\r\n".$plain)===null,'duplicate from rejected');
 $base="From: no_reply@toconline.pt\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".base64_encode('<p>'.$body.'</p>');
@@ -32,7 +44,7 @@ try {InvoiceTocPipe::parse(str_repeat('x',InvoiceTocPipe::MAX_BYTES+1));throw ne
 $dir=sys_get_temp_dir().'/toc-pipe-'.bin2hex(random_bytes(8));mkdir($dir,0700);file_put_contents($dir.'/master.key',random_bytes(32));chmod($dir.'/master.key',0600);
 try {
  $vault=new InvoiceVault($dir);$pipe=new InvoiceTocPipe($vault);
- pipeCheck($pipe->enqueue($plain) && $pipe->enqueue($plain),'enqueue idempotent');
+ pipeCheck($pipe->enqueue($plain) && $pipe->enqueue($wrapped),'enqueue idempotent across envelope variants');
  pipeCheck($pipe->status()['pending']===1,'single queued receipt');
  $raw=file_get_contents(glob($dir.'/toc-pipe-*.enc')[0]);
  pipeCheck(!str_contains($raw,$key) && !str_contains($raw,'no_reply'),'queue encrypted');
@@ -53,9 +65,11 @@ try {
  copy(dirname(__DIR__).'/cron/toconline-reply.php',$cron.'/toconline-reply.php');
  $run=static function(string $input)use($cron):array{$proc=proc_open([PHP_BINARY,$cron.'/toconline-reply.php'],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fwrite($pipes[0],$input);fclose($pipes[0]);$out=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);return [proc_close($proc),$out,$err];};
  pipeCheck($run($plain)===[0,'',''],'real CLI accepts silently');
+ pipeCheck($run($wrapped)===[0,'',''],'real CLI accepts Exim envelope silently');
  pipeCheck($run(str_repeat('x',InvoiceTocPipe::MAX_BYTES+1))===[75,'',''],'real CLI temporary failure without mail leak');
  echo "TOConline private pipe tests passed\n";
 } finally {
  $items=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
  foreach($items as $item) {if($item->isDir())rmdir($item->getPathname());else unlink($item->getPathname());}rmdir($dir);
 }
+
