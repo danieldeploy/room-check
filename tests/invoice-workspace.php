@@ -25,6 +25,7 @@ $viewRoot=dirname(__DIR__).'/admin/partials/invoices';
 $repository=new InvoiceAccounts($pdo);$accounts=$workspace->accounts('2029-02');$properties=[];$readiness=[];
 foreach($accounts as $a){$properties[$a['id']]=$repository->properties((int)$a['id']);$readiness[$a['id']]='integration_setup';}
 $filters=InvoiceWorkspace::filters(['period'=>'2029-02']);$period=$filters['period'];$stats=$workspace->stats($filters);
+$tocStats=$workspace->toconlineStats($filters); $tocMailbox=[]; $tocSettings=[];
 $documents=$workspace->documents($filters);$batches=$workspace->batches($filters);$legacyTasks=$workspace->tasks($filters,true);
 $settings=['browser_ready'=>0,'browser_checked_at'=>null,'worker_seen_at'=>null];$driveSettings=[];$notifications=[];$alerts=[];$driveAlerts=[];$vault=null;$managers=[];
 $agentStatus=['mode'=>'paused','paired'=>true,'last_seen'=>null,'probe_at'=>null];
@@ -72,3 +73,17 @@ try {
 } finally {foreach(glob($driveViewTmp.'/*')?:[] as $file)unlink($file);rmdir($driveViewTmp);$vault=null;}
 restore_error_handler();
 echo "Workspace views render in PT/EN for manager and view-only roles.\n";
+
+
+// Monthly totals must not be limited to the first page or the selected status/search.
+$pdo->exec('DELETE FROM invoice_document_delivery; DELETE FROM invoice_documents;');
+for ($i=0;$i<60;$i++) {
+ $pdo->prepare("INSERT INTO invoice_documents(account_id,property_id,invoice_number,period,format)VALUES(?,'wa',?,'2029-02','pdf')")->execute([$wa,'REPORT-'.$i]);
+ $id=(int)$pdo->lastInsertId();
+ $pdo->prepare('INSERT INTO invoice_document_delivery(document_id,toconline_state)VALUES(?,?)')->execute([$id,$i<55?'toc_existing':'toc_rejected']);
+}
+$report=$workspace->toconlineStats(InvoiceWorkspace::filters(['period'=>'2029-02','q'=>'does-not-match','state'=>'toc_accepted']));
+checkWorkspace($report['toc_existing']===55 && $report['toc_rejected']===5,'Monthly report covers all pages and does not hide outcomes');
+checkWorkspace(array_sum($workspace->toconlineStats(InvoiceWorkspace::filters(['period'=>'2029-01'])))===0,'Report isolates issue month');
+checkWorkspace(array_sum($workspace->toconlineStats(InvoiceWorkspace::filters(['period'=>'2029-02','account'=>$wb])))===0,'Report isolates account');
+checkWorkspace(array_sum($workspace->toconlineStats(InvoiceWorkspace::filters(['period'=>'2029-02','property'=>$wa.':wb'])))===0,'Report isolates property');

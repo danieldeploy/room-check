@@ -5,6 +5,7 @@ require_once __DIR__ . '/InvoiceAuth.php';
 require_once __DIR__ . '/InvoiceAlerts.php';
 require_once __DIR__ . '/InvoiceDrive.php';
 require_once __DIR__ . '/InvoiceToconline.php';
+require_once __DIR__ . '/InvoiceTocMailbox.php';
 require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 require_once __DIR__ . '/InvoiceNotificationTest.php';
 
@@ -111,8 +112,11 @@ final class InvoiceRunner
     private function archive(): void
     {
         $vault = new InvoiceVault((string) ($this->config['private_dir'] ?? ''));
+        $toc=new InvoiceToconline($this->pdo,$vault,new InvoiceDriveClient($vault));
+        $toc->reconcile();
+        (new InvoiceTocMailbox($vault,$toc))->poll();
         (new InvoiceDrive($this->pdo, $vault, new InvoiceDriveClient($vault)))->run();
-        (new InvoiceToconline($this->pdo, $vault, new InvoiceDriveClient($vault)))->run();
+        $toc->run();
     }
 
     private function finishFailure(array $job, string $code, InvoiceAlerts $alerts): void
@@ -199,3 +203,4 @@ final class InvoiceRunner
         }
     }
 }
+

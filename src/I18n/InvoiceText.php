@@ -5,6 +5,28 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'toc_existing' => ['Já existente no arquivo TOConline — confirmado', 'Already in TOConline archive — confirmed'],
+        'toc_rejected' => ['Rejeitado pelo TOConline — confirmado', 'Rejected by TOConline — confirmed'],
+        'toc_review' => ['Resposta recebida — revisão necessária', 'Reply received — review required'],
+        'toc_no_confirmation' => ['Sem confirmação — não reenviar', 'No confirmation — do not resend'],
+        'toc_outcome' => ['Resultado verificado na resposta', 'Verified reply outcome'],
+        'toc_choose_outcome' => ['Selecionar resultado', 'Select outcome'],
+        'toc_monthly_report' => ['Resumo mensal TOConline', 'Monthly TOConline summary'],
+        'toc_report_note' => ['Todos os PDFs Booking do mês de emissão selecionado, respeitando os filtros de conta e propriedade. Arquivado ou já existente não significa contabilizado. Respostas ambíguas e envios sem confirmação não são repetidos.', 'All Booking PDFs in the selected issue month, scoped to account and property filters. Archived or already present does not mean posted to accounting. Ambiguous replies and unconfirmed sends are not retried.'],
+        'toc_mail_title' => ['Respostas do TOConline', 'TOConline replies'],
+        'toc_mail_policy' => ['Consulta privada, só de leitura, das respostas do TOConline nas pastas indicadas, nos últimos 90 dias. O Hub associa apenas identificadores exatos e sinaliza para revisão; um e-mail, por si só, não comprova a aceitação. Não marca mensagens como lidas, não apaga nem guarda o conteúdo das mensagens.', 'Private read-only retrieval of TOConline replies in the specified folders over the last 90 days. The Hub correlates exact identifiers only and flags review; an email alone does not prove acceptance. Messages are not marked read, deleted or stored.'],
+        'toc_mail_enabled' => ['Consulta automática de respostas ativa', 'Automatic reply retrieval enabled'],
+        'toc_mail_disabled' => ['Consulta automática de respostas desativada', 'Automatic reply retrieval disabled'],
+        'toc_mail_unavailable' => ['A extensão IMAP do PHP não está disponível neste servidor. A consulta de respostas não pode ser ativada.', 'PHP IMAP is unavailable on this server. Reply retrieval cannot be enabled.'],
+        'toc_mail_checked' => ['Última tentativa de consulta', 'Last retrieval attempt'],
+        'toc_mail_unmatched' => ['Respostas sem associação automática ou demasiado grandes — conferir na caixa de correio', 'Replies without an automatic match or too large — check the mailbox'],
+        'toc_mail_password' => ['Palavra-passe da caixa de correio (vazio mantém a atual; guardada no cofre privado)', 'Mailbox password (blank keeps current; stored in private vault)'],
+        'toc_mail_folders' => ['Pastas IMAP a consultar, uma por linha', 'IMAP folders to check, one per line'],
+        'toc_mail_enable' => ['Consultar respostas automaticamente', 'Retrieve replies automatically'],
+        'toc_mail_test_save' => ['Verificar ligação e guardar', 'Verify connection and save'],
+        'toc_mail_check_now' => ['Consultar respostas agora', 'Retrieve replies now'],
+        'toc_mail_settings' => ['Verifique a conta de envio, a palavra-passe e as pastas da caixa de correio.', 'Check sender account, mailbox password and folders.'],
+        'toc_mail_connect' => ['Não foi possível consultar a caixa de correio com TLS. Verifique o acesso e as pastas configuradas.', 'Unable to retrieve mail over TLS. Check access and configured folders.'],
         'toc_ledger_missing' => ['Histórico de envio indisponível. Envios bloqueados para evitar duplicados.', 'Sending history unavailable. Sending blocked to prevent duplicates.'],
         'toc_email_note' => ['Envio dos PDFs do Booking para NIF@my.toconline.pt após validação da empresa e confirmação do arquivo no Drive.', 'Send Booking PDFs to NIF@my.toconline.pt after company validation and verified Drive archival.'],
         'toc_nif' => ['NIF da empresa destinatária', 'Recipient company tax number'],
@@ -17,19 +39,19 @@ final class InvoiceText
         'toc_pilot_note' => ['Guarde a configuração e envie uma primeira fatura no separador Documentos. Após verificar a resposta de aceitação do TOConline, registe essa confirmação no documento para permitir a ativação automática.', 'Save the settings and send a first invoice in Documents. After checking the TOConline acceptance reply, record that confirmation on the document to allow automatic activation.'],
         'toc_limits' => ['O Hub bloqueia reenvios da mesma fatura ou ficheiro. Um resultado incerto exige conferência; não é repetido automaticamente. A aceitação pelo TOConline é confirmada manualmente pela resposta recebida. Envios feitos fora do Hub não são detetados.', 'The Hub blocks repeat submissions of the same invoice or file. An uncertain outcome requires reconciliation and is not retried automatically. TOConline acceptance is confirmed manually from its reply. Submissions outside the Hub are not detected.'],
         'toc_send_pilot' => ['Enviar esta fatura por e-mail ao TOConline', 'Email this invoice to TOConline'],
-        'toc_receipt' => ['Verifiquei na resposta do TOConline que esta fatura foi aceite.', 'I checked the TOConline reply and this invoice was accepted.'],
-        'toc_confirm' => ['Registar aceitação confirmada', 'Record confirmed acceptance'],
+        'toc_receipt' => ['Verifiquei a origem da resposta e a correspondência com esta fatura; o resultado selecionado está correto.', 'I verified the reply source and its correspondence to this invoice; the selected outcome is correct.'],
+        'toc_confirm' => ['Registar resultado confirmado', 'Record confirmed outcome'],
         'toc_pending' => ['Aguarda envio ou configuração de e-mail', 'Awaiting sending or email setup'],
         'toc_submitted' => ['Entregue ao serviço de e-mail; aceitação TOConline por confirmar', 'Submitted to mail service; TOConline acceptance unconfirmed'],
         'toc_uncertain' => ['Envio incerto — conferir antes de qualquer reenvio', 'Uncertain submission — reconcile before any resend'],
         'toc_sending' => ['Envio em curso — não repetir', 'Sending — do not resend'],
-        'toc_accepted' => ['Aceitação TOConline confirmada manualmente', 'TOConline acceptance manually confirmed'],
+        'toc_accepted' => ['Arquivo aceite no TOConline — confirmado', 'Archive accepted in TOConline — confirmed'],
         'toc_duplicate' => ['Duplicado bloqueado pelo Hub', 'Duplicate blocked by Hub'],
         'toc_retry' => ['Falha antes do envio — aguarda nova tentativa', 'Pre-send failure — awaiting retry'],
         'toc_invalid_settings' => ['Verifique o NIF, o remetente e a autorização de envio.', 'Check the tax number, sender and sending authorisation.'],
         'toc_pilot_required' => ['Confirme primeiro a aceitação de uma fatura com este remetente e destino.', 'First confirm acceptance of an invoice with this sender and destination.'],
         'toc_ineligible' => ['Documento não elegível para esta operação.', 'Document is not eligible for this action.'],
-        'toc_receipt_required' => ['É necessário verificar a resposta de aceitação do TOConline.', 'You must verify the TOConline acceptance reply.'],
+        'toc_receipt_required' => ['Verifique a resposta do TOConline e a fatura correspondente.', 'Verify the TOConline reply and corresponding invoice.'],
         'toc_settings_error' => ['Não foi possível ler a configuração de envio TOConline.', 'Unable to read TOConline sending settings.'],
 
         'drive_complete' => ['Concluir ligação', 'Complete connection'],
@@ -409,4 +431,5 @@ final class InvoiceText
         return array_column(array_values(self::TEXT), 1, 0);
     }
 }
+
 

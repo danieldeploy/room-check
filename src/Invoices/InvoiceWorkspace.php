@@ -5,7 +5,7 @@ require_once __DIR__ . '/InvoiceService.php';
 /** Queries shared by the overview, invoices and activity screens. No secret values leave the vault. */
 final class InvoiceWorkspace
 {
-    public const DOCUMENT_STATES = ['needs_attention','review','drive_pending','drive_failed','drive_verified','csv_pending','toconline_pending'];
+    public const DOCUMENT_STATES = ['needs_attention','review','drive_pending','drive_failed','drive_verified','csv_pending','toconline_pending','toc_accepted','toc_existing','toc_rejected','toc_review','toc_no_confirmation','toc_submitted','toc_duplicate'];
     public const TASK_STATES = ['completed','failed','running','queued','retry','needs_auth','cancelled','waiting_auth'];
     public function __construct(private readonly PDO $pdo) {}
 
@@ -48,12 +48,14 @@ final class InvoiceWorkspace
             $search='%'.str_replace(['!','%','_'],['!!','!%','!_'],$f['q']).'%'; array_push($params,$search,$search,$search);
         }
         $where .= match ($f['state']) {
-            'needs_attention'=>" AND (COALESCE(x.company_state,'review')='review' OR x.drive_state='failed')",
+            'needs_attention'=>" AND (COALESCE(x.company_state,'review')='review' OR x.drive_state='failed' OR x.toconline_state IN ('toc_rejected','toc_review','toc_no_confirmation','toc_uncertain'))",
             'review'=>" AND COALESCE(x.company_state,'review')='review'",
             'drive_pending'=>" AND COALESCE(x.drive_state,'pending') IN ('pending','retry','uploading')",
             'drive_failed'=>" AND x.drive_state='failed'", 'drive_verified'=>" AND x.drive_state='verified'",
             'csv_pending'=>" AND d.pipeline_state='awaiting_csv_processing'",
-            'toconline_pending'=>" AND COALESCE(x.toconline_state,'pending')='pending'", default=>'',
+            'toconline_pending'=>" AND COALESCE(x.toconline_state,'pending') IN ('pending','toc_retry')",
+            'toc_no_confirmation'=>" AND x.toconline_state IN ('toc_no_confirmation','toc_sending','toc_uncertain')",
+            'toc_accepted','toc_existing','toc_rejected','toc_review','toc_submitted','toc_duplicate'=>" AND x.toconline_state='".$f['state']."'", default=>'',
         };
         $s=$this->pdo->prepare("SELECT d.*,a.portal,a.label AS account_label,p.label AS property_label,x.company_state,x.company_name,
             x.drive_state,x.drive_id,x.attempts AS drive_attempts,x.next_attempt_at,x.last_error,x.local_deleted_at,x.toconline_state
@@ -68,10 +70,28 @@ final class InvoiceWorkspace
         [$where,$params]=self::scope($f,'d');
         $s=$this->pdo->prepare("SELECT COUNT(*) AS total,
             SUM(CASE WHEN x.drive_state='verified' THEN 1 ELSE 0 END) AS archived,
-            SUM(CASE WHEN COALESCE(x.company_state,'review')='review' OR x.drive_state='failed' THEN 1 ELSE 0 END) AS review,
+            SUM(CASE WHEN COALESCE(x.company_state,'review')='review' OR x.drive_state='failed' OR x.toconline_state IN ('toc_rejected','toc_review','toc_no_confirmation','toc_uncertain') THEN 1 ELSE 0 END) AS review,
             SUM(CASE WHEN d.pipeline_state='awaiting_csv_processing' THEN 1 ELSE 0 END) AS csv
             FROM invoice_documents d JOIN invoice_accounts a ON a.id=d.account_id LEFT JOIN invoice_document_delivery x ON x.document_id=d.id WHERE $where");
         $s->execute($params); return array_map('intval',$s->fetch(PDO::FETCH_ASSOC));
+    }
+
+    /** Complete selected issue month; independent of document pagination and status/search filters. */
+    public function toconlineStats(array $f): array
+    {
+        [$where,$params]=self::scope($f,'d');
+        $s=$this->pdo->prepare("SELECT COALESCE(x.toconline_state,'pending') AS state,COUNT(*) AS total
+            FROM invoice_documents d JOIN invoice_accounts a ON a.id=d.account_id
+            LEFT JOIN invoice_document_delivery x ON x.document_id=d.id
+            WHERE $where AND a.portal='booking' AND d.format='pdf' GROUP BY COALESCE(x.toconline_state,'pending')");
+        $s->execute($params); $counts=['toc_pending'=>0,'toc_submitted'=>0,'toc_accepted'=>0,'toc_existing'=>0,
+            'toc_rejected'=>0,'toc_review'=>0,'toc_no_confirmation'=>0,'toc_duplicate'=>0];
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $state=match($row['state']) {'pending','toc_retry'=>'toc_pending','toc_sending','toc_uncertain'=>'toc_no_confirmation',default=>$row['state']};
+            if (!array_key_exists($state,$counts)) $state='toc_review';
+            $counts[$state]+=(int)$row['total'];
+        }
+        return $counts;
     }
 
     public function tasks(array $f, bool $legacyOnly=false, ?int $batch=null, int $before=PHP_INT_MAX, ?int $taskId=null): array
@@ -193,3 +213,4 @@ final class InvoiceWorkspace
         return $result;
     }
 }
+
