@@ -88,6 +88,7 @@ jobs:
           php tests/invoice-drive.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
+          python3 tests/test_toconline_diagnostic.py -v
           php tests/run.php
           php tests/i18n.php
           php tests/transversal-i18n-contract.php
