@@ -8,13 +8,29 @@ final class InvoiceTocPipe
     public const MAX_BYTES=262144;
     public function __construct(private readonly InvoiceVault $vault) {}
 
+    /** Exim's pipe transport may prepend one Unix mailbox From_ envelope line.
+     * It is transport metadata, never evidence of the RFC From sender/authenticity.
+     * Strip only the first bounded line, never headers or nested MIME parts.
+     */
+    private static function withoutEnvelope(string $raw): string
+    {
+        if (preg_match('/\AFrom [^\r\n\x00]{1,1024}\r?\n/',$raw,$m)) return substr($raw,strlen($m[0]));
+        return $raw;
+    }
+
+    public static function inputFacts(string $raw): array
+    {
+        return ['input_bytes'=>strlen($raw),'transport_prefix'=>self::withoutEnvelope($raw)!==$raw];
+    }
+
     private static function split(string $raw): array
     {
         $parts=preg_split('/\r?\n\r?\n/',$raw,2);
-        if (count($parts)!==2 || strlen($parts[0])>32768) throw new RuntimeException('toc_pipe_invalid');
+        if (count($parts)!==2) throw new RuntimeException('toc_pipe_header_separator');
+        if (strlen($parts[0])>32768) throw new RuntimeException('toc_pipe_header_size');
         $header=preg_replace('/\r?\n[ \t]+/',' ',$parts[0]); $headers=[];
         foreach (preg_split('/\r?\n/',$header) as $line) {
-            if (!preg_match('/\A([A-Za-z0-9-]+):[ \t]*(.*)\z/',$line,$m)) throw new RuntimeException('toc_pipe_invalid');
+            if (!preg_match('/\A([A-Za-z0-9-]+):[ \t]*(.*)\z/',$line,$m)) throw new RuntimeException('toc_pipe_header_line');
             $key=strtolower($m[1]); $headers[$key][]=$m[2];
         }
         return [$headers,$parts[1]];
@@ -59,7 +75,11 @@ final class InvoiceTocPipe
     /** Store only correlation tokens and a classification hint, never the original mail or attachments. */
     public static function parse(string $raw): ?array
     {
-        if (strlen($raw)>self::MAX_BYTES || str_contains($raw,"\0")) throw new RuntimeException('toc_pipe_invalid');
+        if (strlen($raw)>self::MAX_BYTES) throw new RuntimeException('toc_pipe_message_size');
+        if (str_contains($raw,"\0")) throw new RuntimeException('toc_pipe_message_nul');
+        // Bound the original input first. Hash the message without the delivery-time prefix
+        // so an Exim retry with a different envelope date cannot duplicate queue processing.
+        $raw=self::withoutEnvelope($raw);
         [$headers]=self::split($raw); $from=$headers['from']??[];
         if (count($from)!==1 || !preg_match('/\A\s*(?:[^<>]*<no_reply@toconline\.pt>|no_reply@toconline\.pt)\s*\z/i',$from[0])) return null;
         $hash=hash('sha256',$raw);

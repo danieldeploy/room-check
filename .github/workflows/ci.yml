@@ -117,6 +117,18 @@ jobs:
           INVOICES_TEST_PASSWORD: test-only-ci-password
         run: php tests/invoices-mysql.php
 
+      - name: Configure production mail-pipe PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: mbstring
+          coverage: none
+
+      - name: Test mail pipe on production PHP
+        run: |
+          php tests/invoice-toc-pipe.php
+          python3 tests/test_toconline_diagnostic.py -v
+
   deploy:
     needs: [validate, windows-agent]
     if: >-

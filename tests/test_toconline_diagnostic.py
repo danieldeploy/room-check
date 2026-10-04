@@ -66,6 +66,33 @@ class DiagnosticTests(unittest.TestCase):
             self.assertEqual((code, data['code']), (0, 'queued'))
         self.assertEqual(len(list(self.vault.glob('toc-pipe-*.enc'))), 1)
 
+    def test_exim_envelope_and_replay(self):
+        for stamp in (b'15:35:13', b'16:35:13'):
+            prefix = b'From private-envelope@example.invalid Sun Oct  4 ' + stamp + b' 2026\n'
+            code, data = self.invoke(prefix + MAIL)
+            self.assertEqual((code, data['stage'], data['code']), (0, 'complete', 'queued'))
+            self.assertTrue(data['facts']['transport_prefix'])
+            self.assertEqual(data['facts']['input_bytes'], len(prefix + MAIL))
+            self.assertNotIn('private-envelope', self.status.read_text())
+        self.assertEqual(len(list(self.vault.glob('toc-pipe-*.enc'))), 1)
+
+    def test_header_failure_is_specific_and_private(self):
+        code, data = self.invoke(b'Private invalid header line\n' + MAIL)
+        self.assertEqual((code, data['stage'], data['code']), (75, 'queue', 'toc_pipe_header_line'))
+        self.assertNotIn('Private invalid', self.status.read_text())
+        self.assertFalse(data['facts']['transport_prefix'])
+        self.assertEqual(len(list(self.vault.glob('toc-pipe-*.enc'))), 0)
+
+    def test_input_limits_are_specific(self):
+        for raw, expected in ((b'x' * 262145, 'toc_pipe_message_size'),
+                              (MAIL + b'\x00', 'toc_pipe_message_nul'),
+                              (b'From: no_reply@toconline.pt', 'toc_pipe_header_separator'),
+                              (b'X-Large: ' + b'x' * 32769 + b'\n\nbody', 'toc_pipe_header_size')):
+            with self.subTest(expected=expected):
+                code, data = self.invoke(raw)
+                self.assertEqual((code, data['code']), (75, expected))
+        self.assertEqual(len(list(self.vault.glob('toc-pipe-*.enc'))), 0)
+
     def test_ignored_sender(self):
         code, data = self.invoke(MAIL.replace(b'no_reply@toconline.pt', b'other@example.invalid'))
         self.assertEqual((code, data['code']), (0, 'ignored'))
@@ -134,3 +161,4 @@ if __name__ == '__main__':
     for path in [ROOT / 'cron/toconline-reply.php', ROOT / 'config.php', ROOT / 'src/Invoices/InvoiceVault.php', ROOT / 'src/Invoices/InvoiceTocPipe.php']:
         subprocess.run([PHP, '-l', str(path)], check=True, capture_output=True)
     unittest.main()
+
