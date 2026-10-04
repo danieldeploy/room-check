@@ -2,6 +2,23 @@
 // Tokenize only: never include/evaluate the production configuration.
 $source = stream_get_contents(STDIN);
 $tokens = token_get_all($source, TOKEN_PARSE);
+if (($argv[1] ?? '') === '--core-summary') {
+    $semantic = [];
+    $redacted = '';
+    foreach ($tokens as $token) {
+        if (!is_array($token)) { $semantic[] = $token; $redacted .= $token; continue; }
+        [$kind, $value] = $token;
+        if (!in_array($kind, [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            $semantic[] = [$kind, $value];
+        }
+        if (in_array($kind, [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE,
+                           T_INLINE_HTML, T_COMMENT, T_DOC_COMMENT, T_LNUMBER, T_DNUMBER], true)) {
+            $redacted .= '[literal-or-comment]' . str_repeat("\n", substr_count($value, "\n"));
+        } else { $redacted .= $value; }
+    }
+    echo json_encode(['semantic_sha256' => hash('sha256', json_encode($semantic)), 'redacted' => $redacted]);
+    exit;
+}
 $code = '';
 $open = false;
 $hasInclude = false;

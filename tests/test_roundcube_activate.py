@@ -46,7 +46,7 @@ class ActivationTests(unittest.TestCase):
         report = {}
         hashes = {name: b.digest(fake.files[b.PLUGIN + '/' + name]) for name in b.HASHES}
         core = {name: b.digest(name) for name in a.CORE_HASHES}
-        with patch.object(b, 'HASHES', hashes), patch.object(a, 'CORE_HASHES', core):
+        with patch.object(b, 'HASHES', hashes), patch.object(a, 'CORE_HASHES', core), patch.object(a, 'core_diagnostic', return_value={'test': True}):
             a.activate(fake, report, now=now, lint_check=lambda x: None,
                        parser=lambda x: {'plugins': ['welcome_ui'], 'php_open': True})
         return report
