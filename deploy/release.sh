@@ -24,6 +24,9 @@ export PRIVATEPATH="$HOME/room-check-private/"
     /bin/cp -R admin src "$DEPLOYPATH"
 )
 /bin/cp -R cron "$PRIVATEPATH"
+# Private executable for cPanel email filters. No filter is activated by deployment.
+/bin/chmod 0700 "$PRIVATEPATH/cron/toconline-reply.php"
+/usr/local/bin/php -l "$PRIVATEPATH/cron/toconline-reply.php" >/dev/null
 /bin/cp -R invoice-runner "$PRIVATEPATH"
 (
     umask 022
@@ -35,3 +38,4 @@ export PRIVATEPATH="$HOME/room-check-private/"
 # One reviewed, idempotent login request. No portal secret enters the release job.
 /usr/local/bin/php deploy/enqueue_booking_login_once.php "$DEPLOYPATH"
 /usr/local/bin/php deploy/provision_booking_test_access_once.php "$DEPLOYPATH"
+

@@ -31,6 +31,20 @@ if (!$driveClientConfigured): ?><p><?= it('drive_setup_pending') ?></p><?php els
 <label class="check-row"><input type="checkbox" name="toc_enabled" <?= !empty($tocSettings['enabled'])?'checked':'' ?> <?= empty($tocSettings['pilot_verified'])?'disabled':'' ?>><span><?= it('toc_enable') ?></span></label>
 <p><?= it('toc_pilot_note') ?></p><button class="primary-button" <?= !$vault?'disabled':'' ?>><?= it('save') ?></button></form>
 <details><summary><?= it('processing_details') ?></summary><p><?= it('toc_limits') ?></p><p><?= it('airbnb_pipeline') ?></p></details></section>
+<?php
+require_once dirname(__DIR__,3).'/src/Invoices/InvoiceTocPipe.php';
+$pipeStatus=null;
+try { if ($vault) $pipeStatus=(new InvoiceTocPipe($vault))->status(); } catch (Throwable) {}
+?>
+<section class="card"><h2><?= it('toc_pipe_0') ?></h2>
+<p><?= it('toc_pipe_1') ?></p>
+<p><code translate="no">room-check-private/cron/toconline-reply.php</code></p>
+<?php if ($pipeStatus): ?>
+<p><?= it('toc_pipe_2') ?>: <?= ie(invoiceTime($pipeStatus['received_at'])) ?></p>
+<dl class="invoice-facts"><div><dt><?= it('toc_pipe_3') ?></dt><dd><?= (int)$pipeStatus['pending'] ?></dd></div><div><dt><?= it('toc_pipe_4') ?></dt><dd><?= (int)$pipeStatus['matched'] ?></dd></div><div><dt><?= it('toc_pipe_5') ?></dt><dd><?= (int)$pipeStatus['unmatched'] ?></dd></div></dl>
+<?php else: ?><p><?= it('toc_pipe_6') ?></p><?php endif; ?>
+<p><?= it('toc_pipe_7') ?></p>
+</section>
 <section class="card"><h2><?= it('toc_mail_title') ?></h2><p><?= it('toc_mail_policy') ?></p>
 <p><?= it(!empty($tocMailbox['enabled'])?'toc_mail_enabled':'toc_mail_disabled') ?></p>
 <?php if (empty($tocMailbox['available'])): ?><p role="status"><?= it('toc_mail_unavailable') ?></p><?php endif; ?>
@@ -50,5 +64,6 @@ if (!$driveClientConfigured): ?><p><?= it('drive_setup_pending') ?></p><?php els
 <details><summary><?= it('advanced_template') ?></summary><label class="field"><span><?= it('template_name') ?></span><input type="text" name="template_name" value="<?= ie($notifications['template_name'] ?? 'invoice_collection_failed_v1') ?>" pattern="[a-z0-9_]+" required></label><p><?= it('alerts_note') ?></p><p><?= it('template_approval_note') ?></p></details><button class="primary-button"><?= it('save_alerts') ?></button></form></section>
 <section class="card"><details><summary><?= it('technical_diagnostics') ?></summary><p><?= $service->browserReady()?it('browser_ready'):it('preflight_required') ?></p><p><?= it('worker_last_seen') ?>: <?= ie(invoiceTime($settings['worker_seen_at'] ?? null)) ?></p><p><?= it('browser_last_check') ?>: <?= ie(invoiceTime($settings['browser_checked_at'] ?? null)) ?></p>
 <?php if ($accounts): ?><form method="post"><?php invoiceHidden('preflight',(int)$accounts[0]['id']); ?><button class="invoice-secondary"><?= it('preflight') ?></button></form><?php endif; ?></details></section>
+
 
 
