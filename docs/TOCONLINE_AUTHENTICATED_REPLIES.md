@@ -17,3 +17,5 @@ Checks: PHP 8.1/8.2 signed synthetic fixtures, body/header tampering, duplicate 
 References: RFC 6376 (DKIM canonicalization, header selection, verification) and RFC 8301 (SHA-256, RSA key strength). Cryptography is provided by OpenSSL, not a custom RSA primitive.
 
 The private diagnostic lists missing signature coverage only as names from a fixed interpretation-header allowlist. It never includes header values.
+
+Multipart handling: the signed outer Content-Type fixes boundaries; child interpretation headers are covered by the full signed body. The parser does not consume an outer identity Content-Transfer-Encoding (7bit, 8bit, binary), so its signature is not required. Encoded outer multipart and unsigned leaf decoding headers remain manual. Diagnostic MIME facts are only a boolean and an allowlisted encoding name.
