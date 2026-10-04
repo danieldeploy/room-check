@@ -109,7 +109,7 @@ final class InvoiceText
         'booking_login_sms_waiting' => ['Pedido de SMS detetado — código ainda não submetido', 'SMS prompt detected — code not submitted yet'],
         'booking_login_sms_waiting_detail' => ['O Booking mostrou o passo de SMS. O diagnóstico confirma o pedido, mas não confirma que a mensagem chegou ao telemóvel.', 'Booking displayed the SMS step. The diagnostic confirms the request, but cannot confirm that the message reached the phone.'],
         'booking_login_sms_check' => ['Confirme se o SMS chegou ao SIM configurado. Se não chegou, verifique as definições do dispositivo SMS antes de repetir o teste.', 'Check whether the SMS reached the configured SIM. If it did not, check the SMS device settings before retrying.'],
-        'booking_login_sms_submitted' => ['Código SMS submetido — à espera do resultado do Booking', 'SMS code submitted — waiting for Booking's result'],
+        'booking_login_sms_submitted' => ['Código SMS submetido — à espera do resultado do Booking', 'SMS code submitted — waiting for the result returned by Booking'],
         'booking_login_sms_submitted_detail' => ['O código foi submetido, mas este diagnóstico ainda não confirma que o Booking o aceitou.', 'The code was submitted, but this diagnostic does not yet confirm that Booking accepted it.'],
         'booking_login_sms_result' => ['Consulte o resultado do teste de login. Se continuar pendente, confirme o estado do Booking no Chrome.', 'Check the login test result. If it remains pending, check Booking in Chrome.'],
         'booking_login_sms_timeout' => ['O prazo de espera do SMS terminou', 'SMS wait timed out'],
