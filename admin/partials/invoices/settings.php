@@ -42,6 +42,8 @@ try { if ($vault) $pipeStatus=(new InvoiceTocPipe($vault))->status(); } catch (T
 <?php if ($pipeStatus): ?>
 <p><?= it('toc_pipe_2') ?>: <?= ie(invoiceTime($pipeStatus['received_at'])) ?></p>
 <dl class="invoice-facts"><div><dt><?= it('toc_pipe_3') ?></dt><dd><?= (int)$pipeStatus['pending'] ?></dd></div><div><dt><?= it('toc_pipe_4') ?></dt><dd><?= (int)$pipeStatus['matched'] ?></dd></div><div><dt><?= it('toc_pipe_5') ?></dt><dd><?= (int)$pipeStatus['unmatched'] ?></dd></div></dl>
+<p><?= it('toc_auth_label') ?>: <?= it('toc_auth_'.($pipeStatus['authentication']??'not_checked')) ?></p>
+<p><?= it('toc_auth_outcome') ?>: <?= it($pipeStatus['outcome']??'toc_review') ?></p>
 <?php else: ?><p><?= it('toc_pipe_6') ?></p><?php endif; ?>
 <p><?= it('toc_pipe_7') ?></p>
 </section>
@@ -64,6 +66,7 @@ try { if ($vault) $pipeStatus=(new InvoiceTocPipe($vault))->status(); } catch (T
 <details><summary><?= it('advanced_template') ?></summary><label class="field"><span><?= it('template_name') ?></span><input type="text" name="template_name" value="<?= ie($notifications['template_name'] ?? 'invoice_collection_failed_v1') ?>" pattern="[a-z0-9_]+" required></label><p><?= it('alerts_note') ?></p><p><?= it('template_approval_note') ?></p></details><button class="primary-button"><?= it('save_alerts') ?></button></form></section>
 <section class="card"><details><summary><?= it('technical_diagnostics') ?></summary><p><?= $service->browserReady()?it('browser_ready'):it('preflight_required') ?></p><p><?= it('worker_last_seen') ?>: <?= ie(invoiceTime($settings['worker_seen_at'] ?? null)) ?></p><p><?= it('browser_last_check') ?>: <?= ie(invoiceTime($settings['browser_checked_at'] ?? null)) ?></p>
 <?php if ($accounts): ?><form method="post"><?php invoiceHidden('preflight',(int)$accounts[0]['id']); ?><button class="invoice-secondary"><?= it('preflight') ?></button></form><?php endif; ?></details></section>
+
 
 
 

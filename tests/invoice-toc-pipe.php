@@ -60,7 +60,7 @@ try {
  $pipe->process($unmatched);pipeCheck($pipe->status()['unmatched']===1,'unmatched receipt visible');
  // Execute the real CLI entry point in an isolated fake hosting layout; no network or real mail.
  $app=$dir.'/public_html/check';$cron=$dir.'/room-check-private/cron';mkdir($app.'/src/Invoices',0700,true);mkdir($cron,0700,true);
- foreach (['InvoiceTocPipe.php','InvoiceVault.php'] as $name)copy(dirname(__DIR__).'/src/Invoices/'.$name,$app.'/src/Invoices/'.$name);
+ foreach (['InvoiceTocPipe.php','InvoiceVault.php','InvoiceTocAuthentication.php'] as $name)copy(dirname(__DIR__).'/src/Invoices/'.$name,$app.'/src/Invoices/'.$name);
  file_put_contents($app.'/config.php','<?php return '.var_export(['invoices'=>['private_dir'=>$dir]],true).';');
  copy(dirname(__DIR__).'/cron/toconline-reply.php',$cron.'/toconline-reply.php');
  $run=static function(string $input)use($cron):array{$proc=proc_open([PHP_BINARY,$cron.'/toconline-reply.php'],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fwrite($pipes[0],$input);fclose($pipes[0]);$out=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);return [proc_close($proc),$out,$err];};
@@ -72,4 +72,5 @@ try {
  $items=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
  foreach($items as $item) {if($item->isDir())rmdir($item->getPathname());else unlink($item->getPathname());}rmdir($dir);
 }
+
 

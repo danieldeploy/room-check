@@ -148,6 +148,36 @@ try {
         if ($failure==='crash') unlink($vault->path('toconline-diagnostic-resend.enc'));
     }
     tocCheck($vault->read('toconline-ledger.enc')===$originalLedger,'failed diagnostics preserve original ledger');
+    // Cryptographic proof comes only from the private pipe, never request fields.
+    $sixth='%PDF-1.4 authenticated receipt'; $add(11,1,'INV-11',$sixth); $drive->pdf=$sixth; $toc->run(11);
+    [$authKey]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-11','sha256'=>hash('sha256',$sixth)],'500000000');
+    $authText='booking_'.$authKey.'.pdf';
+    $proof=['authentication'=>['verified'=>true,'code'=>'verified','recipient'=>$settings['toc_sender'],'signed_at'=>gmdate('c')],'outcome'=>'toc_accepted'];
+    $bad=$proof;$bad['authentication']['verified']=false;
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','unsigned'),$bad);
+    tocCheck($state(11)==='toc_review' && !$toc->settings()['pilot_verified'],'unsigned cannot confirm');
+    $bad=$proof;$bad['authentication']['recipient']='wrong@welcomehostel.pt';
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','wrong recipient'),$bad);
+    tocCheck($state(11)==='toc_review','wrong recipient cannot confirm');
+    $bad=$proof;$bad['authentication']['signed_at']=gmdate('c',time()-3600);
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','old signed message'),$bad);
+    tocCheck($state(11)==='toc_review','receipt predating send cannot confirm');
+    $toc->receive('no_reply@toconline.pt','',$authText.' booking_'.str_repeat('f',64).'.pdf',hash('sha256','unknown extra token'),$proof);
+    tocCheck($state(11)==='toc_review','unknown additional identity prevents automatic confirmation');
+    $result=$toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','verified'),$proof);
+    tocCheck($state(11)==='toc_accepted' && $result['outcome']==='toc_accepted','verified exact receipt confirms automatically');
+    tocCheck($toc->settings()['pilot_verified'] && !$toc->settings()['enabled'],'authenticated archive permits pilot but does not activate sending');
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','later unverified'));
+    tocCheck($state(11)==='toc_accepted','unverified later mail cannot downgrade confirmation');
+    $seventh='%PDF-1.4 authenticated duplicate'; $add(12,1,'INV-12',$seventh); $drive->pdf=$seventh; $toc->run(12);
+    [$dupKey]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-12','sha256'=>hash('sha256',$seventh)],'500000000');
+    $saved=$toc->settings();$saved['pilot_verified']=false;$vault->save('toconline-settings.enc',$saved);
+    $proof['outcome']='toc_existing';
+    $toc->receive('no_reply@toconline.pt','','booking_'.$dupKey.'.pdf',hash('sha256','verified duplicate'),$proof);
+    tocCheck($state(12)==='toc_existing' && !$toc->settings()['pilot_verified'],'authenticated duplicate is not a newly accepted pilot');
+    $proof['outcome']='toc_accepted';
+    $toc->receive('no_reply@toconline.pt','','booking_'.$dupKey.'.pdf',hash('sha256','conflicting final receipt'),$proof);
+    tocCheck($state(12)==='toc_existing' && !$toc->settings()['pilot_verified'],'final outcome immutable and conflicting receipt cannot validate pilot');
     $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
     tocCheck(!$toc->settings()['pilot_verified'],'sender change invalidates pilot');
     tocReject(fn()=>$toc->confirm(1),'old sender receipt cannot validate new sender');
@@ -157,5 +187,6 @@ try {
 } finally {
     foreach(glob($dir.'/*') as $file) unlink($file); rmdir($dir);
 }
+
 
 

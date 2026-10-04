@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceVault.php';
+require_once __DIR__.'/InvoiceTocAuthentication.php';
 
 /** CLI mail delivery -> bounded encrypted queue -> existing conservative receipt reconciliation. */
 final class InvoiceTocPipe
@@ -91,12 +92,25 @@ final class InvoiceTocPipe
         // Too many correlations are ambiguous, never truncate to a seemingly exact match.
         $safe=count($tokens)>20?'':implode("\n",array_map(static fn($key)=>'booking-'.$key.'.pdf',$tokens));
         if (str_contains(mb_strtolower($text),'por já constarem no seu arquivo')) $safe.="\npor já constarem no seu arquivo";
-        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash];
+        $subject=count($headers['subject']??[])===1 ? mb_decode_mimeheader($headers['subject'][0]) : '';
+        $outcome='toc_review';
+        $duplicate=str_contains(mb_strtolower($text),'por já constarem no seu arquivo');
+        $success=preg_match('/\AFicheiros arquivados com sucesso - Active Lines, Lda\s*\z/u',trim($subject))===1;
+        preg_match_all('/booking[-_]([a-f0-9]{64})\.pdf/i',$text,$bodyMatches);
+        $bodyTokens=array_values(array_unique(array_map('strtolower',$bodyMatches[1])));
+        preg_match_all('/[a-zA-Z0-9._-]+\.pdf/i',$text,$pdfNames);
+        $allNamesKnown=count(array_filter($pdfNames[0],static fn($name)=>!preg_match('/\Abooking[-_][a-f0-9]{64}\.pdf\z/i',$name)))===0;
+        if ($allNamesKnown && count($bodyTokens)===1 && count($tokens)===1) {
+            if ($duplicate && !$success) $outcome='toc_existing';
+            elseif ($success && !$duplicate) $outcome='toc_accepted';
+        }
+        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome];
     }
 
     public function enqueue(string $raw): bool
     {
         $receipt=self::parse($raw); if ($receipt===null) return false;
+        $receipt['authentication']=InvoiceTocAuthentication::verify(self::withoutEnvelope($raw));
         $lock=fopen($this->vault->path('toc-pipe.lock'),'c');
         if (!$lock) throw new RuntimeException('toc_pipe_queue');
         try {
@@ -114,7 +128,8 @@ final class InvoiceTocPipe
         $status=$this->vault->has('toconline-pipe-status.enc')?$this->vault->read('toconline-pipe-status.enc'):[];
         return ['pending'=>count(glob($this->vault->root.'/toc-pipe-*.enc')?:[]),
             'matched'=>(int)($status['matched']??0),'unmatched'=>(int)($status['unmatched']??0),
-            'checked_at'=>$status['checked_at']??null,'received_at'=>$status['received_at']??null];
+            'checked_at'=>$status['checked_at']??null,'received_at'=>$status['received_at']??null,
+            'authentication'=>$status['authentication']??'not_checked','outcome'=>$status['outcome']??'toc_review'];
     }
 
     /** Called under room_check_invoices; atomic queue files survive worker/database outages. */
@@ -126,9 +141,11 @@ final class InvoiceTocPipe
             $receipt=$this->vault->read($name);
             if (!hash_equals($m[1],$receipt['hash']??'')) throw new RuntimeException('toc_pipe_queue');
             if (!in_array($receipt['hash'],$status['recent'],true)) {
-                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash']);
+                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review']);
                 $status[$result['result']==='matched'?'matched':'unmatched']++;
                 $status['recent']=array_slice([...$status['recent'],$receipt['hash']],-250);
+                $status['authentication']=$receipt['authentication']['code']??'not_checked';
+                $status['outcome']=$result['outcome']??'toc_review';
                 $status['received_at']=$receipt['received_at']; $status['checked_at']=gmdate('c');
                 $this->vault->save('toconline-pipe-status.enc',$status);
             }
@@ -136,3 +153,4 @@ final class InvoiceTocPipe
         }
     }
 }
+

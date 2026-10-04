@@ -104,7 +104,7 @@ final class InvoiceToconline
     }
 
     /** Mail headers/body are untrusted evidence. Exact correlation only; no automatic acceptance. */
-    public function receive(string $from, string $references, string $text, string $receiptHash): array
+    public function receive(string $from, string $references, string $text, string $receiptHash, array $proof=[]): array
     {
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
         if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
@@ -116,17 +116,34 @@ final class InvoiceToconline
         }
         if (count($matches)!==1) return ['result'=>'unmatched'];
         $id=(int)array_key_first($matches); $suggestion='toc_review';
+        $auth=$proof['authentication']??[]; $automatic='toc_review'; $applied=false;
+        $uniqueTokens=array_unique(array_map('strtolower',$tokens[1]));
+        $signedAt=strtotime((string)($auth['signed_at']??''));
+        if (($auth['verified']??false)===true && ($auth['code']??'')==='verified'
+            && ($auth['recipient']??'')===strtolower($settings['sender'])
+            && count($uniqueTokens)===1 && in_array($proof['outcome']??'',['toc_accepted','toc_existing'],true)) {
+            $candidate=$ledger[reset($uniqueTokens)]??[];
+            $sentAt=strtotime((string)($candidate['attempted_at']??''));
+            if ($signedAt && $sentAt && $signedAt >= $sentAt-300) $automatic=$proof['outcome'];
+        }
         // Only the observed duplicate phrase is recognised. Unknown/new templates remain review.
         if (str_contains(mb_strtolower($text),'por já constarem no seu arquivo')) $suggestion='toc_existing';
         foreach ($ledger as &$entry) if ((int)$entry['document_id']===$id
             && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
             && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
-            $entry['state']='toc_review'; $entry['receipt_hash']=$receiptHash;
+            $entry['state']=$automatic; $entry['receipt_hash']=$receiptHash;
+            if ($automatic!=='toc_review') {
+                $entry['confirmed_at']=gmdate('c'); $entry['confirmation_source']='dkim_toconline';
+                $entry['confirmed_by']=0; $applied=true;
+            }
             $entry['receipt_suggestion']=$suggestion; $entry['receipt_received_at']=gmdate('c');
         }
         unset($entry); $this->vault->save('toconline-ledger.enc',$ledger);
         foreach ($ledger as $entry) if ((int)$entry['document_id']===$id && $entry['nif']===$settings['nif']) { $this->state($id,$entry['state']); break; }
-        return ['result'=>'matched','document_id'=>$id,'suggestion'=>$suggestion];
+        if ($applied && $automatic==='toc_accepted') {
+            $settings['pilot_verified']=true; $this->vault->save('toconline-settings.enc',$settings);
+        }
+        return ['result'=>'matched','document_id'=>$id,'suggestion'=>$suggestion,'outcome'=>$applied?$automatic:'toc_review'];
     }
 
     public function run(?int $pilotId=null): void
@@ -243,4 +260,5 @@ final class InvoiceToconline
             || !hash_equals((string)$d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
     }
 }
+
 
