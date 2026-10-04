@@ -147,8 +147,18 @@ def activate(client, report, now=time.time, lint_check=base.lint, parser=parse_c
         base.require(base.digest(source) == expected, 'plugin_package_changed')
         if filename.endswith(('.php', '.php.dist')): lint_check(source)
         sources[filename] = source
+    core_checks = {}
     for filename, expected in CORE_HASHES.items():
-        base.require(base.digest(client.read(base.ROOT + '/' + filename)) == expected, 'installed_core_differs_from_upstream')
+        source = client.read(base.ROOT + '/' + filename)
+        core_checks[filename] = {
+            'sha256': base.digest(source),
+            'expected_sha256': expected,
+            'normalized_newlines_sha256': base.digest(source.replace('\r\n', '\n').rstrip() + '\n'),
+            'length': len(source),
+        }
+    report['core_file_checks'] = core_checks
+    base.require(all(item['sha256'] == item['expected_sha256'] for item in core_checks.values()),
+                 'installed_core_differs_from_upstream')
     report['core_and_plugin_verified'] = True
     base.require(client.stat(base.BACKUP, 'file') == 0o600, 'backup_requires_0600')
     original = client.read(base.BACKUP)
