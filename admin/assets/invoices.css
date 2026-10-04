@@ -102,6 +102,8 @@
 .invoice-page .invoice-login-summary h3 { margin: 4px 0 10px; color: #15583c; }
 .invoice-page .invoice-login-summary p { line-height: 1.5; }
 .invoice-page .invoice-login-summary p:last-child { margin-bottom: 0; }
+.invoice-page .invoice-login-summary--queued, .invoice-page .invoice-login-summary--in_progress { border-color: #e7c779; border-left-color: #ad7200; background: #fffaf0; }
+.invoice-page .invoice-login-summary--queued h3, .invoice-page .invoice-login-summary--in_progress h3 { color: #795100; }
 .invoice-page .invoice-login-summary--sms_waiting, .invoice-page .invoice-login-summary--sms_submitted, .invoice-page .invoice-login-summary--credentials { border-color: #e7c779; border-left-color: #ad7200; background: #fffaf0; }
 .invoice-page .invoice-login-summary--sms_waiting h3, .invoice-page .invoice-login-summary--sms_submitted h3, .invoice-page .invoice-login-summary--credentials h3 { color: #795100; }
 .invoice-page .invoice-login-summary--captcha, .invoice-page .invoice-login-summary--sms_rejected, .invoice-page .invoice-login-summary--sms_timeout, .invoice-page .invoice-login-summary--credentials_rejected, .invoice-page .invoice-login-summary--blocked { border-color: #e8b5b5; border-left-color: #b42318; background: #fff5f4; }
