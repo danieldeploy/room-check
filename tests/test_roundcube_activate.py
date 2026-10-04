@@ -20,7 +20,8 @@ class Fake:
         self.files[a.TARGET] = self.files[b.PLUGIN + '/config.inc.php.dist']
         self.files.update({b.ROOT + '/' + name: name for name in a.CORE_HASHES})
         self.files[b.ROOT + '/plugins/welcome_ui/welcome_ui.php'] = '<?php // UI only'
-        self.modes = {b.PRIVATE: 0o700, b.BACKUP: 0o600, a.KEY: 0o600}
+        self.files[a.CONFIRM] = a.ATTESTATION
+        self.modes = {b.PRIVATE: 0o700, b.BACKUP: 0o600, a.KEY: 0o600, a.CONFIRM: 0o600}
         self.writes = []
         self.reads = []
 
@@ -70,6 +71,37 @@ class ActivationTests(unittest.TestCase):
         fake = Fake()
         with self.assertRaisesRegex(b.PreparationError, 'expired'):
             self.run_activation(fake, now=lambda: a.EXPIRES)
+        self.assertEqual(fake.writes, [])
+
+    def previous_window(self):
+        fake = Fake()
+        fake.files[b.CONFIG], fake.files[a.TARGET] = a.configurations(
+            fake.files[b.BACKUP], {'php_open': True},
+            fake.files[b.PLUGIN + '/config.inc.php.dist'], a.PREVIOUS_EXPIRES)
+        return fake
+
+    def test_reopen_preserves_backup_and_does_not_refresh_attestation(self):
+        fake = self.previous_window()
+        original = fake.files[b.BACKUP]
+        report = self.run_activation(fake)
+        self.assertTrue(report['ok'])
+        self.assertFalse(report['confirmation_refreshed'])
+        self.assertEqual(fake.files[b.BACKUP], original)
+        self.assertEqual(fake.files[a.CONFIRM], a.ATTESTATION)
+        self.assertEqual(fake.writes, [('write', b.CONFIG), ('write', a.TARGET)])
+        self.assertNotIn(str(a.PREVIOUS_EXPIRES), fake.files[b.CONFIG])
+
+    def test_reopen_before_old_expiry_is_refused(self):
+        fake = self.previous_window()
+        with self.assertRaisesRegex(b.PreparationError, 'previous_window_still_active'):
+            self.run_activation(fake, now=lambda: a.PREVIOUS_EXPIRES-1)
+        self.assertEqual(fake.writes, [])
+
+    def test_missing_attestation_is_not_recreated(self):
+        fake = self.previous_window()
+        del fake.files[a.CONFIRM]
+        with self.assertRaisesRegex(b.PreparationError, 'existing_confirmation_required'):
+            self.run_activation(fake)
         self.assertEqual(fake.writes, [])
 
     def test_key_permissions_prevent_activation(self):
