@@ -52,6 +52,12 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
 
 def route(operation, values):
     """Explicit route and payload allowlist; no arbitrary path/operation input."""
+    if operation == 'list':
+        require(set(values) == {'directory'} and values['directory'] in
+                {'/home/welcome', PRIVATE, PLUGIN}, 'list_not_allowed')
+        return '/json-api/uapi_cpanel', {'api.version': 1, 'cpanel.user': 'welcome',
+            'cpanel.module': 'Fileman', 'cpanel.function': 'list_files',
+            'dir': values['directory']}, 3
     if operation == 'read':
         require(set(values) == {'path'} and values['path'] in READS, 'read_not_allowed')
         directory, filename = values['path'].rsplit('/', 1)
@@ -126,6 +132,15 @@ class Client:
             raise PreparationError('request_or_response_failed_state_requires_review') from None
 
     def stat(self, path, kind, optional=False):
+        if optional:
+            require(path in {PRIVATE, BACKUP, PLUGIN + '/config.inc.php'}, 'optional_stat_not_allowed')
+            parent, name = path.rsplit('/', 1)
+            data = self.call('list', directory=parent)
+            rows = data.get('files') if isinstance(data, dict) else data
+            require(isinstance(rows, list) and all(isinstance(row, dict) and
+                    isinstance(row.get('file'), str) for row in rows), 'invalid_inventory_response')
+            if not any(row['file'] == name for row in rows):
+                return None
         data = self.call('stat', path=path)
         require(isinstance(data, list) and len(data) == 1, 'invalid_stat_response')
         item = data[0]
