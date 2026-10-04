@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/src/Invoices/InvoiceToconline.php';
+require_once dirname(__DIR__).'/src/Invoices/InvoiceTocMailbox.php';
 function tocCheck(bool $ok,string $label): void { if (!$ok) throw new RuntimeException($label); }
 function tocReject(callable $fn,string $label): void {try {$fn();} catch (RuntimeException) {return;} throw new RuntimeException($label);}
 $dir=sys_get_temp_dir().'/toc-'.bin2hex(random_bytes(8)); mkdir($dir,0700); file_put_contents($dir.'/master.key',random_bytes(32)); chmod($dir.'/master.key',0600);
@@ -32,6 +33,11 @@ try {
     tocReject(fn()=>$toc->configure($settings+['toc_enabled'=>1]),'pilot required');
     tocReject(fn()=>$toc->configure(array_replace($settings,['toc_sender'=>"a@welcomehostel.pt\r\nBcc: x@example.org"])), 'header injection');
     $toc->configure($settings);
+    $mailbox=new InvoiceTocMailbox($vault,$toc);
+    tocCheck(!$mailbox->status()['configured'] && !$mailbox->status()['enabled'],'mailbox opt-in');
+    $mailbox->poll();
+    tocReject(fn()=>$mailbox->configure(['toc_mail_password'=>'synthetic','toc_mail_folders'=>"INBOX}evil"]),'mailbox path injection blocked');
+    tocReject(fn()=>$mailbox->configure(['toc_mail_password'=>'','toc_mail_folders'=>'INBOX']),'mailbox requires secure credential');
     $add(1,1,'INV-1',$pdf); $add(2,2,'INV-1',$pdf.' changed'); $add(3,2,'OTHER',$pdf);
     $add(4,1,'NOT-ARCHIVED',$pdf,'pending'); $add(5,1,'REVIEW',$pdf,'verified','review'); $add(6,3,'AIRBNB',$pdf);
     $toc->run(); tocCheck(count($sent)===0,'disabled sends nothing');
@@ -56,6 +62,31 @@ try {
     $ledger[$a]=$ledger[$b]=['document_id'=>8,'nif'=>'500000000','sender'=>$settings['toc_sender'],'state'=>'toc_sending'];
     $vault->save('toconline-ledger.enc',$ledger); $toc->run();
     tocCheck($state(8)==='toc_uncertain' && count($sent)===1,'crash intent blocks duplicate');
+    // A uniquely correlated email is evidence for review, not an authenticated acceptance.
+    $fourth='%PDF-1.4 receipt test'; $add(9,1,'INV-9',$fourth); $drive->pdf=$fourth; $toc->run(9);
+    [$key]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-9','sha256'=>hash('sha256',$fourth)],'500000000');
+    $body='Foram recusados os seguintes ficheiros por já constarem no seu arquivo: booking-'.$key.'.pdf';
+    $hash=hash('sha256','synthetic receipt');
+    tocCheck(str_contains(end($sent)[1]['body'],'booking-'.$key.'.pdf'),'unique correlation filename');
+    tocCheck($toc->receive('attacker@example.org','',$body,$hash)['result']==='ignored','wrong sender ignored');
+    tocCheck($toc->receive('no_reply@toconline.pt','','invoice.pdf',$hash)['result']==='unmatched','generic filename never guessed');
+    tocCheck($toc->receive('no_reply@toconline.pt','',$body,$hash)['document_id']===9 && $state(9)==='toc_review','correlated receipt requires review');
+    $toc->confirm(9,'toc_existing',42); tocCheck($state(9)==='toc_existing','external duplicate distinct from accepted');
+    $before=count($sent); $toc->run(9); tocCheck(count($sent)===$before,'existing never resent');
+    $toc->receive('no_reply@toconline.pt','',$body,$hash); tocCheck($state(9)==='toc_existing','later receipt cannot undo final confirmation');
+    tocReject(fn()=>$toc->confirm(9,'toc_accepted',42),'final outcome cannot silently change');
+    // Receipt contains multiple document identities: never choose one arbitrarily.
+    tocCheck($toc->receive('no_reply@toconline.pt','<toc-'.$a.'@check.welcomehostel.pt>',$body,$hash)['result']==='unmatched','ambiguous reference blocked');
+    $fifth='%PDF-1.4 expiry'; $add(10,1,'INV-10',$fifth); $drive->pdf=$fifth; $toc->run(10);
+    $toc->configure($settings); $toc->reconcile(time()+73*3600);
+    tocCheck($state(10)==='toc_no_confirmation','expires after 72h with sending disabled');
+    $before=count($sent); $toc->run(10); tocCheck(count($sent)===$before,'no confirmation never resent');
+    $toc->confirm(10,'toc_rejected',42); tocCheck($state(10)==='toc_rejected','rejected distinct');
+    $toc->run(10); tocCheck(count($sent)===$before,'rejected never blindly resent');
+    // A duplicate receipt must not unlock first successful new-archive pilot.
+    $saved=$toc->settings(); $saved['pilot_verified']=false; $saved['enabled']=false; $vault->save('toconline-settings.enc',$saved);
+    $toc->confirm(7,'toc_existing',42); tocCheck(!$toc->settings()['pilot_verified'],'duplicate does not validate pilot');
+    tocReject(fn()=>$toc->configure($settings+['toc_enabled'=>1]),'duplicate pilot cannot enable automatic sending');
     $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
     tocCheck(!$toc->settings()['pilot_verified'],'sender change invalidates pilot');
     tocReject(fn()=>$toc->confirm(1),'old sender receipt cannot validate new sender');
@@ -65,3 +96,4 @@ try {
 } finally {
     foreach(glob($dir.'/*') as $file) unlink($file); rmdir($dir);
 }
+
