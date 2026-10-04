@@ -5,6 +5,7 @@ require $root.'/lib.php';
 require_once $root.'/src/UI/SessionBar.php';
 require_once $root.'/src/Invoices/InvoiceWorkspace.php';
 require_once $root.'/src/Invoices/InvoiceAuth.php';
+require_once $root.'/src/Invoices/BookingLoginStatus.php';
 require_once $root.'/src/Invoices/InvoiceDrive.php';
 require_once $root.'/src/Invoices/InvoiceToconline.php';
 require_once $root.'/src/Invoices/InvoiceTocMailbox.php';
@@ -20,6 +21,42 @@ try {
 }
 header('Cache-Control: no-store'); header('Referrer-Policy: no-referrer');
 $isGerente=$currentUser['role']==='gerente';
+if (($_GET['ajax'] ?? '') === 'booking_login_status') {
+    try {
+        if (!$isGerente) throw new RuntimeException('forbidden');
+        $statusAccountId=filter_var($_GET['account_id'] ?? null,FILTER_VALIDATE_INT);
+        if (!$statusAccountId || $statusAccountId<1) throw new RuntimeException('invalid_request');
+        $statusAccount=(new InvoiceAccounts($pdo))->get((int)$statusAccountId);
+        if (($statusAccount['portal'] ?? '')!=='booking') throw new RuntimeException('invalid_request');
+        $statusVault=new InvoiceVault($config['invoices']['private_dir']);
+        $statusFile='account-'.(int)$statusAccountId.'-login-diagnostic.enc';
+        $available=$statusVault->has($statusFile);
+        $diagnosticUpdated=$available ? filemtime($statusVault->path($statusFile)) : false;
+        $statusSummary=$available
+            ? BookingLoginStatus::summarize($statusVault->read($statusFile))
+            : BookingLoginStatus::waiting();
+        $activeLogin=$pdo->prepare("SELECT state,created_at FROM invoice_tasks
+            WHERE account_id=? AND kind='login' AND state IN ('queued','running','waiting_auth')
+            ORDER BY id DESC LIMIT 1");
+        $activeLogin->execute([(int)$statusAccountId]);
+        $activeLoginTask=$activeLogin->fetch(PDO::FETCH_ASSOC);
+        $activeLoginStarted=$activeLoginTask ? (strtotime((string)$activeLoginTask['created_at'].' UTC') ?: 0) : 0;
+        if ($activeLoginTask && ($diagnosticUpdated===false || $activeLoginStarted >= (int)$diagnosticUpdated)) {
+            $statusSummary=BookingLoginStatus::inProgress((string)$activeLoginTask['state']);
+        }
+        jsonResponse([
+            'ok'=>true,
+            'available'=>$available,
+            'phase'=>$statusSummary['phase'],
+            'title'=>InvoiceText::get($statusSummary['title']),
+            'detail'=>InvoiceText::get($statusSummary['detail']),
+            'next'=>InvoiceText::get($statusSummary['next']),
+            'updated_at'=>$diagnosticUpdated===false ? null : $diagnosticUpdated,
+        ]);
+    } catch (Throwable $statusError) {
+        jsonResponse(['ok'=>false],$statusError->getMessage()==='forbidden'?403:404);
+    }
+}
 $canRun=Auth::hasPermission($pdo,$currentUser,Auth::PERMISSION_INVOICES_RUN);
 $tabs=['overview','documents','accounts','activity']; if ($isGerente) $tabs[]='settings';
 $tab=(string)($_GET['tab'] ?? 'overview'); if (!in_array($tab,$tabs,true)) $tab='overview';

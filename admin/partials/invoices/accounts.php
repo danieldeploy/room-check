@@ -55,8 +55,18 @@ if ($editing) {
 <div class="form-actions"><button class="primary-button"><?= it('save_automation_options') ?></button></div></form></details>
 <?php endif; ?>
 <form method="post"><?php invoiceHidden('login',$editId); ?><button class="primary-button" <?= !$repository->active($editId)?'disabled':'' ?>><?= it($a['portal']==='booking'?'booking_login':'login') ?></button></form>
-<?php if ($a['portal']==='booking' && $vault && $vault->has('account-'.$editId.'-login-diagnostic.enc')): $loginDraft=$vault->read('account-'.$editId.'-login-diagnostic.enc'); ?>
-<details class="invoice-options"><summary><?= it('login_diagnostic') ?></summary><pre class="invoice-diagnostic"><?= ie(json_encode($loginDraft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details>
+<?php if ($a['portal']==='booking' && $vault): $loginDiagnosticFile='account-'.$editId.'-login-diagnostic.enc'; $hasLoginDiagnostic=$vault->has($loginDiagnosticFile); $loginDraft=$hasLoginDiagnostic?$vault->read($loginDiagnosticFile):[]; $loginSummary=$hasLoginDiagnostic?BookingLoginStatus::summarize($loginDraft):BookingLoginStatus::waiting(); $loginUpdated=$hasLoginDiagnostic?filemtime($vault->path($loginDiagnosticFile)):false; ?>
+<div data-booking-login-live data-status-url="invoices.php?ajax=booking_login_status&amp;account_id=<?= $editId ?>" data-refresh-error="<?= ie(InvoiceText::get('booking_login_refresh_error')) ?>" data-refresh-ready="<?= ie(InvoiceText::get('booking_login_auto_refresh')) ?>" data-no-diagnostic="<?= ie(InvoiceText::get('booking_login_not_checked')) ?>">
+<div class="invoice-login-summary invoice-login-summary--<?= ie($loginSummary['phase']) ?>" data-login-summary role="status" aria-live="polite">
+<p class="invoice-kicker"><?= it('booking_login_current_state') ?></p>
+<h3 data-login-title><?= it($loginSummary['title']) ?></h3>
+<p data-login-detail><?= it($loginSummary['detail']) ?></p>
+<p><strong><?= it('booking_login_next') ?>:</strong> <span data-login-next><?= it($loginSummary['next']) ?></span></p>
+</div>
+<p class="invoice-login-updated"><span><?= it('booking_login_checked_at') ?>:</span> <time data-login-updated datetime="<?= $loginUpdated!==false?ie(gmdate('c',(int)$loginUpdated)):'' ?>"><?= $loginUpdated!==false?ie(invoiceTime(gmdate('Y-m-d H:i:s',(int)$loginUpdated))):ie(InvoiceText::get('booking_login_not_checked')) ?></time></p>
+<p class="invoice-login-refresh" data-login-refresh><?= it('booking_login_auto_refresh') ?></p>
+</div>
+<?php if ($hasLoginDiagnostic): ?><details class="invoice-options"><summary><?= it('login_diagnostic') ?></summary><pre class="invoice-diagnostic"><?= ie(json_encode($loginDraft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details><?php endif; ?>
 <?php endif; ?>
 <?php if ($vault && $a['portal']!=='email'): ?>
 <form method="post"><?php invoiceHidden('discover',$editId); ?><label class="field"><span><?= it('property') ?></span><select name="diagnostic_property"><?php foreach ($repository->collectionProperties($editId) as $propertyId=>$propertyLabel): ?><option value="<?= ie($propertyId) ?>"><?= ie($propertyLabel) ?></option><?php endforeach; ?></select></label><button class="invoice-secondary" <?= !$repository->active($editId) || ($agentStatus['mode'] ?? '')!=='windows'?'disabled':'' ?>><?= it('discover_map') ?></button></form>

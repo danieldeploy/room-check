@@ -42,6 +42,63 @@
         });
         method.addEventListener('change', sync); sync();
     });
+    document.querySelectorAll('[data-booking-login-live]').forEach(widget => {
+        const summary = widget.querySelector('[data-login-summary]');
+        const title = widget.querySelector('[data-login-title]');
+        const detail = widget.querySelector('[data-login-detail]');
+        const next = widget.querySelector('[data-login-next]');
+        const updated = widget.querySelector('[data-login-updated]');
+        const refresh = widget.querySelector('[data-login-refresh]');
+        let timer = null, inFlight = false;
+        const phaseNames = ['authenticated', 'captcha', 'queued', 'in_progress', 'sms_waiting', 'sms_submitted',
+            'sms_timeout', 'sms_rejected', 'credentials', 'credentials_rejected', 'timeout', 'blocked', 'unknown'];
+        const apply = data => {
+            if (!data || typeof data.title !== 'string' || typeof data.detail !== 'string' || typeof data.next !== 'string') return;
+            if (title.textContent !== data.title) title.textContent = data.title;
+            if (detail.textContent !== data.detail) detail.textContent = data.detail;
+            if (next.textContent !== data.next) next.textContent = data.next;
+            const phase = phaseNames.includes(data.phase) ? data.phase : 'unknown';
+            summary.className = 'invoice-login-summary invoice-login-summary--' + phase;
+            if (Number.isInteger(data.updated_at) && data.updated_at > 0) {
+                const date = new Date(data.updated_at * 1000);
+                updated.dateTime = date.toISOString();
+                const label = new Intl.DateTimeFormat(document.documentElement.lang || 'pt-PT',
+                    { dateStyle: 'short', timeStyle: 'short' }).format(date);
+                if (updated.textContent !== label) updated.textContent = label;
+            } else {
+                updated.removeAttribute('datetime');
+                const label = data.available ? '' : widget.dataset.noDiagnostic;
+                if (updated.textContent !== label) updated.textContent = label;
+            }
+        };
+        const schedule = () => {
+            clearTimeout(timer);
+            if (!document.hidden) timer = setTimeout(poll, 5000);
+        };
+        const poll = async () => {
+            if (inFlight || document.hidden) return;
+            inFlight = true;
+            try {
+                const response = await fetch(widget.dataset.statusUrl, {
+                    method: 'GET', credentials: 'same-origin', cache: 'no-store',
+                    headers: { Accept: 'application/json' },
+                });
+                if (!response.ok) throw new Error('status_unavailable');
+                apply(await response.json());
+                if (refresh.textContent !== widget.dataset.refreshReady) refresh.textContent = widget.dataset.refreshReady;
+            } catch {
+                if (refresh.textContent !== widget.dataset.refreshError) refresh.textContent = widget.dataset.refreshError;
+            } finally {
+                inFlight = false;
+                schedule();
+            }
+        };
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) { clearTimeout(timer); poll(); }
+            else clearTimeout(timer);
+        });
+        poll();
+    });
     document.querySelectorAll('[data-invoice-filters]').forEach(form => {
         const portal = form.querySelector('[data-filter-portal]');
         const account = form.querySelector('[data-filter-account]');
