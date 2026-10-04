@@ -7,6 +7,11 @@ if ($waiting['phase'] !== 'unknown' || $waiting['title'] !== 'booking_login_no_d
     throw new RuntimeException('A missing diagnostic must be shown as waiting for a login test');
 }
 
+$running = BookingLoginStatus::inProgress('waiting_auth');
+if ($running['phase'] !== 'in_progress' || $running['title'] !== 'booking_login_in_progress') {
+    throw new RuntimeException('An active login must take precedence over a stale saved diagnostic');
+}
+
 $cases = [
     [['authenticated_session'=>true,'login_attempted'=>true,'sms_prompted'=>false,'captcha_status'=>'not_needed'], 'authenticated'],
     [['authenticated_session'=>false,'sms_prompted'=>true,'sms_submitted'=>false], 'sms_waiting'],
