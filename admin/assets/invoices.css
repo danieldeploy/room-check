@@ -97,6 +97,15 @@
 .invoice-property-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 12px; align-items: end; padding: 16px 0; border-top: 1px solid #e1e9eb; }
 .invoice-property-row .field[hidden] + .field { grid-column: span 2; }
 .invoice-page [data-auth-for] { margin-top: 20px; padding-top: 12px; border-top: 1px solid #e1e9eb; }
+.invoice-page .invoice-login-summary { margin: 18px 0; padding: 18px; border: 1px solid #b7d8ca; border-left: 5px solid #13835b; border-radius: 12px; background: #f2fbf6; }
+.invoice-page .invoice-login-summary h3 { margin: 4px 0 10px; color: #15583c; }
+.invoice-page .invoice-login-summary p { line-height: 1.5; }
+.invoice-page .invoice-login-summary p:last-child { margin-bottom: 0; }
+.invoice-page .invoice-login-summary--sms_waiting, .invoice-page .invoice-login-summary--sms_submitted, .invoice-page .invoice-login-summary--credentials { border-color: #e7c779; border-left-color: #ad7200; background: #fffaf0; }
+.invoice-page .invoice-login-summary--sms_waiting h3, .invoice-page .invoice-login-summary--sms_submitted h3, .invoice-page .invoice-login-summary--credentials h3 { color: #795100; }
+.invoice-page .invoice-login-summary--captcha, .invoice-page .invoice-login-summary--sms_rejected, .invoice-page .invoice-login-summary--sms_timeout, .invoice-page .invoice-login-summary--credentials_rejected, .invoice-page .invoice-login-summary--blocked { border-color: #e8b5b5; border-left-color: #b42318; background: #fff5f4; }
+.invoice-page .invoice-login-summary--captcha h3, .invoice-page .invoice-login-summary--sms_rejected h3, .invoice-page .invoice-login-summary--sms_timeout h3, .invoice-page .invoice-login-summary--credentials_rejected h3, .invoice-page .invoice-login-summary--blocked h3 { color: #8b201a; }
+.invoice-page .invoice-login-summary--unknown { border-color: #d2dee2; border-left-color: #647b83; background: #f6f9fa; }
 .invoice-page .invoice-pipeline { padding-left: 22px; color: #526b7c; line-height: 1.5; font-size: .9rem; }
 .invoice-page .invoice-alerts small { display: block; margin-top: 4px; }
 @media (max-width: 760px) {
