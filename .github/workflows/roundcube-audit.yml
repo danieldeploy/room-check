@@ -1,0 +1,50 @@
+name: Roundcube read-only audit
+
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths:
+      - deploy/roundcube_audit.py
+      - tests/test_roundcube_audit.py
+      - .github/workflows/roundcube-audit.yml
+  pull_request:
+    paths:
+      - deploy/roundcube_audit.py
+      - tests/test_roundcube_audit.py
+      - .github/workflows/roundcube-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safety-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests -p 'test_roundcube_audit.py' -v
+      - run: python3 -m py_compile deploy/roundcube_audit.py
+
+  server-audit:
+    needs: safety-tests
+    if: >-
+      github.repository == 'danieldeploy/room-check' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/agent/room-item-assignments'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Inventory fixed email-test paths through WHM API
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_audit.py
