@@ -21,7 +21,11 @@ TARGET = base.PLUGIN + '/config.inc.php'
 ATTESTATION = 'SANDBOXED;AUDITING=OFF\n'
 # User confirmed the saved MIME permission at 12:52 UTC; screenshots at 12:50
 # show Sandboxed and empty Email Auditing. This is an operator attestation.
-CORE_HASHES = {'program/lib/Roundcube/rcube.php': '3ceada3855e31a957c72b6904959432e7e94bd8766461f379633e5725f8a74c9', 'program/lib/Roundcube/rcube_mime.php': 'c9aa94c490221c938831ebc87cf1c998fe486f4ceb4abe8cddbc659100c1dc8a', 'program/actions/mail/send.php': '0fc30896921759735f867338f35087e091924e21da8eb0e77ce7d504ebe0e2e2', 'program/include/rcmail_sendmail.php': '081d7b5403c0e849f632fd69078188be9c550703c6d2beb277a922beba4dcc36'}
+CORE_HASHES = {'program/lib/Roundcube/rcube.php': '3ceada3855e31a957c72b6904959432e7e94bd8766461f379633e5725f8a74c9', 'program/lib/Roundcube/rcube_mime.php': 'c9aa94c490221c938831ebc87cf1c998fe486f4ceb4abe8cddbc659100c1dc8a', 'program/actions/mail/send.php': '1892d5ffe2bd3909026e19dc1b246737cf8e48b7b949d40bb677ceeddb42cb76', 'program/include/rcmail_sendmail.php': '081d7b5403c0e849f632fd69078188be9c550703c6d2beb277a922beba4dcc36'}
+# Reviewed installation-only difference: the HTML wrapper concatenates
+# '<html><head><meta charset="utf-8">' and '</head>'. Reconstructing only this
+# replacement from official 1.6.19 reproduces the entire installed SHA-256.
+PUBLIC_SEND_HASH = '0fc30896921759735f867338f35087e091924e21da8eb0e77ce7d504ebe0e2e2'
 DIRECTORIES = {base.ROOT + '/' + p for p in ('program/lib', 'program/lib/Roundcube', 'program/actions', 'program/actions/mail')}
 PLUGIN_SOURCE = re.compile(re.escape(base.ROOT) + r'/plugins/([a-z][a-z0-9_]*)/\1\.php\Z')
 
@@ -124,7 +128,7 @@ def core_diagnostic(filename, source, expected):
         raw = response.read(base.LIMIT + 1)
     base.require(len(raw) <= base.LIMIT, 'reference_too_large')
     reference = raw.decode('utf-8')
-    base.require(base.digest(reference) == expected, 'upstream_reference_changed')
+    base.require(base.digest(reference) == (PUBLIC_SEND_HASH if filename == 'program/actions/mail/send.php' else expected), 'upstream_reference_changed')
     summaries = []
     for value in (reference, source):
         result = subprocess.run(['php', str(Path(__file__).with_name('roundcube_config_summary.php')), '--core-summary'],
