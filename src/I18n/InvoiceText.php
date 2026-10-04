@@ -5,6 +5,14 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'toc_diagnostic_title' => ['Teste da resposta TOConline', 'TOConline reply test'],
+        'toc_diagnostic_note' => ['Envia novamente esta fatura para testar a resposta, que pode indicar ficheiro já existente. Cada teste exige confirmação. Aguarde pelo menos 10 minutos entre testes e confira a receção nas definições. O botão permanece até conclusão dos testes e indicação do Gerente para o retirar.', 'Resends this invoice to test the reply, which may report an existing file. Each test requires confirmation. Wait at least 10 minutes between tests and check reception in Settings. The button remains until testing is complete and the Manager asks for its removal.'],
+        'toc_diagnostic_confirm' => ['Confirmo este reenvio ao TOConline para testar a resposta.', 'I confirm this resend to TOConline to test the reply.'],
+        'toc_diagnostic_send' => ['Enviar teste TOConline', 'Send TOConline test'],
+        'toc_diagnostic_submitted' => ['Teste entregue ao serviço de e-mail. A receção da resposta ainda precisa de verificação.', 'Test submitted to the mail service. Reply reception still needs verification.'],
+        'toc_diagnostic_cooldown' => ['Aguarde 10 minutos após o último teste e atualize a página. Confira entretanto a receção nas definições.', 'Wait 10 minutes after the last test and refresh the page. Meanwhile check reception in Settings.'],
+        'toc_diagnostic_uncertain' => ['Tentativa registada com envio incerto. Novo envio bloqueado até investigação da entrega.', 'Attempt recorded with uncertain delivery. Further sending is blocked pending investigation.'],
+        'toc_diagnostic_unavailable' => ['Teste indisponível ou formulário já utilizado. Atualize a página e confira o estado antes de testar novamente.', 'Test unavailable or form already used. Refresh the page and check the status before testing again.'],
         'toc_pipe_0' => ['Respostas diretas do servidor', 'Direct server replies'],
         'toc_pipe_1' => ['Receção sem palavra-passe de e-mail. Requer um filtro cPanel com Pipe to a Program e uma cópia mantida na caixa de correio. A publicação do programa não ativa o filtro.', 'Reception without an email password. Requires a cPanel Pipe to a Program filter and a retained mailbox copy. Deploying the program does not activate the filter.'],
         'toc_pipe_2' => ['Última resposta processada', 'Last processed reply'],
@@ -439,5 +447,6 @@ final class InvoiceText
         return array_column(array_values(self::TEXT), 1, 0);
     }
 }
+
 
 

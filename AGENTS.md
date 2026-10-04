@@ -33,6 +33,11 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   extraction, pagination and document retrieval have been tested on that portal.
   Keep each portal's selectors and exceptions separate within the common workflow.
 
+- Owner instruction, 2026-10-04: retain the Management Hub TOConline test button
+  throughout diagnosis. Do not remove or automatically expire it before the real
+  end-to-end automation has been verified and the owner explicitly asks for its
+  withdrawal. Keep manual confirmation, repeat protection and private test history.
+
 ## Changes and review
 
 - Work on a separate branch and open a PR targeting
@@ -82,3 +87,4 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   concrete unresolved limitations. Ask the owner only for a genuinely new
   product decision, access that cannot be recovered from existing secure
   configuration, or an unapproved external action.
+

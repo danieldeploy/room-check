@@ -88,6 +88,66 @@ try {
     $saved=$toc->settings(); $saved['pilot_verified']=false; $saved['enabled']=false; $vault->save('toconline-settings.enc',$saved);
     $toc->confirm(7,'toc_existing',42); tocCheck(!$toc->settings()['pilot_verified'],'duplicate does not validate pilot');
     tocReject(fn()=>$toc->configure($settings+['toc_enabled'=>1]),'duplicate pilot cannot enable automatic sending');
+    // Temporary resend: exact scope, manager-only, original PDF and immutable normal ledger.
+    $drive->pdf=$fourth;
+    $actor=['id'=>42,'role'=>'gerente']; $diagnosticNow=strtotime('2026-10-04T14:00:00Z'); $request=str_repeat('a',32);
+    $before=count($sent); $originalLedger=$vault->read('toconline-ledger.enc'); $originalSettings=$toc->settings();
+    tocCheck($toc->diagnosticStatus(9,strtotime('2026-10-05T00:00:00Z'))==='available','diagnostic window');
+    tocCheck($toc->diagnosticStatus(10)==='unavailable','other invoice not offered');
+    tocReject(fn()=>$toc->diagnosticResend(9,['id'=>42,'role'=>'gestor'],true,$request,$diagnosticNow),'non-manager denied');
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,false,$request,$diagnosticNow),'explicit diagnostic confirmation required');
+    tocReject(fn()=>$toc->diagnosticResend(10,$actor,true,$request,$diagnosticNow),'other document denied');
+    $drive->pdf='tampered';
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'tampered diagnostic PDF blocked');
+    tocCheck(!$vault->has('toconline-diagnostic-attempts.enc') && count($sent)===$before,'preflight failure sends nothing');
+    $drive->pdf=$fourth;
+    $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'changed sender blocked');
+    $vault->save('toconline-settings.enc',$originalSettings);
+    [$diagIdentity,$diagContent]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-9','sha256'=>hash('sha256',$fourth)],'500000000');
+    $broken=$originalLedger; unset($broken[$diagContent]); $vault->save('toconline-ledger.enc',$broken);
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'missing content alias blocked');
+    $vault->save('toconline-ledger.enc',$originalLedger);
+    $diagnostic=new InvoiceToconline($pdo,$vault,$drive,static function(string $to,array $message) use ($vault,$transport): bool {
+        $records=$vault->read('toconline-diagnostic-attempts.enc'); $intent=end($records);
+        tocCheck($intent['state']==='sending' && $intent['actor_id']===42 && $intent['document_id']===9,'intent persisted before mail');
+        return $transport($to,$message);
+    });
+    tocCheck($diagnostic->diagnosticResend(9,$actor,true,$request,$diagnosticNow)==='submitted','diagnostic submitted');
+    tocCheck(count($sent)===$before+1 && end($sent)[0]==='500000000@my.toconline.pt','one diagnostic to configured recipient');
+    tocCheck(str_contains(end($sent)[1]['body'],base64_encode($fourth)) && str_contains(end($sent)[1]['body'],'booking-'.$diagIdentity.'.pdf'),'original bytes and correlation preserved');
+    tocCheck(str_contains(end($sent)[1]['headers'][3],'toc-diagnostic-'),'fresh email ID');
+    tocCheck($vault->read('toconline-ledger.enc')===$originalLedger && $toc->settings()===$originalSettings && $state(9)==='toc_existing','normal outcome and automation unchanged');
+    tocReject(fn()=>$diagnostic->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'second click denied');
+    $toc->run(9); tocCheck(count($sent)===$before+1,'normal deduplication still holds');
+    tocCheck($toc->diagnosticStatus(9,$diagnosticNow+599)==='cooldown','cooldown before boundary');
+    tocCheck($toc->diagnosticStatus(9,$diagnosticNow+600)==='available','button reusable at boundary');
+    tocReject(fn()=>$diagnostic->diagnosticResend(9,$actor,true,$request,$diagnosticNow+600),'stale form cannot send again after cooldown');
+    tocReject(fn()=>$diagnostic->diagnosticResend(9,$actor,true,'bad',$diagnosticNow+600),'malformed request rejected');
+    tocCheck($diagnostic->diagnosticResend(9,$actor,true,str_repeat('b',32),$diagnosticNow+600)==='submitted','new explicitly confirmed test allowed');
+    tocCheck(count($vault->read('toconline-diagnostic-attempts.enc'))===2,'test history retained');
+    $vault->save('toconline-diagnostic-resend.enc',['state'=>'submitted','document_id'=>9,'attempted_at'=>gmdate('c',$diagnosticNow-3600)]);
+    $legacy=$vault->read('toconline-diagnostic-resend.enc');
+    tocCheck($diagnostic->diagnosticResend(9,$actor,true,str_repeat('c',32),$diagnosticNow+1200)==='submitted','legacy submitted test permits deliberate new test');
+    tocCheck($vault->read('toconline-diagnostic-resend.enc')===$legacy,'legacy history immutable');
+    unlink($vault->path('toconline-diagnostic-resend.enc'));
+    // Isolated synthetic attempts: uncertain/crashed sends remain consumed, never retried.
+    foreach (['false','throw','crash'] as $failure) {
+        unlink($vault->path('toconline-diagnostic-attempts.enc'));
+        if ($failure==='crash') {
+            $vault->save('toconline-diagnostic-resend.enc',['state'=>'sending','document_id'=>9]);
+        } else {
+            $failed=new InvoiceToconline($pdo,$vault,$drive,static function() use ($failure): bool {
+                if ($failure==='throw') throw new RuntimeException('synthetic mail failure');
+                return false;
+            });
+            tocCheck($failed->diagnosticResend(9,$actor,true,$request,$diagnosticNow)==='uncertain','uncertain diagnostic recorded');
+        }
+        tocCheck($toc->diagnosticStatus(9,$diagnosticNow)==='uncertain','uncertain status displayed');
+        tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'uncertain attempt blocks another send');
+        if ($failure==='crash') unlink($vault->path('toconline-diagnostic-resend.enc'));
+    }
+    tocCheck($vault->read('toconline-ledger.enc')===$originalLedger,'failed diagnostics preserve original ledger');
     $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
     tocCheck(!$toc->settings()['pilot_verified'],'sender change invalidates pilot');
     tocReject(fn()=>$toc->confirm(1),'old sender receipt cannot validate new sender');
@@ -97,4 +157,5 @@ try {
 } finally {
     foreach(glob($dir.'/*') as $file) unlink($file); rmdir($dir);
 }
+
 

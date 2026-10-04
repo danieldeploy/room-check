@@ -5,6 +5,10 @@ require_once __DIR__.'/InvoiceVault.php';
 /** Every caller holds room_check_invoices. The encrypted ledger precedes network side effects. */
 final class InvoiceToconline
 {
+    // Keep until end-to-end validation AND explicit owner withdrawal (2026-10-04).
+    public const DIAGNOSTIC_DOCUMENT_ID = 9;
+    public const DIAGNOSTIC_COOLDOWN = 600;
+
     public function __construct(private readonly PDO $pdo, private readonly InvoiceVault $vault, private readonly object $drive, private readonly mixed $transport = null) {}
 
     public static function destination(string $nif): string
@@ -164,6 +168,73 @@ final class InvoiceToconline
             $ledger[$identity]=$entry; $ledger[$content]=$entry;
             $this->vault->save('toconline-ledger.enc',$ledger); $this->state((int)$d['id'],$entry['state']);
         }
+    }
+
+    private function diagnosticAttempts(): array
+    {
+        $attempts=$this->vault->has('toconline-diagnostic-attempts.enc') ? $this->vault->read('toconline-diagnostic-attempts.enc') : [];
+        // Keep the legacy one-shot record intact, including uncertain outcomes.
+        if ($this->vault->has('toconline-diagnostic-resend.enc')) $attempts['legacy']=$this->vault->read('toconline-diagnostic-resend.enc');
+        return $attempts;
+    }
+
+    public function diagnosticStatus(int $id, ?int $now=null): string
+    {
+        if ($id!==self::DIAGNOSTIC_DOCUMENT_ID) return 'unavailable';
+        $attempts=$this->diagnosticAttempts(); $latest=0;
+        foreach ($attempts as $attempt) {
+            if (($attempt['state']??'')!=='submitted') return 'uncertain';
+            $at=strtotime((string)($attempt['attempted_at']??''));
+            if (!$at) return 'uncertain';
+            $latest=max($latest,$at);
+        }
+        if (count($attempts)>=200) return 'unavailable';
+        if ($latest && ($now??time())<$latest+self::DIAGNOSTIC_COOLDOWN) return 'cooldown';
+        return 'available';
+    }
+
+    /** Explicit manual tests only. Caller holds room_check_invoices, as for run(). */
+    public function diagnosticResend(int $id, array $actor, bool $confirmed, string $requestId, ?int $now=null): string
+    {
+        if (($actor['role']??'')!=='gerente' || (int)($actor['id']??0)<1) throw new RuntimeException('forbidden');
+        if (!$confirmed || $this->diagnosticStatus($id,$now)!=='available') throw new RuntimeException('toc_diagnostic_unavailable');
+        $attempts=$this->diagnosticAttempts();
+        if (!preg_match('/\A[a-f0-9]{32}\z/',$requestId) || isset($attempts[$requestId])) throw new RuntimeException('toc_diagnostic_unavailable');
+        $settings=$this->settings(); $to=self::destination((string)($settings['nif']??''));
+        $ledger=$this->ledger();
+        $s=$this->pdo->prepare("SELECT d.*,x.drive_id,x.drive_parent,a.portal FROM invoice_documents d JOIN invoice_document_delivery x ON x.document_id=d.id JOIN invoice_accounts a ON a.id=d.account_id WHERE d.id=? AND x.drive_state='verified' AND x.company_state='validated' AND d.format='pdf' AND a.portal='booking'");
+        $s->execute([$id]); $d=$s->fetch(PDO::FETCH_ASSOC);
+        if (!$d) throw new RuntimeException('toc_ineligible');
+        [$identity,$content]=self::keys($d,$settings['nif']);
+        // Both original deduplication keys must agree with this exact document and destination.
+        foreach ([$identity,$content] as $key) {
+            $entry=$ledger[$key]??null;
+            if (!$entry || (int)$entry['document_id']!==$id || $entry['nif']!==$settings['nif']
+                || $entry['sender']!==$settings['sender']
+                || !in_array($entry['state'],['toc_submitted','toc_uncertain','toc_review','toc_no_confirmation','toc_accepted','toc_existing'],true)) {
+                throw new RuntimeException('toc_ineligible');
+            }
+        }
+        if ($ledger[$identity]!==$ledger[$content]) throw new RuntimeException('toc_ineligible');
+        $this->drive->connect(); $pdf=$this->drive->verifiedPdf($d); self::assertPdf($pdf,$d);
+        $message=self::message($pdf,$identity,$settings['sender']);
+        $attemptId=bin2hex(random_bytes(16));
+        // Fresh email ID, unchanged attachment filename/PDF for original receipt correlation.
+        $message['headers'][3]='Message-ID: <toc-diagnostic-'.$attemptId.'@check.welcomehostel.pt>';
+        $attempt=['document_id'=>$id,'actor_id'=>(int)$actor['id'],'attempt_id'=>$attemptId,
+            'attempted_at'=>gmdate('c',$now??time()),'state'=>'sending'];
+        // Reserve before network I/O. Crash, false, or exception permanently consumes this action.
+        $attempts[$requestId]=$attempt;
+        $this->vault->save('toconline-diagnostic-attempts.enc',$attempts);
+        try {
+            $ok=$this->transport ? ($this->transport)($to,$message) : @mail($to,$message['subject'],$message['body'],implode("\r\n",$message['headers']));
+            $attempt['state']=$ok?'submitted':'uncertain';
+        } catch (Throwable) { $attempt['state']='uncertain'; }
+        unset($pdf,$message);
+        $attempts[$requestId]=$attempt;
+        $this->vault->save('toconline-diagnostic-attempts.enc',$attempts);
+        // Never reset the original ledger, final outcome, pilot flag, or automatic-send setting.
+        return $attempt['state'];
     }
 
     public static function assertPdf(string $pdf, array $d): void
