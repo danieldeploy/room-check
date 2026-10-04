@@ -22,7 +22,6 @@ try {
 header('Cache-Control: no-store'); header('Referrer-Policy: no-referrer');
 $isGerente=$currentUser['role']==='gerente';
 if (($_GET['ajax'] ?? '') === 'booking_login_status') {
-    header('Content-Type: application/json; charset=UTF-8');
     try {
         if (!$isGerente) throw new RuntimeException('forbidden');
         $statusAccountId=filter_var($_GET['account_id'] ?? null,FILTER_VALIDATE_INT);
@@ -45,19 +44,18 @@ if (($_GET['ajax'] ?? '') === 'booking_login_status') {
         if ($activeLoginTask && ($diagnosticUpdated===false || $activeLoginStarted >= (int)$diagnosticUpdated)) {
             $statusSummary=BookingLoginStatus::inProgress((string)$activeLoginTask['state']);
         }
-        echo json_encode([
+        jsonResponse([
+            'ok'=>true,
             'available'=>$available,
             'phase'=>$statusSummary['phase'],
             'title'=>InvoiceText::get($statusSummary['title']),
             'detail'=>InvoiceText::get($statusSummary['detail']),
             'next'=>InvoiceText::get($statusSummary['next']),
             'updated_at'=>$diagnosticUpdated===false ? null : $diagnosticUpdated,
-        ],JSON_THROW_ON_ERROR|JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT);
+        ]);
     } catch (Throwable $statusError) {
-        http_response_code($statusError->getMessage()==='forbidden'?403:404);
-        echo json_encode(['error'=>true]);
+        jsonResponse(['ok'=>false],$statusError->getMessage()==='forbidden'?403:404);
     }
-    exit;
 }
 $canRun=Auth::hasPermission($pdo,$currentUser,Auth::PERMISSION_INVOICES_RUN);
 $tabs=['overview','documents','accounts','activity']; if ($isGerente) $tabs[]='settings';
