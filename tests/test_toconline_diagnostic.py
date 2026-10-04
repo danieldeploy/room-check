@@ -78,6 +78,16 @@ class DiagnosticTests(unittest.TestCase):
         self.assertFalse(data['home_matches_account'])
         self.assertFalse(data['facts']['private_dir_exists'])
 
+    def test_explicit_vault_with_different_home(self):
+        # A different HOME is not a failure when private_dir is explicit.
+        path = str(self.vault).replace("\\", "\\\\").replace("'", "\\'")
+        (self.app / 'config.local.php').write_text(
+            "<?php return ['invoices'=>['private_dir'=>'" + path + "']];")
+        code, data = self.invoke(home=self.account / 'mail/example.invalid/test')
+        self.assertEqual((code, data['code']), (0, 'queued'))
+        self.assertFalse(data['home_matches_account'])
+        self.assertTrue(data['facts']['private_dir_exists'])
+
     def test_bad_vault_permissions(self):
         self.vault.chmod(0o755)
         code, data = self.invoke()
