@@ -36,14 +36,14 @@ require_once dirname(__DIR__,3).'/src/Invoices/InvoiceTocPipe.php';
 $pipeStatus=null;
 try { if ($vault) $pipeStatus=(new InvoiceTocPipe($vault))->status(); } catch (Throwable) {}
 ?>
-<section class="card"><h2><?= ie(Translator::localized('Respostas diretas do servidor','Direct server replies')) ?></h2>
-<p><?= ie(Translator::localized('Receção sem palavra-passe de e-mail. Requer um filtro cPanel com Pipe to a Program e uma cópia mantida na caixa de correio. A publicação do programa não ativa o filtro.','Reception without an email password. Requires a cPanel Pipe to a Program filter and a retained mailbox copy. Deploying the program does not activate the filter.')) ?></p>
+<section class="card"><h2><?= it('toc_pipe_0') ?></h2>
+<p><?= it('toc_pipe_1') ?></p>
 <p><code translate="no">room-check-private/cron/toconline-reply.php</code></p>
 <?php if ($pipeStatus): ?>
-<p><?= ie(Translator::localized('Última resposta processada','Last processed reply')) ?>: <?= ie(invoiceTime($pipeStatus['received_at'])) ?></p>
-<dl class="invoice-facts"><div><dt><?= ie(Translator::localized('Em fila','Queued')) ?></dt><dd><?= (int)$pipeStatus['pending'] ?></dd></div><div><dt><?= ie(Translator::localized('Associadas a uma fatura','Matched to an invoice')) ?></dt><dd><?= (int)$pipeStatus['matched'] ?></dd></div><div><dt><?= ie(Translator::localized('Sem associação — conferir e-mail','Unmatched — check mailbox')) ?></dt><dd><?= (int)$pipeStatus['unmatched'] ?></dd></div></dl>
-<?php else: ?><p><?= ie(Translator::localized('Estado de receção indisponível.','Reception status unavailable.')) ?></p><?php endif; ?>
-<p><?= ie(Translator::localized('As respostas associadas ficam para revisão. Receber um e-mail não confirma a sua autenticidade nem a contabilização da fatura.','Matched replies require review. Receiving an email does not confirm its authenticity or that the invoice was posted to accounting.')) ?></p>
+<p><?= it('toc_pipe_2') ?>: <?= ie(invoiceTime($pipeStatus['received_at'])) ?></p>
+<dl class="invoice-facts"><div><dt><?= it('toc_pipe_3') ?></dt><dd><?= (int)$pipeStatus['pending'] ?></dd></div><div><dt><?= it('toc_pipe_4') ?></dt><dd><?= (int)$pipeStatus['matched'] ?></dd></div><div><dt><?= it('toc_pipe_5') ?></dt><dd><?= (int)$pipeStatus['unmatched'] ?></dd></div></dl>
+<?php else: ?><p><?= it('toc_pipe_6') ?></p><?php endif; ?>
+<p><?= it('toc_pipe_7') ?></p>
 </section>
 <section class="card"><h2><?= it('toc_mail_title') ?></h2><p><?= it('toc_mail_policy') ?></p>
 <p><?= it(!empty($tocMailbox['enabled'])?'toc_mail_enabled':'toc_mail_disabled') ?></p>

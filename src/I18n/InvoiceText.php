@@ -5,6 +5,14 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'toc_pipe_0' => ['Respostas diretas do servidor', 'Direct server replies'],
+        'toc_pipe_1' => ['Receção sem palavra-passe de e-mail. Requer um filtro cPanel com Pipe to a Program e uma cópia mantida na caixa de correio. A publicação do programa não ativa o filtro.', 'Reception without an email password. Requires a cPanel Pipe to a Program filter and a retained mailbox copy. Deploying the program does not activate the filter.'],
+        'toc_pipe_2' => ['Última resposta processada', 'Last processed reply'],
+        'toc_pipe_3' => ['Em fila', 'Queued'],
+        'toc_pipe_4' => ['Associadas a uma fatura', 'Matched to an invoice'],
+        'toc_pipe_5' => ['Sem associação — conferir e-mail', 'Unmatched — check mailbox'],
+        'toc_pipe_6' => ['Estado de receção indisponível.', 'Reception status unavailable.'],
+        'toc_pipe_7' => ['As respostas associadas ficam para revisão. Receber um e-mail não confirma a sua autenticidade nem a contabilização da fatura.', 'Matched replies require review. Receiving an email does not confirm its authenticity or that the invoice was posted to accounting.'],
         'toc_existing' => ['Já existente no arquivo TOConline — confirmado', 'Already in TOConline archive — confirmed'],
         'toc_rejected' => ['Rejeitado pelo TOConline — confirmado', 'Rejected by TOConline — confirmed'],
         'toc_review' => ['Resposta recebida — revisão necessária', 'Reply received — review required'],
