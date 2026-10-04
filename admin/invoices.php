@@ -21,6 +21,35 @@ try {
 }
 header('Cache-Control: no-store'); header('Referrer-Policy: no-referrer');
 $isGerente=$currentUser['role']==='gerente';
+if (($_GET['ajax'] ?? '') === 'booking_login_status') {
+    header('Content-Type: application/json; charset=UTF-8');
+    try {
+        if (!$isGerente) throw new RuntimeException('forbidden');
+        $statusAccountId=filter_var($_GET['account_id'] ?? null,FILTER_VALIDATE_INT);
+        if (!$statusAccountId || $statusAccountId<1) throw new RuntimeException('invalid_request');
+        $statusAccount=(new InvoiceAccounts($pdo))->get((int)$statusAccountId);
+        if (($statusAccount['portal'] ?? '')!=='booking') throw new RuntimeException('invalid_request');
+        $statusVault=new InvoiceVault($config['invoices']['private_dir']);
+        $statusFile='account-'.(int)$statusAccountId.'-login-diagnostic.enc';
+        $available=$statusVault->has($statusFile);
+        $diagnosticUpdated=$available ? filemtime($statusVault->path($statusFile)) : false;
+        $statusSummary=$available
+            ? BookingLoginStatus::summarize($statusVault->read($statusFile))
+            : BookingLoginStatus::waiting();
+        echo json_encode([
+            'available'=>$available,
+            'phase'=>$statusSummary['phase'],
+            'title'=>InvoiceText::get($statusSummary['title']),
+            'detail'=>InvoiceText::get($statusSummary['detail']),
+            'next'=>InvoiceText::get($statusSummary['next']),
+            'updated_at'=>$diagnosticUpdated===false ? null : $diagnosticUpdated,
+        ],JSON_THROW_ON_ERROR|JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT);
+    } catch (Throwable $statusError) {
+        http_response_code($statusError->getMessage()==='forbidden'?403:404);
+        echo json_encode(['error'=>true]);
+    }
+    exit;
+}
 $canRun=Auth::hasPermission($pdo,$currentUser,Auth::PERMISSION_INVOICES_RUN);
 $tabs=['overview','documents','accounts','activity']; if ($isGerente) $tabs[]='settings';
 $tab=(string)($_GET['tab'] ?? 'overview'); if (!in_array($tab,$tabs,true)) $tab='overview';
