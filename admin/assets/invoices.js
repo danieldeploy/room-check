@@ -50,7 +50,7 @@
         const updated = widget.querySelector('[data-login-updated]');
         const refresh = widget.querySelector('[data-login-refresh]');
         let timer = null, inFlight = false;
-        const phaseNames = ['authenticated', 'captcha', 'sms_waiting', 'sms_submitted',
+        const phaseNames = ['authenticated', 'captcha', 'queued', 'in_progress', 'sms_waiting', 'sms_submitted',
             'sms_timeout', 'sms_rejected', 'credentials', 'credentials_rejected', 'timeout', 'blocked', 'unknown'];
         const apply = data => {
             if (!data || typeof data.title !== 'string' || typeof data.detail !== 'string' || typeof data.next !== 'string') return;
