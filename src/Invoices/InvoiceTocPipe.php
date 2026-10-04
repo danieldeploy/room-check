@@ -129,7 +129,7 @@ final class InvoiceTocPipe
         return ['pending'=>count(glob($this->vault->root.'/toc-pipe-*.enc')?:[]),
             'matched'=>(int)($status['matched']??0),'unmatched'=>(int)($status['unmatched']??0),
             'checked_at'=>$status['checked_at']??null,'received_at'=>$status['received_at']??null,
-            'authentication'=>$status['authentication']??'not_checked','outcome'=>$status['outcome']??'toc_review'];
+            'authentication'=>$status['authentication']??'not_checked','outcome'=>$status['outcome']??'toc_review','authentication_facts'=>$status['authentication_facts']??[]];
     }
 
     /** Called under room_check_invoices; atomic queue files survive worker/database outages. */
@@ -145,6 +145,7 @@ final class InvoiceTocPipe
                 $status[$result['result']==='matched'?'matched':'unmatched']++;
                 $status['recent']=array_slice([...$status['recent'],$receipt['hash']],-250);
                 $status['authentication']=$receipt['authentication']['code']??'not_checked';
+                $status['authentication_facts']=$receipt['authentication']['facts']??[];
                 $status['outcome']=$result['outcome']??'toc_review';
                 $status['received_at']=$receipt['received_at']; $status['checked_at']=gmdate('c');
                 $this->vault->save('toconline-pipe-status.enc',$status);
