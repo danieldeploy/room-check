@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One dated, bounded Sandbox window. The SMTP2GO key never leaves hosting."""
 import json
+import difflib
 import os
 import re
 import subprocess
@@ -115,6 +116,28 @@ def parse_config(source):
     return data
 
 
+def core_diagnostic(filename, source, expected):
+    # Public fixed reference download carries no hosting token or private content.
+    url = 'https://raw.githubusercontent.com/roundcube/roundcubemail/1.6.19/' + filename
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), base.NoRedirects())
+    with opener.open(url, timeout=20) as response:
+        raw = response.read(base.LIMIT + 1)
+    base.require(len(raw) <= base.LIMIT, 'reference_too_large')
+    reference = raw.decode('utf-8')
+    base.require(base.digest(reference) == expected, 'upstream_reference_changed')
+    summaries = []
+    for value in (reference, source):
+        result = subprocess.run(['php', str(Path(__file__).with_name('roundcube_config_summary.php')), '--core-summary'],
+                                input=value.encode(), capture_output=True, timeout=20)
+        base.require(result.returncode == 0, 'core_syntax_requires_review')
+        summaries.append(json.loads(result.stdout))
+    before, after = summaries
+    delta = list(difflib.unified_diff(before['redacted'].splitlines(), after['redacted'].splitlines(), n=2))
+    return {'reference_length': len(reference),
+            'semantic_tokens_identical': before['semantic_sha256'] == after['semantic_sha256'],
+            'redacted_structure_diff': delta[:80], 'diff_truncated': len(delta) > 80}
+
+
 def configurations(original, summary, disabled):
     suffix = ('' if summary['php_open'] else '\n<?php\n') + '''
 // WELCOME SMTP2GO dated Sandbox window; automatically inactive after expiry.
@@ -157,6 +180,9 @@ def activate(client, report, now=time.time, lint_check=base.lint, parser=parse_c
             'length': len(source),
         }
     report['core_file_checks'] = core_checks
+    for filename, details in core_checks.items():
+        if details['sha256'] != details['expected_sha256']:
+            details['diagnostic'] = core_diagnostic(filename, client.read(base.ROOT + '/' + filename), details['expected_sha256'])
     base.require(all(item['sha256'] == item['expected_sha256'] for item in core_checks.values()),
                  'installed_core_differs_from_upstream')
     report['core_and_plugin_verified'] = True
