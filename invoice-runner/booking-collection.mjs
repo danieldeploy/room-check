@@ -29,6 +29,73 @@ function assertProperty(page, input) {
   if (url.hostname !== 'admin.booking.com' || url.searchParams.get('hotel_id') !== input.property) fail('account_mismatch');
   return url;
 }
+async function selectBookingYear(page, year) {
+  const filter = await page.evaluate(targetYear => {
+    const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+    const controls = [...document.querySelectorAll('select,input[type="number"]')].filter(visible);
+    const labelsFor = control => {
+      const labels = [...(control.labels || [])].map(label => label.innerText || '');
+      const labelledBy = (control.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+        .map(id => document.getElementById(id)?.innerText || '');
+      labels.push(control.getAttribute('aria-label') || '', ...labelledBy);
+      for (let parent = control.parentElement, depth = 0; parent && depth < 2; parent = parent.parentElement, depth++)
+        labels.push(parent.innerText || '');
+      return labels.join(' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    };
+    const candidates = controls.filter(control => /filter by year/.test(labelsFor(control)));
+    const cssPath = element => {
+      const parts = [];
+      for (let el = element; el && el.tagName !== 'BODY'; el = el.parentElement) {
+        const siblings = [...el.parentElement.children].filter(x => x.tagName === el.tagName);
+        parts.unshift(el.tagName.toLowerCase() + ':nth-of-type(' + (siblings.indexOf(el) + 1) + ')');
+        if (parts.length > 20) return null;
+      }
+      return 'body > ' + parts.join(' > ');
+    };
+    const yearVisible = [...document.querySelectorAll('table tbody tr')]
+      .filter(visible).some(row => new RegExp('\\b' + targetYear + '\\b').test(row.innerText || ''));
+    if (candidates.length !== 1) return { count: candidates.length, yearVisible };
+    const control = candidates[0];
+    return {
+      count: 1,
+      selector: cssPath(control),
+      kind: control.tagName === 'SELECT' ? 'select' : control.type === 'number' ? 'number' : 'unsupported',
+      value: String(control.value || ''),
+      options: control.tagName === 'SELECT' ? [...control.options].map(option => ({
+        value: option.value, label: (option.label || option.textContent || '').trim(),
+      })) : [],
+      yearVisible,
+    };
+  }, year);
+  if (filter?.count !== 1) {
+    if (filter?.count === 0 && filter.yearVisible) return;
+    fail('portal_changed');
+  }
+  if (!filter.selector || filter.kind === 'unsupported') fail('portal_changed');
+  if (filter.value !== year) {
+    if (filter.kind === 'select') {
+      const option = filter.options.find(item => item.value === year || item.label === year);
+      if (!option || !option.value) fail('portal_changed');
+      const selected = await page.select(filter.selector, option.value);
+      if (!selected.includes(option.value)) fail('portal_changed');
+    } else {
+      await page.click(filter.selector);
+      await page.keyboard.press('Control+A');
+      await page.keyboard.type(year);
+      await page.keyboard.press('Enter');
+    }
+  }
+  await page.waitForFunction(({ selector, year: targetYear }) => {
+    const control = document.querySelector(selector);
+    if (!control || String(control.value) !== targetYear) return false;
+    const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+    const tables = [...document.querySelectorAll('table')].filter(table => visible(table)
+      && table.querySelector('a[href*="/fresa/extranet/finance/invoices/get_document"]'));
+    return tables.length === 1 && [...tables[0].querySelectorAll('tbody tr')].filter(visible)
+      .some(row => new RegExp('\\b' + targetYear + '\\b').test(row.innerText || ''));
+  }, { timeout: 20000 }, { selector: filter.selector, year });
+}
+
 export async function readBookingTable(page) {
   return page.evaluate(() => {
     const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -69,6 +136,7 @@ export async function collectBookingInvoices(page, input, target = null, trace =
   if (input.accountId !== 1 || input.portal !== 'booking' || input.periodBasis !== 'issue_month'
       || !/^\d{1,12}$/.test(input.property || '')) fail('connector_unconfigured');
   assertProperty(page, input);
+  await selectBookingYear(page, input.period.slice(0, 4));
   await page.waitForFunction(() => [...document.querySelectorAll('table')]
     .some(t => t.getClientRects().length && t.querySelector('a[href*="/fresa/extranet/finance/invoices/get_document"]')),
   { timeout: 15000 }).catch(() => fail('portal_changed'));
