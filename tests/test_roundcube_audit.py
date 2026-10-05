@@ -42,6 +42,26 @@ class FakeClient:
                 'welcome_smtp2go', 'welcome_smtp2go_pilot'} and path in {audit.HOME, audit.PRIVATE,
                 audit.ARCHIVE, audit.PLUGINS} else 'file', 'permissions': '0700', 'size_bytes': 42}
 
+    def dns_zone(self, zone):
+        self.calls.append(('dns', zone))
+        records = [
+            {'line_index': 1, 'name': zone, 'type': 'TXT', 'ttl': 3600,
+             'data': ['v=spf1 include:spf.smtp2go.com include:spf.mtasv.net ~all']},
+            {'line_index': 2, 'name': zone, 'type': 'MX', 'ttl': 3600,
+             'data': ['10 mail.example.test.']},
+            {'line_index': 3, 'name': '_dmarc.' + zone, 'type': 'TXT', 'ttl': 3600,
+             'data': ['v=DMARC1; p=none']},
+            {'line_index': 4, 'name': 'pm._domainkey.' + zone, 'type': 'TXT', 'ttl': 3600,
+             'data': ['old-postmark-key']},
+            {'line_index': 5, 'name': 'resend._domainkey.' + zone, 'type': 'TXT', 'ttl': 3600,
+             'data': ['old-resend-key']},
+            {'line_index': 6, 'name': 'smtp2go._domainkey.' + zone, 'type': 'CNAME', 'ttl': 3600,
+             'data': ['smtp2go.example.test.']},
+            {'line_index': 7, 'name': 'unrelated.' + zone, 'type': 'TXT', 'ttl': 3600,
+             'data': ['unrelated']},
+        ]
+        return audit.select_dns_records(zone, records)
+
 
 class AuditTests(unittest.TestCase):
     def test_audit_is_bounded_and_reports_test_names_and_old_backups(self):
@@ -51,6 +71,12 @@ class AuditTests(unittest.TestCase):
         self.assertFalse(report['writes'])
         self.assertFalse(report['file_contents_read'])
         self.assertFalse(report['email_sent'])
+        self.assertEqual([x['zone'] for x in report['dns']], list(audit.DNS_ZONES))
+        self.assertTrue(all(x['ok'] for x in report['dns']))
+        dns_names = {x['name'] for x in report['dns'][0]['records']}
+        self.assertIn('pm._domainkey.' + audit.DNS_ZONES[0], dns_names)
+        self.assertIn('smtp2go._domainkey.' + audit.DNS_ZONES[0], dns_names)
+        self.assertNotIn('unrelated.' + audit.DNS_ZONES[0], dns_names)
         self.assertEqual(report['directories'][audit.HOME][0]['name'], 'roundcube-resend-probe.php')
         self.assertEqual({x['name'] for x in report['directories'][audit.PUBLIC_HTML]},
                          {'roundcube', 'smtp2go-sandbox-probe.php'})
@@ -87,6 +113,19 @@ class AuditTests(unittest.TestCase):
             client.stat(audit.PRIVATE, '../outside')
         with self.assertRaisesRegex(audit.AuditError, 'stat_not_allowed'):
             client.stat('/home/welcome/secret', 'secret.txt')
+        with self.assertRaisesRegex(audit.AuditError, 'dns_zone_not_allowed'):
+            client.dns_zone('example.org')
+
+    def test_dns_filter_keeps_provider_and_production_mail_records(self):
+        client = FakeClient()
+        report = audit.audit(client)
+        names = {x['name'] for x in report['dns'][0]['records']}
+        self.assertIn(audit.DNS_ZONES[0], names)  # SPF and MX at apex
+        self.assertIn('_dmarc.' + audit.DNS_ZONES[0], names)
+        self.assertIn('pm._domainkey.' + audit.DNS_ZONES[0], names)
+        self.assertIn('resend._domainkey.' + audit.DNS_ZONES[0], names)
+        self.assertIn('smtp2go._domainkey.' + audit.DNS_ZONES[0], names)
+        self.assertNotIn('unrelated.' + audit.DNS_ZONES[0], names)
 
     def test_api_responses_are_summarized_without_error_body(self):
         class Opener:

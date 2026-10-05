@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only, fixed-path inventory of Roundcube email-test leftovers."""
 import json
+import base64
 import os
 import re
 import ssl
@@ -19,6 +20,7 @@ ARCHIVE = PRIVATE + '/retired-tests-20261004'
 TEMP_TEST = HOME + '/smtp2go-sandbox-test'
 SANDBOX = PLUGINS + '/welcome_smtp2go'
 PILOT = PLUGINS + '/welcome_smtp2go_pilot'
+DNS_ZONES = ('welcomehostel.pt', 'citycenterhostel.pt')
 ARCHIVE_SANDBOX = ARCHIVE + '/welcome_smtp2go'
 ARCHIVE_PILOT = ARCHIVE + '/welcome_smtp2go_pilot'
 LISTABLE = {HOME, PUBLIC_HTML, ROUND_ROOT, PLUGINS, PRIVATE, ARCHIVE, TEMP_TEST, SANDBOX, PILOT,
@@ -77,6 +79,14 @@ class Client:
             if not isinstance(result, dict) or result.get('status') != 1 or result.get('errors') not in (None, []):
                 raise AuditError('uapi_read_failed')
             return result.get('data')
+
+        if version == 1:
+            if not isinstance(payload, dict) or payload.get('metadata', {}).get('result') != 1:
+                raise AuditError('whm_read_failed')
+            data = payload.get('data')
+            if not isinstance(data, dict):
+                raise AuditError('whm_dns_read_failed')
+            return data
 
         result = payload.get('cpanelresult') if isinstance(payload, dict) else None
         if not isinstance(result, dict) or result.get('event', {}).get('result') != 1 or result.get('error'):
@@ -139,6 +149,36 @@ class Client:
             raise AuditError('unsupported_file_type')
         return {'type': kind, 'permissions': format(raw_mode & 0o777, '04o'), 'size_bytes': size}
 
+    def dns_zone(self, zone):
+        if zone not in DNS_ZONES:
+            raise AuditError('dns_zone_not_allowed')
+        data = self.request('/json-api/parse_dns_zone', {
+            'api.version': 1, 'zone': zone,
+        }, 1)
+        rows = data.get('payload') if isinstance(data, dict) else None
+        if not isinstance(rows, list):
+            raise AuditError('invalid_dns_inventory_response')
+        records = []
+        for row in rows:
+            if not isinstance(row, dict) or row.get('type') != 'record':
+                continue
+            try:
+                name = base64.b64decode(row['dname_b64'], validate=True).decode('utf-8')
+                values = row['data_b64']
+                if not isinstance(values, list):
+                    raise ValueError
+                values = [base64.b64decode(value, validate=True).decode('utf-8') for value in values]
+                line_index = int(row['line_index'])
+                ttl = int(row['ttl'])
+                record_type = row['record_type']
+                if not isinstance(record_type, str) or not record_type or line_index < 0 or ttl < 0:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError, UnicodeDecodeError):
+                raise AuditError('invalid_dns_record') from None
+            records.append({'line_index': line_index, 'name': name, 'type': record_type,
+                            'ttl': ttl, 'data': values})
+        return select_dns_records(zone, records)
+
 
 def _metadata(client, directory, names, hide_size=False):
     result = []
@@ -151,11 +191,40 @@ def _metadata(client, directory, names, hide_size=False):
     return result
 
 
+def select_dns_records(zone, records):
+    """Keep only mail-routing and mail-authentication DNS records for review/rollback."""
+    if zone not in DNS_ZONES or not isinstance(records, list):
+        raise AuditError('dns_zone_not_allowed')
+    apex = zone.rstrip('.').lower()
+    selected = []
+    for record in records:
+        name = record.get('name', '').rstrip('.').lower()
+        record_type = record.get('type', '').upper()
+        data = ' '.join(record.get('data', [])).lower()
+        relevant = bool(re.search(r'(postmark|resend|smtp2go|pm-bounces)', name + ' ' + data))
+        relevant |= name == apex and record_type == 'MX'
+        relevant |= name == apex and record_type == 'TXT' and 'v=spf1' in data
+        relevant |= name == '_dmarc.' + apex and record_type == 'TXT'
+        relevant |= name.endswith('._domainkey.' + apex) and record_type in {'TXT', 'CNAME'}
+        if relevant:
+            selected.append(record)
+    return sorted(selected, key=lambda r: (r['line_index'], r['name']))
+
+
 def audit(client):
     home = client.list_dir(HOME)
     plugin_roots = client.list_dir(PLUGINS)
     result = {'ok': True, 'mode': 'roundcube-read-only-audit', 'writes': False,
               'file_contents_read': False, 'email_sent': False, 'directories': {}}
+
+    dns = []
+    for zone in DNS_ZONES:
+        try:
+            dns.append({'zone': zone, 'ok': True, 'records': client.dns_zone(zone)})
+        except AuditError as error:
+            dns.append({'zone': zone, 'ok': False, 'error': str(error)})
+            result['ok'] = False
+    result['dns'] = dns
 
     for directory, entries in ((HOME, home), (PUBLIC_HTML, client.list_dir(PUBLIC_HTML)),
                                 (ROUND_ROOT, client.list_dir(ROUND_ROOT))):
@@ -201,8 +270,9 @@ def audit(client):
 
 def main():
     try:
-        print(json.dumps(audit(Client(os.environ.get('WHM_API_TOKEN', ''))), sort_keys=True))
-        return 0
+        result = audit(Client(os.environ.get('WHM_API_TOKEN', '')))
+        print(json.dumps(result, sort_keys=True))
+        return 0 if result.get('ok') else 1
     except AuditError as error:
         print(json.dumps({'ok': False, 'writes': False, 'error': str(error)}))
         return 1
