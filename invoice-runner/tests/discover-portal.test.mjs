@@ -83,7 +83,7 @@ test('map discovery continues from a retained Booking session after the public r
   page.evaluate = async () => [];
   page.waitForFunction = async () => {};
   page.waitForNavigation = async () => {};
-  page.$ = async selector => selector === 'a,button,[role="button"]'
+  page[String.fromCharCode(36,36)] = async selector => selector === 'a,button,[role="button"]'
     ? step === 0 ? [control('finance', 1)] : step === 1 ? [control('invoices', 2)] : []
     : [];
   const diagnostic = await discoverPortal(page, { portal: 'booking', property: '1140306',
