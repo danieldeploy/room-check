@@ -1,4 +1,5 @@
 import unittest
+import base64
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -126,6 +127,28 @@ class AuditTests(unittest.TestCase):
         self.assertIn('resend._domainkey.' + audit.DNS_ZONES[0], names)
         self.assertIn('smtp2go._domainkey.' + audit.DNS_ZONES[0], names)
         self.assertNotIn('unrelated.' + audit.DNS_ZONES[0], names)
+
+    def test_dns_read_falls_back_to_cpanel_uapi_when_whm_acl_denies(self):
+        class UapiClient(audit.Client):
+            def __init__(self):
+                super().__init__('fake-token', opener=object())
+                self.calls = []
+
+            def request(self, path, params, version):
+                self.calls.append((path, params, version))
+                if path == '/json-api/parse_dns_zone':
+                    raise audit.AuditError('whm_read_failed_permission_denied')
+                return [{
+                    'type': 'record', 'line_index': 2, 'ttl': 3600, 'record_type': 'TXT',
+                    'dname_b64': base64.b64encode(('pm._domainkey.' + audit.DNS_ZONES[0] + '.').encode()).decode(),
+                    'data_b64': [base64.b64encode(b'old-postmark-key').decode()],
+                }]
+
+        client = UapiClient()
+        records = client.dns_zone(audit.DNS_ZONES[0])
+        self.assertEqual(records[0]['type'], 'TXT')
+        self.assertEqual(client.calls[1][1]['cpanel.module'], 'DNS')
+        self.assertEqual(client.calls[1][1]['cpanel.function'], 'parse_zone')
 
     def test_api_responses_are_summarized_without_error_body(self):
         class Opener:

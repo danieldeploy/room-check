@@ -155,10 +155,19 @@ class Client:
     def dns_zone(self, zone):
         if zone not in DNS_ZONES:
             raise AuditError('dns_zone_not_allowed')
-        data = self.request('/json-api/parse_dns_zone', {
-            'api.version': 1, 'zone': zone,
-        }, 1)
-        rows = data.get('payload') if isinstance(data, dict) else None
+        try:
+            data = self.request('/json-api/parse_dns_zone', {
+                'api.version': 1, 'zone': zone,
+            }, 1)
+        except AuditError as error:
+            if 'permission_denied' not in str(error):
+                raise
+            data = self.request('/json-api/uapi_cpanel', {
+                'api.version': 1, 'cpanel.user': 'welcome',
+                'cpanel.module': 'DNS', 'cpanel.function': 'parse_zone',
+                'zone': zone,
+            }, 3)
+        rows = data if isinstance(data, list) else data.get('payload') if isinstance(data, dict) else None
         if not isinstance(rows, list):
             raise AuditError('invalid_dns_inventory_response')
         records = []
@@ -166,17 +175,17 @@ class Client:
             if not isinstance(row, dict) or row.get('type') != 'record':
                 continue
             try:
-                name = base64.b64decode(row['dname_b64'], validate=True).decode('utf-8')
+                name = base64.b64decode(row['dname_b64'], validate=True).decode('utf-8', 'replace')
                 values = row['data_b64']
                 if not isinstance(values, list):
                     raise ValueError
-                values = [base64.b64decode(value, validate=True).decode('utf-8') for value in values]
+                values = [base64.b64decode(value, validate=True).decode('utf-8', 'replace') for value in values]
                 line_index = int(row['line_index'])
                 ttl = int(row['ttl'])
                 record_type = row['record_type']
                 if not isinstance(record_type, str) or not record_type or line_index < 0 or ttl < 0:
                     raise ValueError
-            except (KeyError, TypeError, ValueError, UnicodeDecodeError):
+            except (KeyError, TypeError, ValueError):
                 raise AuditError('invalid_dns_record') from None
             records.append({'line_index': line_index, 'name': name, 'type': record_type,
                             'ttl': ttl, 'data': values})
