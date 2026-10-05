@@ -77,7 +77,10 @@ class Client:
                 raise AuditError('whm_read_failed')
             result = payload.get('data', {}).get('uapi')
             if not isinstance(result, dict) or result.get('status') != 1 or result.get('errors') not in (None, []):
-                raise AuditError('uapi_read_failed')
+                details = result.get('errors') or result.get('messages') or result.get('warnings') or [] \
+                    if isinstance(result, dict) else []
+                safe_details = re.sub(r'[^a-z0-9]+', '_', ' '.join(map(str, details)).lower()).strip('_')[:80]
+                raise AuditError('uapi_read_failed' + ('_' + safe_details if safe_details else ''))
             return result.get('data')
 
         if version == 1:
