@@ -8,13 +8,21 @@ const headers = ['Type', 'Number', 'Date', 'Period', 'Due date', 'Paid', 'Status
 const url = number => `https://admin.booking.com/fresa/extranet/finance/invoices/get_document?hotel_id=1140306&doc=${number}&token=PRIVATE_TOKEN`;
 const row = (number, date, link = url(number)) => ({ cells: ['Invoice', number, date, 'Jul 2026', '15 Sep 2026', '', 'Paid', 'PRIVATE_AMOUNT'], links: [link] });
 const table = (rows, next = []) => ({ tables: 1, headers, rows, pagination_present: !!next.length, next });
-function pageFor(pages, repeat = false) {
+function pageFor(pages, repeat = false, initialYear = '2026') {
   let index = 0; const downloads = [], clicks = [];
-  return { downloads, clicks, url: () => 'https://admin.booking.com/hotel/invoices.html?hotel_id=1140306',
+  const yearControl = { selector: 'input[type="number"]', kind: 'number', value: initialYear, options: [] };
+  const keyboard = {
+    press: async key => { if (key === 'Control+A') yearControl.value = ''; },
+    type: async value => { yearControl.value += value; },
+  };
+  return { downloads, clicks, yearControl, url: () => 'https://admin.booking.com/hotel/invoices.html?hotel_id=1140306',
     waitForFunction: async () => {}, waitForNavigation: async () => {},
-    click: async selector => { clicks.push(selector); if (!repeat) index++; },
-    evaluate: async (_fn, href) => {
-      if (typeof href === 'string') { downloads.push(href); return Buffer.from('%PDF-1.7 fixture\n%%EOF').toString('base64'); }
+    click: async selector => { clicks.push(selector); if (!repeat && selector !== yearControl.selector) index++; },
+    keyboard,
+    select: async (_selector, value) => { yearControl.value = value; return [value]; },
+    evaluate: async (fn, ...args) => {
+      if (fn.toString().includes('filter by year')) return { ...yearControl, count: 1, yearVisible: false };
+      if (typeof args[0] === 'string') { downloads.push(args[0]); return Buffer.from('%PDF-1.7 fixture\n%%EOF').toString('base64'); }
       return pages[index];
     },
   };
@@ -35,6 +43,13 @@ test('all pages are read and only issue-month rows download, regardless of servi
   assert.equal(result.verification.validated, false);
   for (const privateValue of ['PRIVATE_TOKEN','PRIVATE_AMOUNT','AUG1','2026-08-01'])
     assert.equal(JSON.stringify(result.verification).includes(privateValue), false);
+});
+test('collection selects the requested Booking year before filtering issue month', async () => {
+  const page = pageFor([table([row('AUG-ISSUED', '3 Aug 2025')])], false, '2026');
+  const result = await collectBookingInvoices(page, { ...input, period: '2025-08' }, approved());
+  assert.deepEqual(result.documents.map(document => document.number), ['AUG-ISSUED']);
+  assert.equal(page.yearControl.value, '2025');
+  assert.deepEqual(page.downloads, [url('AUG-ISSUED')]);
 });
 test('an unrecognized paginator and repeated page cannot produce a complete result', async () => {
   await assert.rejects(collectBookingInvoices(pageFor([{ ...table([row('A', '1 Aug 2026')]), pagination_present: true }]), input), /portal_changed/);
