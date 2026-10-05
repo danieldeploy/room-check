@@ -81,8 +81,11 @@ class Client:
             return result.get('data')
 
         if version == 1:
-            if not isinstance(payload, dict) or payload.get('metadata', {}).get('result') != 1:
-                raise AuditError('whm_read_failed')
+            metadata = payload.get('metadata', {}) if isinstance(payload, dict) else {}
+            if metadata.get('result') != 1:
+                reason = metadata.get('reason', '')
+                safe_reason = re.sub(r'[^a-z0-9]+', '_', str(reason).lower()).strip('_')[:80]
+                raise AuditError('whm_read_failed' + ('_' + safe_reason if safe_reason else ''))
             data = payload.get('data')
             if not isinstance(data, dict):
                 raise AuditError('whm_dns_read_failed')
