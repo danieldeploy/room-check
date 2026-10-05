@@ -21,7 +21,7 @@ function pageFor(pages, repeat = false, initialYear = '2026') {
     keyboard,
     select: async (_selector, value) => { yearControl.value = value; return [value]; },
     evaluate: async (fn, ...args) => {
-      if (fn.toString().includes('filter by year')) return { ...yearControl, yearVisible: false };
+      if (fn.toString().includes('filter by year')) return { ...yearControl, count: 1, yearVisible: false };
       if (typeof args[0] === 'string') { downloads.push(args[0]); return Buffer.from('%PDF-1.7 fixture\n%%EOF').toString('base64'); }
       return pages[index];
     },
