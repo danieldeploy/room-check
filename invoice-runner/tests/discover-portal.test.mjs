@@ -68,6 +68,37 @@ test('a property switch awaits group responses that begin after the authenticate
   assert.equal(page.listenerCount('response'), 0);
 });
 
+test('map discovery continues from a retained Booking session after the public redirect', async () => {
+  const page = new EventEmitter();
+  const target = 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id=1140306';
+  let current = 'about:blank';
+  let step = 0;
+  const control = (label, next) => ({ evaluate: async () => ({ visible: true, label, href: null }),
+    click: async () => { step = next; } });
+  page.url = () => current;
+  page.goto = async href => {
+    assert.equal(href, 'https://admin.booking.com/');
+    current = target; // Booking redirects an already-authenticated profile to its extranet.
+  };
+  page.evaluate = async () => [];
+  page.waitForFunction = async () => {};
+  page.waitForNavigation = async () => {};
+  page.$ = async selector => selector === 'a,button,[role="button"]'
+    ? step === 0 ? [control('finance', 1)] : step === 1 ? [control('invoices', 2)] : []
+    : [];
+  const diagnostic = await discoverPortal(page, { portal: 'booking', property: '1140306',
+    propertyLabel: 'Welcome Guest House', period: '2025-08', authMethod: 'password',
+    credentials: { identifier: 'private@example.com', password: 'sensitive-password' } });
+  assert.equal(diagnostic.authenticated_session, true);
+  assert.equal(diagnostic.login_attempted, false);
+  assert.equal(diagnostic.navigation_stage, 'invoices_visible');
+  assert.equal(diagnostic.invoice_inspection.property_verified, true);
+  assert.equal(diagnostic.validated, false);
+  assert.ok(!JSON.stringify(diagnostic).includes('private@example.com'));
+  assert.ok(!JSON.stringify(diagnostic).includes('sensitive-password'));
+  assert.equal(page.listenerCount('response'), 0);
+});
+
 function fakePage(action = 'https://account.booking.com/login') {
   let url = 'https://admin.booking.com/';
   let stage = 0;
