@@ -283,7 +283,34 @@ export async function discoverPortal(initialPage, input, hooks = {}) {
       if (challengeNow) {
         stage = 'human_verification'; fail('human_verification');
       }
-      if (loginOnly && authenticatedBookingPage(page)) break;
+      if (portal === 'booking' && authenticatedBookingPage(page)) {
+        if (loginOnly) break;
+        // A valid retained session can land on the extranet after the public
+        // entry redirect without showing either credential field. Continue the
+        // normal property and invoice checks from that authenticated session.
+        stage = 'authenticated_session';
+        const verified = new URL(page.url());
+        if (verified.pathname.includes('/groups/home') && typeof page.waitForFunction === 'function') {
+          await page.waitForFunction(values => [...document.querySelectorAll('tr,[role="row"]')]
+            .some(el => el.getClientRects().length > 0
+              && ((el.textContent || '').toLowerCase().includes(values.label.toLowerCase())
+                || (el.textContent || '').includes(values.property))),
+          { timeout: 15000 }, { label: String(input.propertyLabel || ''), property: String(input.property || '') })
+            .catch(() => {});
+        }
+        await Promise.allSettled(propertyReads);
+        snapshots.push(await inspectPortalPage(page, portal));
+        const navigationStage = await navigateBookingInvoices(page, { ...input, propertyEntryUrls: propertyUrls }, async () => {
+          snapshots.push(await inspectPortalPage(page, portal));
+        }, { waitForPropertyEntries: () => Promise.allSettled(propertyReads),
+          onPhase: phase => { navigationPhase = phase; } });
+        if (navigationStage !== 'invoices_visible') snapshots.push(await inspectPortalPage(page, portal));
+        const invoiceInspection = navigationStage === 'invoices_visible' ? await inspectBookingInvoices(page, input) : undefined;
+        return { version: 1, portal, validated: false,
+          login_attempted: identifierSent && passwordSent, authenticated_session: true,
+          navigation_stage: navigationStage, location: publicLocation(portal, page.url()),
+          snapshots: snapshots.slice(0, 6), responses, invoice_inspection: invoiceInspection };
+      }
       stage = 'cookie_consent';
       await dismissCookies(step === 0 ? 2500 : 0);
       const identifier = await uniqueInput(page, x => x.autocomplete === 'username' || x.type === 'email'
