@@ -35,7 +35,7 @@ jobs:
       group: management-hub-production
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949b9ba4906955
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           ref: codex/welcome-cleanup-20261005
           persist-credentials: false
