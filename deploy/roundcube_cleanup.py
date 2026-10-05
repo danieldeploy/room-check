@@ -260,8 +260,8 @@ def cleanup(client):
         raise CleanupError('read_only_client')
     production = _assert_production_preserved(client)
     serial, record, old_record = _dns_backup(client)
-    dns = _remove_postmark_dns(client, serial, record)
     files = _trash_files(client)
+    dns = _remove_postmark_dns(client, serial, record)
     after = _assert_production_preserved(client)
     # Final DNS verification, including every production SMTP2GO record.
     final_rows = client.dns_rows(DNS_ZONE)
