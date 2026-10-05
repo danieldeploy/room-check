@@ -17,7 +17,7 @@ function pageFor(pages, repeat = false, initialYear = '2026') {
   };
   return { downloads, clicks, yearControl, url: () => 'https://admin.booking.com/hotel/invoices.html?hotel_id=1140306',
     waitForFunction: async () => {}, waitForNavigation: async () => {},
-    click: async selector => { clicks.push(selector); if (!repeat && selector === 'button.next') index++; },
+    click: async selector => { clicks.push(selector); if (!repeat && selector !== yearControl.selector) index++; },
     keyboard,
     select: async (_selector, value) => { yearControl.value = value; return [value]; },
     evaluate: async (fn, ...args) => {
