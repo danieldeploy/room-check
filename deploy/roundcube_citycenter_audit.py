@@ -12,7 +12,6 @@ import urllib.request
 
 ORIGIN = 'https://server50.romania-webhosting.com:2087'
 DOMAIN = 'citycenterhostel.pt'
-NAME_FILTER = re.compile(r'(?i)(roundcube|smtp2go|postmark|resend|sandbox|pilot|test|email)')
 SAFE_USER = re.compile(r'^[a-z][a-z0-9]{0,15}$')
 SAFE_NAME = re.compile(r'^[A-Za-z0-9._ -]{1,180}$')
 LIMIT = 2 * 1024 * 1024
@@ -163,8 +162,32 @@ def select_dns_records(records):
     return sorted(selected, key=lambda row: (row['line_index'], row['name']))
 
 
-def picked(names, extra=()):
-    return sorted((name for name in names if NAME_FILTER.search(name) or name in extra), key=str.casefold)
+def flags(name_lists):
+    names = [name for group in name_lists for name in group]
+    lowered = [name.lower() for name in names]
+    return {
+        'smtp2go': any('smtp2go' in name for name in lowered),
+        'postmark': any('postmark' in name or 'mtasv' in name for name in lowered),
+        'resend': any('resend' in name for name in lowered),
+        'sandbox_or_pilot': any('sandbox' in name or 'pilot' in name for name in lowered),
+        'test_artifact': any('test' in name for name in lowered),
+        'backup_artifact': any('backup' in name or 'before-' in name or 'old' in name for name in lowered),
+    }
+
+
+def dns_flags(records):
+    names = [record.get('name', '').rstrip('.').lower() for record in records]
+    values = [' '.join(record.get('data', [])).lower() for record in records]
+    combined = names + values
+    return {
+        'smtp2go_records': any('smtp2go' in item for item in combined),
+        'postmark_records': any('postmark' in item or 'mtasv' in item or 'pm-bounces' in item for item in combined),
+        'resend_records': any('resend' in item for item in combined),
+        'mx_present': any(record.get('name', '').rstrip('.').lower() == DOMAIN and record.get('type', '').upper() == 'MX' for record in records),
+        'spf_present': any(record.get('name', '').rstrip('.').lower() == DOMAIN and record.get('type', '').upper() == 'TXT' and 'v=spf1' in ' '.join(record.get('data', [])).lower() for record in records),
+        'dmarc_present': any(record.get('name', '').rstrip('.').lower() == '_dmarc.' + DOMAIN and record.get('type', '').upper() == 'TXT' for record in records),
+        'dkim_selector_count': sum(1 for record in records if record.get('name', '').rstrip('.').lower().endswith('._domainkey.' + DOMAIN)),
+    }
 
 
 def audit(client):
@@ -174,31 +197,34 @@ def audit(client):
     root = public + '/roundcube'
     home_names = client.list_dir(user, home)
     public_names = client.list_dir(user, public)
-    result = {
-        'ok': True, 'mode': 'citycenter-roundcube-read-only-audit',
-        'writes': False, 'file_contents_read': False, 'email_sent': False,
-        'account': {'domain': DOMAIN, 'home': home},
-        'directories': {
-            home: picked(home_names),
-            public: picked(public_names, ('roundcube',)),
-        },
-        'dns': [],
-    }
+    inventories = [home_names, public_names]
+    roundcube_present = False
+    config_present = False
     if 'roundcube' in public_names:
         root_names = client.list_dir(user, root)
-        result['directories'][root] = picked(root_names, ('index.php', 'program', 'config', 'plugins'))
+        inventories.append(root_names)
+        roundcube_present = all(name in root_names for name in ('index.php', 'program', 'config', 'plugins'))
         if 'plugins' in root_names:
             plugins = client.list_dir(user, root + '/plugins')
-            result['directories'][root + '/plugins'] = picked(plugins, ('welcome_ui',))
+            inventories.append(plugins)
         if 'config' in root_names:
             config = client.list_dir(user, root + '/config')
-            result['directories'][root + '/config'] = picked(config, ('config.inc.php',))
-        result['roundcube_present'] = all(name in root_names for name in ('index.php', 'program', 'config', 'plugins'))
-    else:
-        result['directories'][root] = 'absent'
-        result['roundcube_present'] = False
-    result['dns'].append({'zone': DOMAIN, 'records': client.dns_zone(user)})
-    return result
+            inventories.append(config)
+            config_present = 'config.inc.php' in config
+    records = client.dns_zone(user)
+    return {
+        'ok': True,
+        'mode': 'citycenter-roundcube-read-only-audit',
+        'writes': False,
+        'file_contents_read': False,
+        'email_sent': False,
+        'target': DOMAIN,
+        'account_resolved': True,
+        'roundcube_present': roundcube_present,
+        'roundcube_config_file_present': config_present,
+        'server_artifact_flags': flags(inventories),
+        'mail_dns_flags': dns_flags(records),
+    }
 
 
 def main():
