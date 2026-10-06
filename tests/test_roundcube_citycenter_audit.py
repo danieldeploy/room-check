@@ -47,10 +47,18 @@ class CityCenterAuditTests(unittest.TestCase):
         self.assertFalse(report['writes'])
         self.assertFalse(report['file_contents_read'])
         self.assertFalse(report['email_sent'])
-        self.assertEqual(report['account'], {'domain': audit.DOMAIN, 'home': '/home/ccenter'})
-        self.assertEqual(report['directories']['/home/ccenter/public_html/roundcube/config'],
-                         ['config.inc.php'])
-        self.assertIn('citycenter_postmark', report['directories']['/home/ccenter/public_html/roundcube/plugins'])
+        self.assertEqual(report['target'], audit.DOMAIN)
+        self.assertTrue(report['account_resolved'])
+        self.assertTrue(report['roundcube_config_file_present'])
+        self.assertTrue(report['server_artifact_flags']['postmark'])
+        self.assertTrue(report['server_artifact_flags']['smtp2go'])
+        self.assertTrue(report['server_artifact_flags']['test_artifact'])
+        self.assertTrue(report['mail_dns_flags']['postmark_records'])
+        self.assertTrue(report['mail_dns_flags']['mx_present'])
+        self.assertTrue(report['mail_dns_flags']['dkim_selector_count'])
+        rendered = str(report)
+        for private_detail in ('ccenter', 'config.inc.php', 'citycenter_postmark', 'mtasv', 'postmark public key'):
+            self.assertNotIn(private_detail, rendered)
         self.assertTrue(all(call[0] != 'read' and call[0] != 'write' for call in client.calls))
         self.assertTrue(all(call[1] == 'ccenter' for call in client.calls if call[0] in {'list', 'dns'}))
 
