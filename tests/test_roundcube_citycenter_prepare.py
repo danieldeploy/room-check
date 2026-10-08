@@ -21,7 +21,11 @@ class MemoryClient:
         self.files[key] = params['content']
         self.writes.append(key)
     def api2(self, function, **params):
-        if function == 'fileop':
+        if function == 'fileop' and params['op'] == 'copy':
+            dest_dir, dest_name = params['destfiles'].rsplit('/', 1)
+            self.files[dest_dir, dest_name] = self.files[prep.ROOT + '/config', 'config.inc.php']
+            self.writes.append((dest_dir, dest_name))
+        elif function == 'fileop':
             path = prep.HOME + '/' + params['sourcefiles']
             directory, name = path.rsplit('/', 1)
             self.modes[directory, name] = params['metadata']
