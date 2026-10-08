@@ -25,8 +25,9 @@ export PRIVATEPATH="$HOME/room-check-private/"
 )
 /bin/cp -R cron "$PRIVATEPATH"
 # Private executable for cPanel email filters. No filter is activated by deployment.
-/bin/chmod 0700 "$PRIVATEPATH/cron/toconline-reply.php"
+/bin/chmod 0700 "$PRIVATEPATH/cron/toconline-reply.php" "$PRIVATEPATH/cron/hostelworld-auth-pipe.php"
 /usr/local/bin/php -l "$PRIVATEPATH/cron/toconline-reply.php" >/dev/null
+/usr/local/bin/php -l "$PRIVATEPATH/cron/hostelworld-auth-pipe.php" >/dev/null
 /bin/cp -R invoice-runner "$PRIVATEPATH"
 (
     umask 022
