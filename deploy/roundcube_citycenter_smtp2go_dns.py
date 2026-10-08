@@ -67,21 +67,23 @@ class Client:
             raise OperationError('http_error') from None
         except Exception:
             raise OperationError('request_failed') from None
-        if not isinstance(payload, dict) or payload.get('metadata', {}).get('result') != 1:
+        if not isinstance(payload, dict):
+            raise OperationError('api_call_failed')
+        if api_version == 2:
+            result = payload.get('cpanelresult')
+            if not isinstance(result, dict) or result.get('event', {}).get('result') != 1 or result.get('error'):
+                raise OperationError('cpanel_call_failed')
+            rows = result.get('data')
+            if not isinstance(rows, list) or any(not isinstance(row, dict) or row.get('reason') or row.get('err') or row.get('result', 1) not in (1, '1', True) for row in rows):
+                raise OperationError('cpanel_call_failed')
+            return rows
+        if payload.get('metadata', {}).get('result') != 1:
             raise OperationError('api_call_failed')
         if api_version == 3:
             result = payload.get('data', {}).get('uapi')
             if not isinstance(result, dict) or result.get('status') != 1 or result.get('errors') not in (None, []):
                 raise OperationError('uapi_call_failed')
             return result.get('data')
-        if api_version == 2:
-            result = payload.get('data', {}).get('cpanelresult')
-            if not isinstance(result, dict) or result.get('event', {}).get('result') != 1:
-                raise OperationError('cpanel_call_failed')
-            rows = result.get('data')
-            if isinstance(rows, list) and any(isinstance(row, dict) and row.get('result') == 0 for row in rows):
-                raise OperationError('cpanel_call_failed')
-            return rows
         return payload.get('data')
 
     def account_for_domain(self):
@@ -166,14 +168,13 @@ class Client:
                 'api.version': 1, 'cpanel.user': self.user, 'cpanel.module': 'Fileman',
                 'cpanel.function': 'get_file_content', 'dir': directory, 'file': BACKUP_FILE,
                 'from_charset': 'UTF-8', 'to_charset': 'UTF-8'}, api_version=3)
-            if old != content:
-                # A prior partial run has a different timestamp; preserve the first backup.
-                try:
-                    saved = json.loads(old)
-                except Exception:
-                    raise OperationError('existing_backup_unreadable') from None
-                if saved.get('domain') != DOMAIN or not isinstance(saved.get('records'), list):
-                    raise OperationError('existing_backup_invalid')
+            # Preserve and validate the first backup, even if its timestamp matches.
+            try:
+                saved = json.loads(old)
+            except Exception:
+                raise OperationError('existing_backup_unreadable') from None
+            if saved.get('domain') != DOMAIN or not isinstance(saved.get('records'), list):
+                raise OperationError('existing_backup_invalid')
             expected = {(r['name'], 'CNAME', r['target']) for r in RECORDS}
             baseline = _fingerprints(r for r in records if (r['name'], r['type'], r['data'][0] if r['data'] else '') not in expected)
             if _fingerprints(saved['records']) != baseline:
