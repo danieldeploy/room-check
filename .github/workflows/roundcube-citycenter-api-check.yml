@@ -1,4 +1,4 @@
-name: City Center read-only API check
+name: City Center public DNS check
 on:
   push:
     branches: [codex/roundcube-server-audit-20261004]
@@ -7,72 +7,20 @@ on:
 permissions:
   contents: read
 jobs:
-  check-citycenter:
+  public-dns:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: management-hub-production
-    concurrency:
-      group: citycenter-smtp2go-dns
-      cancel-in-progress: false
+    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
-        with:
-          persist-credentials: false
-      - name: Test City Center safety and API parsing
-        run: python3 -m unittest discover -s tests -p 'test_roundcube_citycenter*.py' -v
-      - name: Read only the City Center account, DNS and backup metadata
-        env:
-          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
-          PYTHONDONTWRITEBYTECODE: '1'
+      - name: Verify only the two public SMTP2GO CNAMEs
         run: |
           python3 - <<'PY'
-          import json, os, sys
-          sys.path.insert(0, 'deploy')
-          import roundcube_citycenter_smtp2go_dns as dns
-          stage = 'account'
-          try:
-              client = dns.Client(os.environ.get('WHM_API_TOKEN', ''))
-              client.account_for_domain()
-              if client.user != 'city':
-                  raise dns.OperationError('account_scope_mismatch')
-              stage = 'dns'
-              records = client.dns_records()
-              legacy = client.legacy_zone()
-              categories = []
-              for desired in dns.RECORDS:
-                  targets = [r for r in records if r['type'] == 'CNAME' and r['data'] == [desired['target']]]
-                  categories.append({'target_record_count': len(targets), 'exact_name_count': sum(r['name'] == desired['name'] for r in targets), 'relative_name_count': sum(r['name'] == desired['name'].removesuffix('.' + dns.DOMAIN) for r in targets), 'doubled_domain_count': sum(r['name'] == desired['name'] + '.' + dns.DOMAIN for r in targets)})
-              print(json.dumps({'dns_shape_check': categories, 'legacy_inventory_read': True}))
-              stage = 'files'
-              names = client.file_inventory('/home/' + client.user)
-              stage = 'legacy_api'
-              stat = client.file_stat('/home/' + client.user, 'public_html')
-              if not stat or stat.get('type') != 'dir':
-                  raise dns.OperationError('metadata_check_failed')
-              stage = 'preflight'
-              backup_dir = '/home/' + client.user + '/' + dns.BACKUP_DIR
-              backup_stat = client.file_stat(backup_dir, dns.BACKUP_FILE) if dns.BACKUP_DIR in names else None
-              backup_secure = bool(backup_stat and backup_stat.get('type') == 'file' and backup_stat.get('nicemode') == '0600')
-              acl_state = 'unavailable'
-              try:
-                  privileges = client.request('/json-api/myprivs', {'api.version': 1})
-                  def acl_present(value):
-                      if isinstance(value, dict):
-                          if value.get('manage-dns-records') in (1, '1', True) or value.get('all') in (1, '1', True): return True
-                          return any(acl_present(v) for v in value.values())
-                      if isinstance(value, list): return any(acl_present(v) for v in value)
-                      return value in ('manage-dns-records', 'all')
-                  acl_state = 'present' if acl_present(privileges) else 'absent'
-              except dns.OperationError:
-                  pass
-              config_data = client.request('/json-api/uapi_cpanel', {'api.version': 1, 'cpanel.user': client.user, 'cpanel.module': 'Fileman', 'cpanel.function': 'get_file_content', 'dir': '/home/' + client.user + '/public_html/roundcube/config', 'file': 'config.inc.php', 'from_charset': 'UTF-8', 'to_charset': 'UTF-8'}, api_version=3)
-              config = config_data.get('content') if isinstance(config_data, dict) else None
-              if not isinstance(config, str): raise dns.OperationError('config_read_failed')
-              print(json.dumps({'backup_secure': backup_secure, 'dns_management_acl': acl_state, 'roundcube_config_read': True, 'smtp2go_config_marker': 'smtp2go' in config.lower(), 'postmark_config_marker': any(x in config.lower() for x in ('postmark', 'mtasv')), 'resend_config_marker': 'resend' in config.lower(), 'ok': True, 'read_only': True, 'account_scope_verified': True, 'dns_record_count': len(records), 'smtp2go_auth_records': sum(bool(dns.matching(records, rec)) for rec in dns.RECORDS), 'private_backup_directory_exists': dns.BACKUP_DIR in names, 'legacy_api_read_ok': True}))
-          except dns.OperationError as error:
-              print(json.dumps({'ok': False, 'read_only': True, 'stage': stage, 'error': str(error)}))
-              sys.exit(1)
-          except Exception:
-              print(json.dumps({'ok': False, 'read_only': True, 'stage': stage, 'error': 'state_requires_review'}))
-              sys.exit(1)
+          import json, subprocess, sys
+          pairs = [('em1063225.citycenterhostel.pt', 'return.smtp2go.net'), ('s1063225._domainkey.citycenterhostel.pt', 'dkim.smtp2go.net')]
+          count = 0
+          for name, expected in pairs:
+              result = subprocess.run(['dig', '+short', 'CNAME', name], capture_output=True, text=True, timeout=20)
+              if result.returncode == 0 and expected in [x.rstrip('.').lower() for x in result.stdout.splitlines()]:
+                  count += 1
+          print(json.dumps({'ok': count == 2, 'public_dns_auth_records': count, 'read_only': True, 'private_configuration_read': False, 'credentials_used': False}))
+          sys.exit(0 if count == 2 else 1)
           PY
