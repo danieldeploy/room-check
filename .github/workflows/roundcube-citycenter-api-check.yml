@@ -1,0 +1,53 @@
+name: City Center read-only API check
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-citycenter-api-check.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-citycenter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: citycenter-smtp2go-dns
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Test City Center safety and API parsing
+        run: python3 -m unittest discover -s tests -p 'test_roundcube_citycenter*.py' -v
+      - name: Read only the City Center account, DNS and backup metadata
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'deploy')
+          import roundcube_citycenter_smtp2go_dns as dns
+          stage = 'account'
+          try:
+              client = dns.Client(os.environ.get('WHM_API_TOKEN', ''))
+              client.account_for_domain()
+              if client.user != 'city':
+                  raise dns.OperationError('account_scope_mismatch')
+              stage = 'dns'
+              records = client.dns_records()
+              stage = 'files'
+              names = client.file_inventory('/home/' + client.user)
+              stage = 'legacy_api'
+              stat = client.file_stat('/home/' + client.user, 'public_html')
+              if not stat or stat.get('type') != 'dir':
+                  raise dns.OperationError('metadata_check_failed')
+              print(json.dumps({'ok': True, 'read_only': True, 'account_scope_verified': True, 'dns_record_count': len(records), 'smtp2go_auth_records': sum(bool(dns.matching(records, rec)) for rec in dns.RECORDS), 'private_backup_directory_exists': dns.BACKUP_DIR in names, 'legacy_api_read_ok': True}))
+          except dns.OperationError as error:
+              print(json.dumps({'ok': False, 'read_only': True, 'stage': stage, 'error': str(error)}))
+              sys.exit(1)
+          except Exception:
+              print(json.dumps({'ok': False, 'read_only': True, 'stage': stage, 'error': 'state_requires_review'}))
+              sys.exit(1)
+          PY
