@@ -32,7 +32,9 @@ def transfer():
     source_dir = client.file_stat('/home/welcome', 'roundcube-smtp2go-private')
     source_key = client.file_stat(SOURCE_DIR, SOURCE_FILE)
     require(source_dir and source_dir.get('type') == 'dir' and source_dir.get('nicemode') == '0700', 'source_directory_not_private')
-    require(source_key and source_key.get('type') == 'file' and source_key.get('nicemode') == '0600', 'source_key_not_private')
+    if not source_key or source_key.get('type') != 'file' or source_key.get('nicemode') != '0600':
+        print(json.dumps({'source_key_exists': bool(source_key), 'source_key_regular_file': bool(source_key and source_key.get('type') == 'file'), 'source_key_owner_read_only': bool(source_key and source_key.get('nicemode') == '0400'), 'source_key_owner_read_write': bool(source_key and source_key.get('nicemode') == '0600'), 'credential_published': False}))
+        raise dns.OperationError('source_key_not_private')
     client.user = 'city'
     dest_dir = client.file_stat('/home/city', dns.BACKUP_DIR)
     require(dest_dir and dest_dir.get('type') == 'dir' and dest_dir.get('nicemode') == '0700', 'destination_not_private')
