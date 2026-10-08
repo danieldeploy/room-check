@@ -170,6 +170,9 @@ class Client:
                 'api.version': 1, 'cpanel.user': self.user, 'cpanel.module': 'Fileman',
                 'cpanel.function': 'get_file_content', 'dir': directory, 'file': BACKUP_FILE,
                 'from_charset': 'UTF-8', 'to_charset': 'UTF-8'}, api_version=3)
+            if not isinstance(old, dict) or not isinstance(old.get('content'), str):
+                raise OperationError('existing_backup_unreadable')
+            old = old['content']
             # Preserve and validate the first backup, even if its timestamp matches.
             try:
                 saved = json.loads(old)
@@ -195,6 +198,9 @@ class Client:
             'api.version': 1, 'cpanel.user': self.user, 'cpanel.module': 'Fileman',
             'cpanel.function': 'get_file_content', 'dir': directory, 'file': BACKUP_FILE,
             'from_charset': 'UTF-8', 'to_charset': 'UTF-8'}, api_version=3)
+        if not isinstance(saved, dict) or not isinstance(saved.get('content'), str):
+            raise OperationError('backup_verification_failed')
+        saved = saved['content']
         try:
             if json.loads(saved) != json.loads(content):
                 raise OperationError('backup_verification_failed')
