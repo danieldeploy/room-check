@@ -2,6 +2,36 @@
 // Tokenize only: never include/evaluate the production configuration.
 $source = stream_get_contents(STDIN);
 $tokens = token_get_all($source, TOKEN_PARSE);
+if (($argv[1] ?? '') === '--mail-summary') {
+    $semantic = [];
+    foreach ($tokens as $token) {
+        if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) { continue; }
+        $semantic[] = $token;
+    }
+    $settings = [];
+    for ($i = 0; $i + 6 < count($semantic); $i++) {
+        $part = array_slice($semantic, $i, 7);
+        if (!is_array($part[0]) || $part[0][0] !== T_VARIABLE || $part[0][1] !== '$config'
+            || $part[1] !== '[' || !is_array($part[2]) || $part[2][0] !== T_CONSTANT_ENCAPSED_STRING
+            || $part[3] !== ']' || $part[4] !== '=' || !is_array($part[5]) || $part[5][0] !== T_CONSTANT_ENCAPSED_STRING
+            || $part[6] !== ';') { continue; }
+        $name = substr($part[2][1], 1, -1);
+        if (in_array($name, ['smtp_host', 'smtp_server', 'smtp_user', 'smtp_pass'], true)) {
+            $settings[$name] = substr($part[5][1], 1, -1);
+        }
+    }
+    $host = strtolower($settings['smtp_host'] ?? $settings['smtp_server'] ?? '');
+    $provider = 'other_or_default';
+    foreach (['postmark' => ['postmark', 'mtasv'], 'resend' => ['resend'], 'smtp2go' => ['smtp2go'], 'local' => ['localhost', '127.0.0.1']] as $name => $markers) {
+        foreach ($markers as $marker) { if (strpos($host, $marker) !== false) { $provider = $name; } }
+    }
+    $credentials = 0;
+    foreach (['smtp_user', 'smtp_pass'] as $name) {
+        if (isset($settings[$name]) && !in_array($settings[$name], ['', '%u', '%p'], true)) { $credentials++; }
+    }
+    echo json_encode(['smtp_route_provider' => $provider, 'nonplaceholder_smtp_credential_fields' => $credentials]);
+    exit;
+}
 if (($argv[1] ?? '') === '--core-summary') {
     $semantic = [];
     $redacted = '';
