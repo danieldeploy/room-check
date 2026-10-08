@@ -45,3 +45,5 @@ jobs:
         run: python3 deploy/roundcube_citycenter_smtp2go_dns.py
 
 # Legacy cPanel parsing verified by the scoped read-only API check.
+
+# Missing backup detection covered before the legacy stat operation.
