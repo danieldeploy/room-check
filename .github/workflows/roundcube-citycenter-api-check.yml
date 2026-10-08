@@ -1,4 +1,4 @@
-name: City Center public DNS check
+name: City Center public DNS and prepared transport checks
 on:
   push:
     branches: [codex/roundcube-server-audit-20261004]
@@ -24,3 +24,18 @@ jobs:
           print(json.dumps({'ok': count == 2, 'public_dns_auth_records': count, 'read_only': True, 'private_configuration_read': False, 'credentials_used': False}))
           sys.exit(0 if count == 2 else 1)
           PY
+
+  prepared-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Lint the prepared City Center PHP plugin
+        run: |
+          php -l deploy/roundcube-citycenter-live/api_transport.php
+          php -l deploy/roundcube-citycenter-live/citycenter_smtp2go_api.php
+          php -l deploy/roundcube-citycenter-live/config.inc.php
+      - name: Check envelope, duplicate protection and Sent-folder preservation without network calls
+        run: php tests/test_roundcube_citycenter_live.php
