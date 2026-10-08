@@ -74,7 +74,7 @@ class Client:
             if not isinstance(result, dict) or result.get('event', {}).get('result') != 1 or result.get('error'):
                 raise OperationError('cpanel_call_failed')
             rows = result.get('data')
-            if not isinstance(rows, list) or any(not isinstance(row, dict) or row.get('reason') or row.get('err') or row.get('result', 1) not in (1, '1', True) for row in rows):
+            if not isinstance(rows, list) or any(not isinstance(row, dict) or row.get('reason') or row.get('err') or not _api2_success(row) for row in rows):
                 raise OperationError('cpanel_call_failed')
             return rows
         if payload.get('metadata', {}).get('result') != 1:
@@ -208,18 +208,41 @@ class Client:
             raise OperationError('backup_verification_failed') from None
         return backup_path
 
+    def zone_api2(self, function, **params):
+        if self.user != 'city':
+            raise OperationError('account_scope_violation')
+        common = {'cpanel_jsonapi_user': self.user, 'cpanel_jsonapi_apiversion': 2,
+                  'cpanel_jsonapi_module': 'ZoneEdit', 'cpanel_jsonapi_func': function,
+                  'domain': DOMAIN}
+        return self.request('/json-api/cpanel', {**common, **params}, api_version=2)
+
+    def legacy_zone(self):
+        rows = self.zone_api2('fetchzone', customonly=0)
+        if len(rows) != 1 or rows[0].get('status') not in (1, '1') or not isinstance(rows[0].get('record'), list):
+            raise OperationError('rollback_inventory_unavailable')
+        return rows[0]['record']
+
     def add_cname(self, rec):
-        data = self.request('/json-api/addzonerecord', {
-            'api.version': 1, 'domain': DOMAIN, 'name': rec['name'], 'type': 'CNAME',
-            'class': 'IN', 'ttl': rec['ttl'], 'cname': rec['target'] + '.'})
-        if not isinstance(data, dict) or data.get('result') != 1:
-            raise OperationError('dns_add_failed')
+        if rec not in RECORDS:
+            raise OperationError('dns_scope_violation')
+        # Ensure the account-scoped rollback inventory is available before writing.
+        self.legacy_zone()
+        self.zone_api2('add_zone_record', name=rec['name'].removesuffix('.' + DOMAIN),
+                      type='CNAME', ttl=rec['ttl'], cname=rec['target'] + '.', **{'class': 'IN'})
 
     def remove_line(self, line_index):
-        data = self.request('/json-api/removezonerecord', {
-            'api.version': 1, 'domain': DOMAIN, 'line': line_index})
-        if not isinstance(data, dict) or data.get('result') != 1:
-            raise OperationError('dns_rollback_failed')
+        # UAPI line_index and legacy line numbers are different: resolve by identity.
+        current = self.dns_records()
+        chosen = [r for r in current if r['line_index'] == line_index]
+        if len(chosen) != 1 or not any(matching(chosen, rec) for rec in RECORDS):
+            raise OperationError('rollback_scope_violation')
+        selected = chosen[0]
+        legacy = [r for r in self.legacy_zone() if r.get('type') == 'CNAME' and
+                  str(r.get('name', '')).rstrip('.').lower() == selected['name'] and
+                  str(r.get('cname', '')).rstrip('.').lower() == selected['data'][0]]
+        if len(legacy) != 1 or not isinstance(legacy[0].get('Line'), int) or legacy[0]['Line'] < 1:
+            raise OperationError('rollback_inventory_mismatch')
+        self.zone_api2('remove_zone_record', line=legacy[0]['Line'])
 
 
 def matching(records, rec):
@@ -227,8 +250,21 @@ def matching(records, rec):
             r['data'] == [rec['target']]]
 
 
+def _api2_success(row):
+    result = row.get('result', 1)
+    if isinstance(result, dict):
+        return result.get('status') in (1, '1')
+    return result in (1, '1', True) and row.get('status', 1) in (1, '1')
+
+
 def _fingerprints(records):
-    return sorted((r['name'], r['type'], r['ttl'], tuple(r['data'])) for r in records)
+    # Ignore only the SOA serial changed by DNS writes; preserve all other fields.
+    def data(record):
+        values = list(record['data'])
+        if record['type'] == 'SOA' and len(values) == 7:
+            values[2] = '<serial>'
+        return tuple(values)
+    return sorted((r['name'], r['type'], r['ttl'], data(r)) for r in records)
 
 
 def apply(client):
@@ -273,11 +309,11 @@ def main():
         print(json.dumps(apply(Client(os.environ.get('WHM_API_TOKEN', ''))), sort_keys=True))
         return 0
     except OperationError as error:
-        print(json.dumps({'ok': False, 'mode': 'citycenter-smtp2go-dns', 'writes': False,
+        print(json.dumps({'ok': False, 'mode': 'citycenter-smtp2go-dns', 'dns_write_state': 'requires_verification',
                           'email_sent': False, 'error': str(error)}))
         return 1
     except Exception:
-        print(json.dumps({'ok': False, 'mode': 'citycenter-smtp2go-dns', 'writes': False,
+        print(json.dumps({'ok': False, 'mode': 'citycenter-smtp2go-dns', 'dns_write_state': 'requires_verification',
                           'email_sent': False, 'error': 'state_requires_review'}))
         return 1
 
