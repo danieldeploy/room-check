@@ -39,3 +39,20 @@ jobs:
           php -l deploy/roundcube-citycenter-live/config.inc.php
       - name: Check envelope, duplicate protection and Sent-folder preservation without network calls
         run: php tests/test_roundcube_citycenter_live.php
+
+  private-requirements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: citycenter-smtp2go-dns
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Inspect private Roundcube configuration under explicit user authorization
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_citycenter_requirements.py
