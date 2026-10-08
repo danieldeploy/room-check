@@ -81,6 +81,7 @@ jobs:
           php tests/invoice-booking-verification.php
           php tests/release-backup.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
+          php tests/invoice-hostelworld-account.php
           php tests/booking-login-smoke.php
           php tests/booking-login-status.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoice-agent.php
@@ -89,6 +90,7 @@ jobs:
           php tests/invoice-drive.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
+          php tests/invoice-hostelworld-pipe.php
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
           php tests/run.php

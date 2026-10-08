@@ -304,11 +304,15 @@ final class InvoiceRemoteAgent
         $request=$data['challenge'] ?? null;
         if (!is_array($request)) throw new RuntimeException('invalid_request',400);
         $id=(string)($request['id'] ?? '');
-        if (!preg_match('/\A[a-f0-9]{32}\z/',$id) || ($request['method'] ?? '')!=='sms') throw new RuntimeException('invalid_request',400);
+        $method = (string)($request['method'] ?? '');
+        $portal = (string)($lease['input']['portal'] ?? '');
+        $authMethod = (string)($lease['input']['authMethod'] ?? '');
+        $allowed = $method==='sms' || ($method==='email' && $portal==='hostelworld' && $authMethod==='email');
+        if (!preg_match('/\A[a-f0-9]{32}\z/',$id) || !$allowed) throw new RuntimeException('invalid_request',400);
         $auth=new InvoiceAuth($this->pdo,$this->vault);
         if (!isset($lease['challenge_id'])) {
             // Use server time; clock skew on the Windows PC must not bind an SMS to another job.
-            $auth->register($lease['job'],['id'=>$id,'method'=>'sms','created'=>time()]);
+            $auth->register($lease['job'],['id'=>$id,'method'=>$method,'created'=>time()]);
             $lease['challenge_id']=$id;
             $this->vault->save(self::LEASE,$lease);
         } elseif (!hash_equals($lease['challenge_id'],$id)) throw new RuntimeException('auth_invalid',409);

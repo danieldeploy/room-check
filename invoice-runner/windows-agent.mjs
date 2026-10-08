@@ -105,7 +105,7 @@ async function execute(client, root, runtime, job, browserSupervisor) {
             await privateWrite(path.join(exchange, `ready-${current.id}`), 'ready');
           }
           if (reply.value !== null && reply.value !== undefined) {
-            if (!/^\d{6}$/.test(reply.value)) throw new AgentError('auth_invalid');
+            if (!['sms', 'email'].includes(current.method) || !/^\d{6}$/.test(reply.value)) throw new AgentError('auth_invalid');
             await privateWrite(path.join(exchange, `response-${current.id}.json`), JSON.stringify({ value: reply.value }));
             await request({ action: 'challenge', challenge: current, ack: true });
             challenge.delivered = true;

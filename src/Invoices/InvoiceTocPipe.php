@@ -24,6 +24,27 @@ final class InvoiceTocPipe
         return ['input_bytes'=>strlen($raw),'transport_prefix'=>self::withoutEnvelope($raw)!==$raw];
     }
 
+    /** Parse bounded, untrusted cPanel pipe input and return only decoded text headers. */
+    public static function parseMessage(string $raw): array
+    {
+        if (strlen($raw)>self::MAX_BYTES || str_contains($raw,"\0")) throw new RuntimeException('toc_pipe_invalid');
+        $raw=self::withoutEnvelope($raw);
+        [$headers]=self::split($raw);
+        $parts=0; $text=self::text($raw,0,$parts);
+        $one=static function(array $values): string {
+            if (count($values)!==1) return '';
+            return trim((string)$values[0]);
+        };
+        $fromHeader=$one($headers['from']??[]);
+        if (preg_match('/<([^<>]+)>/',$fromHeader,$m)) $from=trim($m[1]);
+        else $from=trim($fromHeader," \t\r\n<>");
+        $subject=mb_decode_mimeheader($one($headers['subject']??[]));
+        $date=$one($headers['date']??[]);
+        $received=$date!=='' ? strtotime($date) : false;
+        return ['from'=>$from,'subject'=>$subject,'text'=>$text,
+            'received_at'=>$received===false ? 0 : $received,'hash'=>hash('sha256',$raw)];
+    }
+
     private static function split(string $raw): array
     {
         $parts=preg_split('/\r?\n\r?\n/',$raw,2);

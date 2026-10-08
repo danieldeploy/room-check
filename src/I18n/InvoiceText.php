@@ -381,6 +381,7 @@ final class InvoiceText
         'method_password' => ['Sem 2FA configurado', 'No 2FA configured'],
         'method_sms' => ['2FA por SMS', 'SMS 2FA'],
         'method_email' => ['2FA por email', 'Email 2FA'],
+        'hostelworld_filter_auth_note' => ['O código de autenticação só é recebido através do filtro dedicado do Hostelworld. Não é necessário acesso IMAP.', 'The authentication code is received only through the dedicated Hostelworld filter. IMAP access is not required.'],
         'method_totp' => ['Google Authenticator (TOTP)', 'Google Authenticator (TOTP)'],
         'sms_note' => ['O Android encaminha apenas mensagens correspondentes à conta e a uma autenticação em curso.', 'Android forwards only messages matching this account and an active authentication attempt.'],
         'sms_sender' => ['Remetente SMS', 'SMS sender'],
