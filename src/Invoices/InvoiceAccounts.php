@@ -203,9 +203,13 @@ final class InvoiceAccounts
         }
         if ($method === 'totp' && empty($data['totp_secret'])) throw new RuntimeException('auth_unconfigured');
         if ($method === 'sms' && (empty($data['sms_sender']) || empty($data['sms_keyword']))) throw new RuntimeException('auth_unconfigured');
-        if (($method === 'email' || $account['portal'] === 'email') &&
+        // Hostelworld email 2FA is delivered by the account-level cPanel filter pipe.
+        // Never require or store mailbox credentials for that portal.
+        $filteredHostelworld = $account['portal'] === 'hostelworld' && $method === 'email';
+        if ((($method === 'email' && !$filteredHostelworld) || $account['portal'] === 'email') &&
             (empty($data['imap_host']) || empty($data['imap_user']) || empty($data['imap_password']))) throw new RuntimeException('auth_unconfigured');
-        if ($method === 'email' && (empty($data['email_sender']) || empty($data['email_recipient']) || empty($data['email_subject']))) throw new RuntimeException('auth_unconfigured');
+        if ($method === 'email' && !$filteredHostelworld &&
+            (empty($data['email_sender']) || empty($data['email_recipient']) || empty($data['email_subject']))) throw new RuntimeException('auth_unconfigured');
         if ($data === $original && $method === $account['auth_method']) return;
         $vault->save(self::secretName($id, 'credentials'), $data);
         $vault->save(self::secretName($id, 'session'), ['cookies' => []]);
