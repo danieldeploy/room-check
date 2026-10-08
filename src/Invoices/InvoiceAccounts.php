@@ -197,8 +197,9 @@ final class InvoiceAccounts
         }
         $method = (string) ($input['auth_method'] ?? $account['auth_method']);
         if (!in_array($method, self::METHODS, true)) throw new RuntimeException('invalid_request');
-        $filteredHostelworld = $account['portal'] === 'hostelworld' && $method === 'email';
-        if ($filteredHostelworld) {
+        $hostelworldAccount = $account['portal'] === 'hostelworld';
+        $filteredHostelworld = $hostelworldAccount && $method === 'email';
+        if ($hostelworldAccount) {
             foreach (['imap_host','imap_user','imap_password','imap_mailbox','email_sender','email_recipient','email_subject'] as $key) unset($data[$key]);
         }
         if (!empty($data['totp_secret'])) {
