@@ -1,8 +1,5 @@
 name: City Center verified SMTP2GO activation
 on:
-  push:
-    branches: [codex/roundcube-server-audit-20261004]
-    paths: [.github/workflows/roundcube-citycenter-activate.yml]
   workflow_dispatch:
 permissions:
   contents: read
