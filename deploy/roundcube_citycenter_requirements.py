@@ -35,6 +35,9 @@ def audit():
     rows = data if isinstance(data, list) else data.get('pops', []) if isinstance(data, dict) else []
     private = '/home/city/' + dns.BACKUP_DIR
     filenames = client.file_inventory(private)
+    config_backup = client.file_stat(private, 'config-before-smtp2go-20261008.inc.php')
+    plugin_dir_exists = 'citycenter_smtp2go_api' in client.file_inventory(ROOT + '/plugins')
+    installed_count = len(client.file_inventory(ROOT + '/plugins/citycenter_smtp2go_api') - {'.', '..'}) if plugin_dir_exists else 0
     key_names = ('api-key.txt', 'sandbox-key.txt')
     key_present = False
     for name in key_names:
@@ -42,7 +45,7 @@ def audit():
             stat = client.file_stat(private, name)
             key_present |= bool(stat and stat.get('type') == 'file' and stat.get('nicemode') == '0600')
     return {'ok': True, 'read_only': True, 'private_contents_published': False,
-            'active_plugin_count': len(names), 'mail_hook_conflict_count': conflicts,
+            'config_backup_present': bool(config_backup), 'config_backup_secure': bool(config_backup and config_backup.get('nicemode') == '0600'), 'new_plugin_directory_present': plugin_dir_exists, 'installed_plugin_file_count': installed_count, 'active_plugin_count': len(names), 'mail_hook_conflict_count': conflicts,
             'provider_hook_conflict_count': provider_conflicts,
             'roundcube_version_matches_transport': bool(version and version[1] == '1.6.19'),
             'production_mailbox_exists': any(str(r.get('email', '')).lower() == 'info@citycenterhostel.pt' for r in rows),
