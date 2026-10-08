@@ -19,6 +19,9 @@ def audit():
     if result.returncode != 0:
         raise dns.OperationError('config_static_analysis_failed')
     summary = json.loads(result.stdout)
+    mail_run = subprocess.run(['php', 'deploy/roundcube_config_summary.php', '--mail-summary'], input=config, text=True, capture_output=True, timeout=20)
+    if mail_run.returncode != 0: raise dns.OperationError('mail_config_analysis_failed')
+    mail_summary = json.loads(mail_run.stdout)
     names = summary['plugins']
     conflicts = 0
     provider_conflicts = 0
@@ -45,7 +48,7 @@ def audit():
             stat = client.file_stat(private, name)
             key_present |= bool(stat and stat.get('type') == 'file' and stat.get('nicemode') == '0600')
     return {'ok': True, 'read_only': True, 'private_contents_published': False,
-            'config_backup_present': bool(config_backup), 'config_backup_secure': bool(config_backup and config_backup.get('nicemode') == '0600'), 'new_plugin_directory_present': plugin_dir_exists, 'installed_plugin_file_count': installed_count, 'active_plugin_count': len(names), 'mail_hook_conflict_count': conflicts,
+            'config_backup_present': bool(config_backup), 'config_backup_secure': bool(config_backup and config_backup.get('nicemode') == '0600'), 'new_plugin_directory_present': plugin_dir_exists, 'installed_plugin_file_count': installed_count, 'smtp_route_provider': mail_summary['smtp_route_provider'], 'nonplaceholder_smtp_credential_fields': mail_summary['nonplaceholder_smtp_credential_fields'], 'active_plugin_count': len(names), 'mail_hook_conflict_count': conflicts,
             'provider_hook_conflict_count': provider_conflicts,
             'roundcube_version_matches_transport': bool(version and version[1] == '1.6.19'),
             'production_mailbox_exists': any(str(r.get('email', '')).lower() == 'info@citycenterhostel.pt' for r in rows),
