@@ -15,14 +15,14 @@ try {
     $credentials=$accounts->credentials($vault,$id);
     hwAccountCheck(($credentials['identifier']??'')==='manager','portal username retained');
     hwAccountCheck(($credentials['hostel_number']??'')==='77759','Hostelworld account number retained');
-    hwAccountCheck(!isset($credentials['imap_host'],$credentials['imap_user'],$credentials['imap_password']),'mailbox access credentials absent');
+    hwAccountCheck(array_intersect(['imap_host','imap_user','imap_password','imap_mailbox'],array_keys($credentials))===[],'mailbox access credentials absent');
     hwAccountCheck((string)$pdo->query('SELECT auth_method FROM invoice_accounts WHERE id='.$id)->fetchColumn()==='email','email 2FA configured');
     // Switching an account previously configured with IMAP to filtered delivery deletes mailbox secrets.
     $old=$credentials+['imap_host'=>'imap.example.test','imap_user'=>'mail-user','imap_password'=>'mail-secret','imap_mailbox'=>'INBOX'];
     $vault->save(InvoiceAccounts::secretName($id,'credentials'),$old);
     $accounts->saveCredentials($vault,$id,['auth_method'=>'email']);
     $credentials=$accounts->credentials($vault,$id);
-    hwAccountCheck(!isset($credentials['imap_host'],$credentials['imap_user'],$credentials['imap_password'],$credentials['imap_mailbox']),'legacy mailbox secrets purged');
+    hwAccountCheck(array_intersect(['imap_host','imap_user','imap_password','imap_mailbox'],array_keys($credentials))===[],'legacy mailbox secrets purged');
     echo "Hostelworld filtered email account tests passed\n";
 } finally {
     foreach (glob($dir.'/*')?:[] as $file) unlink($file);rmdir($dir);
