@@ -89,6 +89,7 @@ jobs:
           php tests/invoice-drive.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
+          php tests/invoice-hostelworld-pipe.php
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
           php tests/run.php
