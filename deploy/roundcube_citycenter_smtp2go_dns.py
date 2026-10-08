@@ -114,7 +114,7 @@ class Client:
             if not isinstance(row, dict) or row.get('type') != 'record':
                 continue
             try:
-                name = base64.b64decode(row['dname_b64'], validate=True).decode().rstrip('.').lower()
+                name = canonical_name(base64.b64decode(row['dname_b64'], validate=True).decode())
                 values = row['data_b64']
                 if not isinstance(values, list):
                     raise ValueError
@@ -238,11 +238,22 @@ class Client:
             raise OperationError('rollback_scope_violation')
         selected = chosen[0]
         legacy = [r for r in self.legacy_zone() if r.get('type') == 'CNAME' and
-                  str(r.get('name', '')).rstrip('.').lower() == selected['name'] and
+                  canonical_name(str(r.get('name', ''))) == selected['name'] and
                   str(r.get('cname', '')).rstrip('.').lower() == selected['data'][0]]
         if len(legacy) != 1 or not isinstance(legacy[0].get('Line'), int) or legacy[0]['Line'] < 1:
             raise OperationError('rollback_inventory_mismatch')
         self.zone_api2('remove_zone_record', line=legacy[0]['Line'])
+
+
+def canonical_name(value):
+    value = value.lower()
+    if value.endswith('.'):
+        return value.rstrip('.')
+    if value in ('', '@'):
+        return DOMAIN
+    if value == DOMAIN or value.endswith('.' + DOMAIN):
+        return value
+    return value + '.' + DOMAIN
 
 
 def matching(records, rec):
@@ -264,7 +275,7 @@ def _fingerprints(records):
         if record['type'] == 'SOA' and len(values) == 7:
             values[2] = '<serial>'
         return tuple(values)
-    return sorted((r['name'], r['type'], r['ttl'], data(r)) for r in records)
+    return sorted((canonical_name(r['name']), r['type'], r['ttl'], data(r)) for r in records)
 
 
 def apply(client):
