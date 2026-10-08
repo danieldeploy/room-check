@@ -62,8 +62,36 @@ def run():
     return {'ok':True,'server_send_accepted':True,'email_sent':True,'temporary_cron_removed':True,
             'test_program_retired':True,'credential_published':False,'production_config_changed':False}
 
+def diagnose():
+    import urllib.parse, urllib.request
+    client=dns.Client(os.environ.get('WHM_API_TOKEN',''))
+    prep.require(client.account_for_domain()=='city','account_scope_mismatch')
+    params={'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':'Cron','cpanel_jsonapi_func':'fetchcron'}
+    url=dns.ORIGIN+'/json-api/cpanel?'+urllib.parse.urlencode(params)
+    request=urllib.request.Request(url,headers={'Authorization':'whm fazenda:'+client.token,'Accept':'application/json'})
+    with client.opener.open(request,timeout=20) as response:
+        prep.require(response.status==200 and response.geturl()==url,'cron_diagnostic_http_failed')
+        payload=json.loads(response.read(1024*1024))
+    data=payload.get('cpanelresult',{})
+    rows=data.get('data',[])
+    rows=rows if isinstance(rows,list) else []
+    messages=[str(data.get('error',''))]
+    for row in rows:
+        if isinstance(row,dict):
+            messages.extend(str(row.get(k,'')) for k in ('reason','err','statusmsg'))
+    message=' '.join(messages).lower()
+    names=client.file_inventory(prep.PRIVATE)
+    final=result(client)
+    return {'ok':True,'read_only':True,'cron_event_success':data.get('event',{}).get('result')==1,
+            'cron_reports_no_crontab':'no crontab' in message,'cron_reports_missing_function':any(x in message for x in ('unknown function','does not exist','not found')),
+            'cron_reports_permission_denied':any(x in message for x in ('permission denied','not permitted','access denied')),
+            'cron_entry_count':sum(r.get('type')=='command' for r in rows if isinstance(r,dict)),
+            'temporary_test_cron_count':sum(r.get('command')==COMMAND for r in rows if isinstance(r,dict)),
+            'test_program_present':FILE in names,'test_marker_present':MARKER in names,
+            'server_send_accepted':bool(final and final.get('server_send_accepted')),'credential_published':False}
+
 if __name__=='__main__':
-    try: print(json.dumps(run(),sort_keys=True))
+    try: print(json.dumps(diagnose() if '--diagnose' in sys.argv else run(),sort_keys=True))
     except dns.OperationError as error:
         print(json.dumps({'ok':False,'error':str(error),'delivery_state':'requires_review','automatic_retry':False}));sys.exit(1)
     except Exception:
