@@ -46,6 +46,20 @@ export class SecondFactor {
       }
       throw new PortalError('auth_unconfigured');
     }
+    if (authMethod === 'email' && this.input.portal === 'hostelworld') {
+      if (!exchangeDir) throw new PortalError('auth_unconfigured');
+      this.id = crypto.randomBytes(16).toString('hex');
+      this.filteredEmail = true;
+      const tmp = path.join(exchangeDir, 'challenge.tmp');
+      await fs.writeFile(tmp, JSON.stringify({ id: this.id, method: 'email', created: Math.floor(this.started / 1000) }), { mode: 0o600 });
+      await fs.rename(tmp, path.join(exchangeDir, 'challenge.json'));
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        if (await fs.stat(path.join(exchangeDir, `ready-${this.id}`)).then(() => true).catch(() => false)) return;
+        await delay(100);
+      }
+      throw new PortalError('auth_unconfigured');
+    }
     if (authMethod === 'email') {
       const { EmailChallenge } = await import('./email.mjs');
       this.email = new EmailChallenge(credentials);
@@ -61,6 +75,19 @@ export class SecondFactor {
       const remaining = period - (Math.floor(Date.now() / 1000) % period);
       if (remaining < 5) await delay((remaining + 1) * 1000);
       return totp(this.input.credentials.totp_secret, Math.floor(Date.now() / 1000), challenge);
+    }
+    if (challenge.method === 'email' && this.filteredEmail && this.id) {
+      const file = path.join(this.input.exchangeDir, `response-${this.id}.json`);
+      const deadline = this.started + 145000;
+      while (Date.now() < deadline) {
+        const value = await fs.readFile(file, 'utf8').catch(() => null);
+        if (value) {
+          await fs.unlink(file);
+          return extractCode(JSON.parse(value).value);
+        }
+        await delay(500);
+      }
+      throw new PortalError('auth_timeout');
     }
     if (challenge.method === 'email' && this.email) return this.email.value(challenge, this.urlCheck);
     if (challenge.method === 'sms' && this.id && (challenge.digits || 6) === 6) {
