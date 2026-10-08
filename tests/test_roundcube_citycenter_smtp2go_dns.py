@@ -39,6 +39,49 @@ class FakeClient:
 
 
 class CityCenterSmtp2goDnsTests(unittest.TestCase):
+    def test_nested_zone_result_requires_success(self):
+        self.assertTrue(dns._api2_success({'result': {'status': 1}}))
+        self.assertFalse(dns._api2_success({'result': {'status': 0}}))
+        self.assertFalse(dns._api2_success({'result': {}}))
+
+    def test_soa_serial_changes_preserve_backup_comparison(self):
+        a = {'name': dns.DOMAIN, 'type': 'SOA', 'ttl': 86400,
+             'data': ['ns.test', 'admin.test', '2026100801', '10', '20', '30', '40']}
+        b = copy.deepcopy(a)
+        b['data'][2] = '2026100802'
+        self.assertEqual(dns._fingerprints([a]), dns._fingerprints([b]))
+        b['data'][0] = 'other.test'
+        self.assertNotEqual(dns._fingerprints([a]), dns._fingerprints([b]))
+
+    def test_rollback_resolves_legacy_line_by_record_identity(self):
+        client = dns.Client('test-token')
+        client.user = 'city'
+        rec = dns.RECORDS[0]
+        client.dns_records = lambda: [{'name': rec['name'], 'type': 'CNAME',
+            'data': [rec['target']], 'ttl': rec['ttl'], 'line_index': 17}]
+        client.legacy_zone = lambda: [{'name': rec['name'] + '.', 'type': 'CNAME',
+            'cname': rec['target'] + '.', 'Line': 24}]
+        calls = []
+        client.zone_api2 = lambda func, **params: calls.append((func, params))
+        client.remove_line(17)
+        self.assertEqual(calls, [('remove_zone_record', {'line': 24})])
+        client.legacy_zone = lambda: []
+        with self.assertRaisesRegex(dns.OperationError, 'rollback_inventory_mismatch'):
+            client.remove_line(17)
+        self.assertEqual(len(calls), 1)
+
+    def test_add_checks_rollback_inventory_and_scopes_record(self):
+        client = dns.Client('test-token')
+        client.user = 'city'
+        calls = []
+        client.legacy_zone = lambda: calls.append(('inventory', {}))
+        client.zone_api2 = lambda func, **params: calls.append((func, params))
+        client.add_cname(dns.RECORDS[0])
+        self.assertEqual(calls[0][0], 'inventory')
+        self.assertEqual(calls[1][1]['name'], 'em1063225')
+        with self.assertRaisesRegex(dns.OperationError, 'dns_scope_violation'):
+            client.add_cname({'name': 'other.test'})
+
     def test_private_backup_reads_uapi_content_and_preserves_first_capture(self):
         class BackupClient(dns.Client):
             def __init__(self):
