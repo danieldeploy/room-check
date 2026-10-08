@@ -37,6 +37,12 @@ jobs:
                   raise dns.OperationError('account_scope_mismatch')
               stage = 'dns'
               records = client.dns_records()
+              legacy = client.legacy_zone()
+              categories = []
+              for desired in dns.RECORDS:
+                  targets = [r for r in records if r['type'] == 'CNAME' and r['data'] == [desired['target']]]
+                  categories.append({'target_record_count': len(targets), 'exact_name_count': sum(r['name'] == desired['name'] for r in targets), 'relative_name_count': sum(r['name'] == desired['name'].removesuffix('.' + dns.DOMAIN) for r in targets), 'doubled_domain_count': sum(r['name'] == desired['name'] + '.' + dns.DOMAIN for r in targets)})
+              print(json.dumps({'dns_shape_check': categories, 'legacy_inventory_read': True}))
               stage = 'files'
               names = client.file_inventory('/home/' + client.user)
               stage = 'legacy_api'
