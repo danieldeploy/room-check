@@ -18,11 +18,15 @@ final class InvoiceAuth
     {
         $id = (string) ($request['id'] ?? '');
         $created = (int) ($request['created'] ?? 0);
-        if (!preg_match('/\A[a-f0-9]{32}\z/', $id) || ($request['method'] ?? '') !== 'sms'
+        $method = (string) ($request['method'] ?? '');
+        $account = (new InvoiceAccounts($this->pdo))->get((int) $job['account_id']);
+        $methodAllowed = $method === 'sms' || ($method === 'email'
+            && $account['portal'] === 'hostelworld' && $account['auth_method'] === 'email');
+        if (!preg_match('/\A[a-f0-9]{32}\z/', $id) || !$methodAllowed
             || $created < time() - 30 || $created > time() + 5) throw new RuntimeException('auth_unconfigured');
         $this->pdo->prepare("UPDATE invoice_auth_challenges SET state = 'expired' WHERE task_id = ? AND state IN ('waiting', 'received')")->execute([$job['id']]);
         $this->pdo->prepare('INSERT INTO invoice_auth_challenges (id, account_id, task_id, method, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
-            ->execute([$id, $job['account_id'], $job['id'], 'sms', gmdate('Y-m-d H:i:s', $created), gmdate('Y-m-d H:i:s', $created + 150)]);
+            ->execute([$id, $job['account_id'], $job['id'], $method, gmdate('Y-m-d H:i:s', $created), gmdate('Y-m-d H:i:s', $created + 150)]);
         $this->pdo->prepare("UPDATE invoice_tasks SET state = 'waiting_auth' WHERE id = ?")->execute([$job['id']]);
     }
 
@@ -59,6 +63,51 @@ final class InvoiceAuth
             $s->execute([$hash, $challenge['id']]);
             if ($s->rowCount() !== 1) { $this->pdo->rollBack(); return false; }
             $this->vault->save($name, ['value' => $codes[0][0], 'account' => $accountId, 'challenge' => $challenge['id']]);
+            $this->pdo->prepare("UPDATE invoice_auth_challenges SET state = 'received' WHERE id = ?")->execute([$challenge['id']]);
+            $this->pdo->commit();
+            return true;
+        } catch (PDOException $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            if ($e->getCode() === '23000') return false;
+            throw $e;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Accept only a Hostelworld code from a cPanel filter pipe while one account challenge is active. */
+    public function receiveHostelworldEmail(int $accountId, array $message): bool
+    {
+        $accounts = new InvoiceAccounts($this->pdo);
+        $account = $accounts->get($accountId);
+        if ($account['portal'] !== 'hostelworld' || $account['auth_method'] !== 'email') return false;
+        $from = trim((string) ($message['from'] ?? ''));
+        $subject = trim((string) ($message['subject'] ?? ''));
+        $text = (string) ($message['text'] ?? '');
+        $received = filter_var($message['received_at'] ?? '', FILTER_VALIDATE_INT);
+        // Filtered messages are still untrusted input: require Hostelworld's domain and a
+        // login/security subject; ignore all mail outside the short live challenge window.
+        if (!preg_match('/\A[^<>\s@]+@(?:[A-Za-z0-9-]+\.)*hostelworld\.com\z/i', $from)
+            || !preg_match('/\b(login|sign[ -]?in|security|verification|code|authentication)\b/i', $subject)
+            || !$received || abs(time() - $received) > 150 || strlen($text) > 32768) return false;
+        preg_match_all('/(?<!\d)\d{6}(?!\d)/', $text, $codes);
+        if (count($codes[0]) !== 1) return false;
+        $s = $this->pdo->prepare("SELECT c.* FROM invoice_auth_challenges c JOIN invoice_tasks t ON t.id = c.task_id
+            WHERE c.account_id = ? AND c.method = 'email' AND c.state = 'waiting' AND c.expires_at > ?
+            AND t.state IN ('running', 'waiting_auth') ORDER BY c.created_at DESC LIMIT 2");
+        $s->execute([$accountId, gmdate('Y-m-d H:i:s')]);
+        $matches = $s->fetchAll(PDO::FETCH_ASSOC);
+        if (count($matches) !== 1 || $received < strtotime($matches[0]['created_at'] . ' UTC')) return false;
+        $challenge = $matches[0];
+        $hash = hash('sha256', $accountId . "\0" . strtolower($from) . "\0" . $subject . "\0" . $codes[0][0] . "\0" . $received);
+        $this->pdo->beginTransaction();
+        try {
+            $s = $this->pdo->prepare("UPDATE invoice_auth_challenges SET state = 'receiving', event_hash = ? WHERE id = ? AND state = 'waiting'");
+            $s->execute([$hash, $challenge['id']]);
+            if ($s->rowCount() !== 1) { $this->pdo->rollBack(); return false; }
+            $this->vault->save('otp-' . $challenge['id'] . '.enc',
+                ['value' => $codes[0][0], 'account' => $accountId, 'challenge' => $challenge['id']]);
             $this->pdo->prepare("UPDATE invoice_auth_challenges SET state = 'received' WHERE id = ?")->execute([$challenge['id']]);
             $this->pdo->commit();
             return true;
