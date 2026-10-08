@@ -39,6 +39,12 @@ class FakeClient:
 
 
 class CityCenterSmtp2goDnsTests(unittest.TestCase):
+    def test_relative_dns_owner_names_are_canonicalized(self):
+        self.assertEqual(dns.canonical_name('em1063225'), dns.RECORDS[0]['name'])
+        self.assertEqual(dns.canonical_name('s1063225._domainkey'), dns.RECORDS[1]['name'])
+        self.assertEqual(dns.canonical_name(dns.DOMAIN + '.'), dns.DOMAIN)
+        self.assertEqual(dns.canonical_name(dns.DOMAIN), dns.DOMAIN)
+
     def test_nested_zone_result_requires_success(self):
         self.assertTrue(dns._api2_success({'result': {'status': 1}}))
         self.assertFalse(dns._api2_success({'result': {'status': 0}}))
