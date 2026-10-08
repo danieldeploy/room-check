@@ -21,6 +21,7 @@ ORIGIN = "https://server50.romania-webhosting.com:2083"
 WHM_ORIGIN = "https://server50.romania-webhosting.com:2087"
 WHM_USER = "fazenda"
 CPANEL_USER = "welcome"
+WHM_TARGET_ACCOUNTS = {"welcome", "city"}
 DATABASE = "welcome_roomcheck"
 SOURCE_URLS = {
     "https://github.com/danieldeploy/room-check",
@@ -37,6 +38,7 @@ OPERATIONS = {
     ("VersionControlDeployment", "retrieve"): set(),
     ("Features", "list_features_like"): {"pattern", "is_regex"},
     ("Mysql", "get_privileges_on_database"): {"user", "database"},
+    ("Email", "list_filters"): set(),
 }
 MYSQL_PRIVILEGES = {
     "ALL PRIVILEGES", "ALTER", "ALTER ROUTINE", "CREATE", "CREATE ROUTINE",
@@ -81,6 +83,7 @@ class Config:
     poll_interval: float = 2.0
     transport: str = "cpanel"
     whm_user: str = WHM_USER
+    whm_target_account: str = CPANEL_USER
 
     def __post_init__(self):
         # A protected environment cannot silently send this token to another host.
@@ -92,6 +95,7 @@ class Config:
         if self.transport == "whm":
             require(self.user == CPANEL_USER, "whm_target_account_not_allowed")
             require(self.whm_user == WHM_USER, "whm_reseller_not_allowed")
+            require(self.whm_target_account in WHM_TARGET_ACCOUNTS, "whm_target_account_not_allowed")
         require(isinstance(self.token, str) and self.token and len(self.token) <= 4096,
                 "missing_or_invalid_token")
         require(all(33 <= ord(c) <= 126 for c in self.token), "missing_or_invalid_token")
@@ -114,6 +118,7 @@ class Config:
             wait_timeout=args.wait_timeout,
             transport=args.transport,
             whm_user=os.environ.get("WHM_USER", WHM_USER),
+            whm_target_account=os.environ.get("WHM_TARGET_ACCOUNT", CPANEL_USER),
         )
 
 
@@ -147,7 +152,7 @@ class CpanelAPI:
             require(parameters == {"user": DATABASE, "database": DATABASE},
                     "database_not_allowed")
         if self.config.transport == "whm":
-            query = urllib.parse.urlencode({"api.version": 1, "cpanel.user": CPANEL_USER,
+            query = urllib.parse.urlencode({"api.version": 1, "cpanel.user": self.config.whm_target_account,
                                            "cpanel.module": module, "cpanel.function": function,
                                            **parameters})
             url = self.config.origin + "/json-api/uapi_cpanel"
@@ -394,10 +399,12 @@ class Deployment:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Management Hub: UAPI por cPanel ou WHM; estado por defeito.")
-    parser.add_argument("command", choices=("status", "doctor", "update", "deploy", "wait"), nargs="?", default="status")
+    parser.add_argument("command", choices=("status", "doctor", "update", "deploy", "wait", "filters"), nargs="?", default="status")
     parser.add_argument("--transport", choices=("cpanel", "whm"), default="cpanel",
                         help="cpanel: token da conta, porta 2083; whm: token fazenda, porta 2087")
     parser.add_argument("--expected-commit", help="SHA completo revisto: destino do update ou HEAD a publicar")
+    parser.add_argument("--target-account", choices=tuple(sorted(WHM_TARGET_ACCOUNTS)), default=CPANEL_USER,
+                        help="conta cPanel alvo apenas no transporte WHM")
     parser.add_argument("--expected-current-commit", help="SHA atual no cPanel, obrigatório para update")
     parser.add_argument("--deploy-id", help="ID existente; wait apenas consulta, sem criar novo deployment")
     parser.add_argument("--request-timeout", type=float, default=20)
@@ -409,6 +416,19 @@ def main(argv=None):
         require(args.command != "update" or args.expected_current_commit, "expected_current_commit_required")
         require(args.command != "wait" or args.deploy_id, "deploy_id_required")
         config = Config.from_environment(args)
+        if args.transport == "whm":
+            config = Config(**{**config.__dict__, "whm_target_account": args.target_account})
+        elif args.target_account != CPANEL_USER:
+            raise DeploymentError("whm_target_account_requires_whm_transport")
+        if args.command == "filters":
+            require(args.transport == "whm", "filters_require_whm_transport")
+            data = CpanelAPI(config).call("Email", "list_filters")
+            require(isinstance(data, (list, dict)), "invalid_filter_response")
+            result = {"command": "filters", "cpanel_account": config.whm_target_account,
+                      "filters": data}
+            output = json.dumps({"ok": True, **result}, ensure_ascii=False)
+            print(output.replace(config.token, "[REDACTED]"))
+            return 0
         runner = Deployment(CpanelAPI(config), config)
         if args.command == "status":
             result = runner.status()
