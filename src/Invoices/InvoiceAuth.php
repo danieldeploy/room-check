@@ -80,8 +80,10 @@ final class InvoiceAuth
     public function receiveHostelworldEmail(int $accountId, array $message): bool
     {
         $accounts = new InvoiceAccounts($this->pdo);
-        $account = $accounts->get($accountId);
-        if ($account['portal'] !== 'hostelworld' || $account['auth_method'] !== 'email') return false;
+        if ($accountId > 0) {
+            $account = $accounts->get($accountId);
+            if ($account['portal'] !== 'hostelworld' || $account['auth_method'] !== 'email') return false;
+        }
         $from = trim((string) ($message['from'] ?? ''));
         $subject = trim((string) ($message['subject'] ?? ''));
         $text = (string) ($message['text'] ?? '');
@@ -93,13 +95,19 @@ final class InvoiceAuth
             || !$received || abs(time() - $received) > 150 || strlen($text) > 32768) return false;
         preg_match_all('/(?<!\d)\d{6}(?!\d)/', $text, $codes);
         if (count($codes[0]) !== 1) return false;
-        $s = $this->pdo->prepare("SELECT c.* FROM invoice_auth_challenges c JOIN invoice_tasks t ON t.id = c.task_id
-            WHERE c.account_id = ? AND c.method = 'email' AND c.state = 'waiting' AND c.expires_at > ?
-            AND t.state IN ('running', 'waiting_auth') ORDER BY c.created_at DESC LIMIT 2");
-        $s->execute([$accountId, gmdate('Y-m-d H:i:s')]);
+        $sql = "SELECT c.* FROM invoice_auth_challenges c
+            JOIN invoice_tasks t ON t.id = c.task_id
+            JOIN invoice_accounts a ON a.id = c.account_id
+            WHERE a.portal = 'hostelworld' AND a.auth_method = 'email' AND c.method = 'email'
+            AND c.state = 'waiting' AND c.expires_at > ?
+            AND t.state IN ('running', 'waiting_auth')".($accountId > 0 ? " AND c.account_id = ?" : "")
+            ." ORDER BY c.created_at DESC LIMIT 2";
+        $s = $this->pdo->prepare($sql);
+        $s->execute($accountId > 0 ? [gmdate('Y-m-d H:i:s'), $accountId] : [gmdate('Y-m-d H:i:s')]);
         $matches = $s->fetchAll(PDO::FETCH_ASSOC);
         if (count($matches) !== 1 || $received < strtotime($matches[0]['created_at'] . ' UTC')) return false;
         $challenge = $matches[0];
+        $accountId=(int)$challenge['account_id'];
         $hash = hash('sha256', $accountId . "\0" . strtolower($from) . "\0" . $subject . "\0" . $codes[0][0] . "\0" . $received);
         $this->pdo->beginTransaction();
         try {
