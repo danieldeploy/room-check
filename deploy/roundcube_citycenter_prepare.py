@@ -10,6 +10,7 @@ PRIVATE = HOME + '/' + dns.BACKUP_DIR
 BACKUP = 'config-before-smtp2go-20261008.inc.php'
 PLUGIN = ROOT + '/plugins/citycenter_smtp2go_api'
 FILES = ('api_transport.php', 'citycenter_smtp2go_api.php', 'config.inc.php')
+STAGE = 'initial'
 
 def require(value, message):
     if not value:
@@ -40,30 +41,43 @@ def save(client, directory, name, content):
     require(requirements.read(client, directory, name) == content, 'file_readback_mismatch')
 
 def prepare():
+    global STAGE
+    STAGE = 'read_only_audit'
     audit = requirements.audit()
     require(audit['production_mailbox_exists'] and audit['roundcube_version_matches_transport'] and
             audit['mail_hook_conflict_count'] == 0 and audit['smtp2go_auth_records'] == 2, 'transport_prerequisites_not_met')
     client = dns.Client(os.environ.get('WHM_API_TOKEN', ''))
     require(client.account_for_domain() == 'city', 'account_scope_mismatch')
+    STAGE = 'path_metadata'
     for directory, name in ((HOME, dns.BACKUP_DIR), (HOME, 'public_html'), (HOME + '/public_html', 'roundcube'), (ROOT, 'config'), (ROOT, 'plugins')):
         stat(client, directory, name, 'dir', '0700' if name == dns.BACKUP_DIR else None)
     stat(client, ROOT + '/config', 'config.inc.php', 'file')
     original = requirements.read(client, ROOT + '/config', 'config.inc.php')
     require('citycenter_smtp2go_api' not in original, 'plugin_already_registered')
+    STAGE = 'private_config_backup'
     private_names = client.file_inventory(PRIVATE)
     if BACKUP in private_names:
         stat(client, PRIVATE, BACKUP, 'file', '0600')
         require(requirements.read(client, PRIVATE, BACKUP) == original, 'existing_backup_does_not_match_config')
     else:
-        save(client, PRIVATE, BACKUP, original)
+        # Keep the existing configuration on the server: native copy, no PHP-content upload.
+        client.api2('fileop', op='copy', sourcefiles='public_html/roundcube/config/config.inc.php',
+                    destfiles=PRIVATE + '/' + BACKUP, doubledecode=0)
+        client.api2('fileop', op='chmod', sourcefiles=(PRIVATE + '/' + BACKUP).removeprefix(HOME + '/'),
+                    metadata='0600', doubledecode=0)
+        stat(client, PRIVATE, BACKUP, 'file', '0600')
+        require(requirements.read(client, PRIVATE, BACKUP) == original, 'backup_readback_mismatch')
+    STAGE = 'private_journal_directory'
     if 'live' not in client.file_inventory(PRIVATE):
         client.api2('mkdir', path=PRIVATE, name='live', permissions='0700')
     stat(client, PRIVATE, 'live', 'dir', '0700')
+    STAGE = 'disabled_plugin_directory'
     if 'citycenter_smtp2go_api' not in client.file_inventory(ROOT + '/plugins'):
         client.api2('mkdir', path=ROOT + '/plugins', name='citycenter_smtp2go_api', permissions='0755')
     stat(client, ROOT + '/plugins', 'citycenter_smtp2go_api', 'dir', '0755')
     names = client.file_inventory(PLUGIN) - {'.', '..'}
     require(names <= set(FILES), 'unrecognized_plugin_files')
+    STAGE = 'disabled_plugin_files'
     for name, content in sources().items():
         if name in names:
             stat(client, PLUGIN, name, 'file', '0644')
@@ -79,8 +93,8 @@ if __name__ == '__main__':
     try:
         print(json.dumps(prepare(), sort_keys=True))
     except dns.OperationError as error:
-        print(json.dumps({'ok': False, 'mode': 'citycenter-disabled-plugin-preparation', 'email_sent': False, 'state_requires_review': True, 'error': str(error)}))
+        print(json.dumps({'ok': False, 'mode': 'citycenter-disabled-plugin-preparation', 'email_sent': False, 'state_requires_review': True, 'stage': STAGE, 'error': str(error)}))
         sys.exit(1)
     except Exception:
-        print(json.dumps({'ok': False, 'mode': 'citycenter-disabled-plugin-preparation', 'email_sent': False, 'state_requires_review': True, 'error': 'private_state_requires_review'}))
+        print(json.dumps({'ok': False, 'mode': 'citycenter-disabled-plugin-preparation', 'email_sent': False, 'state_requires_review': True, 'stage': STAGE, 'error': 'private_state_requires_review'}))
         sys.exit(1)
