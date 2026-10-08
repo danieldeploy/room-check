@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
-          ref: 320cde44c63fab2d60522fe6d6563734157fa4eb
+          ref: 62cd8239ed21c70aa2dfe0385bfbc65ad426573c
           persist-credentials: false
       - name: Retire fixed tests and verify both live installations
         env:
