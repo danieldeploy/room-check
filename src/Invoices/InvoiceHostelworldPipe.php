@@ -15,6 +15,7 @@ final class InvoiceHostelworldPipe
         $subject = preg_replace('/[_-]+/', ' ', $message['subject']);
         if (!preg_match('/\b(login|sign\s*in|security|verification|code|authentication)\b/i',$subject)) return null;
         preg_match_all('/(?<!\d)\d{6}(?!\d)/',$message['text'],$codes);
+        $codes[0]=array_values(array_unique($codes[0]));
         if (count($codes[0])!==1 || !$message['received_at']) return null;
         return $message;
     }
