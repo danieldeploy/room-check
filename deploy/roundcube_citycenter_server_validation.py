@@ -11,8 +11,25 @@ COMMAND = '/usr/local/bin/php ' + prep.PRIVATE + '/' + FILE + ' >/dev/null 2>&1'
 
 def cron(client, function, **params):
     prep.require(function in ('fetchcron', 'add_line', 'remove_line'), 'cron_scope_violation')
+    if function == 'remove_line':
+        return remove_cron_raw(client, params)
     return client.request('/json-api/cpanel', {'cpanel_jsonapi_user': 'city', 'cpanel_jsonapi_apiversion': 2,
         'cpanel_jsonapi_module': 'Cron', 'cpanel_jsonapi_func': function, **params}, api_version=2)
+
+def remove_cron_raw(client, params):
+    import urllib.parse, urllib.request
+    values={'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':'Cron','cpanel_jsonapi_func':'remove_line',**params}
+    url=dns.ORIGIN+'/json-api/cpanel?'+urllib.parse.urlencode(values)
+    request=urllib.request.Request(url,headers={'Authorization':'whm fazenda:'+client.token,'Accept':'application/json'})
+    with client.opener.open(request,timeout=20) as response:
+        prep.require(response.status==200 and response.geturl()==url,'cron_remove_http_failed')
+        payload=json.loads(response.read(1024*1024))
+    result=payload.get('cpanelresult',{})
+    rows=result.get('data',[])
+    message=' '.join([str(result.get('error',''))]+[str(r.get(k,'')) for r in rows if isinstance(r,dict) for k in ('reason','err','statusmsg')]).lower()
+    if result.get('event',{}).get('result') != 1 or result.get('error') or any(not dns._api2_success(r) or r.get('reason') or r.get('err') for r in rows):
+        raise dns.OperationError('cron_remove_requires_linekey' if 'linekey' in message else 'cron_remove_identifier_rejected' if any(x in message for x in ('line','identifier','not found','invalid')) else 'cron_remove_rejected')
+    return rows
 
 def scheduled(client):
     return [r for r in cron(client, 'fetchcron') if r.get('type') == 'command' and r.get('command') == COMMAND]
