@@ -49,3 +49,5 @@ jobs:
 # Missing backup detection covered before the legacy stat operation.
 
 # Backup creation and first-capture preservation tested with UAPI content responses.
+
+# Execute the account-scoped DNS operation after regression checks.
