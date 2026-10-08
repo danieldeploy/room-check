@@ -1,4 +1,5 @@
 import copy
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -38,6 +39,22 @@ class FakeClient:
 
 
 class CityCenterSmtp2goDnsTests(unittest.TestCase):
+    def test_legacy_api2_response_is_parsed_without_whm_metadata(self):
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def geturl(self): return self.url
+            def read(self, limit): return json.dumps({'cpanelresult': {'event': {'result': 1}, 'data': [{'exists': 1, 'nicemode': '0700', 'type': 'dir'}]}}).encode()
+        class Opener:
+            def open(self, request, timeout):
+                response = Response()
+                response.url = request.full_url
+                return response
+        client = dns.Client('test-token', opener=Opener())
+        client.user = 'ccenter'
+        self.assertEqual(client.file_stat('/home/ccenter', 'public_html')['type'], 'dir')
+
     def test_adds_fixed_records_after_private_backup_and_emits_aggregate_only(self):
         client = FakeClient([{'name': 'citycenterhostel.pt', 'type': 'MX', 'data': ['mail.example'],
                               'ttl': 3600, 'line_index': 1}])
