@@ -12,7 +12,8 @@ final class InvoiceHostelworldPipe
     {
         $message=InvoiceTocPipe::parseMessage($raw);
         if (!preg_match('/\A[^<>\s@]+@(?:[A-Za-z0-9-]+\.)*hostelworld\.com\z/i',$message['from'])) return null;
-        if (!preg_match('/\b(login|sign[ -]?in|security|verification|code|authentication)\b/i',$message['subject'])) return null;
+        $subject = preg_replace('/[_-]+/', ' ', $message['subject']);
+        if (!preg_match('/\b(login|sign\s*in|security|verification|code|authentication)\b/i',$subject)) return null;
         preg_match_all('/(?<!\d)\d{6}(?!\d)/',$message['text'],$codes);
         if (count($codes[0])!==1 || !$message['received_at']) return null;
         return $message;
