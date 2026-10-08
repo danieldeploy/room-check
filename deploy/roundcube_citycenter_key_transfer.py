@@ -41,7 +41,19 @@ def transfer():
     client.user = 'welcome'
     source_dir = client.file_stat('/home/welcome', 'roundcube-smtp2go-private')
     source_key = client.file_stat(SOURCE_DIR, SOURCE_FILE)
+    restored = False
     require(source_dir and source_dir.get('type') == 'dir' and source_dir.get('nicemode') == '0700', 'source_directory_not_private')
+    if source_key is None:
+        trash = '/home/welcome/.trash'
+        names = client.file_inventory(trash)
+        require(SOURCE_FILE in names and sum(n == SOURCE_FILE or n.startswith(SOURCE_FILE + '.') for n in names) == 1, 'source_recovery_not_unique')
+        candidate = client.file_stat(trash, SOURCE_FILE)
+        require(candidate and candidate.get('type') == 'file' and candidate.get('nicemode') in ('0400', '0600'), 'source_recovery_not_private')
+        client.api2('fileop', op='rename', sourcefiles='.trash/' + SOURCE_FILE,
+                    destfiles=SOURCE_DIR + '/' + SOURCE_FILE, doubledecode=0)
+        source_key = client.file_stat(SOURCE_DIR, SOURCE_FILE)
+        require(SOURCE_FILE not in client.file_inventory(trash), 'source_restore_verification_failed')
+        restored = True
     if not source_key or source_key.get('type') != 'file' or source_key.get('nicemode') not in ('0400', '0600'):
         print(json.dumps({'source_key_exists': bool(source_key), 'source_key_regular_file': bool(source_key and source_key.get('type') == 'file'), 'source_key_owner_read_only': bool(source_key and source_key.get('nicemode') == '0400'), 'source_key_owner_read_write': bool(source_key and source_key.get('nicemode') == '0600'), 'credential_published': False}))
         raise dns.OperationError('source_key_not_private')
@@ -64,7 +76,7 @@ def transfer():
         require(stat and stat.get('type') == 'file' and stat.get('nicemode') == '0600', 'destination_key_not_private')
         require(read(client, 'city', DEST_DIR, DEST_FILE).strip() == key, 'key_transfer_readback_failed')
     del key
-    return {'ok': True, 'private_key_transfer_verified': True, 'credential_published': False, 'source_key_changed': False, 'email_sent': False}
+    return {'ok': True, 'private_key_transfer_verified': True, 'credential_published': False, 'source_key_changed': False, 'source_key_restored_from_trash': restored, 'email_sent': False}
 
 if __name__ == '__main__':
     try: print(json.dumps(transfer(), sort_keys=True))
