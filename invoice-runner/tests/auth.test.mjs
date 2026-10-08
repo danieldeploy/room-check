@@ -1,8 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {totp, extractCode} from '../second-factor.mjs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {totp, extractCode, SecondFactor} from '../second-factor.mjs';
 import {matchesEmail,extractMagicLink,publicAddress} from '../email.mjs';
 import {portalUrl,validatePortalMap,safeCookies} from '../portal.mjs';
+test('Hostelworld email 2FA uses the filtered challenge exchange without IMAP', async () => {
+ const exchangeDir=await fs.mkdtemp(path.join(os.tmpdir(),'hostelworld-auth-'));
+ const broker=new SecondFactor({portal:'hostelworld',authMethod:'email',credentials:{},exchangeDir},()=>{});
+ try {
+  const prepared=broker.prepare();
+  let challenge=null;
+  for(let i=0;i<100 && !challenge;i++) {
+   challenge=await fs.readFile(path.join(exchangeDir,'challenge.json'),'utf8').then(JSON.parse).catch(()=>null);
+   if(!challenge) await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.equal(challenge?.method,'email');
+  await fs.writeFile(path.join(exchangeDir,`ready-${challenge.id}`),'ready',{mode:0o600});
+  await prepared;
+  const valuePromise=broker.value({method:'email'});
+  await fs.writeFile(path.join(exchangeDir,`response-${challenge.id}.json`),JSON.stringify({value:'047291'}),{mode:0o600});
+  assert.equal(await valuePromise,'047291');
+ } finally {
+  await broker.close();
+  await fs.rm(exchangeDir,{recursive:true,force:true});
+ }
+});
+
 test('TOTP RFC 6238 known vectors and leading zero handling',()=>{
  const key='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
  for(const [time,result] of [[59,'94287082'],[1111111109,'07081804'],[1111111111,'14050471'],[1234567890,'89005924'],[2000000000,'69279037']]) assert.equal(totp(key,time,{digits:8}),result);
