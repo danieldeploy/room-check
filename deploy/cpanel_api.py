@@ -39,7 +39,6 @@ OPERATIONS = {
     ("Features", "list_features_like"): {"pattern", "is_regex"},
     ("Mysql", "get_privileges_on_database"): {"user", "database"},
     ("Email", "list_filters"): set(),
-    ("Email", "store_filter"): {"filtername", "action1", "dest1", "part1", "match1", "val1"},
 }
 MYSQL_PRIVILEGES = {
     "ALL PRIVILEGES", "ALTER", "ALTER ROUTINE", "CREATE", "CREATE ROUTINE",
@@ -152,17 +151,6 @@ class CpanelAPI:
         if (module, function) == ("Mysql", "get_privileges_on_database"):
             require(parameters == {"user": DATABASE, "database": DATABASE},
                     "database_not_allowed")
-        if (module, function) == ("Email", "store_filter"):
-            target = self.config.whm_target_account
-            require(self.config.transport == "whm" and target in WHM_TARGET_ACCOUNTS,
-                    "filter_target_not_allowed")
-            expected_dest = ("/home/welcome/room-check-private/cron/hostelworld-auth-pipe.php"
-                             if target == "welcome" else "info@welcomehostel.pt")
-            expected_action = "pipe" if target == "welcome" else "deliver"
-            expected = {"filtername": "Room Check Hostelworld Auth v1",
-                        "action1": expected_action, "dest1": expected_dest,
-                        "part1": "$header_from:", "match1": "contains", "val1": "hostelworld.com"}
-            require(parameters == expected, "filter_parameters_not_allowed")
         if self.config.transport == "whm":
             query = urllib.parse.urlencode({"api.version": 1, "cpanel.user": self.config.whm_target_account,
                                            "cpanel.module": module, "cpanel.function": function,
@@ -409,40 +397,9 @@ class Deployment:
             self.sleep(min(self.config.poll_interval, max(0, deadline - self.clock())))
 
 
-FILTER_NAME = "Room Check Hostelworld Auth v1"
-
-
-def ensure_hostelworld_filter(api, account):
-    require(account in WHM_TARGET_ACCOUNTS, "filter_target_not_allowed")
-    data = api.call("Email", "list_filters")
-    require(isinstance(data, (list, dict)), "invalid_filter_response")
-    encoded = json.dumps(data, ensure_ascii=True).lower()
-    name = FILTER_NAME.lower()
-    if name in encoded:
-        expected_action = "pipe" if account == "welcome" else "deliver"
-        expected_dest = ("/home/welcome/room-check-private/cron/hostelworld-auth-pipe.php"
-                         if account == "welcome" else "info@welcomehostel.pt")
-        require(expected_action in encoded and expected_dest.lower() in encoded
-                and "hostelworld.com" in encoded and "$header_from:" in encoded,
-                "hostelworld_filter_conflict")
-        return "already_configured"
-    expected_dest = ("/home/welcome/room-check-private/cron/hostelworld-auth-pipe.php"
-                     if account == "welcome" else "info@welcomehostel.pt")
-    expected_action = "pipe" if account == "welcome" else "deliver"
-    api.call("Email", "store_filter", filtername=FILTER_NAME, action1=expected_action,
-             dest1=expected_dest, part1="$header_from:", match1="contains", val1="hostelworld.com")
-    verified = api.call("Email", "list_filters")
-    require(isinstance(verified, (list, dict)), "invalid_filter_response")
-    encoded = json.dumps(verified, ensure_ascii=True).lower()
-    require(FILTER_NAME.lower() in encoded and expected_action in encoded
-            and expected_dest.lower() in encoded and "hostelworld.com" in encoded
-            and "$header_from:" in encoded, "hostelworld_filter_not_verified")
-    return "created"
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Management Hub: UAPI por cPanel ou WHM; estado por defeito.")
-    parser.add_argument("command", choices=("status", "doctor", "update", "deploy", "wait", "filters", "configure-hostelworld-filter"), nargs="?", default="status")
+    parser.add_argument("command", choices=("status", "doctor", "update", "deploy", "wait", "filters"), nargs="?", default="status")
     parser.add_argument("--transport", choices=("cpanel", "whm"), default="cpanel",
                         help="cpanel: token da conta, porta 2083; whm: token fazenda, porta 2087")
     parser.add_argument("--expected-commit", help="SHA completo revisto: destino do update ou HEAD a publicar")
@@ -455,7 +412,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     config = None
     try:
-        require(args.command in ("status", "doctor", "filters", "configure-hostelworld-filter") or args.expected_commit, "expected_commit_required")
+        require(args.command in ("status", "doctor", "filters") or args.expected_commit, "expected_commit_required")
         require(args.command != "update" or args.expected_current_commit, "expected_current_commit_required")
         require(args.command != "wait" or args.deploy_id, "deploy_id_required")
         config = Config.from_environment(args)
@@ -471,13 +428,6 @@ def main(argv=None):
                       "filters": data}
             output = json.dumps({"ok": True, **result}, ensure_ascii=False)
             print(output.replace(config.token, "[REDACTED]"))
-            return 0
-        if args.command == "configure-hostelworld-filter":
-            require(args.transport == "whm", "filter_configuration_requires_whm_transport")
-            state = ensure_hostelworld_filter(CpanelAPI(config), config.whm_target_account)
-            print(json.dumps({"ok": True, "command": args.command,
-                              "cpanel_account": config.whm_target_account,
-                              "state": state}))
             return 0
         runner = Deployment(CpanelAPI(config), config)
         if args.command == "status":
