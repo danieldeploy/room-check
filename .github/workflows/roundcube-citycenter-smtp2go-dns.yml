@@ -47,3 +47,5 @@ jobs:
 # Legacy cPanel parsing verified by the scoped read-only API check.
 
 # Missing backup detection covered before the legacy stat operation.
+
+# Backup creation and first-capture preservation tested with UAPI content responses.
