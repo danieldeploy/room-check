@@ -1,0 +1,35 @@
+name: City Center verified SMTP2GO activation
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-citycenter-activate.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  activate-citycenter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    environment: management-hub-production
+    concurrency:
+      group: citycenter-smtp2go-dns
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Verify transport, rollback and operation safety
+        run: |
+          php -l deploy/roundcube_config_summary.php
+          php tests/test_roundcube_citycenter_live.php
+          python3 -m unittest discover -s tests -p 'test_roundcube_citycenter*.py'
+      - name: Read aggregate SMTP route and private prerequisites
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_citycenter_requirements.py
+      - name: Activate only after confirmed server send and preserve original configuration for reversal
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_citycenter_activate.py
