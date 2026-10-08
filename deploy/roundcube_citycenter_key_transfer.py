@@ -28,11 +28,21 @@ def transfer():
     require(client.account_for_domain() == 'city', 'destination_scope_mismatch')
     accounts = client.request('/json-api/listaccts', {'api.version': 1, 'api.columns.enable': 1, 'api.columns.a': 'user', 'api.columns.b': 'domain'})
     require(sum(r.get('user') == 'welcome' and r.get('domain') == 'welcomehostel.pt' for r in accounts.get('acct', [])) == 1, 'source_scope_mismatch')
+    global SOURCE_FILE
+    source = client.request('/json-api/uapi_cpanel', {'api.version': 1, 'cpanel.user': 'welcome',
+        'cpanel.module': 'Fileman', 'cpanel.function': 'get_file_content',
+        'dir': '/home/welcome/public_html/roundcube/plugins/welcome_smtp2go_api', 'file': 'api_transport.php',
+        'from_charset': 'UTF-8', 'to_charset': 'UTF-8'}, api_version=3)
+    source_code = source.get('content', '') if isinstance(source, dict) else ''
+    require("const PRIVATE_DIR = '" + SOURCE_DIR + "'" in source_code, 'source_transport_scope_mismatch')
+    reference = re.search(r"\$keyfile\s*=\s*\$dir\s*\.\s*['\"]/([A-Za-z0-9_-]{1,64}\.txt)['\"]", source_code)
+    require(bool(reference), 'source_key_reference_unrecognized')
+    SOURCE_FILE = reference[1]
     client.user = 'welcome'
     source_dir = client.file_stat('/home/welcome', 'roundcube-smtp2go-private')
     source_key = client.file_stat(SOURCE_DIR, SOURCE_FILE)
     require(source_dir and source_dir.get('type') == 'dir' and source_dir.get('nicemode') == '0700', 'source_directory_not_private')
-    if not source_key or source_key.get('type') != 'file' or source_key.get('nicemode') != '0600':
+    if not source_key or source_key.get('type') != 'file' or source_key.get('nicemode') not in ('0400', '0600'):
         print(json.dumps({'source_key_exists': bool(source_key), 'source_key_regular_file': bool(source_key and source_key.get('type') == 'file'), 'source_key_owner_read_only': bool(source_key and source_key.get('nicemode') == '0400'), 'source_key_owner_read_write': bool(source_key and source_key.get('nicemode') == '0600'), 'credential_published': False}))
         raise dns.OperationError('source_key_not_private')
     client.user = 'city'
