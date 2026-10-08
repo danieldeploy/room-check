@@ -10,7 +10,7 @@ MARKER = 'server-validation-20261008.json'
 COMMAND = '/usr/local/bin/php ' + prep.PRIVATE + '/' + FILE + ' >/dev/null 2>&1'
 
 def cron(client, function, **params):
-    prep.require(function in ('fetchcron', 'add_line', 'remove_line'), 'cron_scope_violation')
+    prep.require(function in ('fetchcron', 'listcron', 'add_line', 'remove_line'), 'cron_scope_violation')
     if function == 'remove_line':
         return remove_cron_raw(client, params)
     return client.request('/json-api/cpanel', {'cpanel_jsonapi_user': 'city', 'cpanel_jsonapi_apiversion': 2,
@@ -69,8 +69,12 @@ def run():
         prep.require(finished is not None,'server_validation_timeout_no_retry')
     finally:
         for row in scheduled(client):
-            prep.require(str(row.get('line','')).isdigit() and int(row['line'])>0,'validation_schedule_identifier_invalid')
-            cron(client,'remove_line',line=int(row['line']))
+            # Resolve the command's deletion identifier from listcron, not its physical crontab line.
+            listed=[r for r in cron(client,'listcron') if r.get('command')==COMMAND]
+            prep.require(len(listed)==1 and listed[0].get('linekey')==row.get('linekey'),'validation_schedule_identity_mismatch')
+            identifier=listed[0].get('count')
+            prep.require(str(identifier).isdigit() and int(identifier)>0,'validation_schedule_identifier_invalid')
+            cron(client,'remove_line',line=int(identifier))
         prep.require(not scheduled(client),'temporary_cron_removal_unconfirmed')
     prep.require(finished.get('ok') is True and finished.get('server_send_accepted') is True,'server_send_not_confirmed_no_retry')
     # Retire only the one test program. Keep the private result and duplicate guard.
