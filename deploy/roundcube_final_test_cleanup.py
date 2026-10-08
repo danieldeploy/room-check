@@ -1,5 +1,5 @@
 """Retire fixed test artifacts, protect both live installations, aggregate audit only."""
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 import roundcube_citycenter_smtp2go_dns as dns
 
 def read(c,path):
@@ -16,9 +16,8 @@ def run():
         private=home+('/roundcube-smtp2go-private' if user=='welcome' else '/roundcube-smtp2go-citycenter-private')
         plugin='welcome_smtp2go_api' if user=='welcome' else 'citycenter_smtp2go_api'
         cfgpath=root+'/config/config.inc.php';config=read(c,cfgpath)
-        proc=subprocess.run(['php','deploy/roundcube_config_summary.php'],input=config,text=True,capture_output=True,timeout=20)
-        if proc.returncode!=0: raise dns.OperationError('config_analysis_failed')
-        names=json.loads(proc.stdout)['plugins']
+        # Conservative literal inventory; never evaluate config or includes.
+        names=re.findall(r"['\"]([a-z][a-z0-9_]*)['\"]",config)
         if plugin not in names: raise dns.OperationError('live_plugin_not_active')
         protected={cfgpath:config}
         for name in ('api_transport.php',plugin+'.php','config.inc.php'):
