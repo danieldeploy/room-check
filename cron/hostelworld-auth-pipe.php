@@ -5,8 +5,11 @@ declare(strict_types=1);
 if (PHP_SAPI!=='cli') { http_response_code(404); exit; }
 ini_set('display_errors','0'); ini_set('log_errors','0'); error_reporting(0); umask(0077);
 try {
-    $accountId=isset($argv[1]) && preg_match('/\A[1-9][0-9]{0,17}\z/',(string)$argv[1]) ? (int)$argv[1] : 0;
-    if ($accountId<1) exit(75);
+    $accountId=0;
+    if (isset($argv[1])) {
+        if (!preg_match('/\A[1-9][0-9]{0,17}\z/',(string)$argv[1])) exit(75);
+        $accountId=(int)$argv[1];
+    }
     $appRoot=dirname(__DIR__,2).'/public_html/check';
     require_once $appRoot.'/lib.php';
     require_once $appRoot.'/src/Invoices/InvoiceHostelworldPipe.php';
