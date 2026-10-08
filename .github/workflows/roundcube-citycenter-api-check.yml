@@ -97,3 +97,21 @@ jobs:
           CITYCENTER_KEY_TRANSFER_AUTHORIZED: '20261008'
           PYTHONDONTWRITEBYTECODE: '1'
         run: python3 deploy/roundcube_citycenter_key_transfer.py
+
+  provider-domain-check:
+    needs: transfer-authorized-key
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: management-hub-production
+    concurrency:
+      group: citycenter-smtp2go-dns
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Read only SMTP2GO verification flags for City Center
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_citycenter_provider_check.py
