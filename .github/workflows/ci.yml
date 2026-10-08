@@ -34,6 +34,7 @@ jobs:
       - name: Validate hosting deployment tools
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_filters.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
 
