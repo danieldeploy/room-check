@@ -143,6 +143,8 @@ class Client:
         return self.request('/json-api/cpanel', {**common, **params}, api_version=2)
 
     def file_stat(self, directory, filename):
+        if filename not in self.file_inventory(directory):
+            return None
         rows = self.api2('statfiles', dir=directory.removeprefix('/home/' + self.user + '/'), files=filename)
         if not isinstance(rows, list) or len(rows) != 1 or rows[0].get('exists') != 1:
             return None
