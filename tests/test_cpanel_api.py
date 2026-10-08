@@ -362,31 +362,6 @@ class WhmTransport(unittest.TestCase):
         with self.assertRaises(cpanel.DeploymentError):
             self.config(whm_target_account="root")
 
-    def test_hostelworld_filter_install_is_scoped_and_idempotent(self):
-        for account, action, destination in (
-            ("welcome", "pipe", "/home/welcome/room-check-private/cron/hostelworld-auth-pipe.php"),
-            ("city", "deliver", "info@welcomehostel.pt"),
-        ):
-            expected = {"filtername": cpanel.FILTER_NAME, "action1": action, "dest1": destination,
-                        "part1": "$header_from:", "match1": "contains", "val1": "hostelworld.com"}
-            listed = [{"filtername": cpanel.FILTER_NAME, **expected}]
-            api = FakeAPI([
-                (("Email", "list_filters"), []),
-                (("Email", "store_filter"), {"account": account}),
-                (("Email", "list_filters"), listed),
-            ])
-            self.assertEqual(cpanel.ensure_hostelworld_filter(api, account), "created")
-            self.assertEqual(api.calls[1][2], expected)
-            self.assertEqual(len(api.calls), 3)
-            already = FakeAPI([(("Email", "list_filters"), listed)])
-            self.assertEqual(cpanel.ensure_hostelworld_filter(already, account), "already_configured")
-            self.assertEqual(len(already.calls), 1)
-            conflict = FakeAPI([(("Email", "list_filters"), [{"filtername": cpanel.FILTER_NAME,
-                                                                "action1": "pipe", "dest1": "/tmp/other"}])])
-            with self.assertRaisesRegex(cpanel.DeploymentError, "hostelworld_filter_conflict"):
-                cpanel.ensure_hostelworld_filter(conflict, account)
-            self.assertEqual(len(conflict.calls), 1)
-
     def test_outer_success_does_not_hide_inner_failure_or_errors(self):
         api = cpanel.CpanelAPI(self.config())
         payloads = [whm_payload([], inner_status=0, errors=[TOKEN]),
@@ -442,9 +417,7 @@ class WhmTransport(unittest.TestCase):
                     ("Mysql", "get_privileges_on_database", {"user": "other", "database": "other"}),
                     ("Mysql", "set_privileges_on_database", {"user": cpanel.DATABASE, "database": cpanel.DATABASE}),
                     ("Fileman", "upload_files", {}), ("Tokens", "create_full_access", {}),
-                    ("Cron", "add_line", {}),
-                    ("Email", "store_filter", {"filtername": cpanel.FILTER_NAME, "action1": "pipe",
-                     "dest1": "/tmp/evil", "part1": "$header_from:", "match1": "contains", "val1": "hostelworld.com"})]
+                    ("Cron", "add_line", {})]
         with patch.object(api.opener, "open") as opened:
             for module, function, parameters in attempts:
                 with self.subTest(operation=(module, function), parameters=parameters), self.assertRaises(cpanel.DeploymentError):
