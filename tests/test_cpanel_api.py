@@ -344,6 +344,24 @@ class WhmTransport(unittest.TestCase):
             self.assertEqual(api.call("VersionControl", "retrieve", fields=cpanel.FIELDS), [repository()])
         self.assertEqual(opened.call_count, 1)
 
+    def test_whm_filter_inspection_targets_each_allowed_account_read_only(self):
+        for account in ("welcome", "city"):
+            config = self.config(whm_target_account=account)
+            api = cpanel.CpanelAPI(config)
+            filters = [{"filter": "hostelworld-auth", "actions": []}]
+            def respond(request, timeout):
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)
+                self.assertEqual(query["cpanel.user"], [account])
+                self.assertEqual(query["cpanel.module"], ["Email"])
+                self.assertEqual(query["cpanel.function"], ["list_filters"])
+                self.assertEqual(request.get_header("Authorization"), "whm fazenda:" + TOKEN)
+                return Response(whm_payload(filters), request.full_url)
+            with patch.object(api.opener, "open", side_effect=respond) as opened:
+                self.assertEqual(api.call("Email", "list_filters"), filters)
+            self.assertEqual(opened.call_count, 1)
+        with self.assertRaises(cpanel.DeploymentError):
+            self.config(whm_target_account="root")
+
     def test_outer_success_does_not_hide_inner_failure_or_errors(self):
         api = cpanel.CpanelAPI(self.config())
         payloads = [whm_payload([], inner_status=0, errors=[TOKEN]),
