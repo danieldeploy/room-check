@@ -39,6 +39,35 @@ class FakeClient:
 
 
 class CityCenterSmtp2goDnsTests(unittest.TestCase):
+    def test_private_backup_reads_uapi_content_and_preserves_first_capture(self):
+        class BackupClient(dns.Client):
+            def __init__(self):
+                super().__init__('test-token')
+                self.user = 'ccenter'
+                self.saved_content = None
+                self.save_count = 0
+            def file_inventory(self, directory): return {dns.BACKUP_DIR}
+            def file_stat(self, directory, filename):
+                if filename == dns.BACKUP_DIR: return {'type': 'dir', 'nicemode': '0700'}
+                return {'type': 'file', 'nicemode': '0600'} if self.saved_content else None
+            def api2(self, *args, **kwargs): return [{'result': 1}]
+            def request(self, path, params, **kwargs):
+                if params['cpanel.function'] == 'save_file_content':
+                    self.saved_content = params['content']
+                    self.save_count += 1
+                    return {}
+                return {'content': self.saved_content}
+        client = BackupClient()
+        records = [{'name': 'example.test', 'type': 'MX', 'ttl': 3600, 'data': ['mail.example.test'], 'line_index': 1}]
+        client.ensure_private_backup(records)
+        first = client.saved_content
+        client.ensure_private_backup(records)
+        self.assertEqual(client.saved_content, first)
+        self.assertEqual(client.save_count, 1)
+        client.saved_content = '{invalid'
+        with self.assertRaisesRegex(dns.OperationError, 'existing_backup_unreadable'):
+            client.ensure_private_backup(records)
+
     def test_legacy_api2_response_is_parsed_without_whm_metadata(self):
         class Response:
             status = 200
