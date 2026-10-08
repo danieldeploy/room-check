@@ -18,8 +18,16 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           persist-credentials: false
-      - name: Inspect recovery metadata without reading or changing credentials
+      - name: Resolve and transfer the explicitly authorized production key privately
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          CITYCENTER_KEY_TRANSFER_AUTHORIZED: '20261008'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_citycenter_key_transfer.py
+      - name: Read City Center sender-domain verification flags
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 deploy/roundcube_welcome_key_metadata.py
+        run: python3 deploy/roundcube_citycenter_provider_check.py
+
+# Restore only the uniquely verified private production credential from Trash if needed.
