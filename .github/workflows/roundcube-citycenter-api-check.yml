@@ -56,3 +56,23 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: python3 deploy/roundcube_citycenter_requirements.py
+
+  prepare-disabled-citycenter:
+    needs: [private-requirements, prepared-transport, public-dns]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: citycenter-smtp2go-dns
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Test the scoped operations
+        run: python3 -m unittest discover -s tests -p 'test_roundcube_citycenter*.py'
+      - name: Back up configuration and install the disabled plugin
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_citycenter_prepare.py
