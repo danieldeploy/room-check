@@ -18,10 +18,17 @@ try {
     if ($privateDir==='' || !is_dir($privateDir) || is_link($privateDir)) exit(75);
     $raw=stream_get_contents(STDIN,InvoiceTocPipe::MAX_BYTES+1);
     if (!is_string($raw) || strlen($raw)>InvoiceTocPipe::MAX_BYTES) exit(75);
+    $message=InvoiceHostelworldPipe::parse($raw);
+    if ($message===null) exit(0);
     $service=new InvoiceAuth(database(),new InvoiceVault($privateDir));
-    (new InvoiceHostelworldPipe($service))->receive($accountId,$raw);
-    // Discard unrelated/old messages silently; retry only infrastructure failure.
-    exit(0);
+    try {
+        $service->receiveHostelworldEmail($accountId,$message);
+        exit(0);
+    } catch (Throwable) {
+        // Only retry after a valid filtered auth message reached infrastructure handling.
+        exit(75);
+    }
 } catch (Throwable) {
-    exit(75);
+    // Oversized, malformed, or unrelated input is discarded silently.
+    exit(0);
 }
