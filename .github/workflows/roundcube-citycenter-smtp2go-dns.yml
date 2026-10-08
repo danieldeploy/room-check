@@ -51,3 +51,5 @@ jobs:
 # Backup creation and first-capture preservation tested with UAPI content responses.
 
 # Execute the account-scoped DNS operation after regression checks.
+
+# Verify canonical owner names when resuming the private snapshot.
