@@ -412,7 +412,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     config = None
     try:
-        require(args.command in ("status", "doctor") or args.expected_commit, "expected_commit_required")
+        require(args.command in ("status", "doctor", "filters") or args.expected_commit, "expected_commit_required")
         require(args.command != "update" or args.expected_current_commit, "expected_current_commit_required")
         require(args.command != "wait" or args.deploy_id, "deploy_id_required")
         config = Config.from_environment(args)
