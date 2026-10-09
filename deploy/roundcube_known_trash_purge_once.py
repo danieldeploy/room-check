@@ -14,7 +14,7 @@ def walk(c,parent,name,depth=0):
   children=c.file_inventory(path)
   if len(children)>200:raise dns.OperationError('test_tree_too_large')
   for child in sorted(children):result+=walk(c,path,child,depth+1)
- result.append((path,st))
+ result.append((path,{k:st[k] for k in ('type','nicemode','inode','size','mtime') if k in st}))
  return result
 def run():
  if os.environ.get('EMAIL_TEST_PURGE_ONCE')!='20261009-known-trash-only':raise dns.OperationError('manual_scope_not_enabled')
@@ -50,7 +50,9 @@ def run():
   if any(read(c,path)!=value for path,value in protected.items()) or c.file_stat(private,'sandbox-key.txt')!=key:raise dns.OperationError('production_changed')
   for path,st in tree:
    parent,leaf=path.rsplit('/',1)
-   if c.file_stat(parent,leaf)!=st:raise dns.OperationError('test_entry_changed')
+   current=c.file_stat(parent,leaf)
+   fields=('type','nicemode','inode') if st['type']=='dir' else tuple(st)
+   if not current or any(current.get(k)!=st.get(k) for k in fields):raise dns.OperationError('test_entry_changed')
    c.api2('fileop',op='unlink',sourcefiles=path.removeprefix(home+'/'),doubledecode=0)
    if leaf in c.file_inventory(parent):raise dns.OperationError('purge_not_verified')
   deleted+=1
