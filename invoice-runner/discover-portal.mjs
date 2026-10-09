@@ -98,6 +98,16 @@ async function submit(page, field, portal, identifierStep = false, onPhase = () 
 export async function discoverPortal(initialPage, input, hooks = {}) {
   let page = initialPage;
   const { portal, credentials = {}, authMethod, loginOnly = false } = input;
+  // Bootstrap structural discovery independently of a validated collection map.
+  // Hostelworld sends a magic link: never submit credentials until its exact
+  // destination and account binding have been configured and verified.
+  if (portal === 'hostelworld' && input.action === 'discover') {
+    await page.goto('https://inbox.hostelworld.com/', { waitUntil: 'domcontentloaded' });
+    const snapshot = await inspectPortalPage(page, portal);
+    return { version: 1, portal, validated: false, login_attempted: false,
+      authenticated_session: false, navigation_stage: 'login_structure',
+      location: snapshot.location, snapshots: [snapshot], responses: [] };
+  }
   const start = portal === 'booking' ? 'https://admin.booking.com/' : input.map?.login?.url;
   if (!start) fail('connector_unconfigured');
   portalUrl(portal, start);
