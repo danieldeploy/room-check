@@ -35,6 +35,7 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   let stage = 'login_structure', attempted = false, authenticated = false;
   const snapshots = [];
   let broker;
+  let authSignals;
   try {
     await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded' });
     ownUrl(page.url());
@@ -71,11 +72,21 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
       page.click('#loginForm input[type="submit"]')]);
     ownUrl(page.url());
     stage = 'secure_link_requested';
-    const sent = await page.$eval('.login-email', (el, expected) =>
-      /sent a secure link/i.test(el.textContent || '')
-      && [...el.querySelectorAll('strong')].some(x => x.textContent.trim() === 'Hostel Number ' + expected),
-    String(input.property)).catch(() => false);
-    if (!sent) fail('auth_invalid');
+    snapshots.push(await inspectPortalPage(page, 'hostelworld'));
+    authSignals = await page.evaluate(expected => {
+      const notice = document.querySelector('.login-email');
+      const text = (document.body?.innerText || '').toLowerCase();
+      return {
+        sent_notice: !!notice && /sent a secure link/i.test(notice.textContent || ''),
+        hostel_matches: !!notice && [...notice.querySelectorAll('strong')].some(el =>
+          el.textContent.trim().replace(/\s+/g, ' ') === 'Hostel Number ' + expected),
+        login_form: !!document.querySelector('#loginForm'),
+        credential_error: /incorrect password|invalid password|invalid login|incorrect login|incorrect username/.test(text),
+        human_challenge: /verify you are human|checking your browser|unusual traffic/.test(text),
+      };
+    }, String(input.property));
+    if (!authSignals.sent_notice || !authSignals.hostel_matches)
+      fail(authSignals.human_challenge ? 'human_verification' : authSignals.credential_error ? 'auth_invalid' : 'portal_changed');
     stage = 'waiting_auth';
     const link = await broker.value({ method: 'email', kind: 'link', linkHost: 'inbox.hostelworld.com', linkPath: '/login/' });
     stage = 'consume_link';
@@ -99,6 +110,6 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   } catch (error) {
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: authenticated, failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, snapshots, responses: [] };
+      failure_stage: stage, auth_signals: authSignals, location: publicLocation('hostelworld', page.url()), snapshots, responses: [] };
   } finally { if (broker) await broker.close(); }
 }
