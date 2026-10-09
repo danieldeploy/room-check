@@ -1,0 +1,22 @@
+name: Retired email tests inventory
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-retired-tests-audit.yml, deploy/roundcube_retired_tests_audit.py]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Read-only retired test inventory
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_retired_tests_audit.py
