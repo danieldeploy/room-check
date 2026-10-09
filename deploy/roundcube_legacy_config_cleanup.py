@@ -15,7 +15,7 @@ def plan(c,user,domain):
  path=root+'/config/config.inc.php';original=read(c,path)
  if mail_summary(original)['smtp_route_provider']!='postmark':raise dns.OperationError('unexpected_current_route')
  defaults=read(c,root+'/config/defaults.inc.php')
- if summary(defaults,domain)['route_class']!='local':raise dns.OperationError('default_route_not_verified_local')
+ if mail_summary(defaults)['smtp_route_provider']!='local':raise dns.OperationError('default_route_not_verified_local')
  if mail_summary(defaults)['nonplaceholder_smtp_credential_fields']!=0:raise dns.OperationError('default_credentials_not_safe')
  protected={root+'/plugins/'+plugin+'/'+n:read(c,root+'/plugins/'+plugin+'/'+n) for n in ('api_transport.php',plugin+'.php','config.inc.php')}
  if plugin not in original:raise dns.OperationError('production_plugin_not_active')
