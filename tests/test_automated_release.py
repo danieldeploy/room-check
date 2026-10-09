@@ -96,7 +96,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/agent/room-item-assignments'", job)
         self.assertLess(job.index('--inspect-state'), job.index('--expected-commit'))
         self.assertNotIn('continue-on-error', job)
-        self.assertNotIn('always()', job)
+        mutations, readiness = job.split('      - name: Report safe Hostelworld release readiness', 1)
+        self.assertNotIn('always()', mutations)
+        self.assertIn('if: always()', readiness)
+        self.assertIn('run: python3 deploy/hostelworld_status.py', readiness)
+        self.assertNotIn('hostelworld_filters.py', readiness)
+        self.assertNotIn('--expected-commit', readiness)
 
     def test_deployment_summary_optional_branch_keeps_sha_and_conflict_checks(self):
         row = {'last_deployment': {'repository_state': {'identifier': OLD}}}

@@ -48,6 +48,23 @@ try {
             $pdo->prepare("UPDATE invoice_accounts SET auth_method='email',status='configured',enabled=0,login_verified_at=NULL WHERE id=?")->execute([$id]);
         }
     }
+    foreach ($map as $source=>$id) {
+        $credentials=$accounts->credentials($vault,$id);
+        $name='account-'.$id.'-map.json';
+        $navigation=$vault->has($name)?json_decode(file_get_contents($vault->path($name)),true,32,JSON_THROW_ON_ERROR):[];
+        $links=[];
+        foreach ($navigation['login']['challenges']??[] as $challenge) {
+            if (($challenge['kind']??'')!=='link') continue;
+            $host=(string)($challenge['linkHost']??''); $path=(string)($challenge['linkPath']??'');
+            if (preg_match('/\A(?:[a-z0-9-]+\.)*hostelworld\.com\z/i',$host)
+                && preg_match('/\A\/[a-zA-Z0-9_\/.-]{0,200}\z/',$path)
+                && !preg_match('/[a-zA-Z0-9_-]{24,}/',$path)) $links[]=['host'=>$host,'path'=>$path];
+        }
+        echo json_encode(['hostelworld_capability'=>['source'=>$source,'account_id'=>$id,
+            'credentials_ready'=>!empty($credentials['identifier'])&&!empty($credentials['password'])&&!empty($credentials['hostel_number']),
+            'map_exists'=>$vault->has($name),'map_validated'=>($navigation['validated']??false)===true,
+            'map_version'=>$navigation['version']??null,'link_targets'=>$links]],JSON_THROW_ON_ERROR)."\n";
+    }
     echo "Hostelworld filter account bindings provisioned.\n";
 } catch (Throwable $e) {
     fwrite(STDERR,"Hostelworld filter provisioning failed: ".($e instanceof RuntimeException?$e->getMessage():'configuration_error')."\n");
