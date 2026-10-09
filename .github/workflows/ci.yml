@@ -185,6 +185,12 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: python3 deploy/hostelworld_filters.py
 
+      - name: Report safe Hostelworld release readiness
+        if: always()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/hostelworld_status.py
+
   windows-agent:
     runs-on: windows-latest
     steps:
