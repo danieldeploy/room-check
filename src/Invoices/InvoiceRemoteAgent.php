@@ -216,6 +216,9 @@ final class InvoiceRemoteAgent
             if ($job['kind']!=='preflight') {
                 $input['credentials']=$accounts->credentials($this->vault,(int)$account['id']);
                 $input['authMethod']=$account['auth_method'];
+                if ($account['portal']==='hostelworld') {
+                    $input['hostelworldAuthTargets']=(new InvoiceAuth($this->pdo,$this->vault))->hostelworldLinkTargets((int)$account['id']);
+                }
                 $options=$accounts->automationOptions($this->vault,(int)$account['id']);
                 $input['automation']=$accounts->automationOptions($this->vault,(int)$account['id'],
                     $job['kind']==='login' || ($options['captcha_mode'] ?? '')==='collection');

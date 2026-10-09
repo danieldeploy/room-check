@@ -76,3 +76,14 @@ foreach ([$pathUrl.'&token=other',$pathUrl.'&Language=French',$pathUrl.'&redirec
 }
 check(HostelworldLinkToken::extract(str_replace(str_repeat('a',32),str_repeat('b',32),$pathUrl)."\n".$pathUrl,[$pathTarget])===null);
 echo "Hostelworld path token format and rejection tests passed.\n";
+
+require_once __DIR__.'/../src/Invoices/HostelworldSetup.php';
+$account=['id'=>2,'portal'=>'hostelworld','auth_method'=>'email'];
+$credentials=['hostel_number'=>'305209'];
+check(HostelworldSetup::targets($account,$credentials,['305209'=>'Welcome'])===[$pathTarget]);
+check(HostelworldSetup::targets(array_replace($account,['id'=>3]),$credentials,['305209'=>'Welcome'])===[]);
+check(HostelworldSetup::targets($account,['hostel_number'=>'77759'],['305209'=>'Welcome'])===[]);
+check(HostelworldSetup::targets($account,$credentials,['77759'=>'City'])===[]);
+check(HostelworldSetup::targets(array_replace($account,['portal'=>'booking']),$credentials,['305209'=>'Welcome'])===[]);
+check(HostelworldSetup::targets(['id'=>3,'portal'=>'hostelworld','auth_method'=>'email'],['hostel_number'=>'77759'],['77759'=>'City'])===[$pathTarget]);
+echo "Hostelworld bootstrap targets require exact account and property bindings.\n";
