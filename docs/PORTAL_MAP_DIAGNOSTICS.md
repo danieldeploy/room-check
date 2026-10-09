@@ -1,0 +1,58 @@
+# Diagnóstico transversal de mapas de portais
+
+O módulo `invoice-runner/map-diagnostics.mjs` recebe uma página Puppeteer já aberta
+num portal autorizado e produz pistas estruturais para um futuro mapa. O mesmo
+código suporta Booking, Hostelworld, Expedia, Airbnb e Hostelsclub através da lista
+de domínios permitidos em `portal.mjs`.
+
+`inspectPortalPage(page, portal)` devolve `{ version, portal, validated: false,
+location, hints }`. Não guarda passwords, campos preenchidos, códigos 2FA,
+cookies, texto de faturas, respostas HTTP, capturas de ecrã ou parâmetros de URL
+além do `hotel_id` numérico do Booking. O resultado é apenas uma lista de
+candidatos; não é um mapa executável. Nunca atribuir `validated: true`
+automaticamente nem enviar um diagnóstico real para GitHub ou logs.
+
+## Execução pelo agente Windows
+
+O Gerente pode pedir **Observar portal e preparar mapa** em Portais e contas.
+A tarefa usa o agente Windows já emparelhado e as credenciais guardadas no cofre.
+Para Booking, começa em `https://admin.booking.com/`, aceita apenas destinos
+Booking, identifica um único campo de utilizador/password e um único campo SMS
+reconhecível. Se a estrutura for ambígua, pára com erro; não tenta CAPTCHA.
+O Gerente escolhe um alojamento associado à conta para cada observação. Antes de
+entrar nas finanças, a navegação confirma o `hotel_id` selecionado; uma sessão
+aberta noutra casa regressa por uma ligação de grupo observada na página. Se a
+página de faturas omitir essa ligação, volta uma vez à entrada pública Booking
+já usada no login, mantendo a sessão. Só prossegue se o portal permitir escolher
+a casa pedida; nunca constrói URLs privados nem altera tokens para trocar de casa.
+São aceites as entradas observadas `manage/home.html` e `manage/index.html`,
+sempre com o `hotel_id` exato. Ligações de mensagens ou reservas não são entradas.
+Quando existe um endereço de entrada observado, segue-o na página controlada,
+mesmo que a ligação do portal costume abrir outro separador. Só os controlos
+sem endereço precisam de um clique; a identidade é verificada após a navegação.
+Ao regressar ao grupo, espera pelas leituras das respostas observadas nessa
+página antes de resolver a ligação da casa. Não exige repetir a tarefa para
+aproveitar uma resposta que ainda estava a chegar na primeira execução.
+Na página de faturas Booking, a observação classifica cabeçalhos, formatos de
+data e controlos de paginação, sem persistir contagens de faturas ou documentos.
+Uma data genérica não é tratada como
+data de emissão. Pode ler um PDF da mesma origem e alojamento, dando preferência
+ao mês de emissão pedido, com limite de 30 segundos e sem redirecionamentos;
+recusa tamanhos declarados superiores a 20 MiB e cancela a resposta logo após
+ler os cinco bytes da assinatura. Só guarda o resultado da assinatura PDF,
+sem provar a transferência completa; nunca guarda bytes, números, datas
+concretas, valores ou ligações com tokens no diagnóstico. Esta leitura não importa
+a fatura e não prova a paginação: ambos continuam por validar.
+O rascunho fica cifrado no cofre e é mostrado apenas
+ao Gerente. Este diagnóstico não marca o acesso como validado nem liga a agenda.
+
+A inspeção estrutural é comum aos portais permitidos, mas cada portal precisa
+de um URL de entrada observado ou configurado. Nesta versão, Booking é o único
+portal com endereço inicial configurado; os restantes param sem o respetivo
+mapa inicial. Não se envia o rascunho para logs, GitHub ou JavaScript público.
+
+O resultado ainda **não é o mapa executável**. Rever os seletores e os
+identificadores de conta e alojamento, observar a página de faturas e validar
+datas, paginação e PDF real de cada propriedade antes de criar um mapa privado
+com `validated: true`. O agente instalado no PC precisa de receber a revisão
+do código aprovada; o deploy do Hub não atualiza automaticamente o PC.

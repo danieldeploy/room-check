@@ -1,0 +1,192 @@
+<?php
+declare(strict_types=1);
+require_once dirname(__DIR__).'/src/Invoices/InvoiceToconline.php';
+require_once dirname(__DIR__).'/src/Invoices/InvoiceTocMailbox.php';
+function tocCheck(bool $ok,string $label): void { if (!$ok) throw new RuntimeException($label); }
+function tocReject(callable $fn,string $label): void {try {$fn();} catch (RuntimeException) {return;} throw new RuntimeException($label);}
+$dir=sys_get_temp_dir().'/toc-'.bin2hex(random_bytes(8)); mkdir($dir,0700); file_put_contents($dir.'/master.key',random_bytes(32)); chmod($dir.'/master.key',0600);
+try {
+    $vault=new InvoiceVault($dir);
+    $pdo=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+    $pdo->exec("CREATE TABLE invoice_accounts(id INTEGER PRIMARY KEY,portal TEXT);
+        INSERT INTO invoice_accounts VALUES(1,'booking'),(2,'booking'),(3,'airbnb');
+        CREATE TABLE invoice_documents(id INTEGER PRIMARY KEY,account_id INTEGER,invoice_number TEXT,format TEXT,sha256 TEXT,size_bytes INTEGER);
+        CREATE TABLE invoice_document_delivery(document_id INTEGER PRIMARY KEY,drive_state TEXT,company_state TEXT,drive_id TEXT,drive_parent TEXT,toconline_state TEXT);");
+    $pdf='%PDF-1.4 synthetic test only';
+    $add=static function(int $id,int $account,string $number,string $pdf,string $driveState='verified',string $company='validated') use ($pdo): void {
+        $pdo->prepare('INSERT INTO invoice_documents VALUES(?,?,?,?,?,?)')->execute([$id,$account,$number,'pdf',hash('sha256',$pdf),strlen($pdf)]);
+        $pdo->prepare('INSERT INTO invoice_document_delivery VALUES(?,?,?,?,?,?)')->execute([$id,$driveState,$company,'drive-test-id','parent-test-id','pending']);
+    };
+    $state=static function(int $id) use($pdo): string {return (string)$pdo->query('SELECT toconline_state FROM invoice_document_delivery WHERE document_id='.$id)->fetchColumn();};
+    $drive=new class($pdf) {
+        public bool $fail=false;
+        public function __construct(public string $pdf) {}
+        public function connect(): void {}
+        public function verifiedPdf(array $d): string {if($this->fail)throw new RuntimeException('network');return $this->pdf;}
+    };
+    $sent=[];
+    $transport=static function(string $to,array $message) use (&$sent): bool {$sent[]=[$to,$message];return true;};
+    $toc=new InvoiceToconline($pdo,$vault,$drive,$transport);
+    // Synthetic checksum-valid NIF; no external traffic occurs in tests.
+    $settings=['toc_nif'=>'500000000','toc_sender'=>'test@welcomehostel.pt','toc_authorized'=>1];
+    tocReject(fn()=>InvoiceToconline::destination('500000001'),'invalid NIF');
+    tocReject(fn()=>$toc->configure($settings+['toc_enabled'=>1]),'pilot required');
+    tocReject(fn()=>$toc->configure(array_replace($settings,['toc_sender'=>"a@welcomehostel.pt\r\nBcc: x@example.org"])), 'header injection');
+    $toc->configure($settings);
+    $mailbox=new InvoiceTocMailbox($vault,$toc);
+    tocCheck(!$mailbox->status()['configured'] && !$mailbox->status()['enabled'],'mailbox opt-in');
+    $mailbox->poll();
+    tocReject(fn()=>$mailbox->configure(['toc_mail_password'=>'synthetic','toc_mail_folders'=>"INBOX}evil"]),'mailbox path injection blocked');
+    tocReject(fn()=>$mailbox->configure(['toc_mail_password'=>'','toc_mail_folders'=>'INBOX']),'mailbox requires secure credential');
+    $add(1,1,'INV-1',$pdf); $add(2,2,'INV-1',$pdf.' changed'); $add(3,2,'OTHER',$pdf);
+    $add(4,1,'NOT-ARCHIVED',$pdf,'pending'); $add(5,1,'REVIEW',$pdf,'verified','review'); $add(6,3,'AIRBNB',$pdf);
+    $toc->run(); tocCheck(count($sent)===0,'disabled sends nothing');
+    $toc->run(1); tocCheck(count($sent)===1 && $state(1)==='toc_submitted','pilot submitted only');
+    tocCheck($sent[0][0]==='500000000@my.toconline.pt','exact recipient');
+    tocCheck(str_contains($sent[0][1]['body'],base64_encode($pdf)),'original PDF attached');
+    $toc->run(1); tocCheck(count($sent)===1,'repeated pilot blocked');
+    $toc->confirm(1); tocCheck($state(1)==='toc_accepted','manual receipt recorded');
+    $toc->configure($settings+['toc_enabled'=>1]); $toc->run();
+    tocCheck(count($sent)===1 && $state(2)==='toc_duplicate' && $state(3)==='toc_duplicate','identity and hash across accounts');
+    tocCheck($state(4)==='pending' && $state(5)==='pending' && $state(6)==='pending','eligibility gates');
+    $next='%PDF-1.4 second test'; $add(7,1,'INV-7',$next); $drive->pdf='tampered'; $toc->run();
+    tocCheck(count($sent)===1 && $state(7)==='toc_retry','changed PDF never sent');
+    $drive->pdf=$next;
+    $uncertain=new InvoiceToconline($pdo,$vault,$drive,static function(): never {throw new RuntimeException('simulated interruption');});
+    $uncertain->run(); tocCheck($state(7)==='toc_uncertain','unknown transport outcome');
+    $toc->run(); $toc->run(7); tocCheck(count($sent)===1,'unknown never resent');
+    // Simulate a crash after intent persistence but before a DB state update.
+    $third='%PDF-1.4 third test'; $add(8,1,'INV-8',$third);
+    $d=['portal'=>'booking','invoice_number'=>'INV-8','sha256'=>hash('sha256',$third)];
+    [$a,$b]=InvoiceToconline::keys($d,'500000000'); $ledger=$vault->read('toconline-ledger.enc');
+    $ledger[$a]=$ledger[$b]=['document_id'=>8,'nif'=>'500000000','sender'=>$settings['toc_sender'],'state'=>'toc_sending'];
+    $vault->save('toconline-ledger.enc',$ledger); $toc->run();
+    tocCheck($state(8)==='toc_uncertain' && count($sent)===1,'crash intent blocks duplicate');
+    // A uniquely correlated email is evidence for review, not an authenticated acceptance.
+    $fourth='%PDF-1.4 receipt test'; $add(9,1,'INV-9',$fourth); $drive->pdf=$fourth; $toc->run(9);
+    [$key]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-9','sha256'=>hash('sha256',$fourth)],'500000000');
+    $body='Foram recusados os seguintes ficheiros por já constarem no seu arquivo: booking-'.$key.'.pdf';
+    $hash=hash('sha256','synthetic receipt');
+    tocCheck(str_contains(end($sent)[1]['body'],'booking-'.$key.'.pdf'),'unique correlation filename');
+    tocCheck($toc->receive('attacker@example.org','',$body,$hash)['result']==='ignored','wrong sender ignored');
+    tocCheck($toc->receive('no_reply@toconline.pt','','invoice.pdf',$hash)['result']==='unmatched','generic filename never guessed');
+    tocCheck($toc->receive('no_reply@toconline.pt','',$body,$hash)['document_id']===9 && $state(9)==='toc_review','correlated receipt requires review');
+    tocCheck($toc->receive('no_reply@toconline.pt','',str_replace('booking-','booking_',$body),hash('sha256','normalized receipt'))['document_id']===9 && $state(9)==='toc_review','normalized filename matches exact identity without accepting');
+    $toc->confirm(9,'toc_existing',42); tocCheck($state(9)==='toc_existing','external duplicate distinct from accepted');
+    $before=count($sent); $toc->run(9); tocCheck(count($sent)===$before,'existing never resent');
+    $toc->receive('no_reply@toconline.pt','',$body,$hash); tocCheck($state(9)==='toc_existing','later receipt cannot undo final confirmation');
+    tocReject(fn()=>$toc->confirm(9,'toc_accepted',42),'final outcome cannot silently change');
+    // Receipt contains multiple document identities: never choose one arbitrarily.
+    tocCheck($toc->receive('no_reply@toconline.pt','<toc-'.$a.'@check.welcomehostel.pt>',$body,$hash)['result']==='unmatched','ambiguous reference blocked');
+    $fifth='%PDF-1.4 expiry'; $add(10,1,'INV-10',$fifth); $drive->pdf=$fifth; $toc->run(10);
+    $toc->configure($settings); $toc->reconcile(time()+73*3600);
+    tocCheck($state(10)==='toc_no_confirmation','expires after 72h with sending disabled');
+    $before=count($sent); $toc->run(10); tocCheck(count($sent)===$before,'no confirmation never resent');
+    $toc->confirm(10,'toc_rejected',42); tocCheck($state(10)==='toc_rejected','rejected distinct');
+    $toc->run(10); tocCheck(count($sent)===$before,'rejected never blindly resent');
+    // A duplicate receipt must not unlock first successful new-archive pilot.
+    $saved=$toc->settings(); $saved['pilot_verified']=false; $saved['enabled']=false; $vault->save('toconline-settings.enc',$saved);
+    $toc->confirm(7,'toc_existing',42); tocCheck(!$toc->settings()['pilot_verified'],'duplicate does not validate pilot');
+    tocReject(fn()=>$toc->configure($settings+['toc_enabled'=>1]),'duplicate pilot cannot enable automatic sending');
+    // Temporary resend: exact scope, manager-only, original PDF and immutable normal ledger.
+    $drive->pdf=$fourth;
+    $actor=['id'=>42,'role'=>'gerente']; $diagnosticNow=strtotime('2026-10-04T14:00:00Z'); $request=str_repeat('a',32);
+    $before=count($sent); $originalLedger=$vault->read('toconline-ledger.enc'); $originalSettings=$toc->settings();
+    tocCheck($toc->diagnosticStatus(9,strtotime('2026-10-05T00:00:00Z'))==='available','diagnostic window');
+    tocCheck($toc->diagnosticStatus(10)==='unavailable','other invoice not offered');
+    tocReject(fn()=>$toc->diagnosticResend(9,['id'=>42,'role'=>'gestor'],true,$request,$diagnosticNow),'non-manager denied');
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,false,$request,$diagnosticNow),'explicit diagnostic confirmation required');
+    tocReject(fn()=>$toc->diagnosticResend(10,$actor,true,$request,$diagnosticNow),'other document denied');
+    $drive->pdf='tampered';
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'tampered diagnostic PDF blocked');
+    tocCheck(!$vault->has('toconline-diagnostic-attempts.enc') && count($sent)===$before,'preflight failure sends nothing');
+    $drive->pdf=$fourth;
+    $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'changed sender blocked');
+    $vault->save('toconline-settings.enc',$originalSettings);
+    [$diagIdentity,$diagContent]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-9','sha256'=>hash('sha256',$fourth)],'500000000');
+    $broken=$originalLedger; unset($broken[$diagContent]); $vault->save('toconline-ledger.enc',$broken);
+    tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'missing content alias blocked');
+    $vault->save('toconline-ledger.enc',$originalLedger);
+    $diagnostic=new InvoiceToconline($pdo,$vault,$drive,static function(string $to,array $message) use ($vault,$transport): bool {
+        $records=$vault->read('toconline-diagnostic-attempts.enc'); $intent=end($records);
+        tocCheck($intent['state']==='sending' && $intent['actor_id']===42 && $intent['document_id']===9,'intent persisted before mail');
+        return $transport($to,$message);
+    });
+    tocCheck($diagnostic->diagnosticResend(9,$actor,true,$request,$diagnosticNow)==='submitted','diagnostic submitted');
+    tocCheck(count($sent)===$before+1 && end($sent)[0]==='500000000@my.toconline.pt','one diagnostic to configured recipient');
+    tocCheck(str_contains(end($sent)[1]['body'],base64_encode($fourth)) && str_contains(end($sent)[1]['body'],'booking-'.$diagIdentity.'.pdf'),'original bytes and correlation preserved');
+    tocCheck(str_contains(end($sent)[1]['headers'][3],'toc-diagnostic-'),'fresh email ID');
+    tocCheck($vault->read('toconline-ledger.enc')===$originalLedger && $toc->settings()===$originalSettings && $state(9)==='toc_existing','normal outcome and automation unchanged');
+    tocReject(fn()=>$diagnostic->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'second click denied');
+    $toc->run(9); tocCheck(count($sent)===$before+1,'normal deduplication still holds');
+    tocCheck($toc->diagnosticStatus(9,$diagnosticNow+599)==='cooldown','cooldown before boundary');
+    tocCheck($toc->diagnosticStatus(9,$diagnosticNow+600)==='available','button reusable at boundary');
+    tocReject(fn()=>$diagnostic->diagnosticResend(9,$actor,true,$request,$diagnosticNow+600),'stale form cannot send again after cooldown');
+    tocReject(fn()=>$diagnostic->diagnosticResend(9,$actor,true,'bad',$diagnosticNow+600),'malformed request rejected');
+    tocCheck($diagnostic->diagnosticResend(9,$actor,true,str_repeat('b',32),$diagnosticNow+600)==='submitted','new explicitly confirmed test allowed');
+    tocCheck(count($vault->read('toconline-diagnostic-attempts.enc'))===2,'test history retained');
+    $vault->save('toconline-diagnostic-resend.enc',['state'=>'submitted','document_id'=>9,'attempted_at'=>gmdate('c',$diagnosticNow-3600)]);
+    $legacy=$vault->read('toconline-diagnostic-resend.enc');
+    tocCheck($diagnostic->diagnosticResend(9,$actor,true,str_repeat('c',32),$diagnosticNow+1200)==='submitted','legacy submitted test permits deliberate new test');
+    tocCheck($vault->read('toconline-diagnostic-resend.enc')===$legacy,'legacy history immutable');
+    unlink($vault->path('toconline-diagnostic-resend.enc'));
+    // Isolated synthetic attempts: uncertain/crashed sends remain consumed, never retried.
+    foreach (['false','throw','crash'] as $failure) {
+        unlink($vault->path('toconline-diagnostic-attempts.enc'));
+        if ($failure==='crash') {
+            $vault->save('toconline-diagnostic-resend.enc',['state'=>'sending','document_id'=>9]);
+        } else {
+            $failed=new InvoiceToconline($pdo,$vault,$drive,static function() use ($failure): bool {
+                if ($failure==='throw') throw new RuntimeException('synthetic mail failure');
+                return false;
+            });
+            tocCheck($failed->diagnosticResend(9,$actor,true,$request,$diagnosticNow)==='uncertain','uncertain diagnostic recorded');
+        }
+        tocCheck($toc->diagnosticStatus(9,$diagnosticNow)==='uncertain','uncertain status displayed');
+        tocReject(fn()=>$toc->diagnosticResend(9,$actor,true,$request,$diagnosticNow),'uncertain attempt blocks another send');
+        if ($failure==='crash') unlink($vault->path('toconline-diagnostic-resend.enc'));
+    }
+    tocCheck($vault->read('toconline-ledger.enc')===$originalLedger,'failed diagnostics preserve original ledger');
+    // Cryptographic proof comes only from the private pipe, never request fields.
+    $sixth='%PDF-1.4 authenticated receipt'; $add(11,1,'INV-11',$sixth); $drive->pdf=$sixth; $toc->run(11);
+    [$authKey]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-11','sha256'=>hash('sha256',$sixth)],'500000000');
+    $authText='booking_'.$authKey.'.pdf';
+    $proof=['authentication'=>['verified'=>true,'code'=>'verified','recipient'=>$settings['toc_sender'],'signed_at'=>gmdate('c')],'outcome'=>'toc_accepted'];
+    $bad=$proof;$bad['authentication']['verified']=false;
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','unsigned'),$bad);
+    tocCheck($state(11)==='toc_review' && !$toc->settings()['pilot_verified'],'unsigned cannot confirm');
+    $bad=$proof;$bad['authentication']['recipient']='wrong@welcomehostel.pt';
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','wrong recipient'),$bad);
+    tocCheck($state(11)==='toc_review','wrong recipient cannot confirm');
+    $bad=$proof;$bad['authentication']['signed_at']=gmdate('c',time()-3600);
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','old signed message'),$bad);
+    tocCheck($state(11)==='toc_review','receipt predating send cannot confirm');
+    $toc->receive('no_reply@toconline.pt','',$authText.' booking_'.str_repeat('f',64).'.pdf',hash('sha256','unknown extra token'),$proof);
+    tocCheck($state(11)==='toc_review','unknown additional identity prevents automatic confirmation');
+    $result=$toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','verified'),$proof);
+    tocCheck($state(11)==='toc_accepted' && $result['outcome']==='toc_accepted','verified exact receipt confirms automatically');
+    tocCheck($toc->settings()['pilot_verified'] && !$toc->settings()['enabled'],'authenticated archive permits pilot but does not activate sending');
+    $toc->receive('no_reply@toconline.pt','',$authText,hash('sha256','later unverified'));
+    tocCheck($state(11)==='toc_accepted','unverified later mail cannot downgrade confirmation');
+    $seventh='%PDF-1.4 authenticated duplicate'; $add(12,1,'INV-12',$seventh); $drive->pdf=$seventh; $toc->run(12);
+    [$dupKey]=InvoiceToconline::keys(['portal'=>'booking','invoice_number'=>'INV-12','sha256'=>hash('sha256',$seventh)],'500000000');
+    $saved=$toc->settings();$saved['pilot_verified']=false;$vault->save('toconline-settings.enc',$saved);
+    $proof['outcome']='toc_existing';
+    $toc->receive('no_reply@toconline.pt','','booking_'.$dupKey.'.pdf',hash('sha256','verified duplicate'),$proof);
+    tocCheck($state(12)==='toc_existing' && !$toc->settings()['pilot_verified'],'authenticated duplicate is not a newly accepted pilot');
+    $proof['outcome']='toc_accepted';
+    $toc->receive('no_reply@toconline.pt','','booking_'.$dupKey.'.pdf',hash('sha256','conflicting final receipt'),$proof);
+    tocCheck($state(12)==='toc_existing' && !$toc->settings()['pilot_verified'],'final outcome immutable and conflicting receipt cannot validate pilot');
+    $toc->configure(array_replace($settings,['toc_sender'=>'other@welcomehostel.pt']));
+    tocCheck(!$toc->settings()['pilot_verified'],'sender change invalidates pilot');
+    tocReject(fn()=>$toc->confirm(1),'old sender receipt cannot validate new sender');
+    unlink($vault->path('toconline-ledger.enc'));
+    tocReject(fn()=>$toc->run(7),'missing ledger fails closed');
+    echo "TOConline email safeguards passed\n";
+} finally {
+    foreach(glob($dir.'/*') as $file) unlink($file); rmdir($dir);
+}
+
+
+

@@ -1,0 +1,82 @@
+name: Roundcube timed Sandbox activation
+
+on:
+  pull_request:
+    paths:
+      - deploy/roundcube_activate.py
+      - deploy/roundcube_config_summary.php
+      - tests/test_roundcube_activate.py
+      - .github/workflows/roundcube-activation.yml
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - deploy/roundcube_activate.py
+      - deploy/roundcube_config_summary.php
+      - tests/test_roundcube_activate.py
+      - .github/workflows/roundcube-activation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  safety-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - run: python3 -m unittest discover -s tests -p 'test_roundcube_*.py' -v
+
+  activate:
+    needs: safety-tests
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Verify installed core, key metadata, backup and plugins before timed activation
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_activate.py
+
+  verify-evidence:
+    needs: activate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read private Sandbox evidence without changing activation
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_verify.py
