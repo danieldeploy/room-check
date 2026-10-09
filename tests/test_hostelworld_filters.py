@@ -22,6 +22,20 @@ class Tests(unittest.TestCase):
             "actions":[{"action":params["action1"],"dest":params["dest1"]},
                        {"action":"deliver","dest":"outside@example.com"}]}
         with self.assertRaises(h.DeploymentError): h.verify_filter(row,params)
+    def test_native_absolute_pipe_and_wrong_account(self):
+        params=h.expected("welcome",11)
+        row={"filtername":h.NAME,"rules":[
+            {"part":params["part1"],"match":params["match1"],"val":params["val1"],"opt":"and"},
+            {"part":params["part2"],"match":params["match2"],"val":params["val2"]}],
+            "actions":[{"action":"save","dest":params["dest1"]},
+                       {"action":"pipe","dest":"|/home/welcome/"+params["dest2"]}]}
+        h.verify_filter(row,params)
+        for wrong in ("|/home/city/"+params["dest2"],
+                      "|/home/welcome/"+params["dest2"]+"; other",
+                      "|/home/welcome/"+params["dest2"].replace(" 11"," 12")):
+            row["actions"][1]["dest"]=wrong
+            with self.assertRaises(h.DeploymentError): h.verify_filter(row,params)
+
     def test_whm_rejects_unrelated_file(self):
         with patch.dict("os.environ",{"WHM_API_TOKEN":"test-only"}):
             api=h.FilterAPI("city")
