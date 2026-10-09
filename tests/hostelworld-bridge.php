@@ -58,3 +58,21 @@ $linkJson=json_encode($linkPacket,JSON_THROW_ON_ERROR);
 check(!str_contains($linkJson,'https:')&&!str_contains($linkJson,'attachment-secret')&&!str_contains($linkJson,'Sign in'));
 check(HostelworldBridge::packet(str_replace($url,$url.'&email=private%40example.com',$linkMail),[$target])===null);
 echo "Hostelworld HTML token packet excludes bodies, URLs and attachments.\n";
+
+// Synthetic token; the observed production format is /login/<32 hex digits>.
+$pathTarget=['host'=>'inbox.hostelworld.com','path'=>'/login/'];
+$pathUrl='https://inbox.hostelworld.com/login/'.str_repeat('a',32).'?Language=English';
+$pathCode=HostelworldLinkToken::encode($pathUrl,$pathTarget);
+check(HostelworldLinkToken::decode($pathCode,$pathTarget)===$pathUrl);
+check(HostelworldLinkToken::extract($pathUrl,[$pathTarget])===$pathCode);
+check(HostelworldLinkToken::decode(HostelworldLinkToken::encode(explode('?',$pathUrl)[0],$pathTarget),$pathTarget)===explode('?',$pathUrl)[0]);
+foreach ([$pathUrl.'&token=other',$pathUrl.'&Language=French',$pathUrl.'&redirect=evil',
+ str_replace('/login/','/other/',$pathUrl),str_replace(str_repeat('a',32),str_repeat('a',31),$pathUrl),
+ str_replace(str_repeat('a',32),str_repeat('g',32),$pathUrl),$pathUrl.'#x',
+ 'https://inbox.hostelworld.com/login/?token='.str_repeat('a',32)] as $invalid) {
+ $rejected=false;
+ try { HostelworldLinkToken::encode($invalid,$pathTarget); } catch (RuntimeException) { $rejected=true; }
+ check($rejected);
+}
+check(HostelworldLinkToken::extract(str_replace(str_repeat('a',32),str_repeat('b',32),$pathUrl)."\n".$pathUrl,[$pathTarget])===null);
+echo "Hostelworld path token format and rejection tests passed.\n";

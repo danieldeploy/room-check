@@ -79,3 +79,21 @@ test('filtered Hostelworld link uses exact mapped destination and one consumptio
   }
  } finally { await fs.rm(exchangeDir,{recursive:true,force:true}); }
 });
+
+test('Hostelworld path tokens accept only the observed login shape', async()=>{
+ const exchangeDir=await fs.mkdtemp(path.join(os.tmpdir(),'hostelworld-path-'));
+ const challenge={method:'email',kind:'link',linkHost:'inbox.hostelworld.com',linkPath:'/login/'};
+ const base='https://inbox.hostelworld.com/login/'+'a'.repeat(32);
+ try {
+  for(const [value,valid] of [[base,true],[base+'?Language=English',true],
+   [base+'?token=other',false],[base+'?Language=English&Language=French',false],
+   [base+'?Language=',false],[base+'/extra',false],[base.slice(0,-1),false],
+   [base.replace('/login/','/other/'),false],[base.replace('inbox.hostelworld.com','evil.example'),false]]) {
+   const broker=new SecondFactor({portal:'hostelworld',authMethod:'email',exchangeDir},u=>portalUrl('hostelworld',u));
+   broker.id='fixture'; broker.started=Date.now(); broker.filteredEmail=true;
+   await fs.writeFile(path.join(exchangeDir,'response-fixture.json'),JSON.stringify({value}),{mode:0o600});
+   if(valid) assert.equal(await broker.value(challenge),value);
+   else await assert.rejects(broker.value(challenge));
+  }
+ } finally { await fs.rm(exchangeDir,{recursive:true,force:true}); }
+});

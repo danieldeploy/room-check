@@ -87,8 +87,13 @@ export class SecondFactor {
           if (challenge.kind === 'link') {
             let url;
             try { url = new URL(received); } catch { throw new PortalError('auth_invalid'); }
+            const pathToken = challenge.linkHost === 'inbox.hostelworld.com' && challenge.linkPath === '/login/';
+            const pathMatches = pathToken ? /^\/login\/[a-fA-F0-9]{32}$/.test(url.pathname) : url.pathname === challenge.linkPath;
+            if (pathToken && ([...url.searchParams.keys()].some(key => key !== 'Language')
+                || url.searchParams.getAll('Language').length > 1
+                || (url.searchParams.has('Language') && !/^[A-Za-z]{2,20}$/.test(url.searchParams.get('Language'))))) throw new PortalError('auth_invalid');
             if (url.protocol !== 'https:' || url.hostname !== challenge.linkHost
-                || url.pathname !== challenge.linkPath || url.username || url.password
+                || !pathMatches || url.username || url.password
                 || url.port || url.hash) throw new PortalError('auth_invalid');
             return this.urlCheck(url.href).href;
           }
