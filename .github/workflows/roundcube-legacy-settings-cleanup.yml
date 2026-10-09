@@ -2,7 +2,7 @@ name: Final Roundcube legacy settings cleanup
 on:
   push:
     branches: [codex/roundcube-server-audit-20261004]
-    paths: [.github/workflows/roundcube-legacy-settings-cleanup.yml]
+    paths: [.github/workflows/roundcube-legacy-settings-cleanup.yml, deploy/roundcube_legacy_config_cleanup.py]
   workflow_dispatch:
 permissions:
   contents: read
