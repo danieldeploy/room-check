@@ -80,6 +80,7 @@ final class InvoiceAuth
 
     public function hostelworldLinkTargets(int $accountId): array
     {
+        if ($accountId<1) return [];
         $accounts=new InvoiceAccounts($this->pdo);
         $targets=HostelworldSetup::targets($accounts->get($accountId),
             $accounts->credentials($this->vault,$accountId),$accounts->properties($accountId));
