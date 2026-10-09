@@ -119,13 +119,20 @@ def verify_filter(row, params):
             home="/home/welcome/" if params["dest1"].startswith("/home/welcome/") else "/home/city/"
             absolute=home+destination
             allowed.update((absolute,"|"+absolute,"| "+absolute,"|"+destination,"| "+destination))
+        if expected_action=="save":
+            home="/home/welcome" if destination.startswith("/home/welcome/") else "/home/city"
+            allowed.add("$home"+destination[len(home):])
+        allowed.update('"'+v+'"' for v in tuple(allowed))
+        allowed.update("'"+v+"'" for v in tuple(allowed) if not v.startswith('"'))
         if a.get("action")!=expected_action or actual not in allowed:
             # Only known local paths can be displayed; arbitrary existing destinations stay private.
-            safe=actual if isinstance(actual,str) and len(actual)<=512 and (
-                actual.startswith(("/home/welcome/","/home/city/","|/home/welcome/","|/home/city/"))
-                or actual in allowed) else "[unexpected destination]"
+            safe=str(actual)[:512]
+            safe=re.sub(r"[A-Fa-f0-9]{32,}","[redacted]",safe)
+            safe=re.sub(r"[^\\s<>@]+@[^\\s<>]+","[address]",safe)
+            safe=re.sub(r"https?://[^\\s]+","[url]",safe)
             print(json.dumps({"filter_binding_mismatch":{"index":i,"action":a.get("action"),
-                                                        "destination":safe}}),file=sys.stderr)
+                                                        "destination":safe,"destination_type":type(actual).__name__,
+                                                        "fields":sorted(a)}}),file=sys.stderr)
             raise DeploymentError("filter_destination_conflict")
 
 def install(api, identifier):
