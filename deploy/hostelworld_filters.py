@@ -118,7 +118,9 @@ def verify_filter(row, params):
         if expected_action=="pipe":
             home="/home/welcome/" if params["dest1"].startswith("/home/welcome/") else "/home/city/"
             absolute=home+destination
-            allowed.update((absolute,"|"+absolute,"| "+absolute,"|"+destination,"| "+destination))
+            local="$home/"+destination
+            allowed.update((absolute,"|"+absolute,"| "+absolute,"|"+destination,"| "+destination,
+                            local,"|"+local,"| "+local))
         if expected_action=="save":
             home="/home/welcome" if destination.startswith("/home/welcome/") else "/home/city"
             allowed.add("$home"+destination[len(home):])
