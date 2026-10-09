@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/InvoiceAccounts.php';
 require_once __DIR__ . '/HostelworldLinkToken.php';
+require_once __DIR__ . '/HostelworldSetup.php';
 
 final class InvoiceAuth
 {
@@ -79,6 +80,11 @@ final class InvoiceAuth
 
     public function hostelworldLinkTargets(int $accountId): array
     {
+        if ($accountId<1) return [];
+        $accounts=new InvoiceAccounts($this->pdo);
+        $targets=HostelworldSetup::targets($accounts->get($accountId),
+            $accounts->credentials($this->vault,$accountId),$accounts->properties($accountId));
+        if ($targets) return $targets;
         $name='account-'.$accountId.'-map.json';
         if ($accountId<1 || !$this->vault->has($name)) return [];
         $map=json_decode(file_get_contents($this->vault->path($name)),true,32,JSON_THROW_ON_ERROR);
