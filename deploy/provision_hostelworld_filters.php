@@ -64,6 +64,7 @@ try {
         $linkTargets[$source]=($navigation['validated']??false)===true && (int)($navigation['accountId']??0)===$id ? $links : [];
         echo json_encode(['hostelworld_capability'=>['source'=>$source,'account_id'=>$id,
             'credentials_ready'=>!empty($credentials['identifier'])&&!empty($credentials['password'])&&!empty($credentials['hostel_number']),
+            'credential_fields'=>['identifier'=>!empty($credentials['identifier']),'password'=>!empty($credentials['password']),'hostel_number'=>!empty($credentials['hostel_number'])],
             'map_exists'=>$vault->has($name),'map_validated'=>($navigation['validated']??false)===true,
             'map_version'=>$navigation['version']??null,'link_targets'=>$links]],JSON_THROW_ON_ERROR)."\n";
     }
