@@ -58,7 +58,7 @@ class FilterAPI:
             return r.get("data")
         require(p.get("metadata",{}).get("result")==1,"whm_operation_failed")
         r=p.get("data",{}).get("uapi",{})
-        require(r.get("status")==1 and not r.get("errors"),"uapi_operation_failed")
+        require(r.get("status")==1 and not r.get("errors"),"uapi_operation_failed_"+self.account+"_"+function+"_"+params.get("file","filter"))
         return r.get("data")
 
 def content(value):
@@ -126,7 +126,7 @@ def main():
     # Create the key empty first; restrict permissions before putting a secret in it.
     for name,value in files.items():
         if name.endswith(".key"):
-            city.call("Fileman","save_file_content",dir="/home/city",file=name,content="")
+            city.call("Fileman","save_file_content",dir="/home/city",file=name,content="pending\n")
         else:
             city.call("Fileman","save_file_content",dir="/home/city",file=name,content=value)
         mode="0700" if name.endswith("-pipe.php") else "0600"
