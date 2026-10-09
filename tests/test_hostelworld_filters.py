@@ -44,7 +44,8 @@ class Tests(unittest.TestCase):
             "actions":[{"action":"save","dest":params["dest1"]},
                        {"action":"pipe","dest":params["dest2"]}]}
         for delivery in ('"'+params["dest1"]+'"',"$home/mail/$domain/$local_part/",
-                         '"$home/mail/$domain/$local_part/"'):
+                         '"$home/mail/$domain/$local_part/"',
+                         "$home/mail/$domain/$local_part",params["dest1"].rstrip("/")):
             row["actions"][0]["dest"]=delivery
             h.verify_filter(row,params)
         for wrong in ("/home/welcome/mail/$domain/$local_part/","$home/other/",
