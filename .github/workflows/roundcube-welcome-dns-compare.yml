@@ -2,7 +2,7 @@ name: Welcome DNS comparison
 on:
   push:
     branches: [codex/roundcube-server-audit-20261004]
-    paths: [.github/workflows/roundcube-welcome-dns-compare.yml]
+    paths: [.github/workflows/roundcube-welcome-dns-compare.yml, deploy/roundcube_welcome_dns_compare.py]
 permissions:
   contents: read
 jobs:
