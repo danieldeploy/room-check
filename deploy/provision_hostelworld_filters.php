@@ -32,6 +32,12 @@ try {
         throw new RuntimeException('hostelworld_account_binding_missing_or_ambiguous');
     }
     $map=['welcome'=>$ids['welcome'][0],'city'=>$ids['city'][0]];
+    // Account facts explicitly supplied by the owner; never replace existing credentials.
+    $cityCredentials=$accounts->credentials($vault,$map['city']); $knownFields=[];
+    if (empty($cityCredentials['identifier'])) $knownFields['identifier']='manager';
+    if (empty($cityCredentials['hostel_number'])) $knownFields['hostel_number']='77759';
+    if ($knownFields) $accounts->saveCredentials($vault,$map['city'],$knownFields+['auth_method'=>'email']);
+
     $root='/home/welcome/room-check-private';
     if (is_link($root) || !is_dir($root) || (fileperms($root)&0077)!==0) throw new RuntimeException('private_root_permissions');
     $path=$root.'/hostelworld-filter-provision.json';
