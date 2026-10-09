@@ -8,6 +8,7 @@ def run():
   home='/home/'+user;trash=home+'/.trash'
   entries=c.file_inventory(trash)
   tests=[];protected=0
+  known={'smtp-port-test.php','gmailports-test.php','pm2525-test.php','postmark-api-test-20261002-1327.txt','resend-connectivity-20261003.txt','smtp2go-connectivity-20261004.txt','smtp2go-sandbox-test','welcome_smtp2go','welcome_smtp2go_pilot'}
   for name in sorted(entries):
    if not re.fullmatch(r'[A-Za-z0-9._-]{1,150}',name):continue
    lower=name.lower()
@@ -18,7 +19,7 @@ def run():
    if st and st.get('type') in ('dir','file'):
     tests.append({'name':name,'type':st['type']})
   # Persist no manifest and make no changes. Candidate names remain private in memory.
-  out.append({'account':user,'retired_email_test_candidates':len(tests),'test_directories':sum(x['type']=='dir' for x in tests),'protected_trash_entries':protected})
+  out.append({'account':user,'retired_email_test_candidates':len(tests),'test_directories':sum(x['type']=='dir' for x in tests),'protected_trash_entries':protected,'previously_identified_test_entries':sum(x['name'] in known for x in tests),'test_entries_requiring_identification':sum(x['name'] not in known for x in tests)})
  return {'ok':True,'read_only':True,'accounts':out,'private_contents_published':False,'permanent_deletions':0}
 if __name__=='__main__':
  try:print(json.dumps(run(),sort_keys=True))
