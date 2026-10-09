@@ -30,7 +30,7 @@ def plan(c,user,domain):
 def apply(p):
  c=p['c'];home=p['home'];private=p['private'];backup=p['backup'];original=p['original'];path=p['path'];desired=p['desired']
  if backup not in c.file_inventory(private):
-  c.api2('fileop',op='copy',sourcefiles=path.removeprefix(home+'/'),destfiles=(private+'/'+backup).removeprefix(home+'/'),doubledecode=0)
+  c.api2('fileop',op='copy',sourcefiles=path.removeprefix(home+'/'),destfiles=private+'/'+backup,doubledecode=0)
   c.api2('fileop',op='chmod',sourcefiles=(private+'/'+backup).removeprefix(home+'/'),metadata='0600',doubledecode=0)
  if read(c,private+'/'+backup)!=original or c.file_stat(private,backup).get('nicemode')!='0600':raise dns.OperationError('backup_not_verified')
  if read(c,path)!=original:raise dns.OperationError('config_changed_before_write')
