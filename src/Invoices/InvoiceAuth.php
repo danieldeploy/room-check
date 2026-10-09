@@ -85,7 +85,7 @@ final class InvoiceAuth
             if ($account['portal'] !== 'hostelworld' || $account['auth_method'] !== 'email') return false;
         }
         $from = trim((string) ($message['from'] ?? ''));
-        $subject = trim((string) ($message['subject'] ?? ''));
+        $subject = preg_replace('/[_-]+/', ' ', trim((string) ($message['subject'] ?? '')));
         $text = (string) ($message['text'] ?? '');
         $received = filter_var($message['received_at'] ?? '', FILTER_VALIDATE_INT);
         // Filtered messages are still untrusted input: require Hostelworld's domain and a
@@ -94,6 +94,7 @@ final class InvoiceAuth
             || !preg_match('/\b(login|sign[ -]?in|security|verification|code|authentication)\b/i', $subject)
             || !$received || abs(time() - $received) > 150 || strlen($text) > 32768) return false;
         preg_match_all('/(?<!\d)\d{6}(?!\d)/', $text, $codes);
+        $codes[0] = array_values(array_unique($codes[0]));
         if (count($codes[0]) !== 1) return false;
         $sql = "SELECT c.* FROM invoice_auth_challenges c
             JOIN invoice_tasks t ON t.id = c.task_id

@@ -34,6 +34,7 @@ jobs:
       - name: Validate hosting deployment tools
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_filters.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
 
@@ -91,6 +92,7 @@ jobs:
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-hostelworld-pipe.php
+          php tests/hostelworld-bridge.php
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
           php tests/run.php
@@ -175,6 +177,12 @@ jobs:
           else
             python3 deploy/automated_release.py --expected-commit "$GITHUB_SHA"
           fi
+
+      - name: Install and verify separate Hostelworld filters
+        if: vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/hostelworld_filters.py
 
   windows-agent:
     runs-on: windows-latest
