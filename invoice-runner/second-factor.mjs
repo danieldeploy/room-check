@@ -83,7 +83,16 @@ export class SecondFactor {
         const value = await fs.readFile(file, 'utf8').catch(() => null);
         if (value) {
           await fs.unlink(file);
-          return extractCode(JSON.parse(value).value);
+          const received = JSON.parse(value).value;
+          if (challenge.kind === 'link') {
+            let url;
+            try { url = new URL(received); } catch { throw new PortalError('auth_invalid'); }
+            if (url.protocol !== 'https:' || url.hostname !== challenge.linkHost
+                || url.pathname !== challenge.linkPath || url.username || url.password
+                || url.port || url.hash) throw new PortalError('auth_invalid');
+            return this.urlCheck(url.href).href;
+          }
+          return extractCode(received);
         }
         await delay(500);
       }
