@@ -36,6 +36,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_filters.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_recovery.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
 
       - name: Configure PHP
@@ -163,7 +164,7 @@ jobs:
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 deploy/automated_release.py --inspect-state
+        run: python3 deploy/recover_hostelworld_release.py --inspect-state
 
       - name: Release the exact production commit through WHM
         env:
@@ -175,7 +176,7 @@ jobs:
           if [ "$DIAGNOSTIC_ONLY" = 'true' ]; then
             python3 deploy/automated_release.py --diagnostic
           else
-            python3 deploy/automated_release.py --expected-commit "$GITHUB_SHA"
+            python3 deploy/recover_hostelworld_release.py --expected-commit "$GITHUB_SHA"
           fi
 
       - name: Install and verify separate Hostelworld filters
