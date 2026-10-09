@@ -1,0 +1,73 @@
+.session-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 36px;
+    padding: 14px 18px;
+    border: 1px solid #d9e2ec;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 10px 28px rgba(16, 42, 67, .08);
+}
+.session-navigation,
+.session-account,
+.session-links {
+    display: flex;
+    align-items: center;
+}
+.session-navigation { gap: 22px; min-width: 0; }
+.session-links { flex-wrap: wrap; gap: 12px; }
+.session-brand {
+    color: #17313a;
+    font-weight: 850;
+    letter-spacing: -.02em;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.session-links a,
+.session-logout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 10px;
+    color: #0f766e;
+    background: #e8f4f2;
+    font: inherit;
+    font-size: .84rem;
+    font-weight: 800;
+    text-decoration: none;
+    cursor: pointer;
+}
+.session-account { flex: 0 0 auto; gap: 12px; }
+.session-user {
+    display: grid;
+    color: #65777d;
+    font-size: .82rem;
+    line-height: 1.15;
+    text-align: right;
+}
+.session-user strong { color: #17313a; font-size: .92rem; }
+.session-user span { margin-top: 4px; }
+.session-logout-form { margin: 0; }
+.session-logout { color: #243b53; background: #e9eff5; }
+.session-links a:hover,
+.session-links a:focus-visible,
+.session-logout:hover,
+.session-logout:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, .16);
+}
+@media (max-width: 760px) {
+    .session-bar { align-items: stretch; flex-direction: column; gap: 14px; margin-bottom: 28px; }
+    .session-navigation { align-items: flex-start; flex-direction: column; gap: 10px; }
+    .session-account { justify-content: space-between; border-top: 1px solid #e3eceb; padding-top: 12px; }
+    .session-user { text-align: left; }
+}
+@media (max-width: 440px) {
+    .session-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+    .session-links a { text-align: center; }
+}
