@@ -30,6 +30,8 @@ class Tests(unittest.TestCase):
             "actions":[{"action":"save","dest":params["dest1"]},
                        {"action":"pipe","dest":"|/home/welcome/"+params["dest2"]}]}
         h.verify_filter(row,params)
+        row["actions"][1]["dest"]="|$home/"+params["dest2"]
+        h.verify_filter(row,params)
         for wrong in ("|/home/city/"+params["dest2"],
                       "|/home/welcome/"+params["dest2"]+"; other",
                       "|/home/welcome/"+params["dest2"].replace(" 11"," 12")):
