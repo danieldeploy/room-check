@@ -50,6 +50,7 @@ function flow(identity = true) {
       if (body.includes('ready_state')) return { ready_state: 'complete' };
       if (body.includes('formReady')) throw new Error('unused');
       if (body.includes('form.method')) return true;
+      if (body.includes('sent_notice')) return { sent_notice: true, hostel_matches: true };
       if (body.includes('const ids')) { inspect++; return identity; }
       if (body.includes('pdf_links')) return { pdf_links: 2, pagination: true, issue_date_column: false };
       throw new Error('unexpected evaluation');
@@ -82,4 +83,16 @@ test('wrong property stops before invoice navigation', async () => {
   assert.equal(result.authenticated_session, false);
   assert.equal(result.invoice_structure, undefined);
   assert.equal(f.events.at(-1), 'close');
+});
+
+test('unknown login result is not mislabeled as invalid credentials or retried blindly', async () => {
+  const f = flow(); const evaluate = f.page.evaluate;
+  f.page.evaluate = async fn => String(fn).includes('sent_notice')
+    ? { sent_notice: false, hostel_matches: false, credential_error: false, human_challenge: false }
+    : evaluate(fn);
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  assert.equal(result.failure_code, 'portal_changed');
+  assert.equal(result.failure_stage, 'secure_link_requested');
+  assert.equal(result.auth_signals.sent_notice, false);
+  assert.equal(f.events.includes('receive'), false);
 });
