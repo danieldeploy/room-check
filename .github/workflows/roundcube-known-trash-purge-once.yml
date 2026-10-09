@@ -1,0 +1,26 @@
+name: One-shot purge known retired email tests
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-known-trash-purge-once.yml]
+permissions:
+  contents: read
+jobs:
+  purge:
+    if: github.event.head_commit.message == 'Execute approved one-shot known email test purge 20261009'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: management-hub-production
+    concurrency:
+      group: known-email-trash-purge-20261009
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Purge allowlisted retired tests once; never empty general Trash
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          EMAIL_TEST_PURGE_ONCE: '20261009-known-trash-only'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_known_trash_purge_once.py
