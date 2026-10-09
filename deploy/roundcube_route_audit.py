@@ -30,7 +30,7 @@ def run():
    if re.search(r'postmark|resend|pilot|test',name,re.I):
     st=c.file_stat(private,name)
     artifacts.append({'production_backup':'backup' in name or 'before-' in name,'validation_result':'validation' in name,'test_marker':'test' in name,'legacy_provider':'postmark' in name or 'resend' in name,'type':st.get('type') if st else None,'mode':st.get('nicemode') if st else None})
-  accounts.append({'account':user,'current':summary(read(c,root+'/config/config.inc.php'),domain),'backups':backups,'private_artifact_classifications':artifacts})
+  accounts.append({'account':user,'current':summary(read(c,root+'/config/config.inc.php'),domain),'installed_defaults':summary(read(c,root+'/config/defaults.inc.php'),domain),'backups':backups,'private_artifact_classifications':artifacts})
  return {'ok':True,'read_only':True,'accounts':accounts}
 if __name__=='__main__':
  try:print(json.dumps(run(),sort_keys=True))
