@@ -11,7 +11,9 @@ class Tests(unittest.TestCase):
         self.assertEqual(welcome["dest2"],"room-check-private/cron/hostelworld-auth-pipe.php 11")
         self.assertEqual(city["dest2"],"hostelworld-city-auth-pipe.php")
         self.assertEqual(city["action1"],"save")
-        self.assertEqual(city["dest1"],"$home/mail/$domain/$local_part/")
+        self.assertEqual(city["dest1"],"/home/city/mail/$domain/$local_part/")
+        self.assertEqual(welcome["dest1"],"/home/welcome/mail/$domain/$local_part/")
+        with self.assertRaises(h.DeploymentError): h.expected("../other",22)
     def test_existing_other_destination_is_rejected(self):
         params=h.expected("city",22)
         row={"filtername":h.NAME,"rules":[
