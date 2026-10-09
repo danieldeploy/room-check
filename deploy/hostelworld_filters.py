@@ -122,6 +122,8 @@ def verify_filter(row, params):
         if expected_action=="save":
             home="/home/welcome" if destination.startswith("/home/welcome/") else "/home/city"
             allowed.add("$home"+destination[len(home):])
+            # Live cPanel read-back returns the same directory without its final slash.
+            allowed.update(v.rstrip("/") for v in tuple(allowed))
         allowed.update('"'+v+'"' for v in tuple(allowed))
         allowed.update("'"+v+"'" for v in tuple(allowed) if not v.startswith('"'))
         if a.get("action")!=expected_action or actual not in allowed:
