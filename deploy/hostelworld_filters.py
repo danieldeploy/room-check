@@ -58,7 +58,18 @@ class FilterAPI:
             return r.get("data")
         require(p.get("metadata",{}).get("result")==1,"whm_operation_failed")
         r=p.get("data",{}).get("uapi",{})
-        require(r.get("status")==1 and not r.get("errors"),"uapi_operation_failed_"+self.account+"_"+function+"_"+params.get("file","filter"))
+        if r.get("status") != 1 or r.get("errors"):
+            # Never print server errors: they may echo submitted contents or the bridge key.
+            detail = " ".join(str(x).lower() for x in (r.get("errors") or []))
+            classifications = [label for needle,label in (
+                ("no valid rules","no_valid_rules"), ("invalid action","invalid_action"),
+                ("destination","destination"), ("does not exist","missing_path"),
+                ("permission","permission"), ("regular expression","regex"),
+                ("absolute","absolute_path"), ("pipe","pipe"), ("save","save"),
+                ("disabled","disabled"), ("not allowed","not_allowed"),
+                ("invalid","invalid")) if needle in detail]
+            raise DeploymentError("uapi_operation_failed_"+self.account+"_"+function+"_"+
+                                  params.get("file","filter")+"_"+("-".join(classifications) or "unclassified"))
         return r.get("data")
 
 def content(value):
