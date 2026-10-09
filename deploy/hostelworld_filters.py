@@ -112,8 +112,21 @@ def verify_filter(row, params):
             require(r.get(key)==params[key+str(i)],"filter_rule_conflict")
     require(rules[0].get("opt")=="and","filter_rule_conflict")
     for i,a in enumerate(actions,1):
-        require(a.get("action")==params["action"+str(i)] and
-                a.get("dest")==params["dest"+str(i)],"filter_destination_conflict")
+        expected_action=params["action"+str(i)]; destination=params["dest"+str(i)]
+        actual=a.get("dest")
+        allowed={destination}
+        if expected_action=="pipe":
+            home="/home/welcome/" if params["dest1"].startswith("/home/welcome/") else "/home/city/"
+            absolute=home+destination
+            allowed.update((absolute,"|"+absolute,"| "+absolute,"|"+destination,"| "+destination))
+        if a.get("action")!=expected_action or actual not in allowed:
+            # Only known local paths can be displayed; arbitrary existing destinations stay private.
+            safe=actual if isinstance(actual,str) and len(actual)<=512 and (
+                actual.startswith(("/home/welcome/","/home/city/","|/home/welcome/","|/home/city/"))
+                or actual in allowed) else "[unexpected destination]"
+            print(json.dumps({"filter_binding_mismatch":{"index":i,"action":a.get("action"),
+                                                        "destination":safe}}),file=sys.stderr)
+            raise DeploymentError("filter_destination_conflict")
 
 def install(api, identifier):
     params=expected(api.account,identifier)
