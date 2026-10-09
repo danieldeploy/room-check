@@ -14,7 +14,7 @@ try {
         if ($a['portal']!=='hostelworld' || !$accounts->active((int)$a['id'])) continue;
         $labels=strtolower($a['label'].' '.implode(' ',$accounts->properties((int)$a['id'])));
         $credentials=$accounts->credentials($vault,(int)$a['id']);
-        $knownCity=(string)($credentials['hostel_number']??'')==='77759'
+        $knownCity=trim((string)($credentials['hostel_number']??''))==='77759'
             || array_key_exists('77759',$accounts->properties((int)$a['id']));
         $welcome=str_contains($labels,'welcome');
         $city=$knownCity || preg_match('/\\bcity(?:[ _-]*(?:center|centre))?\\b/',$labels)===1;
@@ -28,7 +28,7 @@ try {
         $ids['welcome']=array_values(array_diff(array_column($candidates,'id'),$ids['city']));
     }
     if (count($ids['welcome'])!==1 || count($ids['city'])!==1) {
-        fwrite(STDERR,'Hostelworld binding facts: '.json_encode($candidates,JSON_THROW_ON_ERROR)."\\n");
+        fwrite(STDERR,'Hostelworld binding facts: '.json_encode($candidates,JSON_THROW_ON_ERROR)."\n");
         throw new RuntimeException('hostelworld_account_binding_missing_or_ambiguous');
     }
     $map=['welcome'=>$ids['welcome'][0],'city'=>$ids['city'][0]];
@@ -48,7 +48,7 @@ try {
             $pdo->prepare("UPDATE invoice_accounts SET auth_method='email',status='configured',enabled=0,login_verified_at=NULL WHERE id=?")->execute([$id]);
         }
     }
-    echo "Hostelworld filter account bindings provisioned.\\n";
+    echo "Hostelworld filter account bindings provisioned.\n";
 } catch (Throwable $e) {
     fwrite(STDERR,"Hostelworld filter provisioning failed: ".($e instanceof RuntimeException?$e->getMessage():'configuration_error')."\n");
     exit(1);
