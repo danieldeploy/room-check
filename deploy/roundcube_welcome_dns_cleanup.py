@@ -15,7 +15,7 @@ def target(r):
     name=str(r.get('name','')).rstrip('.').lower()
     return (r.get('type')=='TXT' and bool(re.fullmatch(r'[0-9]{14}pm\._domainkey\.welcomehostel\.pt',name))) or (r.get('type')=='CNAME' and name=='pm-bounces.'+DOMAIN and str(r.get('cname','')).rstrip('.').lower()=='pm.mtasv.net')
 def fingerprints(rows):
-    return sorted(json.dumps({k:v for k,v in r.items() if k not in ('Line','line')},sort_keys=True) for r in rows if r.get('type') not in ('SOA',None))
+    return sorted(json.dumps({k:v for k,v in r.items() if k not in ('Line','line') and not (r.get('type')=='SOA' and k=='serial')},sort_keys=True) for r in rows if r.get('type') not in (':RAW',None))
 def run():
     c=dns.Client(os.environ.get('WHM_API_TOKEN',''));c.user='welcome'
     config=read(c,'/home/welcome/public_html/roundcube/config/config.inc.php')
