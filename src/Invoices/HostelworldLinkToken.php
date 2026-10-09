@@ -31,21 +31,43 @@ final class HostelworldLinkToken
         return $params;
     }
 
+    private static function pathToken(array $target): bool
+    {
+        return $target['host']==='inbox.hostelworld.com' && $target['path']==='/login/';
+    }
+
+    private static function pathParams(array $params): array
+    {
+        if (array_diff(array_keys($params),['token','Language'])
+            || !is_string($params['token']??null)
+            || !preg_match('/\A[a-fA-F0-9]{32}\z/',$params['token'])
+            || (isset($params['Language']) && (!is_string($params['Language'])
+                || !preg_match('/\A[A-Za-z]{2,20}\z/',$params['Language'])))) throw new RuntimeException('auth_invalid');
+        ksort($params);
+        return $params;
+    }
+
     public static function encode(string $url,array $target): string
     {
         $target=self::target($target); $parts=parse_url($url);
         if (!$parts || ($parts['scheme']??'')!=='https' || strtolower($parts['host']??'')!==$target['host']
-            || ($parts['path']??'/')!==$target['path'] || isset($parts['user']) || isset($parts['pass'])
+            || (!self::pathToken($target) && ($parts['path']??'/')!==$target['path']) || isset($parts['user']) || isset($parts['pass'])
             || isset($parts['port']) || isset($parts['fragment']) || strlen($url)>4096) throw new RuntimeException('auth_invalid');
         $params=[];
-        foreach (explode('&',$parts['query']??'') as $pair) {
+        foreach (($parts['query']??'')==='' ? [] : explode('&',$parts['query']) as $pair) {
             $bits=explode('=',$pair,2);
             if (count($bits)!==2) throw new RuntimeException('auth_invalid');
             $name=rawurldecode($bits[0]); $value=rawurldecode($bits[1]);
             if (array_key_exists($name,$params)) throw new RuntimeException('auth_invalid');
             $params[$name]=$value;
         }
-        $json=json_encode(self::params($params),JSON_THROW_ON_ERROR);
+        if (self::pathToken($target)) {
+            if (array_diff(array_keys($params),['Language'])
+                || !preg_match('~\A/login/([a-fA-F0-9]{32})\z~',$parts['path']??'',$match)) throw new RuntimeException('auth_invalid');
+            $params['token']=$match[1];
+            $params=self::pathParams($params);
+        } else $params=self::params($params);
+        $json=json_encode($params,JSON_THROW_ON_ERROR);
         $code=self::PREFIX.rtrim(strtr(base64_encode($json),'+/','-_'),'=');
         if (strlen($code)>2048) throw new RuntimeException('auth_invalid');
         return $code;
@@ -62,8 +84,14 @@ final class HostelworldLinkToken
         try { $params=json_decode($json,true,4,JSON_THROW_ON_ERROR); }
         catch (Throwable) { throw new RuntimeException('auth_invalid'); }
         if (!is_array($params) || array_is_list($params)) throw new RuntimeException('auth_invalid');
-        $params=self::params($params);
-        $url='https://'.$target['host'].$target['path'].'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
+        if (self::pathToken($target)) {
+            $params=self::pathParams($params);
+            $url='https://'.$target['host'].$target['path'].$params['token'];
+            if (isset($params['Language'])) $url.='?Language='.rawurlencode($params['Language']);
+        } else {
+            $params=self::params($params);
+            $url='https://'.$target['host'].$target['path'].'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
+        }
         if (!hash_equals(self::encode($url,$target),$code)) throw new RuntimeException('auth_invalid');
         return $url;
     }
