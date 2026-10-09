@@ -49,3 +49,12 @@ foreach ([$code.'=', 'hwlink1.'.rtrim(strtr(base64_encode('{"email":"private@exa
  check($rejected);
 }
 echo "Hostelworld token transport destination and privacy tests passed.\n";
+
+$linkMail="From: security@hostelworld.com\r\nSubject: Secure login\r\nDate: $date\r\nContent-Type: multipart/mixed; boundary=\"links\"\r\n\r\n--links\r\nContent-Type: text/html\r\n\r\n<a href=\"$url\">Sign in</a>\r\n--links\r\nContent-Type: text/html\r\nContent-Disposition: attachment\r\n\r\n<a href=\"https://inbox.hostelworld.com/inbox/verify?token=attachment-secret\">Private</a>\r\n--links--\r\n";
+$linkPacket=HostelworldBridge::packet($linkMail,[$target]);
+check($linkPacket!==null && $linkPacket['code']===$code);
+check(array_keys($linkPacket)===['source','from','subject','received_at','code']);
+$linkJson=json_encode($linkPacket,JSON_THROW_ON_ERROR);
+check(!str_contains($linkJson,'https:')&&!str_contains($linkJson,'attachment-secret')&&!str_contains($linkJson,'Sign in'));
+check(HostelworldBridge::packet(str_replace($url,$url.'&email=private%40example.com',$linkMail),[$target])===null);
+echo "Hostelworld HTML token packet excludes bodies, URLs and attachments.\n";
