@@ -6,7 +6,7 @@ def run():
  for user in ('welcome','city'):
   c=dns.Client(os.environ.get('WHM_API_TOKEN',''));c.user=user
   home='/home/'+user;trash=home+'/.trash'
-  entries=c.file_inventory(trash) if '.trash' in c.file_inventory(home) else set()
+  entries=c.file_inventory(trash)
   tests=[];protected=0
   for name in sorted(entries):
    if not re.fullmatch(r'[A-Za-z0-9._-]{1,150}',name):continue
@@ -14,7 +14,6 @@ def run():
    if any(x in lower for x in ('key','backup','before','live')):
     protected+=1;continue
    if 'test' not in lower:continue
-   if not any(x in lower for x in ('smtp2go','postmark','resend','roundcube','pm2525','gmailports','smtp-port')):continue
    st=c.file_stat(trash,name)
    if st and st.get('type') in ('dir','file'):
     tests.append({'name':name,'type':st['type']})
