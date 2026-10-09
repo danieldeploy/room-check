@@ -10,13 +10,15 @@ def run():
  for r in before:
   if not w.target(r):a[(r.get('name'),r.get('type'))].append(r)
  for r in after:b[(r.get('name'),r.get('type'))].append(r)
- changed=collections.Counter();unmatched=0
+ changed=collections.Counter();changed_types=collections.Counter();unmatched=0
  for k in set(a)|set(b):
   if len(a[k])!=len(b[k]):unmatched+=1;continue
   for x,y in zip(a[k],b[k]):
    for key in set(x)|set(y):
-    if x.get(key)!=y.get(key):changed[key]+=1
- return {'ok':True,'read_only':True,'legacy_records_before':sum(w.target(r) for r in before),'legacy_records_after':sum(w.target(r) for r in after),'unmatched_other_record_groups':unmatched,'changed_field_counts':dict(changed),'record_counts_before':dict(collections.Counter(r.get('type') for r in before)),'record_counts_after':dict(collections.Counter(r.get('type') for r in after))}
+    if x.get(key)!=y.get(key):
+     changed[key]+=1
+     if key not in ('Line','line'):changed_types[str(k[1])+':'+key]+=1
+ return {'ok':True,'read_only':True,'legacy_records_before':sum(w.target(r) for r in before),'legacy_records_after':sum(w.target(r) for r in after),'unmatched_other_record_groups':unmatched,'changed_field_counts':dict(changed),'changed_field_types':dict(changed_types),'record_counts_before':dict(collections.Counter(r.get('type') for r in before)),'record_counts_after':dict(collections.Counter(r.get('type') for r in after))}
 if __name__=='__main__':
  try:print(json.dumps(run(),sort_keys=True))
  except Exception:print(json.dumps({'ok':False,'error':'comparison_requires_review'}));sys.exit(1)
