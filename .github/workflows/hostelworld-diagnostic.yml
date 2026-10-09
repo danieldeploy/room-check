@@ -1,0 +1,58 @@
+name: Hostelworld deployment diagnosis
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/hostelworld-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Read sanitized failed deployment log
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import sys,json,os,re,urllib.parse,urllib.request
+          sys.path.insert(0,'deploy')
+          from cpanel_api import Config,CpanelAPI,WHM_ORIGIN,require
+          config=Config(token=os.environ['WHM_API_TOKEN'],transport='whm',origin=WHM_ORIGIN)
+          api=CpanelAPI(config)
+          tasks=api.call('VersionControlDeployment','retrieve')
+          task=[t for t in tasks if str(t.get('deploy_id'))=='288']
+          require(len(task)==1,'failed_deployment_missing')
+          t=task[0]
+          print(json.dumps({'deploy_id':'288','keys':sorted(t),'timestamps':t.get('timestamps'),'repository_state':t.get('repository_state')}))
+          def read(function,**params):
+              require(function in ('list_files','get_file_content'),'read_only')
+              query=urllib.parse.urlencode({'api.version':1,'cpanel.user':'welcome','cpanel.module':'Fileman','cpanel.function':function,**params})
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel?'+query,headers={'Authorization':'whm fazenda:'+config.token})
+              with api.opener.open(req,timeout=20) as r: data=json.loads(r.read(2097153))
+              result=data['data']['uapi']; require(result['status']==1,'file_read_failed')
+              return result['data']
+          directory='/home/welcome/.cpanel/logs'
+          paths=[]
+          for value in t.values():
+              if isinstance(value,str) and re.fullmatch(r'/home/welcome/\.cpanel/logs/vc_[A-Za-z0-9_.-]+_git_deploy\.log',value): paths.append(value)
+          if not paths:
+              files=read('list_files',dir=directory,types='file')
+              if isinstance(files,dict): files=files.get('files',[])
+              names=[r.get('file',r.get('name','')) for r in files]
+              names=sorted(n for n in names if re.fullmatch(r'vc_[A-Za-z0-9_.-]+_git_deploy\.log',n))
+              print(json.dumps({'log_files':names[-3:]}))
+              paths=[directory+'/'+n for n in names[-1:]]
+          for path in paths:
+              value=read('get_file_content',dir=directory,file=path.rsplit('/',1)[1])
+              if isinstance(value,list): value=value[0]
+              text=value.get('content','')
+              known=['hostelworld_account_binding_missing_or_ambiguous','unexpected_app_root','private_root_permissions',
+                     'private_config_symlink','hostelworld_account_binding_changed','invalid_bridge_key','configuration_error',
+                     'private_write_failed','Permission denied','Fatal error','No such file or directory']
+              print(json.dumps({'log':path,'classifications':[k for k in known if k in text],
+                               'hostelworld_line_present':'Hostelworld filter' in text}))
+          PY
