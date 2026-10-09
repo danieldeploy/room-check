@@ -35,6 +35,7 @@ def main():
         c=payload.get("hostelworld_capability",{})
         require(c.get("source") in ("welcome","city") and type(c.get("account_id")) is int,"invalid_capability")
         clean={k:c.get(k) for k in ("source","account_id","credentials_ready","map_exists","map_validated","map_version")}
+        clean["credential_fields"]={k:c.get("credential_fields",{}).get(k) is True for k in ("identifier","password","hostel_number")}
         targets=[]
         for t in c.get("link_targets",[]):
             host=t.get("host",""); path=t.get("path","")

@@ -6,7 +6,11 @@ ini_set('display_errors','0'); ini_set('log_errors','0'); error_reporting(0); um
 try {
     require_once __DIR__.'/HostelworldBridge.php';
     $raw=stream_get_contents(STDIN,HostelworldMailMessage::MAX_BYTES+1);
-    try { $packet=HostelworldBridge::packet($raw); } catch (Throwable) { exit(0); }
+    $targetPath=__DIR__.'/hostelworld-city-auth-targets.json';
+    if (is_link($targetPath) || !is_file($targetPath) || (fileperms($targetPath)&0077)!==0) exit(75);
+    $targets=json_decode(file_get_contents($targetPath),true,4,JSON_THROW_ON_ERROR);
+    if (!is_array($targets)) exit(75);
+    try { $packet=HostelworldBridge::packet($raw,$targets); } catch (Throwable) { exit(0); }
     unset($raw);
     if ($packet===null) exit(0);
     $path=__DIR__.'/hostelworld-city-auth.key';

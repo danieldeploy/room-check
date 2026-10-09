@@ -10,7 +10,7 @@ import urllib.request
 from cpanel_api import Config, CpanelAPI, DeploymentError, require, WHM_ORIGIN
 
 NAME = "Room Check Hostelworld Auth v1"
-FILES = {"hostelworld-city-auth-pipe.php", "HostelworldMailMessage.php", "HostelworldBridge.php", "hostelworld-city-auth.key"}
+FILES = {"hostelworld-city-auth-pipe.php", "HostelworldMailMessage.php", "HostelworldBridge.php", "hostelworld-city-auth.key", "HostelworldLinkToken.php", "hostelworld-city-auth-targets.json"}
 
 class FilterAPI:
     def __init__(self, account):
@@ -58,7 +58,18 @@ class FilterAPI:
             return r.get("data")
         require(p.get("metadata",{}).get("result")==1,"whm_operation_failed")
         r=p.get("data",{}).get("uapi",{})
-        require(r.get("status")==1 and not r.get("errors"),"uapi_operation_failed_"+self.account+"_"+function+"_"+params.get("file","filter"))
+        if r.get("status") != 1 or r.get("errors"):
+            # Never print server errors: they may echo submitted contents or the bridge key.
+            detail = " ".join(str(x).lower() for x in (r.get("errors") or []))
+            classifications = [label for needle,label in (
+                ("no valid rules","no_valid_rules"), ("invalid action","invalid_action"),
+                ("destination","destination"), ("does not exist","missing_path"),
+                ("permission","permission"), ("regular expression","regex"),
+                ("absolute","absolute_path"), ("pipe","pipe"), ("save","save"),
+                ("disabled","disabled"), ("not allowed","not_allowed"),
+                ("invalid","invalid")) if needle in detail]
+            raise DeploymentError("uapi_operation_failed_"+self.account+"_"+function+"_"+
+                                  params.get("file","filter")+"_"+("-".join(classifications) or "unclassified"))
         return r.get("data")
 
 def content(value):
@@ -121,6 +132,8 @@ def main():
         "hostelworld-city-auth-pipe.php":(root/"deploy/hostelworld-city-auth-pipe.php").read_text(),
         "HostelworldMailMessage.php":(root/"src/Invoices/HostelworldMailMessage.php").read_text(),
         "HostelworldBridge.php":(root/"src/Invoices/HostelworldBridge.php").read_text(),
+        "HostelworldLinkToken.php":(root/"src/Invoices/HostelworldLinkToken.php").read_text(),
+        "hostelworld-city-auth-targets.json":json.dumps(provision.get("link_targets",{}).get("city",[])),
         "hostelworld-city-auth.key":provision["key"],
     }
     # Create the key empty first; restrict permissions before putting a secret in it.

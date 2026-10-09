@@ -18,9 +18,9 @@ try {
     if ($privateDir==='' || !is_dir($privateDir) || is_link($privateDir)) exit(75);
     $raw=stream_get_contents(STDIN,InvoiceTocPipe::MAX_BYTES+1);
     if (!is_string($raw) || strlen($raw)>InvoiceTocPipe::MAX_BYTES) exit(75);
-    $message=InvoiceHostelworldPipe::parse($raw);
-    if ($message===null) exit(0);
     $service=new InvoiceAuth(database(),new InvoiceVault($privateDir));
+    $message=InvoiceHostelworldPipe::parse($raw,$service->hostelworldLinkTargets($accountId));
+    if ($message===null) exit(0);
     try {
         $service->receiveHostelworldEmail($accountId,$message);
         exit(0);

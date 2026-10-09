@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/InvoiceAccounts.php';
+require_once __DIR__ . '/HostelworldLinkToken.php';
 
 final class InvoiceAuth
 {
@@ -76,6 +77,22 @@ final class InvoiceAuth
         }
     }
 
+    public function hostelworldLinkTargets(int $accountId): array
+    {
+        $name='account-'.$accountId.'-map.json';
+        if ($accountId<1 || !$this->vault->has($name)) return [];
+        $map=json_decode(file_get_contents($this->vault->path($name)),true,32,JSON_THROW_ON_ERROR);
+        if (($map['portal']??'')!=='hostelworld' || (int)($map['accountId']??0)!==$accountId
+            || ($map['validated']??false)!==true) return [];
+        $targets=[];
+        foreach ($map['login']['challenges']??[] as $challenge) {
+            if (($challenge['kind']??'')==='link' && ($challenge['method']??'')==='email') {
+                $targets[]=HostelworldLinkToken::target($challenge);
+            }
+        }
+        return $targets;
+    }
+
     /** Accept only a Hostelworld code from a cPanel filter pipe while one account challenge is active. */
     public function receiveHostelworldEmail(int $accountId, array $message): bool
     {
@@ -95,7 +112,17 @@ final class InvoiceAuth
             || !$received || abs(time() - $received) > 150 || strlen($text) > 32768) return false;
         preg_match_all('/(?<!\d)\d{6}(?!\d)/', $text, $codes);
         $codes[0] = array_values(array_unique($codes[0]));
-        if (count($codes[0]) !== 1) return false;
+        $kind='otp'; $code=(string)($message['code']??'');
+        if (str_starts_with($code,'hwlink1.')) {
+            $targets=$this->hostelworldLinkTargets($accountId);
+            if (count($targets)!==1) return false;
+            try { HostelworldLinkToken::decode($code,$targets[0]); } catch (RuntimeException) { return false; }
+            $kind='hostelworld_link';
+        } else {
+            if (count($codes[0])!==1) return false;
+            $code=$codes[0][0];
+            if ($this->hostelworldLinkTargets($accountId)) return false;
+        }
         $sql = "SELECT c.* FROM invoice_auth_challenges c
             JOIN invoice_tasks t ON t.id = c.task_id
             JOIN invoice_accounts a ON a.id = c.account_id
@@ -109,14 +136,14 @@ final class InvoiceAuth
         if (count($matches) !== 1 || $received < strtotime($matches[0]['created_at'] . ' UTC')) return false;
         $challenge = $matches[0];
         $accountId=(int)$challenge['account_id'];
-        $hash = hash('sha256', $accountId . "\0" . strtolower($from) . "\0" . $subject . "\0" . $codes[0][0] . "\0" . $received);
+        $hash = hash('sha256', $accountId . "\0" . strtolower($from) . "\0" . $subject . "\0" . $code . "\0" . $received);
         $this->pdo->beginTransaction();
         try {
             $s = $this->pdo->prepare("UPDATE invoice_auth_challenges SET state = 'receiving', event_hash = ? WHERE id = ? AND state = 'waiting'");
             $s->execute([$hash, $challenge['id']]);
             if ($s->rowCount() !== 1) { $this->pdo->rollBack(); return false; }
             $this->vault->save('otp-' . $challenge['id'] . '.enc',
-                ['value' => $codes[0][0], 'account' => $accountId, 'challenge' => $challenge['id']]);
+                ['value' => $code, 'kind'=>$kind, 'account' => $accountId, 'challenge' => $challenge['id']]);
             $this->pdo->prepare("UPDATE invoice_auth_challenges SET state = 'received' WHERE id = ?")->execute([$challenge['id']]);
             $this->pdo->commit();
             return true;
@@ -140,6 +167,15 @@ final class InvoiceAuth
         $name = 'otp-' . $id . '.enc';
         try {
             $value = $this->vault->read($name);
+            if (($value['kind']??'')==='hostelworld_link') {
+                $s=$this->pdo->prepare('SELECT c.account_id,c.method,a.portal FROM invoice_auth_challenges c JOIN invoice_accounts a ON a.id=c.account_id WHERE c.id=? AND c.task_id=?');
+                $s->execute([$id,$taskId]); $bound=$s->fetch(PDO::FETCH_ASSOC);
+                if (!$bound || $bound['method']!=='email' || $bound['portal']!=='hostelworld'
+                    || ($value['challenge']??'')!==$id || (int)($value['account']??0)!==(int)$bound['account_id']) throw new RuntimeException('auth_invalid');
+                $targets=$this->hostelworldLinkTargets((int)$bound['account_id']);
+                if (count($targets)!==1) throw new RuntimeException('auth_invalid');
+                return HostelworldLinkToken::decode((string)$value['value'],$targets[0]);
+            }
             if (($value['challenge'] ?? '') !== $id || !preg_match('/\A\d{6}\z/', (string) ($value['value'] ?? ''))) throw new RuntimeException('auth_invalid');
             return $value['value'];
         } finally {

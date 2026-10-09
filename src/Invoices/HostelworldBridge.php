@@ -1,9 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/HostelworldMailMessage.php';
+require_once __DIR__.'/HostelworldLinkToken.php';
 final class HostelworldBridge
 {
-    public static function packet(string $raw): ?array
+    public static function packet(string $raw,array $targets=[]): ?array
     {
         $m=HostelworldMailMessage::parseMessage($raw);
         $subject=preg_replace('/[_-]+/',' ',$m['subject']);
@@ -12,8 +13,9 @@ final class HostelworldBridge
             || !$m['received_at'] || abs(time()-$m['received_at'])>150) return null;
         preg_match_all('/(?<!\d)\d{6}(?!\d)/',$m['text'],$codes);
         $codes=array_values(array_unique($codes[0]));
-        if (count($codes)!==1 || strlen($m['subject'])>512 || strlen($m['from'])>254) return null;
-        return ['source'=>'city','from'=>$m['from'],'subject'=>$m['subject'],'received_at'=>$m['received_at'],'code'=>$codes[0]];
+        $code=$targets?HostelworldLinkToken::extract($m['text'],$targets):(count($codes)===1?$codes[0]:null);
+        if ($code===null || strlen($m['subject'])>512 || strlen($m['from'])>254) return null;
+        return ['source'=>'city','from'=>$m['from'],'subject'=>$m['subject'],'received_at'=>$m['received_at'],'code'=>$code];
     }
     public static function signature(string $raw,string $timestamp,string $key): string
     {

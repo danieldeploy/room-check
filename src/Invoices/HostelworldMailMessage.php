@@ -82,7 +82,13 @@ public const MAX_BYTES=262144;
         if (preg_match('/;\s*charset\s*=\s*"?([a-zA-Z0-9_-]+)/i',$type,$m)) {
             try { $body=mb_convert_encoding($body,'UTF-8',$m[1]); } catch (ValueError) { throw new RuntimeException('toc_pipe_invalid'); }
         }
-        return html_entity_decode(strip_tags($body),ENT_QUOTES|ENT_HTML5,'UTF-8');
+        $links=[];
+        if (preg_match('/\A\s*text\/html/i',$type)) {
+            preg_match_all('/\bhref\s*=\s*(["\'])(https:\/\/[^"\']{1,4096})\1/i',$body,$matches);
+            $links=$matches[2];
+        }
+        // Retained only inside the local parser; the bridge emits authentication material only.
+        return html_entity_decode(strip_tags($body)."\n".implode("\n",$links),ENT_QUOTES|ENT_HTML5,'UTF-8');
     }
 
 }

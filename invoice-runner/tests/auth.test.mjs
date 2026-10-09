@@ -56,3 +56,26 @@ test('account maps and cookies cannot cross platforms',()=>{
  assert.equal(safeCookies('airbnb',[{secure:true,domain:'.booking.com'}]).length,0);
  assert.equal(publicAddress('127.0.0.1'),false); assert.equal(publicAddress('10.0.0.1'),false);
 });
+
+test('filtered Hostelworld link uses exact mapped destination and one consumption',async()=>{
+ const exchangeDir=await fs.mkdtemp(path.join(os.tmpdir(),'hostelworld-link-'));
+ const challenge={method:'email',kind:'link',linkHost:'inbox.hostelworld.com',linkPath:'/inbox/verify'};
+ try {
+  for(const [value,valid] of [
+   ['https://inbox.hostelworld.com/inbox/verify?token=fixture',true],
+   ['https://evil.example/inbox/verify?token=fixture',false],
+   ['https://inbox.hostelworld.com/other?token=fixture',false],
+   ['https://user@inbox.hostelworld.com/inbox/verify?token=fixture',false],
+   ['https://inbox.hostelworld.com/inbox/verify?token=fixture#fragment',false],
+   ['123456',false]
+  ]) {
+   const broker=new SecondFactor({portal:'hostelworld',authMethod:'email',exchangeDir},u=>portalUrl('hostelworld',u));
+   broker.id='fixture'; broker.started=Date.now(); broker.filteredEmail=true;
+   await fs.writeFile(path.join(exchangeDir,'response-fixture.json'),JSON.stringify({value}),{mode:0o600});
+   if(valid) assert.equal(await broker.value(challenge),value);
+   else await assert.rejects(broker.value(challenge));
+   await assert.rejects(broker.value(challenge));
+   await assert.rejects(fs.stat(path.join(exchangeDir,'response-fixture.json')));
+  }
+ } finally { await fs.rm(exchangeDir,{recursive:true,force:true}); }
+});
