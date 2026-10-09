@@ -4,7 +4,7 @@ import roundcube_citycenter_smtp2go_dns as dns
 from roundcube_final_test_cleanup import read
 from roundcube_known_trash_purge_once import KNOWN,SAFE
 def inspect(c,path,depth=0):
- info={'files':0,'directories':0,'protected_names':0,'provider_content_markers':0}
+ info={'files':0,'directories':0,'protected_names':0,'provider_content_markers':0,'postmark_files':0,'resend_files':0,'smtp2go_files':0,'roundcube_files':0}
  if depth>4:return {**info,'bounded_scan':True}
  children=c.file_inventory(path)
  for name in sorted(children):
@@ -23,6 +23,8 @@ def inspect(c,path,depth=0):
    if name.endswith(('.json','.php','.txt','.log')) and int(st.get('size',0))<65536:
     value=read(c,path+'/'+name)
     if re.search(r'(?i)postmark|resend|smtp2go|roundcube',value):info['provider_content_markers']+=1
+    for marker in ('postmark','resend','smtp2go','roundcube'):
+     if marker in value.lower():info[marker+'_files']+=1
  return info
 def run():
  out=[]
@@ -33,7 +35,7 @@ def run():
    if not SAFE.fullmatch(name) or 'test' not in name.lower() or any(x in name.lower() for x in ('key','backup','before','live')):continue
    if re.sub(r'\.[0-9]+$','',name) in KNOWN:known+=1;continue
    st=c.file_stat(trash,name)
-   evidence={'type':st.get('type') if st else 'missing','generic_test_name':bool(re.fullmatch(r'tests?(?:[._-][0-9]+)?',name))}
+   evidence={'type':st.get('type') if st else 'missing','roundcube_in_directory_name':'roundcube' in name.lower(),'generic_test_name':bool(re.fullmatch(r'tests?(?:[._-][0-9]+)?',name))}
    if st and st.get('type')=='dir':evidence.update(inspect(c,trash+'/'+name))
    unknown.append(evidence)
   out.append({'account':user,'known_test_entries_remaining':known,'unidentified_test_entries':len(unknown),'unidentified_evidence':unknown})
