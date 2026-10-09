@@ -36,6 +36,22 @@ class Tests(unittest.TestCase):
             row["actions"][1]["dest"]=wrong
             with self.assertRaises(h.DeploymentError): h.verify_filter(row,params)
 
+    def test_quoted_delivery_and_home_variable_remain_bound(self):
+        params=h.expected("city",22)
+        row={"filtername":h.NAME,"rules":[
+            {"part":params["part1"],"match":params["match1"],"val":params["val1"],"opt":"and"},
+            {"part":params["part2"],"match":params["match2"],"val":params["val2"]}],
+            "actions":[{"action":"save","dest":params["dest1"]},
+                       {"action":"pipe","dest":params["dest2"]}]}
+        for delivery in ('"'+params["dest1"]+'"',"$home/mail/$domain/$local_part/",
+                         '"$home/mail/$domain/$local_part/"'):
+            row["actions"][0]["dest"]=delivery
+            h.verify_filter(row,params)
+        for wrong in ("/home/welcome/mail/$domain/$local_part/","$home/other/",
+                      '"'+params["dest1"]+'"; other'):
+            row["actions"][0]["dest"]=wrong
+            with self.assertRaises(h.DeploymentError): h.verify_filter(row,params)
+
     def test_whm_rejects_unrelated_file(self):
         with patch.dict("os.environ",{"WHM_API_TOKEN":"test-only"}):
             api=h.FilterAPI("city")
