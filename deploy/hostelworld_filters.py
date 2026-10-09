@@ -10,7 +10,7 @@ import urllib.request
 from cpanel_api import Config, CpanelAPI, DeploymentError, require, WHM_ORIGIN
 
 NAME = "Room Check Hostelworld Auth v1"
-FILES = {"hostelworld-city-auth-pipe.php", "HostelworldMailMessage.php", "HostelworldBridge.php", "hostelworld-city-auth.key"}
+FILES = {"hostelworld-city-auth-pipe.php", "HostelworldMailMessage.php", "HostelworldBridge.php", "hostelworld-city-auth.key", "HostelworldLinkToken.php", "hostelworld-city-auth-targets.json"}
 
 class FilterAPI:
     def __init__(self, account):
@@ -121,6 +121,8 @@ def main():
         "hostelworld-city-auth-pipe.php":(root/"deploy/hostelworld-city-auth-pipe.php").read_text(),
         "HostelworldMailMessage.php":(root/"src/Invoices/HostelworldMailMessage.php").read_text(),
         "HostelworldBridge.php":(root/"src/Invoices/HostelworldBridge.php").read_text(),
+        "HostelworldLinkToken.php":(root/"src/Invoices/HostelworldLinkToken.php").read_text(),
+        "hostelworld-city-auth-targets.json":json.dumps(provision.get("link_targets",{}).get("city",[])),
         "hostelworld-city-auth.key":provision["key"],
     }
     # Create the key empty first; restrict permissions before putting a secret in it.
