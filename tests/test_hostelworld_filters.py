@@ -30,6 +30,8 @@ class Tests(unittest.TestCase):
             "actions":[{"action":"save","dest":params["dest1"]},
                        {"action":"pipe","dest":"|/home/welcome/"+params["dest2"]}]}
         h.verify_filter(row,params)
+        row["actions"][1]["dest"]="|$home/"+params["dest2"]
+        h.verify_filter(row,params)
         for wrong in ("|/home/city/"+params["dest2"],
                       "|/home/welcome/"+params["dest2"]+"; other",
                       "|/home/welcome/"+params["dest2"].replace(" 11"," 12")):
@@ -44,7 +46,8 @@ class Tests(unittest.TestCase):
             "actions":[{"action":"save","dest":params["dest1"]},
                        {"action":"pipe","dest":params["dest2"]}]}
         for delivery in ('"'+params["dest1"]+'"',"$home/mail/$domain/$local_part/",
-                         '"$home/mail/$domain/$local_part/"'):
+                         '"$home/mail/$domain/$local_part/"',
+                         "$home/mail/$domain/$local_part",params["dest1"].rstrip("/")):
             row["actions"][0]["dest"]=delivery
             h.verify_filter(row,params)
         for wrong in ("/home/welcome/mail/$domain/$local_part/","$home/other/",
