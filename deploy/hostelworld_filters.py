@@ -68,6 +68,13 @@ class FilterAPI:
                 ("absolute","absolute_path"), ("pipe","pipe"), ("save","save"),
                 ("disabled","disabled"), ("not allowed","not_allowed"),
                 ("invalid","invalid")) if needle in detail]
+            if function == "store_filter":
+                # This operation submits only fixed filter rules/paths, never mail or keys.
+                reason = " ".join(str(x) for x in (r.get("errors") or []))[:512]
+                reason = reason.replace(self.config.token,"[credential]") if self.config.token else reason
+                reason = re.sub(r"[A-Fa-f0-9]{32,}", "[redacted]", reason)
+                reason = re.sub(r"[^\\s<>@]+@[^\\s<>]+", "[address]", reason)
+                print(json.dumps({"filter_validation":{"account":self.account,"reason":reason}}),file=sys.stderr)
             raise DeploymentError("uapi_operation_failed_"+self.account+"_"+function+"_"+
                                   params.get("file","filter")+"_"+("-".join(classifications) or "unclassified"))
         return r.get("data")
@@ -85,13 +92,14 @@ def rows(value):
     raise DeploymentError("invalid_filter_list_response")
 
 def expected(account, identifier):
+    require(account in ("welcome","city") and type(identifier) is int and identifier > 0,"invalid_account_binding")
     destination = ("room-check-private/cron/hostelworld-auth-pipe.php "+str(identifier)
                    if account=="welcome" else "hostelworld-city-auth-pipe.php")
     return dict(filtername=NAME,part1="$header_from:",match1="matches",
         val1=r"(?i)@(?:[a-z0-9-]+\.)*hostelworld\.com(?:[> \t]|$)",opt1="and",
         part2="$header_subject:",match2="matches",
         val2=r"(?i)(login|sign[ _-]*in|security|verification|code|authentication)",
-        action1="save",dest1="$home/mail/$domain/$local_part/",
+        action1="save",dest1="/home/"+account+"/mail/$domain/$local_part/",
         action2="pipe",dest2=destination)
 
 def verify_filter(row, params):
