@@ -2,7 +2,7 @@ name: Final remaining email test audit
 on:
   push:
     branches: [codex/roundcube-server-audit-20261004]
-    paths: [.github/workflows/roundcube-trash-final-audit.yml]
+    paths: [.github/workflows/roundcube-trash-final-audit.yml, deploy/roundcube_trash_final_audit.py]
 permissions:
   contents: read
 jobs:
