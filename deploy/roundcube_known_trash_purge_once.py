@@ -32,6 +32,7 @@ def run():
  original=set(c.file_inventory(trash));plans=[];ignored=0
  for name in sorted(original):
   if not SAFE.fullmatch(name):continue
+  if 'test' not in name.lower():continue
   norm=re.sub(r'\.[0-9]+$','',name)
   if norm not in KNOWN:continue
   if any(name in content for content in protected.values()):raise dns.OperationError('test_name_referenced_by_production')
