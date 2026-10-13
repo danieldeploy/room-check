@@ -2,7 +2,7 @@ name: Roundcube replication read-only audit
 on:
   push:
     branches: [codex/roundcube-server-audit-20261004]
-    paths: [.github/workflows/roundcube-replication-audit.yml]
+    paths: [.github/workflows/roundcube-replication-audit.yml, deploy/roundcube_replication_audit.py]
 permissions:
   contents: read
 jobs:
