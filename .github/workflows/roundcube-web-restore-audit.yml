@@ -29,7 +29,7 @@ jobs:
           ob_start();
           $stage='config';
           try {
-           $root=__DIR__; define('INSTALL_PATH',$root.'/'); $config=[];
+           $root=__DIR__; define('INSTALL_PATH',$root.'/'); define('RCUBE_INSTALL_PATH',$root.'/'); $config=[];
            require $root.'/config/defaults.inc.php'; require $root.'/config/config.inc.php';
            $stage='extensions'; $extensions=[]; foreach(['pcre','dom','json','session','sockets','openssl','mbstring','filter','ctype','intl','pdo_mysql','curl','iconv','zip','fileinfo','exif'] as $e) $extensions[$e]=extension_loaded($e);
            $limits=[]; foreach(['memory_limit','upload_max_filesize','post_max_size','max_execution_time','max_input_time','max_file_uploads'] as $k) $limits[$k]=ini_get($k);
