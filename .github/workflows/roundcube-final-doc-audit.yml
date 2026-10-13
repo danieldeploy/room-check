@@ -1,0 +1,139 @@
+name: Roundcube final read-only documentation audit
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-final-doc-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+          ref: 3eb2e3fe101d1dfb4d216a0ad97f5b361f0bc033
+      - name: Prepare and test fixed-path extractor without hosting credentials
+        run: |
+          cat > /tmp/roundcube-final-readonly.py <<'PYCODE'
+          """Owner-authorized fixed-path audit; emit only booleans and technical metadata."""
+          import os, sys, json, re, hashlib, subprocess
+          from pathlib import Path
+          sys.path.insert(0, 'deploy')
+          from roundcube_audit import Client
+          from roundcube_replication_audit import PHP
+          ACCOUNTS = {
+           'welcome': ('welcome_ui', 'welcome_smtp2go_api', 'roundcube-live', 'roundcube-smtp2go-private', 'config-before-production-20261004.inc.php'),
+           'city': ('city_ui', 'citycenter_smtp2go_api', 'roundcube-citycenter-live', 'roundcube-smtp2go-citycenter-private', 'config-before-smtp2go-20261008.inc.php')}
+          PUBLIC_KEYS = ['imap_host','language','timezone','skin','sent_mbox','drafts_mbox','junk_mbox','trash_mbox','archive_mbox','log_driver','enable_installer']
+          MAINT_KEYS = ['session_lifetime','temp_dir_ttl','log_driver','log_date_format','log_logins','sql_debug','imap_debug','smtp_debug','devel_mode','enable_installer']
+          CORE_EXPECTED = {'program/lib/Roundcube/rcube.php':'3ceada3855e31a957c72b6904959432e7e94bd8766461f379633e5725f8a74c9','program/lib/Roundcube/rcube_mime.php':'c9aa94c490221c938831ebc87cf1c998fe486f4ceb4abe8cddbc659100c1dc8a','program/actions/mail/send.php':'1892d5ffe2bd3909026e19dc1b246737cf8e48b7b949d40bb677ceeddb42cb76','program/include/rcmail_sendmail.php':'081d7b5403c0e849f632fd69078188be9c550703c6d2beb277a922beba4dcc36'}
+          def digest(s): return hashlib.sha256(s.encode('utf-8')).hexdigest()
+          def config_values(code, keys):
+           p=subprocess.run(['php','-r',PHP,json.dumps(keys)],input=code,text=True,capture_output=True,timeout=15)
+           if p.returncode: raise ValueError()
+           return json.loads(p.stdout)
+          def backup_summary(current, backup):
+           a=config_values(current,PUBLIC_KEYS);b=config_values(backup,PUBLIC_KEYS)
+           return {'identical_to_current': current==backup,'changed_allowlisted_settings':[k for k in PUBLIC_KEYS if a.get(k)!=b.get(k)],'smtp2go_plugin_literal_present':bool(re.search(r"['\"](?:welcome_smtp2go_api|citycenter_smtp2go_api)['\"]",backup))}
+          def cron_summary(entries):
+           if not isinstance(entries,list) or any(not isinstance(e,dict) or e.get('reason') or e.get('result',1) not in (1,'1',True) for e in entries): raise ValueError()
+           rows=[]
+           for e in entries:
+            cmd=str(e.get('command',''))
+            if not re.search(r'roundcube|roundcubemail',cmd,re.I): continue
+            times={k:str(e[k]) for k in ('minute','hour','day','month','weekday') if k in e and re.fullmatch(r'[0-9*/,-]{1,30}',str(e[k]))}
+            rows.append({'schedule':times,'known_scripts':[s for s in ('cleandb.sh','gc.sh','garbagecollect.sh') if s in cmd], 'backup_command_hint':bool(re.search(r'backup|mysqldump|tar\s',cmd,re.I))})
+           return {'direct_roundcube_reference_count':len(rows),'entries':rows,'scope':'account cron entries; indirect wrappers and host-managed tasks not inferred'}
+          def selftest():
+           secret='DO_NOT_PRINT_SECRET_43'
+           cfg="<?php $config['db_dsnw']='"+secret+"';$config['des_key']='"+secret+"';$config['language']='en_US';$config['session_lifetime']=10;"
+           out=json.dumps(backup_summary(cfg,cfg))+json.dumps(config_values(cfg,MAINT_KEYS))+json.dumps(cron_summary([{'command':'php /roundcube/bin/cleandb.sh --password='+secret,'minute':'0','hour':'3','day':'*','month':'*','weekday':'*'},{'command':'unrelated '+secret}]))
+           assert secret not in out and 'db_dsnw' not in out and 'des_key' not in out
+           assert backup_summary(cfg,cfg)['identical_to_current']
+           assert cron_summary([])['direct_roundcube_reference_count']==0
+           print('Extractor privacy checks passed')
+          def main():
+           selftest(); c=Client(os.environ['WHM_API_TOKEN']);results=[]
+           for u,(ui,plugin,local,privname,backupname) in ACCOUNTS.items():
+            root='/home/'+u+'/public_html/roundcube'; private='/home/'+u+'/'+privname
+            allowed_reads={root+'/config/config.inc.php',root+'/config/defaults.inc.php',private+'/'+backupname}
+            allowed_reads.update(root+'/'+p for p in CORE_EXPECTED)
+            allowed_reads.update(root+'/plugins/'+plugin+'/'+p for p in (plugin+'.php','api_transport.php','config.inc.php'))
+            allowed_reads.update(root+'/plugins/'+ui+'/'+p for p in (ui+'.php',ui+'.js','localization/en_US.inc','skins/elastic/'+ui+'.css'))
+            allowed_dirs={root,root+'/config',root+'/bin',private,'/home/'+u}
+            def api(m,f,**kw):
+             assert (m,f) in {('Fileman','get_file_content'),('Fileman','list_files')}
+             return c.request('/json-api/uapi_cpanel',{'api.version':1,'cpanel.user':u,'cpanel.module':m,'cpanel.function':f,**kw},3)
+            def read(path):
+             assert path in allowed_reads
+             d,f=path.rsplit('/',1);v=api('Fileman','get_file_content',dir=d,file=f,from_charset='UTF-8',to_charset='UTF-8')
+             if not isinstance(v,dict) or not isinstance(v.get('content'),str):raise ValueError()
+             return v['content']
+            def listing(path):
+             assert path in allowed_dirs
+             v=api('Fileman','list_files',dir=path); v=v.get('files') if isinstance(v,dict) else v
+             if not isinstance(v,list) or any(not isinstance(e,dict) for e in v):raise ValueError()
+             return v
+            row={'installation':u,'writes':False}
+            def attempt(k,fn):
+             try:row[k]=fn()
+             except Exception:row[k]={'status':'unavailable_no_raw_error'}
+            try:
+             cfg=read(root+'/config/config.inc.php'); defaults=read(root+'/config/defaults.inc.php')
+             attempt('backup',lambda:backup_summary(cfg,read(private+'/'+backupname)))
+             def private_inventory():
+              es=listing(private); byname={e.get('file'):e for e in es}; expected=(backupname,'live','sandbox-key.txt' if u=='welcome' else 'api-key.txt')
+              return {'expected_items':{n:{'present':n in byname,'mode':byname.get(n,{}).get('mode',byname.get(n,{}).get('permissions'))} for n in expected},'other_backup_candidate_count':sum(bool(re.search(r'backup|config-before|\.(?:zip|tar|gz|sql|bak)$',str(e.get('file','')),re.I)) and e.get('file')!=backupname for e in es)}
+             attempt('private_inventory',private_inventory)
+             def inventory():
+              out={}
+              for d,label in [('/home/'+u,'home'),(root,'application'),(root+'/config','config')]:
+               es=listing(d); out[label]=sum(bool(re.search(r'backup|\.bak$|\.(?:zip|tar|gz|sql)$',str(e.get('file','')),re.I)) and ('roundcube' in str(e.get('file','')).lower() or label=='config') for e in es)
+              return {'additional_candidate_counts':out,'contents_not_read':True}
+             attempt('backup_inventory',inventory)
+             def plugins():
+              out={}
+              for name in (plugin+'.php','api_transport.php','config.inc.php'):
+               code=read(root+'/plugins/'+plugin+'/'+name); ref=Path('deploy/'+local+'/'+name).read_text()
+               out[name]={'matches_pinned_source':code==ref,'source_sha256':digest(code)}
+              return out
+             attempt('smtp2go_files',plugins)
+             def ui_files():
+              return {name:{'sha256':digest(read(root+'/plugins/'+ui+'/'+name))} for name in (ui+'.php',ui+'.js','localization/en_US.inc','skins/elastic/'+ui+'.css')}
+             attempt('ui_files',ui_files)
+             def core():
+              out={}
+              for name,sha in CORE_EXPECTED.items():
+               code=read(root+'/'+name)
+               item={'matches_previous_audited_hash':digest(code)==sha}
+               if name=='program/actions/mail/send.php':
+                item['html_head_utf8_meta_present']='<html><head><meta charset="utf-8">' in code
+                item['head_closing_concat_present']="'</head>'" in code
+               out[name]=item
+              return out
+             attempt('core_files',core)
+             attempt('maintenance_config',lambda:{'explicit':config_values(cfg,MAINT_KEYS),'installed_defaults':config_values(defaults,MAINT_KEYS)})
+             attempt('maintenance_tools',lambda:[n for n in ('cleandb.sh','gc.sh','garbagecollect.sh') if any(e.get('file')==n for e in listing(root+'/bin'))])
+             def cron():
+              v=c.request('/json-api/cpanel',{'cpanel_jsonapi_user':u,'cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':'Cron','cpanel_jsonapi_func':'listcron'},2)
+              return cron_summary(v)
+             attempt('maintenance_cron',cron)
+            except Exception:row['status']='partial_read_unavailable'
+            results.append(row)
+           print('ROUNDCUBE_FINAL_AUDIT='+json.dumps({'writes':False,'reads_key_contents':False,'results':results},sort_keys=True))
+          if __name__=='__main__':
+           if '--self-test' in sys.argv:selftest()
+           else:main()
+          PYCODE
+          python3 /tmp/roundcube-final-readonly.py --self-test
+      - name: Read approved backups maintenance and code metadata
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 /tmp/roundcube-final-readonly.py
