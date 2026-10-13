@@ -8,7 +8,8 @@ from roundcube_audit import Client
 KEYS = ['imap_host','default_host','imap_port','default_port','imap_auth_type',
         'username_domain','login_lc','sent_mbox','drafts_mbox','junk_mbox',
         'trash_mbox','archive_mbox','language','timezone','skin','plugins',
-        'enable_installer','log_driver','log_dir','temp_dir']
+        'enable_installer','log_driver','log_dir','temp_dir','imap_conn_options',
+        'imap_namespace','imap_delimiter','auto_create_user','create_default_folders']
 PHP = r'''$ts=token_get_all(stream_get_contents(STDIN), TOKEN_PARSE);
 $t=[]; foreach($ts as $x) {if(is_array($x)&&in_array($x[0],[T_WHITESPACE,T_COMMENT,T_DOC_COMMENT]))continue;$t[]=$x;}
 $allow=json_decode($argv[1],true);$out=[];
@@ -40,6 +41,13 @@ def main():
             p=subprocess.run(['php','-r',PHP,json.dumps(KEYS)],input=data['content'],text=True,capture_output=True,timeout=15)
             if p.returncode:raise ValueError()
             row['explicit_static_settings']=json.loads(p.stdout)
+            plugins=subprocess.run(['php','deploy/roundcube_config_summary.php'],input=data['content'],text=True,capture_output=True,timeout=15)
+            row['active_plugins']=json.loads(plugins.stdout)['plugins'] if plugins.returncode==0 else '[not extracted]'
+            defaults=call('get_file_content',dir=root+'/config',file='defaults.inc.php',from_charset='UTF-8',to_charset='UTF-8')
+            if not isinstance(defaults,dict) or not isinstance(defaults.get('content'),str):raise ValueError()
+            parsed=subprocess.run(['php','-r',PHP,json.dumps(KEYS)],input=defaults['content'],text=True,capture_output=True,timeout=15)
+            if parsed.returncode:raise ValueError()
+            row['installed_static_defaults']=json.loads(parsed.stdout)
             row['note']='Missing values may use defaults; complex expressions and secrets are not extracted.'
             files=call('list_files',dir=root)
             entries=files.get('files') if isinstance(files,dict) else files
