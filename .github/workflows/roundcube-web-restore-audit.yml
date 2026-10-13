@@ -1,0 +1,109 @@
+name: Roundcube web runtime and preferences audit
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-web-restore-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+          ref: 3eb2e3fe101d1dfb4d216a0ad97f5b361f0bc033
+      - name: Prepare fixed scope temporary web probe
+        run: |
+          cat > /tmp/probe.php <<'CODE'
+          <?php
+          ini_set('display_errors','0'); ini_set('log_errors','0');
+          if ($_SERVER['REQUEST_METHOD'] !== 'POST' || time() > __EXPIRY__ || !hash_equals('__TOKENHASH__', hash('sha256', $_SERVER['HTTP_X_AUDIT_TOKEN'] ?? ''))) { http_response_code(404); exit; }
+          header('Content-Type: application/json'); header('Cache-Control: no-store');
+          if (!unlink(__FILE__)) { http_response_code(500); exit; }
+          ob_start();
+          try {
+           $root=__DIR__; define('INSTALL_PATH',$root.'/'); $config=[];
+           require $root.'/config/defaults.inc.php'; require $root.'/config/config.inc.php';
+           $extensions=[]; foreach(['pcre','dom','json','session','sockets','openssl','mbstring','filter','ctype','intl','pdo_mysql','curl','iconv','zip','fileinfo','exif'] as $e) $extensions[$e]=extension_loaded($e);
+           $limits=[]; foreach(['memory_limit','upload_max_filesize','post_max_size','max_execution_time','max_input_time','max_file_uploads'] as $k) $limits[$k]=ini_get($k);
+           $dsn=parse_url($config['db_dsnw']); if(!is_array($dsn) || ($dsn['scheme'] ?? '')!=='mysql' || ($dsn['host'] ?? '')!=='localhost') throw new Exception();
+           $db=rawurldecode(ltrim($dsn['path'],'/')); if(!preg_match('/^[a-zA-Z0-9_]+$/D',$db)) throw new Exception();
+           $pdo=new PDO('mysql:host=localhost;dbname='.$db.';charset=utf8mb4',rawurldecode($dsn['user']),rawurldecode($dsn['pass']),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+           $prefix=$config['db_prefix'] ?? ''; if(!preg_match('/^[a-zA-Z0-9_]*$/D',$prefix))throw new Exception();
+           $pkeys=['language','timezone','skin','drafts_mbox','sent_mbox','junk_mbox','trash_mbox','archive_mbox'];
+           $users=[]; $n=0;
+           foreach($pdo->query('SELECT user_id,username,language,preferences FROM `'.$prefix.'users`') as $u) {
+             $prefs=@unserialize($u['preferences'],['allowed_classes'=>false]); if(!is_array($prefs))$prefs=[];
+             $settings=[]; foreach($pkeys as $k) {
+              $v=$prefs[$k] ?? ($k==='language' && !empty($u['language']) ? $u['language'] : ($config[$k] ?? null));
+              $safe=is_null($v)||is_bool($v)||(is_string($v)&&preg_match('/^[a-zA-Z0-9_.\/ +:\-]{0,100}$/D',$v));
+              $settings[$k]=['value'=>$safe?$v:'nonstandard_value_not_published','source'=>array_key_exists($k,$prefs)?'user_preferences':($k==='language'&&!empty($u['language'])?'user_language':'configuration')];
+             }
+             $q=$pdo->prepare('SELECT email,standard,signature,html_signature FROM `'.$prefix.'identities` WHERE user_id=? AND del=0');$q->execute([$u['user_id']]);$ids=[];
+             foreach($q as $i)$ids[]=['matches_login'=>strcasecmp($i['email'],$u['username'])===0,'default'=>(bool)$i['standard'],'signature_present'=>strlen($i['signature'])>0,'html_signature'=>(bool)$i['html_signature']];
+             $users[]=['user_reference'=>strtolower($u['username'])==='__MAILBOX__'?'primary_info_mailbox':'other_user_'.(++$n),'settings'=>$settings,'identities'=>$ids];
+           }
+           $meta=$pdo->query('SELECT @@version AS version,@@character_set_database AS charset,@@collation_database AS collation')->fetch(PDO::FETCH_ASSOC);
+           $tables=$pdo->query('SHOW TABLE STATUS')->fetchAll(PDO::FETCH_ASSOC);$engines=[];$bytes=0;
+           foreach($tables as $t){$engines[$t['Engine'] ?? 'view']=true;$bytes+=(int)$t['Data_length']+(int)$t['Index_length'];}
+           $out=['ok'=>true,'php_version'=>PHP_VERSION,'sapi'=>PHP_SAPI,'extensions'=>$extensions,'limits'=>$limits,'database'=>$meta,'table_count'=>count($tables),'engines'=>array_keys($engines),'approx_database_bytes'=>$bytes,'users'=>$users,'zip_available'=>class_exists('ZipArchive'),'temporary_probe_removed'=>!file_exists(__FILE__)];
+           ob_end_clean(); echo json_encode($out,JSON_THROW_ON_ERROR);
+          } catch(Throwable $e) {ob_end_clean();http_response_code(500);echo '{"ok":false,"error":"probe_failed_no_raw_details"}';}
+          CODE
+          cat > /tmp/driver.py <<'CODE'
+          import os,sys,json,time,secrets,hashlib,ssl,urllib.request,urllib.parse
+          from pathlib import Path
+          sys.path.insert(0,'deploy')
+          from roundcube_audit import Client,NoRedirects
+          c=Client(os.environ['WHM_API_TOKEN'])
+          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirects(),urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+          def api(u,m,f,**args):
+           p={'api.version':1,'cpanel.user':u,'cpanel.module':m,'cpanel.function':f,**args}
+           req=urllib.request.Request('https://server50.romania-webhosting.com:2087/json-api/uapi_cpanel',data=urllib.parse.urlencode(p).encode(),headers={'Authorization':'whm fazenda:'+c.token,'Accept':'application/json'})
+           with opener.open(req,timeout=40) as r: v=json.load(r)
+           if v.get('metadata',{}).get('result')!=1:raise RuntimeError('whm_failed')
+           v=v.get('data',{}).get('uapi',{})
+           if v.get('status')!=1 or v.get('errors'):raise RuntimeError('uapi_failed')
+           return v.get('data')
+          def names(u,root):
+           v=api(u,'Fileman','list_files',dir=root)
+           if isinstance(v,dict):v=v.get('files')
+           if not isinstance(v,list):raise RuntimeError('listing_failed')
+           return {x['file'] for x in v}
+          def remove(u,root,name):
+           if name not in names(u,root):return
+           v=c.request('/json-api/cpanel',{'cpanel_jsonapi_user':u,'cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':'Fileman','cpanel_jsonapi_func':'fileop','op':'unlink','sourcefiles':root+'/'+name,'doubledecode':0},2)
+           if name in names(u,root):raise RuntimeError('temporary_probe_cleanup_failed')
+          failed=False
+          for u,domain in [('welcome','welcomehostel.pt'),('city','citycenterhostel.pt')]:
+           root='/home/'+u+'/public_html/roundcube'; name='rc-web-audit-'+secrets.token_hex(12)+'.php'; token=secrets.token_hex(32)
+           source=Path('/tmp/probe.php').read_text().replace('__EXPIRY__',str(int(time.time())+600)).replace('__TOKENHASH__',hashlib.sha256(token.encode()).hexdigest()).replace('__MAILBOX__','info@'+domain)
+           assert name not in names(u,root)
+           try:
+            api(u,'Fileman','save_file_content',dir=root,file=name,content=source,from_charset='UTF-8',to_charset='UTF-8')
+            req=urllib.request.Request('https://'+domain+'/roundcube/'+name,data=b'',headers={'X-Audit-Token':token})
+            with opener.open(req,timeout=90) as r: result=json.load(r)
+            if not result.get('ok'):raise RuntimeError('probe_not_successful')
+            print('WEB_AUDIT='+json.dumps({'installation':u,'result':result},sort_keys=True))
+           except Exception as e:
+            failed=True
+            print('WEB_AUDIT='+json.dumps({'installation':u,'ok':False,'error_class':type(e).__name__}))
+           finally:
+            remove(u,root,name)
+            print('CLEANUP='+json.dumps({'installation':u,'probe_absent':name not in names(u,root)}))
+          
+          if failed: sys.exit(1)
+          CODE
+          python3 -m py_compile /tmp/driver.py
+          php -l /tmp/probe.php
+      - name: Inspect web runtime and selected preferences and remove probes
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 /tmp/driver.py
+
