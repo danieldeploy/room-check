@@ -82,7 +82,7 @@ jobs:
            $stage='record';$report=['ok'=>true,'backup_directory'=>$base,'application_files_verified'=>$matched,'database_tables_verified'=>count($expected),'database_rows_verified'=>$rowCount,'private_files_verified'=>count($privateManifest),'volatile_entries_excluded'=>$excluded,'restored_data_matches_snapshot'=>true,'application_originals_unchanged'=>true,'production_database_writes'=>false,'test_database_separate'=>true,'mail_sent'=>false,'functional_login_tested'=>false];
            check(file_put_contents($base.'/manifest.json',json_encode(['files'=>$manifest,'private_files'=>$privateManifest,'tables'=>$expected,'report'=>$report],JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR))!==false);
            $stage='cleanup';erase_tree($restored);$restored=null;$report['restore_directory_removed']=true;$complete=true;check(file_put_contents($base.'/result.json',json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR))!==false);ob_end_clean();echo json_encode($report,JSON_THROW_ON_ERROR);
-          }catch(Throwable $e){if(ob_get_level())ob_end_clean();http_response_code(500);echo json_encode(['ok'=>false,'stage'=>$stage,'error_class'=>get_class($e),'line'=>$e->getLine(),'backup_complete'=>$complete]);}
+          }catch(Throwable $e){if(ob_get_level())ob_end_clean();http_response_code(500);echo json_encode(['ok'=>false,'stage'=>$stage,'error_class'=>get_class($e),'line'=>$e->getLine(),'call_line'=>$e->getTrace()[0]['line']??null,'backup_complete'=>$complete]);}
           finally{if($restored!==null&&is_dir($restored)){try{erase_tree($restored);}catch(Throwable $ignored){}}}
           CODE
           cat > /tmp/driver.py <<'CODE'
@@ -98,7 +98,11 @@ jobs:
            with opener.open(req,timeout=40) as r: v=json.load(r)
            if v.get('metadata',{}).get('result')!=1:raise RuntimeError('whm_failed')
            v=v.get('data',{}).get('uapi',{})
-           if v.get('status')!=1 or v.get('errors'):raise RuntimeError('uapi_failed')
+           if v.get('status')!=1 or v.get('errors'):
+            import re
+            msg=str(v.get('errors','')).lower()
+            category='quota' if re.search(r'maximum|limit|quota',msg) else 'name' if re.search(r'name|prefix|length',msg) else 'permission' if re.search(r'permission|denied',msg) else 'other'
+            raise RuntimeError('uapi_'+category)
            return v.get('data')
           def names(u,root):
            v=api(u,'Fileman','list_files',dir=root)
@@ -113,7 +117,7 @@ jobs:
            if not isinstance(e,urllib.error.HTTPError):return None
            try:
             v=json.loads(e.read(8192))
-            return {k:v[k] for k in ('ok','stage','error_class','line') if k in v and isinstance(v[k],(str,int,bool))}
+            return {k:v[k] for k in ('ok','stage','error_class','line','call_line') if k in v and isinstance(v[k],(str,int,bool))}
            except Exception:return None
           failed=False
           for u,domain,private,key in [('welcome','welcomehostel.pt','roundcube-smtp2go-private','sandbox-key.txt'),('city','citycenterhostel.pt','roundcube-smtp2go-citycenter-private','api-key.txt')]:
@@ -133,7 +137,7 @@ jobs:
             if not result.get('ok'):raise RuntimeError('restore_failed')
             print('RESTORE_AUDIT='+json.dumps({'installation':u,'result':result},sort_keys=True),flush=True)
            except Exception as e:
-            failed=True; print('RESTORE_AUDIT='+json.dumps({'installation':u,'ok':False,'stage':stage,'error_class':type(e).__name__,'http_status':getattr(e,'code',None),'diagnostic':safe_error(e)}),flush=True)
+            failed=True; print('RESTORE_AUDIT='+json.dumps({'installation':u,'ok':False,'stage':stage,'error_class':type(e).__name__,'http_status':getattr(e,'code',None),'api_category':str(e) if str(e) in ('uapi_quota','uapi_name','uapi_permission','uapi_other') else None,'backup_directory':'/home/'+u+'/roundcube-recovery-'+stamp,'diagnostic':safe_error(e)}),flush=True)
            finally:
             clean={'installation':u}
             try:remove(u,root,name);clean['probe_absent']=name not in names(u,root)
