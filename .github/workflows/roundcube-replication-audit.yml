@@ -1,0 +1,37 @@
+name: Roundcube replication read-only audit
+on:
+  push:
+    branches: [codex/roundcube-server-audit-20261004]
+    paths: [.github/workflows/roundcube-replication-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Validate parser excludes secrets and comments
+        run: |
+          python3 - <<'PY'
+          import sys,subprocess,json
+          sys.path.insert(0,'deploy')
+          from roundcube_replication_audit import PHP,KEYS
+          source="<?php\n$config['db_dsnw']='secret-database-password';\n$config['imap_host']='ssl://mail.citycenterhostel.pt:993';\n$config['smtp_pass']='secret-api-password';\n// $config['sent_mbox']='WRONG';\n$config['sent_mbox']='INBOX.Sent';\n$config['enable_installer']=false;\n"
+          p=subprocess.run(['php','-r',PHP,json.dumps(KEYS)],input=source,text=True,capture_output=True)
+          assert p.returncode==0
+          assert json.loads(p.stdout)=={'imap_host':'ssl://mail.citycenterhostel.pt:993','sent_mbox':'INBOX.Sent','enable_installer':False}
+          assert 'secret' not in p.stdout
+          print('Safety validation passed')
+          PY
+      - name: Read safe Roundcube settings using existing WHM secret
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/roundcube_replication_audit.py
