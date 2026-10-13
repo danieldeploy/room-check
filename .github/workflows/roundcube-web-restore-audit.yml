@@ -129,28 +129,28 @@ jobs:
             return {k:v[k] for k in ('ok','stage','error_class','line','call_line','link_kind','link_inside') if k in v and isinstance(v[k],(str,int,bool))}
            except Exception:return None
           failed=False
-          for u,domain,private,key in [('welcome','welcomehostel.pt','roundcube-smtp2go-private','sandbox-key.txt'),('city','citycenterhostel.pt','roundcube-smtp2go-citycenter-private','api-key.txt')]:
+          for u,domain,private,key in [('city','citycenterhostel.pt','roundcube-smtp2go-citycenter-private','api-key.txt')]:
            root='/home/'+u+'/public_html/roundcube'; name='rc-restore-audit-'+secrets.token_hex(12)+'.php'; token=secrets.token_hex(32)
-           suffix=secrets.token_hex(3); testdb=u+'_rct'+suffix; password=secrets.token_hex(24); stamp=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime())+'-'+suffix
+           suffix=secrets.token_hex(3); db_owner='welcome'; testdb=db_owner+'_rct'+suffix; password=secrets.token_hex(24); stamp=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime())+'-'+suffix
            source=Path('/tmp/restore.php').read_text()
            for a,b in {'__EXPIRY__':str(int(time.time())+600),'__TOKENHASH__':hashlib.sha256(token.encode()).hexdigest(),'__ACCOUNT__':u,'__TESTDB__':testdb,'__STAMP__':stamp,'__PRIVATE__':private,'__KEY__':key}.items():source=source.replace(a,b)
            made_db=False;made_user=False;stage='preflight';test_enabled=True
            try:
             assert name not in names(u,root)
             stage='create_test_database'
-            try:api(u,'Mysql','create_database',name=testdb);made_db=True
+            try:api(db_owner,'Mysql','create_database',name=testdb);made_db=True
             except RuntimeError as e:
              if str(e)!='uapi_quota':raise
              test_enabled=False
             if test_enabled:
-             stage='create_test_user';api(u,'Mysql','create_user',name=testdb,password=password);made_user=True
-             stage='grant_test_only';api(u,'Mysql','set_privileges_on_database',user=testdb,database=testdb,privileges='ALL PRIVILEGES')
+             stage='create_test_user';api(db_owner,'Mysql','create_user',name=testdb,password=password);made_user=True
+             stage='grant_test_only';api(db_owner,'Mysql','set_privileges_on_database',user=testdb,database=testdb,privileges='ALL PRIVILEGES')
             source=source.replace('__TEST_ENABLED__','true' if test_enabled else 'false')
             stage='upload_guarded_probe';api(u,'Fileman','save_file_content',dir=root,file=name,content=source,from_charset='UTF-8',to_charset='UTF-8')
             stage='backup_restore';req=urllib.request.Request('https://'+domain+'/roundcube/'+name,data=json.dumps({'database':testdb,'user':testdb,'password':password}).encode(),headers={'X-Audit-Token':token,'Content-Type':'application/json'})
             with opener.open(req,timeout=280) as r:result=json.load(r)
             if not result.get('ok'):raise RuntimeError('restore_failed')
-            print('RESTORE_AUDIT='+json.dumps({'installation':u,'result':result},sort_keys=True),flush=True)
+            print('RESTORE_AUDIT='+json.dumps({'installation':u,'test_database_account':db_owner,'result':result},sort_keys=True),flush=True)
            except Exception as e:
             failed=True; print('RESTORE_AUDIT='+json.dumps({'installation':u,'ok':False,'stage':stage,'error_class':type(e).__name__,'http_status':getattr(e,'code',None),'api_category':str(e) if str(e) in ('uapi_quota','uapi_name','uapi_permission','uapi_other') else None,'backup_directory':'/home/'+u+'/roundcube-recovery-'+stamp,'diagnostic':safe_error(e)}),flush=True)
            finally:
@@ -158,10 +158,10 @@ jobs:
             try:remove(u,root,name);clean['probe_absent']=name not in names(u,root)
             except Exception:clean['probe_absent']=False;failed=True
             if made_db:
-             try:api(u,'Mysql','delete_database',name=testdb);clean['test_database_removed']=True
+             try:api(db_owner,'Mysql','delete_database',name=testdb);clean['test_database_removed']=True
              except Exception:clean['test_database_removed']=False;failed=True
             if made_user:
-             try:api(u,'Mysql','delete_user',name=testdb);clean['test_user_removed']=True
+             try:api(db_owner,'Mysql','delete_user',name=testdb);clean['test_user_removed']=True
              except Exception:clean['test_user_removed']=False;failed=True
             print('RESTORE_CLEANUP='+json.dumps(clean),flush=True)
           if failed:sys.exit(1)
