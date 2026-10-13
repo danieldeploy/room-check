@@ -31,7 +31,7 @@ jobs:
           from roundcube_audit import Client
           from roundcube_replication_audit import PHP, KEYS
           
-          PLUGIN_PARSER = r'''$ts=token_get_all(stream_get_contents(STDIN));$t=[];foreach($ts as $x){if(is_array($x)&&in_array($x[0],[T_COMMENT,T_DOC_COMMENT,T_WHITESPACE]))continue;$t[]=$x;}$out=[];for($i=0;$i+5<count($t);$i++){if(!is_array($t[$i])||$t[$i][0]!==T_VARIABLE||$t[$i][1]!=='$config'||$t[$i+1]!=='['||!is_array($t[$i+2])||substr($t[$i+2][1],1,-1)!=='plugins'||$t[$i+3]!==']'||$t[$i+4]!=='=')continue;for($j=$i+5;$j<count($t)&&$t[$j]!==';';$j++){if(is_array($t[$j])&&$t[$j][0]===T_CONSTANT_ENCAPSED_STRING){$s=substr($t[$j][1],1,-1);if(preg_match('/^[a-z][a-z0-9_]{0,70}$/D',$s))$out[]=$s;}}}echo json_encode(array_values(array_unique($out)));'''
+          PLUGIN_PARSER = r'''$ts=token_get_all(stream_get_contents(STDIN));$t=[];foreach($ts as $x){if(is_array($x)&&in_array($x[0],[T_COMMENT,T_DOC_COMMENT,T_WHITESPACE]))continue;$t[]=$x;}$out=[];for($i=0;$i+5<count($t);$i++){if(!is_array($t[$i])||$t[$i][0]!==T_VARIABLE||$t[$i][1]!=='$config'||$t[$i+1]!=='['||!is_array($t[$i+2])||substr($t[$i+2][1],1,-1)!=='plugins'||$t[$i+3]!==']')continue;for($j=$i+4;$j<count($t)&&$t[$j]!==';';$j++){if(is_array($t[$j])&&$t[$j][0]===T_CONSTANT_ENCAPSED_STRING){$s=substr($t[$j][1],1,-1);if(preg_match('/^[a-z][a-z0-9_]{0,70}$/D',$s))$out[]=$s;}}}echo json_encode(array_values(array_unique($out)));'''
           
           def parse(code, parser, args=()):
               p = subprocess.run(['php','-r',parser,*args],input=code,text=True,capture_output=True,timeout=10)
@@ -71,8 +71,10 @@ jobs:
                       ds=re.search(r"\$config\[['\"]db_dsnw['\"]\]\s*=\s*(['\"])(.*?)\1\s*;",cfg,re.S)
                       dbname=None
                       if ds:
-                          uri=urlsplit(ds[2]); dbname=uri.path.lstrip('/')
-                          row['database_localhost']=uri.hostname in ('localhost','127.0.0.1','::1')
+                          tail=ds[2].rsplit('@',1)[-1]
+                          endpoint,_,dbname=tail.partition('/')
+                          dbname=dbname.split('?',1)[0]
+                          row['database_localhost']=endpoint in ('localhost','127.0.0.1','::1')
                           row['database_name_has_account_prefix']=dbname.startswith(u+'_')
                       def databases():
                           d=api(u,'Mysql','list_databases')
@@ -98,7 +100,10 @@ jobs:
                       attempt('mysql_schema',lambda:{'table_count':len(re.findall(r'CREATE TABLE',read(u,root+'/SQL','mysql.initial.sql'),re.I))})
                       private='/home/'+u+('/roundcube-smtp2go-private' if u=='welcome' else '/roundcube-smtp2go-citycenter-private')
                       attempt('backup_candidates',lambda:[e['file'] for e in listing(u,private) if re.fullmatch(r'(?:config|backup|roundcube)[A-Za-z0-9._-]{0,120}',str(e.get('file',''))) and 'key' not in e['file'].lower()])
-                      attempt('maintenance_cron_count',lambda:sum('roundcube' in str(e.get('command','')) for e in api(u,'Cron','list_cron') if isinstance(e,dict)))
+                      def cron_count():
+                          d=api(u,'Cron','list_cron'); es=d if isinstance(d,list) else d.get('cron',[]) if isinstance(d,dict) else []
+                          return sum('roundcube' in str(e.get('command','')) for e in es if isinstance(e,dict))
+                      attempt('maintenance_cron_count',cron_count)
                       attempt('installed_plugin_directories',lambda:[e['file'] for e in listing(u,root+'/plugins') if e.get('file') in row['declared_plugin_literals']])
                   except Exception:row['error']='read_failed_no_raw_details'
                   rows.append(row)
