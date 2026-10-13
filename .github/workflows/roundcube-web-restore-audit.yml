@@ -27,15 +27,16 @@ jobs:
           header('Content-Type: application/json'); header('Cache-Control: no-store');
           if (!unlink(__FILE__)) { http_response_code(500); exit; }
           ob_start();
+          $stage='config';
           try {
            $root=__DIR__; define('INSTALL_PATH',$root.'/'); $config=[];
            require $root.'/config/defaults.inc.php'; require $root.'/config/config.inc.php';
-           $extensions=[]; foreach(['pcre','dom','json','session','sockets','openssl','mbstring','filter','ctype','intl','pdo_mysql','curl','iconv','zip','fileinfo','exif'] as $e) $extensions[$e]=extension_loaded($e);
+           $stage='extensions'; $extensions=[]; foreach(['pcre','dom','json','session','sockets','openssl','mbstring','filter','ctype','intl','pdo_mysql','curl','iconv','zip','fileinfo','exif'] as $e) $extensions[$e]=extension_loaded($e);
            $limits=[]; foreach(['memory_limit','upload_max_filesize','post_max_size','max_execution_time','max_input_time','max_file_uploads'] as $k) $limits[$k]=ini_get($k);
-           $dsn=parse_url($config['db_dsnw']); if(!is_array($dsn) || ($dsn['scheme'] ?? '')!=='mysql' || ($dsn['host'] ?? '')!=='localhost') throw new Exception();
+           $stage='dsn'; $dsn=parse_url($config['db_dsnw']); if(!is_array($dsn) || ($dsn['scheme'] ?? '')!=='mysql' || ($dsn['host'] ?? '')!=='localhost') throw new Exception();
            $db=rawurldecode(ltrim($dsn['path'],'/')); if(!preg_match('/^[a-zA-Z0-9_]+$/D',$db)) throw new Exception();
-           $pdo=new PDO('mysql:host=localhost;dbname='.$db.';charset=utf8mb4',rawurldecode($dsn['user']),rawurldecode($dsn['pass']),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
-           $prefix=$config['db_prefix'] ?? ''; if(!preg_match('/^[a-zA-Z0-9_]*$/D',$prefix))throw new Exception();
+           $stage='database'; $pdo=new PDO('mysql:host=localhost;dbname='.$db.';charset=utf8mb4',rawurldecode($dsn['user']),rawurldecode($dsn['pass']),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+           $stage='preferences'; $prefix=$config['db_prefix'] ?? ''; if(!preg_match('/^[a-zA-Z0-9_]*$/D',$prefix))throw new Exception();
            $pkeys=['language','timezone','skin','drafts_mbox','sent_mbox','junk_mbox','trash_mbox','archive_mbox'];
            $users=[]; $n=0;
            foreach($pdo->query('SELECT user_id,username,language,preferences FROM `'.$prefix.'users`') as $u) {
@@ -49,12 +50,12 @@ jobs:
              foreach($q as $i)$ids[]=['matches_login'=>strcasecmp($i['email'],$u['username'])===0,'default'=>(bool)$i['standard'],'signature_present'=>strlen($i['signature'])>0,'html_signature'=>(bool)$i['html_signature']];
              $users[]=['user_reference'=>strtolower($u['username'])==='__MAILBOX__'?'primary_info_mailbox':'other_user_'.(++$n),'settings'=>$settings,'identities'=>$ids];
            }
-           $meta=$pdo->query('SELECT @@version AS version,@@character_set_database AS charset,@@collation_database AS collation')->fetch(PDO::FETCH_ASSOC);
+           $stage='metadata'; $meta=$pdo->query('SELECT @@version AS version,@@character_set_database AS charset,@@collation_database AS collation')->fetch(PDO::FETCH_ASSOC);
            $tables=$pdo->query('SHOW TABLE STATUS')->fetchAll(PDO::FETCH_ASSOC);$engines=[];$bytes=0;
            foreach($tables as $t){$engines[$t['Engine'] ?? 'view']=true;$bytes+=(int)$t['Data_length']+(int)$t['Index_length'];}
            $out=['ok'=>true,'php_version'=>PHP_VERSION,'sapi'=>PHP_SAPI,'extensions'=>$extensions,'limits'=>$limits,'database'=>$meta,'table_count'=>count($tables),'engines'=>array_keys($engines),'approx_database_bytes'=>$bytes,'users'=>$users,'zip_available'=>class_exists('ZipArchive'),'temporary_probe_removed'=>!file_exists(__FILE__)];
            ob_end_clean(); echo json_encode($out,JSON_THROW_ON_ERROR);
-          } catch(Throwable $e) {ob_end_clean();http_response_code(500);echo '{"ok":false,"error":"probe_failed_no_raw_details"}';}
+          } catch(Throwable $e) {ob_end_clean();http_response_code(500);echo json_encode(['ok'=>false,'stage'=>$stage,'error_class'=>get_class($e),'line'=>$e->getLine()]);}
           CODE
           cat > /tmp/driver.py <<'CODE'
           import os,sys,json,time,secrets,hashlib,ssl,urllib.request,urllib.parse
@@ -80,6 +81,12 @@ jobs:
            if name not in names(u,root):return
            v=c.request('/json-api/cpanel',{'cpanel_jsonapi_user':u,'cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':'Fileman','cpanel_jsonapi_func':'fileop','op':'unlink','sourcefiles':root+'/'+name,'doubledecode':0},2)
            if name in names(u,root):raise RuntimeError('temporary_probe_cleanup_failed')
+          def safe_error(e):
+           if not isinstance(e,urllib.error.HTTPError):return None
+           try:
+            v=json.loads(e.read(8192))
+            return {k:v[k] for k in ('ok','stage','error_class','line') if k in v and isinstance(v[k],(str,int,bool))}
+           except Exception:return None
           failed=False
           for u,domain in [('welcome','welcomehostel.pt'),('city','citycenterhostel.pt')]:
            root='/home/'+u+'/public_html/roundcube'; name='rc-web-audit-'+secrets.token_hex(12)+'.php'; token=secrets.token_hex(32)
@@ -93,7 +100,7 @@ jobs:
             print('WEB_AUDIT='+json.dumps({'installation':u,'result':result},sort_keys=True))
            except Exception as e:
             failed=True
-            print('WEB_AUDIT='+json.dumps({'installation':u,'ok':False,'error_class':type(e).__name__}))
+            print('WEB_AUDIT='+json.dumps({'installation':u,'ok':False,'error_class':type(e).__name__,'http_status':getattr(e,'code',None),'diagnostic':safe_error(e)}))
            finally:
             remove(u,root,name)
             print('CLEANUP='+json.dumps({'installation':u,'probe_absent':name not in names(u,root)}))
