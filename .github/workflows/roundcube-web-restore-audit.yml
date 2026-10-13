@@ -26,7 +26,7 @@ jobs:
           if ($_SERVER['REQUEST_METHOD']!=='POST'||time()>__EXPIRY__||!hash_equals('__TOKENHASH__',hash('sha256',$_SERVER['HTTP_X_AUDIT_TOKEN']??''))) {http_response_code(404);exit;}
           header('Content-Type: application/json');header('Cache-Control: no-store');
           if(!unlink(__FILE__)){http_response_code(500);exit;}
-          umask(0077);set_time_limit(240);ob_start();$stage='preflight';$restored=null;$complete=false;
+          umask(0077);set_time_limit(240);ob_start();$stage='preflight';$restored=null;$complete=false;$testEnabled=__TEST_ENABLED__;
           function check($ok){if(!$ok)throw new RuntimeException('check_failed');}
           function identifier($s){check(is_string($s)&&preg_match('/^[a-zA-Z0-9_]+$/D',$s));return '`'.$s.'`';}
           function putline($h,$a){$s=json_encode($a,JSON_THROW_ON_ERROR)."\n";check(fwrite($h,$s)===strlen($s));}
@@ -39,14 +39,18 @@ jobs:
            $input=json_decode(file_get_contents('php://input'),true,512,JSON_THROW_ON_ERROR);$testdb='__TESTDB__';check($testdb!==$db&&$input['database']===$testdb&&$input['user']===$testdb);identifier($testdb);
            $opts=[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_EMULATE_PREPARES=>false,PDO::ATTR_STRINGIFY_FETCHES=>true];
            $src=new PDO('mysql:host=localhost;dbname='.$db.';charset=utf8mb4',rawurldecode($dsn['user']),rawurldecode($dsn['pass']),$opts);
-           $dst=new PDO('mysql:host=localhost;dbname='.$testdb.';charset=utf8mb4',$input['user'],$input['password'],$opts);unset($input);
-           check($dst->query('SHOW TABLES')->fetchColumn()===false);
+           $dst=null;if($testEnabled){$dst=new PDO('mysql:host=localhost;dbname='.$testdb.';charset=utf8mb4',$input['user'],$input['password'],$opts);check($dst->query('SHOW TABLES')->fetchColumn()===false);}unset($input);
            $tables=$src->query('SHOW TABLE STATUS')->fetchAll(PDO::FETCH_ASSOC);check(count($tables)===17);foreach($tables as $t){identifier($t['Name']);check($t['Engine']==='InnoDB');}
            check((int)$src->query('SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()')->fetchColumn()===0);
            $base=$home.'/roundcube-recovery-__STAMP__';check(!file_exists($base)&&!is_link($base));check(mkdir($base,0700));check(disk_free_space($base)>512*1024*1024);
            $stage='application_backup';$zip=new ZipArchive();check($zip->open($base.'/application.zip',ZipArchive::CREATE|ZipArchive::EXCL)===true);$manifest=[];$excluded=0;$bytes=0;
            $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);
-           foreach($it as $f){$path=$f->getPathname();$rel=substr($path,strlen($root)+1);check(!$f->isLink());check(!str_contains($rel,'..')&&!str_starts_with($rel,'/'));
+           foreach($it as $f){$path=$f->getPathname();$rel=substr($path,strlen($root)+1);check(!in_array('..',explode('/',$rel),true)&&!str_starts_with($rel,'/'));
+            if($f->isLink()){
+             if(in_array($rel,['logs','temp'],true)){check($zip->addEmptyDir($rel));$manifest[$rel]=['dir'=>true,'mode'=>0755,'volatile_symlink_recreated_as_directory'=>true];$excluded++;continue;}
+             $target=readlink($path);$resolved=realpath($path);$stage='internal_symlink_check';check($resolved!==false&&str_starts_with($resolved,$root.'/')&&is_file($resolved));
+             $data=file_get_contents($resolved);check($data!==false);check($zip->addFromString($rel,$data));$manifest[$rel]=['sha256'=>hash('sha256',$data),'mode'=>fileperms($resolved)&0777,'original_symlink'=>$target];$stage='application_backup';continue;
+            }
             if(preg_match('~^(logs|temp)/~',$rel)&&!str_ends_with($rel,'/.htaccess')){$excluded++;continue;}
             if($f->isDir()){check($zip->addEmptyDir($rel));$manifest[$rel]=['dir'=>true,'mode'=>$f->getPerms()&0777];continue;}
             check($f->isFile());$data=file_get_contents($path);check($data!==false);$bytes+=strlen($data);check($bytes<300*1024*1024);
@@ -74,12 +78,14 @@ jobs:
            $stage='application_restore';$restored=$base.'/restore-test';check(mkdir($restored,0700));check($zip->open($base.'/application.zip')===true);check($zip->extractTo($restored.'/application'));$zip->close();$matched=0;
            foreach($manifest as $rel=>$v){$p=$restored.'/application/'.$rel;check(!is_link($p));if(isset($v['sha256'])){check(is_file($p)&&hash_file('sha256',$p)===$v['sha256']);$matched++;check(hash_file('sha256',$root.'/'.$rel)===$v['sha256']);}else check(is_dir($p));check(chmod($p,$v['mode']));}
            check($privzip->open($base.'/transport-private.zip')===true);check($privzip->extractTo($restored.'/private'));$privzip->close();foreach($privateManifest as $rel=>$hash)check(hash_file('sha256',$restored.'/private/'.$rel)===$hash);
+           if($testEnabled){
            $stage='database_restore';$dst->exec('SET FOREIGN_KEY_CHECKS=0');$fh=fopen($base.'/database.jsonl','r');$current=null;
            while(($line=fgets($fh))!==false){$v=json_decode($line,true,512,JSON_THROW_ON_ERROR);if(isset($v['table'])){$current=$v['table'];identifier($current);$dst->exec(base64_decode($v['ddl'],true));continue;}
             check($current!==null);$row=$v['row'];$columns=array_keys($row);$statement=$dst->prepare('INSERT INTO '.identifier($current).' ('.implode(',',array_map('identifier',$columns)).') VALUES ('.implode(',',array_fill(0,count($row),'?')).')');$vals=[];foreach($row as $x)$vals[]=is_null($x)?null:base64_decode($x,true);$statement->execute($vals);
            }fclose($fh);$dst->exec('SET FOREIGN_KEY_CHECKS=1');
            foreach($expected as $table=>$e){$hashes=[];$stmt=$dst->query('SELECT * FROM '.identifier($table));while($row=$stmt->fetch(PDO::FETCH_NUM))$hashes[]=row_hash($row);sort($hashes);check(count($hashes)===$e['count']&&hash('sha256',implode('',$hashes))===$e['hash']);}
-           $stage='record';$report=['ok'=>true,'backup_directory'=>$base,'application_files_verified'=>$matched,'database_tables_verified'=>count($expected),'database_rows_verified'=>$rowCount,'private_files_verified'=>count($privateManifest),'volatile_entries_excluded'=>$excluded,'restored_data_matches_snapshot'=>true,'application_originals_unchanged'=>true,'production_database_writes'=>false,'test_database_separate'=>true,'mail_sent'=>false,'functional_login_tested'=>false];
+           }
+           $stage='record';$report=['ok'=>true,'backup_directory'=>$base,'application_files_verified'=>$matched,'database_tables_verified'=>$testEnabled?count($expected):0,'database_tables_backed_up'=>count($expected),'database_rows_verified'=>$rowCount,'private_files_verified'=>count($privateManifest),'volatile_entries_excluded'=>$excluded,'restored_data_matches_snapshot'=>$testEnabled,'application_originals_unchanged'=>true,'production_database_writes'=>false,'test_database_separate'=>$testEnabled,'database_restore_blocked_by_quota'=>!$testEnabled,'mail_sent'=>false,'functional_login_tested'=>false];
            check(file_put_contents($base.'/manifest.json',json_encode(['files'=>$manifest,'private_files'=>$privateManifest,'tables'=>$expected,'report'=>$report],JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR))!==false);
            $stage='cleanup';erase_tree($restored);$restored=null;$report['restore_directory_removed']=true;$complete=true;check(file_put_contents($base.'/result.json',json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR))!==false);ob_end_clean();echo json_encode($report,JSON_THROW_ON_ERROR);
           }catch(Throwable $e){if(ob_get_level())ob_end_clean();http_response_code(500);echo json_encode(['ok'=>false,'stage'=>$stage,'error_class'=>get_class($e),'line'=>$e->getLine(),'call_line'=>$e->getTrace()[0]['line']??null,'backup_complete'=>$complete]);}
@@ -125,12 +131,18 @@ jobs:
            suffix=secrets.token_hex(3); testdb=u+'_rct'+suffix; password=secrets.token_hex(24); stamp=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime())+'-'+suffix
            source=Path('/tmp/restore.php').read_text()
            for a,b in {'__EXPIRY__':str(int(time.time())+600),'__TOKENHASH__':hashlib.sha256(token.encode()).hexdigest(),'__ACCOUNT__':u,'__TESTDB__':testdb,'__STAMP__':stamp,'__PRIVATE__':private,'__KEY__':key}.items():source=source.replace(a,b)
-           made_db=False;made_user=False;stage='preflight'
+           made_db=False;made_user=False;stage='preflight';test_enabled=True
            try:
             assert name not in names(u,root)
-            stage='create_test_database';api(u,'Mysql','create_database',name=testdb);made_db=True
-            stage='create_test_user';api(u,'Mysql','create_user',name=testdb,password=password);made_user=True
-            stage='grant_test_only';api(u,'Mysql','set_privileges_on_database',user=testdb,database=testdb,privileges='ALL PRIVILEGES')
+            stage='create_test_database'
+            try:api(u,'Mysql','create_database',name=testdb);made_db=True
+            except RuntimeError as e:
+             if str(e)!='uapi_quota':raise
+             test_enabled=False
+            if test_enabled:
+             stage='create_test_user';api(u,'Mysql','create_user',name=testdb,password=password);made_user=True
+             stage='grant_test_only';api(u,'Mysql','set_privileges_on_database',user=testdb,database=testdb,privileges='ALL PRIVILEGES')
+            source=source.replace('__TEST_ENABLED__','true' if test_enabled else 'false')
             stage='upload_guarded_probe';api(u,'Fileman','save_file_content',dir=root,file=name,content=source,from_charset='UTF-8',to_charset='UTF-8')
             stage='backup_restore';req=urllib.request.Request('https://'+domain+'/roundcube/'+name,data=json.dumps({'database':testdb,'user':testdb,'password':password}).encode(),headers={'X-Audit-Token':token,'Content-Type':'application/json'})
             with opener.open(req,timeout=280) as r:result=json.load(r)
