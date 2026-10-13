@@ -24,90 +24,29 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python3 - <<'PY'
-          """Read-only Roundcube documentation audit. Print allowlisted metadata only."""
-          import sys, os, json, re, subprocess
-          from urllib.parse import urlsplit
-          sys.path.insert(0, 'deploy')
+          import sys,os,json,re,hashlib,subprocess
+          sys.path.insert(0,'deploy')
           from roundcube_audit import Client
-          from roundcube_replication_audit import PHP, KEYS
-          
-          PLUGIN_PARSER = r'''$ts=token_get_all(stream_get_contents(STDIN));$t=[];foreach($ts as $x){if(is_array($x)&&in_array($x[0],[T_COMMENT,T_DOC_COMMENT,T_WHITESPACE]))continue;$t[]=$x;}$out=[];for($i=0;$i+5<count($t);$i++){if(!is_array($t[$i])||$t[$i][0]!==T_VARIABLE||$t[$i][1]!=='$config'||$t[$i+1]!=='['||!is_array($t[$i+2])||substr($t[$i+2][1],1,-1)!=='plugins'||$t[$i+3]!==']')continue;for($j=$i+4;$j<count($t)&&$t[$j]!==';';$j++){if(is_array($t[$j])&&$t[$j][0]===T_CONSTANT_ENCAPSED_STRING){$s=substr($t[$j][1],1,-1);if(preg_match('/^[a-z][a-z0-9_]{0,70}$/D',$s))$out[]=$s;}}}echo json_encode(array_values(array_unique($out)));'''
-          
-          def parse(code, parser, args=()):
-              p = subprocess.run(['php','-r',parser,*args],input=code,text=True,capture_output=True,timeout=10)
-              if p.returncode: raise ValueError('parse_failed')
-              return json.loads(p.stdout)
-          
-          def validate():
-              code="<?php $config['plugins']=array_merge(array('archive','welcome_ui'),array('welcome_smtp2go_api'));$config['db_dsnw']='SECRET';"
-              assert parse(code,PLUGIN_PARSER)==['archive','welcome_ui','welcome_smtp2go_api']
-          
-          def main():
-              validate()
-              c=Client(os.environ['WHM_API_TOKEN'])
-              def api(u,m,f,**kw):
-                  return c.request('/json-api/uapi_cpanel',{'api.version':1,'cpanel.user':u,'cpanel.module':m,'cpanel.function':f,**kw},3)
-              def read(u,d,f):
-                  r=api(u,'Fileman','get_file_content',dir=d,file=f,from_charset='UTF-8',to_charset='UTF-8')
-                  if not isinstance(r,dict) or not isinstance(r.get('content'),str):raise ValueError()
-                  return r['content']
-              def listing(u,d):
-                  r=api(u,'Fileman','list_files',dir=d)
-                  es=r.get('files',[]) if isinstance(r,dict) else r
-                  if not isinstance(es,list):raise ValueError()
-                  return es
-              rows=[]
-              for u,domain in [('welcome','welcomehostel.pt'),('city','citycenterhostel.pt')]:
-                  root='/home/'+u+'/public_html/roundcube'
-                  row={'installation':u,'writes':False}
-                  def attempt(key, fn):
-                      try: row[key]=fn()
-                      except Exception: row[key]='unavailable'
-                  try:
-                      cfg=read(u,root+'/config','config.inc.php')
-                      row['declared_plugin_literals']=parse(cfg,PLUGIN_PARSER)
-                      row['plugin_merge_expression_present']=bool(re.search(r"\$config\[['\"]plugins['\"]\]\s*=\s*array_merge",cfg))
-                      row['database_driver_mysql']=bool(re.search(r"\$config\[['\"]db_dsnw['\"]\]\s*=\s*['\"]mysql",cfg))
-                      ds=re.search(r"\$config\[['\"]db_dsnw['\"]\]\s*=\s*(['\"])(.*?)\1\s*;",cfg,re.S)
-                      dbname=None
-                      if ds:
-                          tail=ds[2].rsplit('@',1)[-1]
-                          endpoint,_,dbname=tail.partition('/')
-                          dbname=dbname.split('?',1)[0]
-                          row['database_localhost']=endpoint in ('localhost','127.0.0.1','::1')
-                          row['database_name_has_account_prefix']=dbname.startswith(u+'_')
-                      def databases():
-                          d=api(u,'Mysql','list_databases')
-                          es=d if isinstance(d,list) else d.get('databases',[]) if isinstance(d,dict) else []
-                          matching=[e for e in es if isinstance(e,dict) and e.get('database')==dbname]
-                          return {'configured_database_present':bool(matching),'configured_database_user_count':len(matching[0].get('users',[])) if matching else None}
-                      attempt('database',databases)
-                      def php_versions():
-                          d=api(u,'LangPHP','php_get_vhost_versions')
-                          es=d if isinstance(d,list) else d.get('versions',d.get('vhosts',[])) if isinstance(d,dict) else []
-                          return [{k:e[k] for k in ('vhost','version','php_fpm') if k in e} for e in es if isinstance(e,dict) and e.get('vhost')==domain]
-                      attempt('php_vhost',php_versions)
-                      for folder,names in [('',('config','logs','temp','plugins','vendor')),('config',('config.inc.php','defaults.inc.php')),('program/include',('iniset.php',))]:
-                          attempt('modes_'+(folder or 'root'),lambda folder=folder,names=names:{e['file']:e.get('mode',e.get('permissions')) for e in listing(u,root+('/'+folder if folder else '')) if e.get('file') in names})
-                      for folder in ('/home/'+u+'/public_html',root):
-                          def handler(folder=folder):
-                              h=read(u,folder,'.htaccess')
-                              return {'handlers':re.findall(r'application/x-httpd-([a-z0-9_-]+)',h),'php_ini_limits':{m[0]:m[1] for m in re.findall(r'(?m)^\s*php_(?:value|flag)\s+(upload_max_filesize|post_max_size|memory_limit|max_execution_time|display_errors|log_errors)\s+([A-Za-z0-9_-]+)',h)}}
-                          attempt('htaccess_'+('parent' if folder!=root else 'roundcube'),handler)
-                      for ini in ('.user.ini','php.ini'):
-                          attempt('local_'+ini,lambda ini=ini:{m[0]:m[1] for m in re.findall(r'(?m)^\s*(upload_max_filesize|post_max_size|memory_limit|max_execution_time|display_errors|log_errors)\s*=\s*([A-Za-z0-9_-]+)',read(u,root,ini))})
-                      attempt('package_requirements',lambda:{k:v for k,v in json.loads(read(u,root,'composer.json')).get('require',{}).items() if k=='php' or k.startswith('ext-')})
-                      attempt('mysql_schema',lambda:{'table_count':len(re.findall(r'CREATE TABLE',read(u,root+'/SQL','mysql.initial.sql'),re.I))})
-                      private='/home/'+u+('/roundcube-smtp2go-private' if u=='welcome' else '/roundcube-smtp2go-citycenter-private')
-                      attempt('backup_candidates',lambda:[e['file'] for e in listing(u,private) if re.fullmatch(r'(?:config|backup|roundcube)[A-Za-z0-9._-]{0,120}',str(e.get('file',''))) and 'key' not in e['file'].lower()])
-                      def cron_count():
-                          d=api(u,'Cron','list_cron'); es=d if isinstance(d,list) else d.get('cron',[]) if isinstance(d,dict) else []
-                          return sum('roundcube' in str(e.get('command','')) for e in es if isinstance(e,dict))
-                      attempt('maintenance_cron_count',cron_count)
-                      attempt('installed_plugin_directories',lambda:[e['file'] for e in listing(u,root+'/plugins') if e.get('file') in row['declared_plugin_literals']])
-                  except Exception:row['error']='read_failed_no_raw_details'
-                  rows.append(row)
-              print(json.dumps({'writes':False,'results':rows}))
-          
-          if __name__=='__main__': main()
+          c=Client(os.environ['WHM_API_TOKEN'])
+          def api(u,m,f,**kw):
+           return c.request('/json-api/uapi_cpanel',{'api.version':1,'cpanel.user':u,'cpanel.module':m,'cpanel.function':f,**kw},3)
+          def read(u,d,f):
+           r=api(u,'Fileman','get_file_content',dir=d,file=f,from_charset='UTF-8',to_charset='UTF-8')
+           if not isinstance(r,dict) or not isinstance(r.get('content'),str):raise ValueError()
+           return r['content']
+          rows=[]
+          for u,pname in [('welcome','welcome_smtp2go_api'),('city','citycenter_smtp2go_api')]:
+           root='/home/'+u+'/public_html/roundcube'; row={'installation':u}
+           def attempt(k,fn):
+            try:row[k]=fn()
+            except Exception:row[k]='unavailable'
+           cfg=read(u,root+'/config','config.inc.php')
+           def plugin_shape():
+            php=r"""$ts=token_get_all(stream_get_contents(STDIN));$code='';foreach($ts as $t){if(is_array($t)&&in_array($t[0],[T_COMMENT,T_DOC_COMMENT]))continue;$code.=is_array($t)?$t[1]:$t;}preg_match_all('/\\$config\\s*\\[\\s*[\x27\x22]plugins[\x27\x22]\\s*\\][^;]*;/s',$code,$m);$out=[];foreach($m[0] as $s){preg_match_all('/[\x27\x22]([a-z][a-z0-9_]{0,70})[\x27\x22]/',$s,$v);preg_match_all('/\\b(array_merge|array_values|array_unique|array_diff|array_filter)\\s*\\(/',$s,$f);$out[]=['names'=>array_values(array_filter($v[1],fn($n)=>$n!=='plugins')),'functions'=>$f[1],'append'=>boolval(preg_match('/\\]\\s*\\[\\s*\\]\\s*=/',$s))];}echo json_encode($out);"""
+            r=subprocess.run(['php','-r',php],input=cfg,text=True,capture_output=True,timeout=10)
+            if r.returncode:raise ValueError()
+            return json.loads(r.stdout)
+           attempt('plugin_declarations',plugin_shape)
+           rows.append(row)
+          print(json.dumps({'writes':False,'results':rows}))
           PY
