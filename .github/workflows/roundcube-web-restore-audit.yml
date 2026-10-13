@@ -31,7 +31,7 @@ jobs:
           function identifier($s){check(is_string($s)&&preg_match('/^[a-zA-Z0-9_]+$/D',$s));return '`'.$s.'`';}
           function putline($h,$a){$s=json_encode($a,JSON_THROW_ON_ERROR)."\n";check(fwrite($h,$s)===strlen($s));}
           function row_hash($row){$a=[];foreach($row as $v)$a[]=is_null($v)?null:base64_encode((string)$v);return hash('sha256',json_encode($a,JSON_THROW_ON_ERROR));}
-          function erase_tree($p){check(!is_link($p));foreach(new FilesystemIterator($p,FilesystemIterator::SKIP_DOTS) as $f){check(!$f->isLink());if($f->isDir())erase_tree($f->getPathname());else check(unlink($f->getPathname()));}check(rmdir($p));}
+          function erase_tree($p){check(!is_link($p));foreach(new FilesystemIterator($p,FilesystemIterator::SKIP_DOTS) as $f){if($f->isDir()&&!$f->isLink())erase_tree($f->getPathname());else check(unlink($f->getPathname()));}check(rmdir($p));}
           try{
            $root=__DIR__;$home=dirname(dirname($root));check($home==='/home/__ACCOUNT__');
            define('RCUBE_INSTALL_PATH',$root.'/');define('INSTALL_PATH',$root.'/');$config=[];require $root.'/config/defaults.inc.php';require $root.'/config/config.inc.php';
@@ -48,8 +48,8 @@ jobs:
            foreach($it as $f){$path=$f->getPathname();$rel=substr($path,strlen($root)+1);check(!in_array('..',explode('/',$rel),true)&&!str_starts_with($rel,'/'));
             if($f->isLink()){
              if(in_array($rel,['logs','temp'],true)){check($zip->addEmptyDir($rel));$manifest[$rel]=['dir'=>true,'mode'=>0755,'volatile_symlink_recreated_as_directory'=>true];$excluded++;continue;}
-             $target=readlink($path);$resolved=realpath($path);$stage='internal_symlink_check';check($resolved!==false&&str_starts_with($resolved,$root.'/')&&is_file($resolved));
-             $data=file_get_contents($resolved);check($data!==false);check($zip->addFromString($rel,$data));$manifest[$rel]=['sha256'=>hash('sha256',$data),'mode'=>fileperms($resolved)&0777,'original_symlink'=>$target];$stage='application_backup';continue;
+             $target=readlink($path);$resolved=realpath($path);$stage='internal_symlink_check';check($resolved!==false&&str_starts_with($resolved,$root.'/'));
+             $resolvedRel=substr($resolved,strlen($root)+1);check($zip->addFromString($rel,$target));check($zip->setExternalAttributesName($rel,ZipArchive::OPSYS_UNIX,0120777<<16));$manifest[$rel]=['link'=>$target,'resolved_relative'=>$resolvedRel];$stage='application_backup';continue;
             }
             if(preg_match('~^(logs|temp)/~',$rel)&&!str_ends_with($rel,'/.htaccess')){$excluded++;continue;}
             if($f->isDir()){check($zip->addEmptyDir($rel));$manifest[$rel]=['dir'=>true,'mode'=>$f->getPerms()&0777];continue;}
@@ -76,7 +76,7 @@ jobs:
            }
            $src->commit();fwrite($sql,"SET FOREIGN_KEY_CHECKS=1;\n");check(fclose($fh));check(fclose($sql));chmod($base.'/database.jsonl',0600);chmod($base.'/database.sql',0600);
            $stage='application_restore';$restored=$base.'/restore-test';check(mkdir($restored,0700));check($zip->open($base.'/application.zip')===true);check($zip->extractTo($restored.'/application'));$zip->close();$matched=0;
-           foreach($manifest as $rel=>$v){$p=$restored.'/application/'.$rel;check(!is_link($p));if(isset($v['sha256'])){check(is_file($p)&&hash_file('sha256',$p)===$v['sha256']);$matched++;check(hash_file('sha256',$root.'/'.$rel)===$v['sha256']);}else check(is_dir($p));check(chmod($p,$v['mode']));}
+           foreach($manifest as $rel=>$v){$p=$restored.'/application/'.$rel;if(isset($v['link'])){if(file_exists($p)||is_link($p))check(unlink($p));$target=str_starts_with($v['link'],'/')?$restored.'/application/'.$v['resolved_relative']:$v['link'];check(symlink($target,$p));check(readlink($root.'/'.$rel)===$v['link']);continue;}check(!is_link($p));if(isset($v['sha256'])){check(is_file($p)&&hash_file('sha256',$p)===$v['sha256']);$matched++;check(hash_file('sha256',$root.'/'.$rel)===$v['sha256']);}else check(is_dir($p));check(chmod($p,$v['mode']));}
            check($privzip->open($base.'/transport-private.zip')===true);check($privzip->extractTo($restored.'/private'));$privzip->close();foreach($privateManifest as $rel=>$hash)check(hash_file('sha256',$restored.'/private/'.$rel)===$hash);
            if($testEnabled){
            $stage='database_restore';$dst->exec('SET FOREIGN_KEY_CHECKS=0');$fh=fopen($base.'/database.jsonl','r');$current=null;
@@ -85,10 +85,10 @@ jobs:
            }fclose($fh);$dst->exec('SET FOREIGN_KEY_CHECKS=1');
            foreach($expected as $table=>$e){$hashes=[];$stmt=$dst->query('SELECT * FROM '.identifier($table));while($row=$stmt->fetch(PDO::FETCH_NUM))$hashes[]=row_hash($row);sort($hashes);check(count($hashes)===$e['count']&&hash('sha256',implode('',$hashes))===$e['hash']);}
            }
-           $stage='record';$report=['ok'=>true,'backup_directory'=>$base,'application_files_verified'=>$matched,'database_tables_verified'=>$testEnabled?count($expected):0,'database_tables_backed_up'=>count($expected),'database_rows_verified'=>$rowCount,'private_files_verified'=>count($privateManifest),'volatile_entries_excluded'=>$excluded,'restored_data_matches_snapshot'=>$testEnabled,'application_originals_unchanged'=>true,'production_database_writes'=>false,'test_database_separate'=>$testEnabled,'database_restore_blocked_by_quota'=>!$testEnabled,'mail_sent'=>false,'functional_login_tested'=>false];
+           $stage='record';$report=['ok'=>true,'backup_directory'=>$base,'application_files_verified'=>$matched,'internal_links_verified'=>count(array_filter($manifest,fn($m)=>isset($m['link']))),'database_tables_verified'=>$testEnabled?count($expected):0,'database_tables_backed_up'=>count($expected),'database_rows_verified'=>$rowCount,'private_files_verified'=>count($privateManifest),'volatile_entries_excluded'=>$excluded,'restored_data_matches_snapshot'=>$testEnabled,'application_originals_unchanged'=>true,'production_database_writes'=>false,'test_database_separate'=>$testEnabled,'database_restore_blocked_by_quota'=>!$testEnabled,'mail_sent'=>false,'functional_login_tested'=>false];
            check(file_put_contents($base.'/manifest.json',json_encode(['files'=>$manifest,'private_files'=>$privateManifest,'tables'=>$expected,'report'=>$report],JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR))!==false);
            $stage='cleanup';erase_tree($restored);$restored=null;$report['restore_directory_removed']=true;$complete=true;check(file_put_contents($base.'/result.json',json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR))!==false);ob_end_clean();echo json_encode($report,JSON_THROW_ON_ERROR);
-          }catch(Throwable $e){if(ob_get_level())ob_end_clean();http_response_code(500);echo json_encode(['ok'=>false,'stage'=>$stage,'error_class'=>get_class($e),'line'=>$e->getLine(),'call_line'=>$e->getTrace()[0]['line']??null,'backup_complete'=>$complete]);}
+          }catch(Throwable $e){if(ob_get_level())ob_end_clean();http_response_code(500);echo json_encode(['ok'=>false,'stage'=>$stage,'error_class'=>get_class($e),'line'=>$e->getLine(),'call_line'=>$e->getTrace()[0]['line']??null,'backup_complete'=>$complete,'link_kind'=>$stage==='internal_symlink_check'?(is_dir($resolved?:'')?'directory':(is_file($resolved?:'')?'file':'missing')):null,'link_inside'=>$stage==='internal_symlink_check'&&$resolved!==false?str_starts_with($resolved,$root.'/'):null]);}
           finally{if($restored!==null&&is_dir($restored)){try{erase_tree($restored);}catch(Throwable $ignored){}}}
           CODE
           cat > /tmp/driver.py <<'CODE'
@@ -123,7 +123,7 @@ jobs:
            if not isinstance(e,urllib.error.HTTPError):return None
            try:
             v=json.loads(e.read(8192))
-            return {k:v[k] for k in ('ok','stage','error_class','line','call_line') if k in v and isinstance(v[k],(str,int,bool))}
+            return {k:v[k] for k in ('ok','stage','error_class','line','call_line','link_kind','link_inside') if k in v and isinstance(v[k],(str,int,bool))}
            except Exception:return None
           failed=False
           for u,domain,private,key in [('welcome','welcomehostel.pt','roundcube-smtp2go-private','sandbox-key.txt'),('city','citycenterhostel.pt','roundcube-smtp2go-citycenter-private','api-key.txt')]:
