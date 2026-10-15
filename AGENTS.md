@@ -43,6 +43,12 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 - Owner instruction, 2026-10-05: an expired Management Hub session during an authorized task is recoverable. Retry sign-in through the project's existing secure access method and continue the task; do not stop or ask the owner to repeat routine login while approved reusable access is available.
 - Never request, expose, or commit passwords, one-time codes, or tokens. If the secure method is unavailable or invalid, try the other already-authorized project control path for the task, then report the specific blocker. For a visual UI acceptance check, restore the signed-in page and observe the live update without refreshing; an API task result alone is not proof of visual behavior.
 
+- Owner instruction, reaffirmed 2026-10-15: opening and operating the Management Hub for the authorized project task is already authorized. Do not ask again merely because a new chat or browser session has started.
+- Recovery order: reuse the existing authenticated administration tab/profile first; use the supported secure saved-credential mechanism if available; then use an existing authorized API or paired-agent control only for operations within its actual scope. Do not log out, clear cookies, replace profiles, or inspect/export saved passwords or session tokens to recover access.
+- Historical access used an existing signed-in Hub session or the secure login flow. An administration Chrome profile was reported as persistent and separate from the Booking automation profile; verify its availability in the current environment rather than assuming profiles or saved credentials are shared with Cloud Browser. Owner permission to retain access is not proof that reusable credentials were configured.
+- The paired Windows agent's delegated test control and the protected WHM deployment API are not administrative browser sessions. Never expand their scope or use them to evade a browser protection or approval denial.
+- If user input is genuinely necessary, identify the exact service/account and present its secure login in the same turn; do not end with an offer that requires another request. Respect a declined login and platform recovery limits. Continue independent authorized work, and state the exact remaining blocker. After successful authentication, continue the original task immediately rather than ending at login confirmation.
+
 ## Changes and review
 
 - Work on a separate branch and open a PR targeting
