@@ -15,22 +15,22 @@ function recordStage(string $stage,int $status=0,?bool $accepted=null): void {
     if (file_put_contents($tmp,$value,LOCK_EX)!==false) { chmod($tmp,0600); rename($tmp,$file); }
     } catch (Throwable) { /* Diagnostics must never change mail processing. */ }
 }
+function deliverCityAuthentication(string $raw): int {
 try {
     recordStage('started');
     require_once __DIR__.'/HostelworldBridge.php';
-    $raw=stream_get_contents(STDIN,HostelworldMailMessage::MAX_BYTES+1);
     $targetPath=__DIR__.'/hostelworld-city-auth-targets.json';
-    if (is_link($targetPath) || !is_file($targetPath) || (fileperms($targetPath)&0077)!==0) exit(75);
+    if (is_link($targetPath) || !is_file($targetPath) || (fileperms($targetPath)&0077)!==0) return 75;
     $targets=json_decode(file_get_contents($targetPath),true,4,JSON_THROW_ON_ERROR);
-    if (!is_array($targets)) exit(75);
-    try { $packet=HostelworldBridge::packet($raw,$targets); } catch (Throwable) { recordStage('parse_error'); exit(0); }
+    if (!is_array($targets)) return 75;
+    try { $packet=HostelworldBridge::packet($raw,$targets); } catch (Throwable) { recordStage('parse_error'); return 0; }
     unset($raw);
-    if ($packet===null) { recordStage('message_not_matched'); exit(0); }
+    if ($packet===null) { recordStage('message_not_matched'); return 0; }
     recordStage('message_matched');
     $path=__DIR__.'/hostelworld-city-auth.key';
-    if (is_link($path) || !is_file($path) || (fileperms($path)&0077)!==0) exit(75);
+    if (is_link($path) || !is_file($path) || (fileperms($path)&0077)!==0) return 75;
     $key=trim(file_get_contents($path));
-    if (!preg_match('/\A[a-f0-9]{64}\z/',$key)) exit(75);
+    if (!preg_match('/\A[a-f0-9]{64}\z/',$key)) return 75;
     $body=json_encode($packet,JSON_THROW_ON_ERROR);
     $stamp=(string)time();
     $curl=curl_init('https://check.welcomehostel.pt/invoice-hostelworld-hook.php');
@@ -43,5 +43,15 @@ try {
     $reply=is_string($result)?json_decode($result,true):null;
     recordStage($result===false?'transport_error':'hub_response',(int)$status,
         is_bool($reply['accepted']??null)?$reply['accepted']:null);
-    exit($result!==false && $status>=200 && $status<300 ? 0 : 75);
+    return $result!==false && $status>=200 && $status<300 ? 0 : 75;
+} catch (Throwable) { recordStage('configuration_error'); return 75; }
+}
+try {
+    require_once __DIR__.'/HostelworldFolderQueue.php';
+    if ($argc===2 && $argv[1]==='--poll-auth-folder') {
+        HostelworldFolderQueue::run(__DIR__.'/mail',__DIR__,static fn(string $raw): bool => deliverCityAuthentication($raw)===0);
+        exit(0);
+    }
+    if ($argc!==1) exit(64);
+    exit(deliverCityAuthentication(stream_get_contents(STDIN,262145)));
 } catch (Throwable) { recordStage('configuration_error'); exit(75); }
