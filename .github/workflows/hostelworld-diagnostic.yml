@@ -68,7 +68,7 @@ jobs:
           # No raw messages, addresses, transport errors, or authentication data
           # are printed. The query is scoped to the City cPanel account.
           query=urllib.parse.urlencode({'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,
-              'cpanel_jsonapi_module':'EmailTrack','cpanel_jsonapi_func':'search','success':1,'defer':1})
+              'cpanel_jsonapi_module':'EmailTrack','cpanel_jsonapi_func':'search','success':1,'defer':1,'failure':1,'inprogress':1})
           req=urllib.request.Request(WHM_ORIGIN+'/json-api/cpanel?'+query,
               headers={'Authorization':'whm fazenda:'+config.token})
           with api.opener.open(req,timeout=20) as r: delivery=json.loads(r.read(2097152))
