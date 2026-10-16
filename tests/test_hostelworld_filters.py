@@ -6,13 +6,39 @@ from unittest.mock import patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"deploy"))
 import hostelworld_filters as h
 class Tests(unittest.TestCase):
+    def test_migrates_only_exact_old_inbox_filter_and_is_idempotent(self):
+        from unittest.mock import Mock
+        import copy
+        params=h.expected('city',22)
+        def row(p):
+            return {'filtername':h.NAME,'rules':[
+                {'part':p['part1'],'match':p['match1'],'val':p['val1'],'opt':'and'},
+                {'part':p['part2'],'match':p['match2'],'val':p['val2']}],
+                'actions':[{'action':'save','dest':p['dest1']},{'action':'pipe','dest':p['dest2']}]}
+        old=row(dict(params,dest1='/home/city/mail/$domain/$local_part/'))
+        api=Mock(account='city')
+        api.call.side_effect=[[old],None,[row(params)]]
+        h.install(api,22)
+        self.assertEqual(api.call.call_args_list[1].kwargs,params)
+        api.call.reset_mock(); api.call.side_effect=[[row(params)],[row(params)]]
+        h.install(api,22)
+        self.assertEqual(api.call.call_count,2)
+        for change in ('disabled','pipe','rule'):
+            bad=copy.deepcopy(old)
+            if change=='disabled': bad['disabled']=1
+            if change=='pipe': bad['actions'][1]['dest']='other.php'
+            if change=='rule': bad['rules'][0]['val']='other.test'
+            api.call.reset_mock(); api.call.side_effect=[[bad]]
+            with self.assertRaises(h.DeploymentError): h.install(api,22)
+            self.assertEqual(api.call.call_count,1)
+
     def test_separate_destinations_and_copy(self):
         welcome=h.expected("welcome",11); city=h.expected("city",22)
         self.assertEqual(welcome["dest2"],"room-check-private/cron/hostelworld-auth-pipe.php 11")
         self.assertEqual(city["dest2"],"hostelworld-city-auth-pipe.php")
         self.assertEqual(city["action1"],"save")
-        self.assertEqual(city["dest1"],"/home/city/mail/$domain/$local_part/")
-        self.assertEqual(welcome["dest1"],"/home/welcome/mail/$domain/$local_part/")
+        self.assertEqual(city["dest1"],"/home/city/mail/$domain/$local_part/.HOSTELWORLD/")
+        self.assertEqual(welcome["dest1"],"/home/welcome/mail/$domain/$local_part/.Hostelworld/")
         with self.assertRaises(h.DeploymentError): h.expected("../other",22)
     def test_existing_other_destination_is_rejected(self):
         params=h.expected("city",22)
@@ -45,12 +71,12 @@ class Tests(unittest.TestCase):
             {"part":params["part2"],"match":params["match2"],"val":params["val2"]}],
             "actions":[{"action":"save","dest":params["dest1"]},
                        {"action":"pipe","dest":params["dest2"]}]}
-        for delivery in ('"'+params["dest1"]+'"',"$home/mail/$domain/$local_part/",
-                         '"$home/mail/$domain/$local_part/"',
-                         "$home/mail/$domain/$local_part",params["dest1"].rstrip("/")):
+        for delivery in ('"'+params["dest1"]+'"',"$home/mail/$domain/$local_part/.HOSTELWORLD/",
+                         '"$home/mail/$domain/$local_part/.HOSTELWORLD/"',
+                         "$home/mail/$domain/$local_part/.HOSTELWORLD",params["dest1"].rstrip("/")):
             row["actions"][0]["dest"]=delivery
             h.verify_filter(row,params)
-        for wrong in ("/home/welcome/mail/$domain/$local_part/","$home/other/",
+        for wrong in ("/home/welcome/mail/$domain/$local_part/.Hostelworld/","$home/other/",
                       '"'+params["dest1"]+'"; other'):
             row["actions"][0]["dest"]=wrong
             with self.assertRaises(h.DeploymentError): h.verify_filter(row,params)
