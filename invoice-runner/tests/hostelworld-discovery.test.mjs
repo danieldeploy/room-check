@@ -28,7 +28,7 @@ test('Hostelworld login still refuses a missing map', async () => {
     /connector_unconfigured/);
 });
 
-const { hostelworldBinding, discoverHostelworld, waitHostelworldSession } = await import('../hostelworld-discovery.mjs');
+const { hostelworldBinding, discoverHostelworld, waitHostelworldSession, confirmHostelworldEntry } = await import('../hostelworld-discovery.mjs');
 const configured = () => ({ action: 'discover', portal: 'hostelworld', accountId: 2, property: '305209',
   authMethod: 'email', credentials: { hostel_number: '305209', identifier: 'fixture-user', password: 'fixture-password' },
   hostelworldAuthTargets: [{ host: 'inbox.hostelworld.com', path: '/login/' }] });
@@ -248,4 +248,30 @@ test('email-link intermediate document is awaited once without a second navigati
  page.waitForFunction=async()=>{const e=new Error('private browser detail');e.name='TimeoutError';throw e;};
  page.evaluate=async()=>({property_count:0,expected_property:false,link_page:true,ready:true});
  const pending=await waitHostelworldSession(page,'305209');assert.equal(pending.completed,false);assert.equal(pending.expected_property,false);
+});
+
+test('recognized email-link confirmation is clicked once; unrelated or blocked controls are untouched',async()=>{
+ let clicks=0,waits=0,control={offered:true,recognized:true,blocked:false};
+ const page={url:()=> 'https://inbox.hostelworld.com/login/'+ 'b'.repeat(32),evaluate:async()=>control,
+  click:async selector=>{assert.equal(selector,'button.btn-content.large');clicks++;},waitForNavigation:async()=>{waits++;}};
+ assert.equal((await confirmHostelworldEntry(page)).clicked,true);assert.equal(clicks,1);assert.equal(waits,1);
+ for(const patch of [{offered:false},{recognized:false},{blocked:true}]) {
+  control={offered:true,recognized:true,blocked:false,...patch};assert.equal((await confirmHostelworldEntry(page)).clicked,false);
+ }
+ assert.equal(clicks,1);
+ page.url=()=> 'https://inbox.hostelworld.com/';assert.equal((await confirmHostelworldEntry(page)).clicked,false);
+ page.url=()=> 'https://foreign.example/login/'+ 'b'.repeat(32);await assert.rejects(confirmHostelworldEntry(page),/portal_changed/);
+});
+
+test('confirmation recognition rejects resend, reset and human verification labels',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ for(const [label,allowed] of [['Log in',true],['Click here to log in',true],['Continue to Inbox',true],['Request a new link',false],['Reset password',false],['Verify you are human',false],['Delete account',false]]) {
+  let clicked=false;
+  const button={disabled:false,textContent:label,getClientRects:()=>[{}]};
+  const document={body:{innerText:label},querySelectorAll:()=>[button],querySelector:()=>null};
+  const page={url:()=> 'https://inbox.hostelworld.com/login/'+ 'c'.repeat(32),
+   evaluate:async fn=>runInNewContext('('+fn.toString()+')()',{document}),
+   waitForNavigation:async()=>{},click:async()=>{clicked=true;}};
+  await confirmHostelworldEntry(page);assert.equal(clicked,allowed,label);
+ }
 });
