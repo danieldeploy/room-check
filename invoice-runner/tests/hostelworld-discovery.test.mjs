@@ -81,7 +81,9 @@ test('prepared email challenge precedes submission and discovery never validates
 });
 
 test('truncated or invalid fields stop before submission without exposing credentials', async () => {
-  for (const fields of [{ fields_match: false, form_valid: true }, { fields_match: true, form_valid: false }]) {
+  for (const fields of [{ fields_match: false, form_valid: true,
+    mismatched_fields: ['Username', 'PRIVATE_SECRET'], oversized_fields: ['Username', 'PRIVATE_SECRET'] },
+  { fields_match: true, form_valid: false }]) {
     const f = flow(); const evaluate = f.page.evaluate;
     f.page.evaluate = async fn => String(fn).includes('fields_match') ? fields : evaluate(fn);
     const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
@@ -90,7 +92,9 @@ test('truncated or invalid fields stop before submission without exposing creden
     assert.equal(result.login_attempted, false);
     assert.equal(f.events.includes('submit'), false);
     assert.equal(f.events.includes('receive'), false);
-    assert.doesNotMatch(JSON.stringify(result), /fixture-user|fixture-password/);
+    assert.deepEqual(result.submission.mismatched_fields, fields.mismatched_fields ? ['Username'] : []);
+    assert.deepEqual(result.submission.oversized_fields, fields.oversized_fields ? ['Username'] : []);
+    assert.doesNotMatch(JSON.stringify(result), /fixture-user|fixture-password|PRIVATE_SECRET/);
   }
 });
 
@@ -108,7 +112,7 @@ test('failed sign-in records only bounded POST evidence and detaches its observe
   };
   const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
   assert.deepEqual(result.submission, { fields_match: true, form_valid: true, navigation_observed: true,
-    post_observed: true, response_status: 302 });
+    post_observed: true, response_status: 302, mismatched_fields: [], oversized_fields: [] });
   assert.equal(detached, true);
   assert.doesNotMatch(JSON.stringify(result), /FIXTURE_SECRET|fixture-password|other.example/);
 });
