@@ -1,4 +1,4 @@
-name: Hostelworld City header condition probe
+name: Hostelworld City generated filter comparison
 on:
   push:
     branches: [agent/room-item-assignments]
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           persist-credentials: false
-      - name: Compare recent authentication header conditions without reading the body
+      - name: Compare generated filter structure without reading messages
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
@@ -55,7 +55,7 @@ jobs:
               if stamp.isdigit() and int(stamp)>=int(time.time())-3600 and re.fullmatch(r'/home/city/mail/[a-zA-Z0-9.-]+/[a-zA-Z0-9_.+-]+/\.HOSTELWORLD/?',destination):
                   folders.add(destination)
           if len(folders)!=1: raise RuntimeError('ambiguous_recent_authentication_folder')
-          source=pathlib.Path('deploy/hostelworld-mail-header-probe.php').read_text().removeprefix('<?php\n')
+          source=pathlib.Path('deploy/hostelworld-filter-source-probe.php').read_text().removeprefix('<?php\n')
           # Fixed reviewed source encoded only to keep cron on one line.
           php="eval(base64_decode('"+base64.b64encode(source.encode()).decode()+"'));"
           body='umask 077; if mkdir '+shlex.quote(directory)+' 2>/dev/null; then cd /home/city; /usr/local/bin/php -r '+shlex.quote(php)+' -- '+shlex.quote(next(iter(folders)))+' > '+shlex.quote(directory+'/result.json')+' 2>/dev/null; fi'
@@ -71,10 +71,11 @@ jobs:
                   time.sleep(5)
                   result=read_result(directory)
                   if isinstance(result,dict): break
-              allowed=['found','raw_from_matches','raw_subject_matches','decoded_from_matches','decoded_subject_matches','decode_available']
-              facts={k:v for k,v in (result or {}).items() if k in allowed and type(v) is bool}
-              if isinstance(result,dict) and type(result.get('at')) is int: facts['at']=result['at']
-              print(json.dumps({'city_header_conditions':facts}))
+              values=(result or {}).get('compiled_filters',{})
+              allowed=['readable','own_rule','own_pipe','folder','has_pipe_action','has_finish']
+              facts={label:{k:v for k,v in row.items() if k in allowed and type(v) is bool}
+                  for label,row in values.items() if label in ['account','domain','mailbox'] and isinstance(row,dict)}
+              print(json.dumps({'city_compiled_filter_structure':facts}))
           finally:
               found=own_rows()
               if len(found)>1: raise RuntimeError('ambiguous_probe_cleanup')
