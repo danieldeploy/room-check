@@ -1,0 +1,36 @@
+name: Regenerate verified City Hostelworld filter
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/hostelworld-city-refresh.yml]
+permissions:
+  contents: read
+concurrency:
+  group: management-hub-production
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Verify existing rule, regenerate through cPanel and verify again
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          python3 - <<'PYCODE'
+          import sys,io,contextlib
+          sys.path.insert(0,'deploy')
+          from hostelworld_filters import FilterAPI
+          from hostelworld_refresh_filter import refresh_city
+          try:
+              with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                  refresh_city(FilterAPI('city'))
+          except Exception:
+              print('{"city_hostelworld_filter":"failed_requires_inspection"}')
+              sys.exit(1)
+          print('{"city_hostelworld_filter":"regenerated_and_verified"}')
+          PYCODE
