@@ -42,6 +42,19 @@ jobs:
           for row in rows:
               print(json.dumps({'city_pipe_file':{'exists':bool(row.get('exists')),
                   'owner_matches':row.get('user')=='city','mode':str(row.get('nicemode')) if re.fullmatch('[0-7]{3,4}',str(row.get('nicemode'))) else None}}))
+          # API2 statfiles explicitly supplies the owner name, unlike UAPI builds
+          # that return only numeric uid/gid. Read metadata, never script/key contents.
+          query=urllib.parse.urlencode({'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,
+              'cpanel_jsonapi_module':'Fileman','cpanel_jsonapi_func':'statfiles','dir':'/home/city',
+              'files':'hostelworld-city-auth-pipe.php|hostelworld-city-auth-status.json'})
+          req=urllib.request.Request(WHM_ORIGIN+'/json-api/cpanel?'+query,
+              headers={'Authorization':'whm fazenda:'+config.token})
+          with api.opener.open(req,timeout=20) as r: metadata=json.loads(r.read(65536))
+          for row in metadata.get('cpanelresult',{}).get('data',[]):
+              if row.get('file') not in ['hostelworld-city-auth-pipe.php','hostelworld-city-auth-status.json']: continue
+              print(json.dumps({'city_file_owner':{'file':row['file'],'exists':bool(row.get('exists')),
+                  'owner_present':'user' in row,'owner':row.get('user') if row.get('user') in ['city','root','welcome'] else 'other',
+                  'mode':str(row.get('nicemode')) if re.fullmatch('[0-7]{3,4}',str(row.get('nicemode'))) else None}}))
           value=read('Variables','get_server_information',name='php_system_default_version')
           if isinstance(value,dict):
               version=value.get('php_system_default_version')
@@ -51,15 +64,9 @@ jobs:
           own=[i for i,row in enumerate(rows) if row.get('filtername')=='Room Check Hostelworld Auth v1']
           print(json.dumps({'city_filters':{'count':len(rows),'own_indices':own,
               'earlier_delivery_actions':sum(1 for row in rows[:own[0] if own else 0] for a in row.get('actions',[]) if a.get('action') in ['save','finish','fail','redirect','discard'])}}))
-          query=urllib.parse.urlencode({'api.version':1,'cpanel.user':'city','cpanel.module':'Fileman',
-              'cpanel.function':'get_file_content','dir':'/home/city','file':'hostelworld-city-auth-status.json'})
-          req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel?'+query,
-              headers={'Authorization':'whm fazenda:'+config.token})
-          with api.opener.open(req,timeout=20) as r: data=json.loads(r.read(65536))
-          result=data.get('data',{}).get('uapi',{})
-          if result.get('status')!=1:
+          value=read('Fileman','get_file_content',dir='/home/city',file='hostelworld-city-auth-status.json')
+          if value is None:
               print(json.dumps({'city_auth_status':'not_available'})); sys.exit(0)
-          value=result.get('data',{})
           if isinstance(value,list): value=value[0]
           try: facts=json.loads(value.get('content',''))
           except Exception:
