@@ -6,7 +6,7 @@ ini_set('display_errors','0'); ini_set('log_errors','0');
 $dir=$argv[1]??'';
 if (!preg_match('~\A/home/city/mail/([a-zA-Z0-9.-]+)/([a-zA-Z0-9_.+-]+)/\.HOSTELWORLD/?\z~',$dir,$m)) exit(1);
 if (in_array($m[1],['.','..'],true) || in_array($m[2],['.','..'],true)) exit(1);
-$files=['account'=>'/home/city/.filter','domain'=>'/etc/vfilters/'.$m[1],
+$files=['account'=>'/home/city/.cpanel/filter','domain'=>'/etc/vfilters/'.$m[1],
     'mailbox'=>'/home/city/etc/'.$m[1].'/'.$m[2].'/filter'];
 $facts=[];
 foreach ($files as $label=>$file) {
