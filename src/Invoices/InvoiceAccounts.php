@@ -192,6 +192,13 @@ final class InvoiceAccounts
             'imap_host', 'imap_user', 'imap_password', 'imap_mailbox', 'email_sender', 'email_recipient', 'email_subject'] as $key) {
             if (isset($input[$key]) && $input[$key] !== '') {
                 if (!is_string($input[$key]) || strlen($input[$key]) > 2048 || str_contains($input[$key], "\0")) throw new RuntimeException('invalid_request');
+                // Match the portal's maxlength=20 UTF-16 code-unit limit. Never
+                // silently truncate an identifier before saving or signing in.
+                if ($account['portal']==='hostelworld' && $key==='identifier'
+                    && (!mb_check_encoding($input[$key],'UTF-8')
+                        || strlen(mb_convert_encoding($input[$key],'UTF-16LE','UTF-8'))>40)) {
+                    throw new RuntimeException('hostelworld_username_length');
+                }
                 $data[$key] = $input[$key];
             }
         }

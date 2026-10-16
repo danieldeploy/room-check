@@ -17,6 +17,20 @@ try {
     hwAccountCheck(($credentials['hostel_number']??'')==='77759','Hostelworld account number retained');
     hwAccountCheck(array_intersect(['imap_host','imap_user','imap_password','imap_mailbox'],array_keys($credentials))===[],'mailbox access credentials absent');
     hwAccountCheck((string)$pdo->query('SELECT auth_method FROM invoice_accounts WHERE id='.$id)->fetchColumn()==='email','email 2FA configured');
+    foreach ([str_repeat('a',21),str_repeat("\u{1F600}",11)] as $oversized) {
+        try {
+            $accounts->saveCredentials($vault,$id,['identifier'=>$oversized,'password'=>'must-not-replace']);
+            throw new RuntimeException('oversized username accepted');
+        } catch (RuntimeException $e) { hwAccountCheck($e->getMessage()==='hostelworld_username_length','specific length error'); }
+        hwAccountCheck($accounts->credentials($vault,$id)===$credentials,'invalid update preserves all credentials');
+    }
+    $accounts->saveCredentials($vault,$id,['identifier'=>str_repeat('a',20),'password'=>'']);
+    hwAccountCheck($accounts->credentials($vault,$id)['identifier']===str_repeat('a',20),'20-character boundary accepted');
+    hwAccountCheck($accounts->credentials($vault,$id)['password']==='portal-secret','username-only correction preserves password');
+    $accounts->saveCredentials($vault,$id,['identifier'=>'manager']);
+    $booking=$accounts->create('booking','Booking fixture',['fixture'=>'Fixture'],'password');
+    $accounts->saveCredentials($vault,$booking,['identifier'=>str_repeat('b',30),'password'=>'fixture-only']);
+    hwAccountCheck($accounts->credentials($vault,$booking)['identifier']===str_repeat('b',30),'other portal limits unchanged');
     // Switching an account previously configured with IMAP to filtered delivery deletes mailbox secrets.
     $old=$credentials+['imap_host'=>'imap.example.test','imap_user'=>'mail-user','imap_password'=>'mail-secret','imap_mailbox'=>'INBOX'];
     $vault->save(InvoiceAccounts::secretName($id,'credentials'),$old);
