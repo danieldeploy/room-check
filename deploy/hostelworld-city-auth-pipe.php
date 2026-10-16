@@ -1,6 +1,8 @@
-#!/usr/local/bin/php -q
+#!/opt/cpanel/ea-php81/root/usr/bin/php -q
 <?php
 declare(strict_types=1);
+// Use the installed PHP 8.1 CLI directly: mail delivery must not depend on
+// ea-php-cli choosing an interpreter from its working directory or environment.
 if (PHP_SAPI!=='cli') { http_response_code(404); exit; }
 ini_set('display_errors','0'); ini_set('log_errors','0'); error_reporting(0); umask(0077);
 function recordStage(string $stage,int $status=0,?bool $accepted=null): void {
