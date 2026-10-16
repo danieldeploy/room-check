@@ -36,6 +36,19 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   const snapshots = [];
   let broker;
   let authSignals;
+  const submission = { fields_match: false, form_valid: false, navigation_observed: false,
+    post_observed: false, response_status: null };
+  const onResponse = response => {
+    try {
+      const url = new URL(response.url());
+      if (url.origin === ORIGIN && url.pathname === '/trylogin.php'
+          && response.request().method() === 'POST') {
+        submission.post_observed = true;
+        const status = response.status();
+        if (Number.isInteger(status) && status >= 100 && status <= 599) submission.response_status = status;
+      }
+    } catch { /* Only bounded metadata may leave this observer. */ }
+  };
   try {
     await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded' });
     ownUrl(page.url());
@@ -67,8 +80,23 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
       await page.$eval(selector, el => { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.type(selector, String(value));
     }
+    stage = 'verify_filled_form';
+    // Compare inside the page; never return values, lengths or validation text.
+    const filled = await page.evaluate(expected => {
+      const form = document.querySelector('#loginForm');
+      return {
+        fields_match: Object.entries(expected).every(([id, value]) => document.getElementById(id)?.value === value),
+        form_valid: !!form && [...form.elements].every(el => !el.willValidate || el.validity.valid),
+      };
+    }, { HostelNumber: String(input.credentials.hostel_number), Username: String(input.credentials.identifier),
+      Password: String(input.credentials.password) });
+    submission.fields_match = filled.fields_match === true;
+    submission.form_valid = filled.form_valid === true;
+    if (!submission.fields_match || !submission.form_valid) fail('auth_unconfigured');
     stage = 'submit_credentials'; attempted = true;
-    await Promise.all([page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}),
+    page.on('response', onResponse);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 })
+      .then(() => { submission.navigation_observed = true; }).catch(() => {}),
       page.click('#loginForm input[type="submit"]')]);
     ownUrl(page.url());
     stage = 'secure_link_requested';
@@ -110,6 +138,10 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   } catch (error) {
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: authenticated, failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, auth_signals: authSignals, location: publicLocation('hostelworld', page.url()), snapshots, responses: [] };
-  } finally { if (broker) await broker.close(); }
+      failure_stage: stage, auth_signals: authSignals, submission,
+      location: publicLocation('hostelworld', page.url()), snapshots, responses: [] };
+  } finally {
+    page.off?.('response', onResponse);
+    if (broker) await broker.close();
+  }
 }
