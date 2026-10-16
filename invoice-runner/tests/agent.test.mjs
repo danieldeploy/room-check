@@ -1,6 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentClient, documentParts, validateEndpoint } from '../agent-client.mjs';
+import { AgentClient, documentParts, validateEndpoint, validateChallengeValue } from '../agent-client.mjs';
+
+test('agent delivers bound Hostelworld links and preserves numeric OTP validation', () => {
+  const input = { portal: 'hostelworld', authMethod: 'email',
+    hostelworldAuthTargets: [{ host: 'inbox.hostelworld.com', path: '/login/' }] };
+  const link = 'https://inbox.hostelworld.com/login/' + 'a'.repeat(32);
+  for (const value of [link, link + '?Language=English']) {
+    assert.equal(validateChallengeValue(input, 'email', value), value);
+  }
+  for (const value of ['123456', 123456, link + '#x', link + '?token=x', link + '?Language=en&Language=pt',
+    link.replace('https:', 'http:'), link.replace('inbox.', 'evil.'), link.replace('/login/', '/other/'),
+    link.replace('https://', 'https://user@'), link + '/', link + '\n']) {
+    assert.throws(() => validateChallengeValue(input, 'email', value), { message: 'auth_invalid' });
+  }
+  for (const changed of [{ ...input, hostelworldAuthTargets: [] }, { ...input, authMethod: 'sms' },
+    { ...input, hostelworldAuthTargets: [...input.hostelworldAuthTargets, ...input.hostelworldAuthTargets] }]) {
+    assert.throws(() => validateChallengeValue(changed, 'email', link));
+  }
+  const booking = { portal: 'booking', authMethod: 'sms' };
+  assert.equal(validateChallengeValue(booking, 'sms', '012345'), '012345');
+  for (const value of [link, '12345', '1234567', 123456]) assert.throws(() => validateChallengeValue(booking, 'sms', value));
+});
 
 const endpoint = 'https://hub.example.test/invoice-agent.php';
 const token = 'a'.repeat(64);
