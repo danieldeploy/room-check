@@ -1,6 +1,8 @@
 import { SecondFactor } from './second-factor.mjs';
 import { PortalError } from './booking.mjs';
 import { inspectPortalPage, publicLocation } from './map-diagnostics.mjs';
+import { guardPortalRequests } from './controlled-browser.mjs';
+import { portalUrl } from './portal.mjs';
 
 const ORIGIN = 'https://inbox.hostelworld.com';
 const fail = code => { throw new PortalError(code); };
@@ -17,6 +19,10 @@ function ownUrl(value) {
   try { url = new URL(value); } catch { fail('portal_changed'); }
   if (url.origin !== ORIGIN || url.username || url.password) fail('portal_changed');
   return url;
+}
+function diagnosticLocation(page) {
+  try { return publicLocation('hostelworld', page.url()); }
+  catch { return null; } // A failed new tab can still be about:blank.
 }
 // Server-rendered property metadata is compared in the page; no script text,
 // account content, credential values or authentication URLs leave the browser.
@@ -87,13 +93,17 @@ export async function hostelworldSessionSignals(page) {
     };
   });
 }
-export async function discoverHostelworld(page, input, dependencies = {}) {
+export async function discoverHostelworld(initialPage, input, dependencies = {}) {
+  let page = initialPage;
+  let authPage;
+  let releaseAuthGuard;
   let stage = 'login_structure', attempted = false, authenticated = false;
   const snapshots = [];
   let broker;
   let authSignals;
   let sessionSignals;
-  let postLinkLoginAttempted = false;
+  let secureLinkNewTab = false;
+  const linkNavigation = { request_matches: false, response_status: null, redirect_count: 0 };
   const submission = { fields_match: false, form_valid: false, navigation_observed: false,
     post_observed: false, response_status: null, mismatched_fields: [], oversized_fields: [] };
   const onResponse = response => {
@@ -149,27 +159,36 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
       fail(authSignals.human_challenge ? 'human_verification' : authSignals.credential_error ? 'auth_invalid' : 'portal_changed');
     stage = 'waiting_auth';
     const link = await broker.value({ method: 'email', kind: 'link', linkHost: 'inbox.hostelworld.com', linkPath: '/login/' });
+    const destination = ownUrl(link).href;
+    stage = 'open_auth_tab';
+    // Match the confirmed email-link flow: preserve the waiting tab and open
+    // a new tab in its existing browser context. No cookie export or new profile.
+    const context = initialPage.browserContext();
+    authPage = await context.newPage();
+    if (authPage === initialPage || authPage.browserContext() !== context) fail('browser_unavailable');
+    authPage.setDefaultNavigationTimeout(30000);
+    authPage.setDefaultTimeout(15000);
+    releaseAuthGuard = await guardPortalRequests(authPage, 'hostelworld', portalUrl, [input.credentials.password]);
+    page = authPage;
+    secureLinkNewTab = true;
     stage = 'consume_link';
-    await page.goto(ownUrl(link).href, { waitUntil: 'domcontentloaded' });
+    const response = await page.goto(destination, { waitUntil: 'domcontentloaded' });
+    // Only bounded transport facts leave the browser; never token URLs/headers.
+    if (response) {
+      const requests = [...response.request().redirectChain(), response.request()];
+      linkNavigation.request_matches = requests[0]?.url() === destination;
+      linkNavigation.redirect_count = Math.min(20, requests.length - 1);
+      const status = response.status();
+      if (Number.isInteger(status) && status >= 100 && status <= 599) linkNavigation.response_status = status;
+    }
+    ownUrl(page.url());
     stage = 'account_check';
     sessionSignals = await hostelworldSessionSignals(page);
     if (sessionSignals.human_challenge) fail('human_verification');
     if (sessionSignals.invalid_link) fail('auth_invalid');
     if (sessionSignals.error_notice) fail('needs_auth');
-    // A secure link can establish device trust and return to the sign-in form.
-    // Continue that visible form once; never request/consume another email in a loop.
-    if (sessionSignals.login_form) {
-      stage = 'post_link_login';
-      await requireLoginForm(page);
-      await fillLoginFields(page, input, submission);
-      postLinkLoginAttempted = true;
-      await Promise.all([page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}),
-        page.click('#loginForm input[type="submit"]')]);
-      ownUrl(page.url());
-      sessionSignals = await hostelworldSessionSignals(page);
-    }
-    if (sessionSignals.human_challenge) fail('human_verification');
-    if (sessionSignals.invalid_link) fail('auth_invalid');
+    // The email link should directly authenticate its new tab. A returned
+    // sign-in form is a failed session, not a reason to request another email.
     if (sessionSignals.login_form || sessionSignals.secure_link_notice || sessionSignals.error_notice) fail('needs_auth');
     stage = 'account_check';
     if (!await hostelworldIdentity(page, input.property)) fail('account_mismatch');
@@ -185,15 +204,19 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
     }));
     stage = 'invoices_visible';
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
-      authenticated_session: true, account_verified: true, post_link_login_attempted: postLinkLoginAttempted, navigation_stage: stage,
+      authenticated_session: true, account_verified: true, secure_link_new_tab: secureLinkNewTab,
+      link_navigation: linkNavigation, post_link_login_attempted: false, navigation_stage: stage,
       location: publicLocation('hostelworld', page.url()), snapshots, responses: [], invoice_structure: invoices };
   } catch (error) {
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: authenticated, failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, auth_signals: authSignals, session_signals: sessionSignals, post_link_login_attempted: postLinkLoginAttempted, submission,
-      location: publicLocation('hostelworld', page.url()), snapshots, responses: [] };
+      failure_stage: stage, auth_signals: authSignals, session_signals: sessionSignals,
+      secure_link_new_tab: secureLinkNewTab, link_navigation: linkNavigation, post_link_login_attempted: false, submission,
+      location: diagnosticLocation(page), snapshots, responses: [] };
   } finally {
-    page.off?.('response', onResponse);
+    initialPage.off?.('response', onResponse);
+    if (releaseAuthGuard) await releaseAuthGuard().catch(() => {});
+    if (authPage && authPage !== initialPage) await authPage.close().catch(() => {});
     if (broker) await broker.close();
   }
 }
