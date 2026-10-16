@@ -50,6 +50,7 @@ function flow(identity = true) {
       if (body.includes('ready_state')) return { ready_state: 'complete' };
       if (body.includes('formReady')) throw new Error('unused');
       if (body.includes('form.method')) return true;
+      if (body.includes('fields_match')) return { fields_match: true, form_valid: true };
       if (body.includes('sent_notice')) return { sent_notice: true, hostel_matches: true };
       if (body.includes('const ids')) { inspect++; return identity; }
       if (body.includes('pdf_links')) return { pdf_links: 2, pagination: true, issue_date_column: false };
@@ -60,6 +61,7 @@ function flow(identity = true) {
     type: async () => events.push('type'),
     click: async () => { events.push('submit'); url = 'https://inbox.hostelworld.com/trylogin.php'; },
     waitForNavigation: async () => {},
+    on: () => {}, off: () => {},
   };
   const broker = { prepare: async () => events.push('prepare'), value: async () => {
     events.push('receive'); return 'https://inbox.hostelworld.com/login/' + 'a'.repeat(32);
@@ -76,6 +78,39 @@ test('prepared email challenge precedes submission and discovery never validates
   assert.ok(f.events.indexOf('receive') < f.events.indexOf('consume'));
   assert.equal(f.events.at(-1), 'close');
   assert.doesNotMatch(JSON.stringify(result), /fixture-|a{32}|cookies/);
+});
+
+test('truncated or invalid fields stop before submission without exposing credentials', async () => {
+  for (const fields of [{ fields_match: false, form_valid: true }, { fields_match: true, form_valid: false }]) {
+    const f = flow(); const evaluate = f.page.evaluate;
+    f.page.evaluate = async fn => String(fn).includes('fields_match') ? fields : evaluate(fn);
+    const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+    assert.equal(result.failure_code, 'auth_unconfigured');
+    assert.equal(result.failure_stage, 'verify_filled_form');
+    assert.equal(result.login_attempted, false);
+    assert.equal(f.events.includes('submit'), false);
+    assert.equal(f.events.includes('receive'), false);
+    assert.doesNotMatch(JSON.stringify(result), /fixture-user|fixture-password/);
+  }
+});
+
+test('failed sign-in records only bounded POST evidence and detaches its observer', async () => {
+  const f = flow(); const evaluate = f.page.evaluate;
+  f.page.evaluate = async fn => String(fn).includes('sent_notice') ? { sent_notice: false } : evaluate(fn);
+  let listener, detached = false;
+  f.page.on = (event, fn) => { assert.equal(event, 'response'); listener = fn; };
+  f.page.off = (event, fn) => { detached = event === 'response' && fn === listener; };
+  f.page.click = async () => {
+    listener({ url: () => 'https://inbox.hostelworld.com/trylogin.php?private=FIXTURE_SECRET',
+      request: () => ({ method: () => 'POST' }), status: () => 302 });
+    listener({ url: () => 'https://other.example/trylogin.php',
+      request: () => ({ method: () => 'POST' }), status: () => 500 });
+  };
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  assert.deepEqual(result.submission, { fields_match: true, form_valid: true, navigation_observed: true,
+    post_observed: true, response_status: 302 });
+  assert.equal(detached, true);
+  assert.doesNotMatch(JSON.stringify(result), /FIXTURE_SECRET|fixture-password|other.example/);
 });
 test('wrong property stops before invoice navigation', async () => {
   const f = flow(false); const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
