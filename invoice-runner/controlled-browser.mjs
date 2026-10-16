@@ -2,6 +2,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { assertPrivateDirectory } from './private-storage.mjs';
 
+// Compare Hostelworld discovery in ordinary windowed Chrome on the Windows
+// desktop. Keep the disposable profile and all existing launch safeguards.
+// Neither portal data nor runtime configuration can supply arbitrary options.
+export function isolatedBrowserLaunchOptions(input, runtime, profile, platform = process.platform) {
+  const windowed = platform === 'win32' && input.action === 'discover'
+    && input.portal === 'hostelworld'
+    && ((input.accountId === 2 && String(input.property) === '305209')
+      || (input.accountId === 3 && String(input.property) === '77759'));
+  return { headless: !windowed, executablePath: runtime.executablePath || undefined,
+    userDataDir: profile, timeout: 30000, dumpio: false };
+}
+
 // Chrome writes an endpoint inside each fixed, ACL-restricted persistent profile.
 // Never accept an endpoint, host or profile path from a portal or a Hub job.
 export function controlledBrowserProfile(input) {

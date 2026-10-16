@@ -6,7 +6,36 @@ import os from 'node:os';
 import path from 'node:path';
 import { portalUrl } from '../portal.mjs';
 import { parseControlledEndpoint, controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions,
-  controlledBookingPage, startBookingCollection, guardPortalRequests, usesControlledBrowser } from '../controlled-browser.mjs';
+  controlledBookingPage, startBookingCollection, guardPortalRequests, usesControlledBrowser,
+  isolatedBrowserLaunchOptions } from '../controlled-browser.mjs';
+
+test('Windows Hostelworld inspection uses a fresh window without accepting launch overrides', () => {
+  const runtime = { executablePath: 'C:\\Chrome\\chrome.exe', headless: true,
+    args: ['--no-sandbox'], userDataDir: 'C:\\personal-profile', dumpio: true };
+  const profile = 'C:\\private\\.browser-fixture';
+  for (const [accountId, property] of [[2, '305209'], [3, '77759']]) {
+    assert.deepEqual(isolatedBrowserLaunchOptions({ action: 'discover', portal: 'hostelworld', accountId, property,
+      headless: true, args: ['--no-sandbox'], userDataDir: 'C:\\other-profile' }, runtime, profile, 'win32'), {
+      headless: false, executablePath: runtime.executablePath, userDataDir: profile, timeout: 30000, dumpio: false,
+    });
+  }
+});
+
+test('windowed inspection cannot change other portals, accounts, actions or server launches', () => {
+  const input = { action: 'discover', portal: 'hostelworld', accountId: 2, property: '305209' };
+  for (const platform of ['linux', 'darwin']) {
+    assert.equal(isolatedBrowserLaunchOptions(input, {}, '/private/profile', platform).headless, true);
+  }
+  for (const change of [{ portal: 'booking' }, { portal: 'airbnb' }, { accountId: 1 },
+    { accountId: '2' }, { property: '77759' }, { property: undefined },
+    ...['preflight', 'login', 'collect', 'verify'].map(action => ({ action }))]) {
+    const options = isolatedBrowserLaunchOptions({ ...input, ...change }, { headless: false }, '/private/profile', 'win32');
+    assert.equal(options.headless, true);
+    assert.equal(options.userDataDir, '/private/profile');
+    assert.equal(options.executablePath, undefined);
+    assert.equal(options.dumpio, false);
+  }
+});
 
 test('Booking control endpoint is pinned to local Chrome', () => {
   assert.equal(parseControlledEndpoint('38617\n/devtools/browser/12345678-abcd-1234-abcd-123456789012\n'),
