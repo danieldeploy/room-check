@@ -6,6 +6,7 @@ require_once $root.'/src/UI/SessionBar.php';
 require_once $root.'/src/Invoices/InvoiceWorkspace.php';
 require_once $root.'/src/Invoices/InvoiceAuth.php';
 require_once $root.'/src/Invoices/BookingLoginStatus.php';
+require_once $root.'/src/Invoices/HostelworldHostingStatus.php';
 require_once $root.'/src/Invoices/InvoiceDrive.php';
 require_once $root.'/src/Invoices/InvoiceToconline.php';
 require_once $root.'/src/Invoices/InvoiceTocMailbox.php';
