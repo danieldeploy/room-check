@@ -52,6 +52,8 @@ function flow(identity = true) {
       if (body.includes('form.method')) return true;
       if (body.includes('fields_match')) return { fields_match: true, form_valid: true };
       if (body.includes('sent_notice')) return { sent_notice: true, hostel_matches: true };
+      if (body.includes('property_marker')) return { login_form: !identity, property_marker: identity,
+        invoice_link: identity, secure_link_notice: false };
       if (body.includes('const ids')) { inspect++; return identity; }
       if (body.includes('pdf_links')) return { pdf_links: 2, pagination: true, issue_date_column: false };
       throw new Error('unexpected evaluation');
