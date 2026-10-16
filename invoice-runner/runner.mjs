@@ -6,7 +6,8 @@ import { PortalError, validateMap, authenticate, collect } from './booking.mjs';
 import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCookies } from './portal.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
 import { controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions, controlledBookingPage,
-  controlledBookingPasswordPage, startBookingCollection, guardPortalRequests, usesControlledBrowser } from './controlled-browser.mjs';
+  controlledBookingPasswordPage, startBookingCollection, guardPortalRequests, usesControlledBrowser,
+  isolatedBrowserLaunchOptions } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
@@ -65,13 +66,14 @@ try {
     if (runtime.executablePath && !path.isAbsolute(runtime.executablePath)) throw new PortalError('browser_unavailable');
     const { default: puppeteer } = await import('puppeteer');
     connected = usesControlledBrowser(input);
+    let launchOptions;
     if (connected) {
       browser = await puppeteer.connect(controlledBrowserConnectOptions(
         await controlledBrowserEndpoint(root, browserPurpose), browserPurpose, input.action));
     } else {
       profile = await fs.mkdtemp(path.join(root, '.browser-'));
-      browser = await puppeteer.launch({ headless: true, executablePath: runtime.executablePath || undefined,
-        userDataDir: profile, timeout: 30000, dumpio: false });
+      launchOptions = isolatedBrowserLaunchOptions(input, runtime, profile);
+      browser = await puppeteer.launch(launchOptions);
     }
     const selection = connected ? await controlledBookingPage(browser, browserPurpose,
       { fromEntry: ['collect', 'verify'].includes(input.action) })
@@ -119,6 +121,7 @@ try {
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
         const { discoverPortal, bookingLoginCode } = await import('./discover-portal.mjs');
         const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' }, loginHooks);
+        if (input.portal === 'hostelworld') diagnostic.browser_mode = launchOptions?.headless === false ? 'window' : 'headless';
         const code = input.action === 'login' ? bookingLoginCode(diagnostic) : diagnostic.failure_code || 'ok';
         // Leave an actual human challenge visible in the persistent Chrome
         // profile so the owner can complete it there. All listeners are still
