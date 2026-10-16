@@ -37,7 +37,7 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   let broker;
   let authSignals;
   const submission = { fields_match: false, form_valid: false, navigation_observed: false,
-    post_observed: false, response_status: null };
+    post_observed: false, response_status: null, mismatched_fields: [], oversized_fields: [] };
   const onResponse = response => {
     try {
       const url = new URL(response.url());
@@ -87,11 +87,19 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
       return {
         fields_match: Object.entries(expected).every(([id, value]) => document.getElementById(id)?.value === value),
         form_valid: !!form && [...form.elements].every(el => !el.willValidate || el.validity.valid),
+        mismatched_fields: Object.entries(expected).filter(([id, value]) => document.getElementById(id)?.value !== value).map(([id]) => id),
+        oversized_fields: Object.entries(expected).filter(([id, value]) => {
+          const limit = document.getElementById(id)?.maxLength;
+          return Number.isInteger(limit) && limit >= 0 && value.length > limit;
+        }).map(([id]) => id),
       };
     }, { HostelNumber: String(input.credentials.hostel_number), Username: String(input.credentials.identifier),
       Password: String(input.credentials.password) });
     submission.fields_match = filled.fields_match === true;
     submission.form_valid = filled.form_valid === true;
+    for (const key of ['mismatched_fields', 'oversized_fields']) {
+      submission[key] = ['HostelNumber', 'Username', 'Password'].filter(id => filled[key]?.includes(id));
+    }
     if (!submission.fields_match || !submission.form_valid) fail('auth_unconfigured');
     stage = 'submit_credentials'; attempted = true;
     page.on('response', onResponse);
