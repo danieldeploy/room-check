@@ -6,6 +6,27 @@ from unittest.mock import patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"deploy"))
 import hostelworld_filters as h
 class Tests(unittest.TestCase):
+    def test_refresh_only_exact_existing_city_filter(self):
+        from unittest.mock import Mock
+        from hostelworld_refresh_filter import refresh_city
+        import copy
+        p=h.expected('city',3)
+        current={'filtername':h.NAME,'rules':[
+            {'part':p['part1'],'match':p['match1'],'val':p['val1'],'opt':'and'},
+            {'part':p['part2'],'match':p['match2'],'val':p['val2']}],
+            'actions':[{'action':'save','dest':p['dest1']},{'action':'pipe','dest':p['dest2']}]}
+        api=Mock(account='city'); api.call.side_effect=[[current],None,[current]]
+        refresh_city(api)
+        self.assertEqual(api.call.call_args_list[1].kwargs,dict(p,oldfiltername=h.NAME))
+        for prior in ([],[current,{'filtername':'unrelated'}],[dict(current,disabled=1)]):
+            api.call.reset_mock(); api.call.side_effect=[prior]
+            with self.assertRaises(h.DeploymentError): refresh_city(api)
+            self.assertEqual(api.call.call_count,1)
+        bad=copy.deepcopy(current); bad['rules'][0]['val']='unrelated.example'
+        api.call.reset_mock(); api.call.side_effect=[[bad]]
+        with self.assertRaises(h.DeploymentError): refresh_city(api)
+        self.assertEqual(api.call.call_count,1)
+
     def test_migrates_only_exact_old_inbox_filter_and_is_idempotent(self):
         from unittest.mock import Mock
         import copy
