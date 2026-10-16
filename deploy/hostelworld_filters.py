@@ -99,7 +99,8 @@ def expected(account, identifier):
         val1=r"(?i)@(?:[a-z0-9-]+\.)*hostelworld\.com(?:[> \t]|$)",opt1="and",
         part2="$header_subject:",match2="matches",
         val2=r"(?i)(login|sign[ _-]*in|security|verification|code|authentication)",
-        action1="save",dest1="/home/"+account+"/mail/$domain/$local_part/",
+        action1="save",dest1="/home/"+account+"/mail/$domain/$local_part/"+
+            (".Hostelworld/" if account=="welcome" else ".HOSTELWORLD/"),
         action2="pipe",dest2=destination)
 
 def verify_filter(row, params):
@@ -143,7 +144,15 @@ def install(api, identifier):
     params=expected(api.account,identifier)
     matches=[r for r in rows(api.call("Email","list_filters")) if r.get("filtername")==NAME]
     require(len(matches)<=1,"ambiguous_filter")
-    if matches: verify_filter(matches[0],params)
+    if matches:
+        # Migrate only our exact previously verified INBOX filter. Never overwrite
+        # another rule, destination, disabled filter or account binding.
+        try:
+            verify_filter(matches[0],params)
+        except DeploymentError:
+            previous=dict(params,dest1="/home/"+api.account+"/mail/$domain/$local_part/")
+            verify_filter(matches[0],previous)
+            api.call("Email","store_filter",**params)
     else: api.call("Email","store_filter",**params)
     matches=[r for r in rows(api.call("Email","list_filters")) if r.get("filtername")==NAME]
     require(len(matches)==1,"filter_missing_after_creation")
