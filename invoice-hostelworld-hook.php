@@ -25,9 +25,9 @@ try {
     require_once __DIR__.'/lib.php';
     require_once __DIR__.'/src/Invoices/InvoiceAuth.php';
     $config=require __DIR__.'/config.php';
-    (new InvoiceAuth(database(),new InvoiceVault($config['invoices']['private_dir'])))->receiveHostelworldEmail($id,
+    $accepted=(new InvoiceAuth(database(),new InvoiceVault($config['invoices']['private_dir'])))->receiveHostelworldEmail($id,
         ['from'=>$m['from'],'subject'=>$m['subject'],'received_at'=>$m['received_at'],'text'=>$m['code'],'code'=>$m['code']]);
-    http_response_code(202); echo '{"received":true}';
+    http_response_code(202); echo json_encode(['received'=>true,'accepted'=>$accepted]);
 } catch (Throwable $e) {
     http_response_code(in_array($e->getCode(),[400,403],true)?$e->getCode():503);
     echo '{"received":false}';
