@@ -1,4 +1,4 @@
-name: Hostelworld City runtime probe
+name: Hostelworld City header condition probe
 on:
   push:
     branches: [agent/room-item-assignments]
@@ -17,12 +17,12 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           persist-credentials: false
-      - name: Run once with empty input and remove only the temporary cron
+      - name: Compare recent authentication header conditions without reading the body
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           python3 - <<'PYCODE'
-          import os,sys,json,re,time,shlex,urllib.request,urllib.parse
+          import os,sys,json,re,time,shlex,pathlib,base64,urllib.request,urllib.parse
           sys.path.insert(0,'deploy')
           from cpanel_api import Config,CpanelAPI,WHM_ORIGIN
           api=CpanelAPI(Config(token=os.environ['WHM_API_TOKEN'],transport='whm',origin=WHM_ORIGIN))
@@ -46,10 +46,19 @@ jobs:
           run=os.environ['GITHUB_RUN_ID']
           if not re.fullmatch('[0-9]{1,20}',run): raise RuntimeError('invalid_run')
           directory='/home/city/.hostelworld-runtime-'+run
-          # mkdir is the one-shot fence. No mail, credentials or network calls are
-          # provided to the installed pipe; empty input must fail its MIME parser.
-          php='echo json_encode(["php"=>PHP_VERSION,"sapi"=>PHP_SAPI]);'
-          body='umask 077; if mkdir '+shlex.quote(directory)+' 2>/dev/null; then cd /home/city; /usr/local/bin/php -r '+shlex.quote(php)+' > '+shlex.quote(directory+'/php.json')+' 2>/dev/null; /home/city/hostelworld-city-auth-pipe.php </dev/null >/dev/null 2>&1; echo "{\\\"pipe_exit\\\":$?}" > '+shlex.quote(directory+'/result.json')+'; fi'
+          # Use only a confirmed recent Hostelworld delivery folder. No mailbox
+          # identifiers or header values leave the hosting account.
+          folders=set()
+          for row in call('EmailTrack','search',success=1,defer=0):
+              destination=str(row.get('deliveredto',''))
+              stamp=str(row.get('actionunixtime',''))
+              if stamp.isdigit() and int(stamp)>=int(time.time())-3600 and re.fullmatch(r'/home/city/mail/[a-zA-Z0-9.-]+/[a-zA-Z0-9_.+-]+/\.HOSTELWORLD/?',destination):
+                  folders.add(destination)
+          if len(folders)!=1: raise RuntimeError('ambiguous_recent_authentication_folder')
+          source=pathlib.Path('deploy/hostelworld-mail-header-probe.php').read_text().removeprefix('<?php\n')
+          # Fixed reviewed source encoded only to keep cron on one line.
+          php="eval(base64_decode('"+base64.b64encode(source.encode()).decode()+"'));"
+          body='umask 077; if mkdir '+shlex.quote(directory)+' 2>/dev/null; then cd /home/city; /usr/local/bin/php -r '+shlex.quote(php)+' -- '+shlex.quote(next(iter(folders)))+' > '+shlex.quote(directory+'/result.json')+' 2>/dev/null; fi'
           command='/bin/sh -c '+shlex.quote(body)+' >/dev/null 2>&1'
           def own_rows(): return [r for r in call('Cron','listcron') if r.get('command')==command]
           if own_rows(): raise RuntimeError('prior_probe_requires_inspection')
@@ -62,10 +71,10 @@ jobs:
                   time.sleep(5)
                   result=read_result(directory)
                   if isinstance(result,dict): break
-              code=result.get('pipe_exit') if isinstance(result,dict) else None
-              runtime=read_result(directory,'php.json') or {}
-              print(json.dumps({'city_php_runtime':{k:v for k,v in runtime.items() if k in ['php','sapi'] and isinstance(v,str) and re.fullmatch('[A-Za-z0-9_.-]{1,30}',v)}}))
-              print(json.dumps({'runtime_probe':{'completed':type(code) is int,'pipe_exit':code if type(code) is int and 0<=code<=255 else None}}))
+              allowed=['found','raw_from_matches','raw_subject_matches','decoded_from_matches','decoded_subject_matches','decode_available']
+              facts={k:v for k,v in (result or {}).items() if k in allowed and type(v) is bool}
+              if isinstance(result,dict) and type(result.get('at')) is int: facts['at']=result['at']
+              print(json.dumps({'city_header_conditions':facts}))
           finally:
               found=own_rows()
               if len(found)>1: raise RuntimeError('ambiguous_probe_cleanup')
