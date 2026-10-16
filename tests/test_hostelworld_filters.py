@@ -6,6 +6,21 @@ from unittest.mock import patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"deploy"))
 import hostelworld_filters as h
 class Tests(unittest.TestCase):
+    def test_private_hosting_comparison_never_returns_domains_or_mail_data(self):
+        from hostelworld_private_status import summarize
+        trace={'result':'Testing Exim filter file "/etc/vfilters/main.example.test"'}
+        row={'actionunixtime':'10000','deliveredto':'/home/city/mail/mail.example.test/inbox/.HOSTELWORLD/',
+             'sender':'private@example.test','message':'PRIVATE_MAIL_CONTENT'}
+        result=summarize(trace,[row],10010)
+        self.assertTrue(result['tested_filter_identified'])
+        self.assertFalse(result['delivery_uses_tested_domain'])
+        self.assertEqual(set(result),{'version','account_id','at','tested_filter_identified','delivery_uses_tested_domain'})
+        self.assertNotIn('example.test',str(result))
+        self.assertNotIn('PRIVATE_MAIL_CONTENT',str(result))
+        self.assertTrue(summarize({'trace':'/etc/vfilters/mail.example.test'},[row],10010)['delivery_uses_tested_domain'])
+        self.assertFalse(summarize(trace,[row,dict(row,deliveredto='/home/city/mail/other.test/inbox/.HOSTELWORLD/')],10010)['tested_filter_identified'])
+        self.assertFalse(summarize(trace,[row],40000)['tested_filter_identified'])
+
     def test_refresh_only_exact_existing_city_filter(self):
         from unittest.mock import Mock
         from hostelworld_refresh_filter import refresh_city
