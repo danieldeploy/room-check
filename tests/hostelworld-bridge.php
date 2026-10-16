@@ -87,3 +87,41 @@ check(HostelworldSetup::targets($account,$credentials,['77759'=>'City'])===[]);
 check(HostelworldSetup::targets(array_replace($account,['portal'=>'booking']),$credentials,['305209'=>'Welcome'])===[]);
 check(HostelworldSetup::targets(['id'=>3,'portal'=>'hostelworld','auth_method'=>'email'],['hostel_number'=>'77759'],['77759'=>'City'])===[$pathTarget]);
 echo "Hostelworld bootstrap targets require exact account and property bindings.\n";
+
+require_once __DIR__.'/../src/Invoices/HostelworldFolderQueue.php';
+$queueRoot=sys_get_temp_dir().'/hw-folder-'.bin2hex(random_bytes(8));
+mkdir($queueRoot,0700); mkdir($queueRoot.'/mail',0700);
+$folder=$queueRoot.'/mail/example.test/inbox/.HOSTELWORLD';
+mkdir($folder.'/new',0700,true); mkdir($folder.'/cur',0700);
+$fresh="From: security@hostelworld.com\r\nDate: ".gmdate('r')."\r\nSubject: Secure login\r\n\r\n".$pathUrl;
+try {
+    file_put_contents($folder.'/new/first',$fresh);
+    file_put_contents($folder.'/cur/duplicate',$fresh);
+    file_put_contents($folder.'/new/stale','STALE_PRIVATE_MAIL'); touch($folder.'/new/stale',time()-200);
+    file_put_contents($queueRoot.'/mail/unrelated','PRIVATE_UNRELATED_MAIL');
+    symlink($queueRoot.'/mail/unrelated',$folder.'/new/symlink');
+    $calls=0;
+    $consume=static function(string $raw) use (&$calls,$pathTarget): bool {
+        ++$calls; $packet=HostelworldBridge::packet($raw,[$pathTarget]);
+        check($packet!==null && $packet['source']==='city'); return true;
+    };
+    HostelworldFolderQueue::run($queueRoot.'/mail',$queueRoot,$consume);
+    check($calls===1);
+    HostelworldFolderQueue::run($queueRoot.'/mail',$queueRoot,$consume);
+    check($calls===1);
+    $state=file_get_contents($queueRoot.'/hostelworld-city-folder-state.json');
+    check(!str_contains($state,'PRIVATE')&&!str_contains($state,'https:')&&!str_contains($state,'example.test'));
+    check((fileperms($queueRoot.'/hostelworld-city-folder-state.json')&0077)===0);
+    check(file_get_contents($folder.'/new/first')===$fresh);
+    // Failed transfers remain retryable; accepted content stays deduplicated.
+    file_put_contents($folder.'/new/retry',str_replace(str_repeat('a',32),str_repeat('c',32),$fresh));
+    $retries=0;
+    HostelworldFolderQueue::run($queueRoot.'/mail',$queueRoot,static function(string $raw) use (&$retries): bool { ++$retries; return false; });
+    HostelworldFolderQueue::run($queueRoot.'/mail',$queueRoot,static function(string $raw) use (&$retries): bool { ++$retries; return true; });
+    check($retries===2);
+} finally {
+    $items=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($queueRoot,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
+    foreach ($items as $item) { if ($item->isDir()&&!$item->isLink()) rmdir($item->getPathname()); else unlink($item->getPathname()); }
+    rmdir($queueRoot);
+}
+echo "Hostelworld dedicated folder bounds, privacy, deduplication and retry tests passed.\n";
