@@ -128,11 +128,16 @@ try {
           withInvoices: async workPage => { collected = await collectHostelworldInvoices(workPage,input,target,{trace:collectionTrace}); },
         });
         diagnostic.browser_mode = launchOptions.headless ? 'headless' : 'window';
+        if (collectionTrace) collectionTrace.hostelworld = {
+          stage: diagnostic.failure_stage || diagnostic.navigation_stage,
+          authenticated: diagnostic.authenticated_session === true,
+          ...diagnostic.session_readiness,
+        };
         if (diagnostic.failure_code) throw new PortalError(diagnostic.failure_code);
         if (diagnostic.authenticated_session !== true) throw new PortalError('needs_auth');
         const documents = collected?.documents || [];
         process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok',
-          documents, ...(input.action === 'login' ? { diagnostic } : { verification: collected.verification }) }));
+          documents, ...(input.action === 'login' ? { diagnostic } : { verification: collected.verification, collection_trace: collectionTrace }) }));
       } else if (input.action === 'discover' || (input.action === 'login' && input.portal === 'booking')) {
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
         const { discoverPortal, bookingLoginCode } = await import('./discover-portal.mjs');

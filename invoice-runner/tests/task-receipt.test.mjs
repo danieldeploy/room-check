@@ -108,3 +108,13 @@ test('verification receipts distinguish runner failure from server rejection wit
     assert.equal(raw.includes('PRIVATE_'), false);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test('Hostelworld verification receipt contains only bounded readiness facts',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'hw-receipt-'));
+ try {
+  await writeTaskReceipt(root,{id:57,input:{action:'verify',portal:'hostelworld'}},{code:'account_mismatch',collection_trace:{stage:'session',hostelworld:{stage:'account_check',authenticated:false,waited:true,completed:false,expected_property:false,property_count:0,link_page:true,ready:true,url:'PRIVATE_LINK',text:'PRIVATE_TEXT'}}},{accepted:true,state:'failed'});
+  const raw=await fs.readFile(path.join(root,'task-57-receipt.json'),'utf8');
+  assert.equal(raw.includes('PRIVATE_'),false);
+  assert.deepEqual(JSON.parse(raw).hostelworld,{stage:'account_check',authenticated:false,waited:true,completed:false,expected_property:false,link_page:true,ready:true,property_count:0});
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});

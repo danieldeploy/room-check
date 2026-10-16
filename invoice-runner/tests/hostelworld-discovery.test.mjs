@@ -28,7 +28,7 @@ test('Hostelworld login still refuses a missing map', async () => {
     /connector_unconfigured/);
 });
 
-const { hostelworldBinding, discoverHostelworld } = await import('../hostelworld-discovery.mjs');
+const { hostelworldBinding, discoverHostelworld, waitHostelworldSession } = await import('../hostelworld-discovery.mjs');
 const configured = () => ({ action: 'discover', portal: 'hostelworld', accountId: 2, property: '305209',
   authMethod: 'email', credentials: { hostel_number: '305209', identifier: 'fixture-user', password: 'fixture-password' },
   hostelworldAuthTargets: [{ host: 'inbox.hostelworld.com', path: '/login/' }] });
@@ -55,6 +55,7 @@ function flow(identity = true) {
       if (body.includes('sent_notice')) return { sent_notice: true, hostel_matches: true };
       if (body.includes('property_marker')) return { login_form: false, property_marker: true,
         invoice_link: true, secure_link_notice: false };
+      if (body.includes('identityIds')) return {property_count:1,expected_property:identity,link_page:false,ready:true};
       if (body.includes('const ids')) return identity;
       if (body.includes('pdf_links')) return { pdf_links: 2, pagination: true, issue_date_column: false };
       throw new Error('unexpected evaluation');
@@ -236,4 +237,15 @@ test('unknown login result is not mislabeled as invalid credentials or retried b
   assert.equal(result.failure_stage, 'secure_link_requested');
   assert.equal(result.auth_signals.sent_notice, false);
   assert.equal(f.events.includes('receive'), false);
+});
+
+test('email-link intermediate document is awaited once without a second navigation',async()=>{
+ let waits=0;const page={url:()=> 'https://inbox.hostelworld.com/login/'+ 'a'.repeat(32),
+  waitForFunction:async (_fn,options,property)=>{waits++;assert.equal(options.timeout,15000);assert.equal(property,'305209');},
+  evaluate:async()=>({property_count:1,expected_property:true,link_page:false,ready:true})};
+ const facts=await waitHostelworldSession(page,'305209');assert.equal(waits,1);assert.equal(facts.waited,true);assert.equal(facts.completed,true);
+ assert.doesNotMatch(JSON.stringify(facts),/a{32}|305209/);
+ page.waitForFunction=async()=>{const e=new Error('private browser detail');e.name='TimeoutError';throw e;};
+ page.evaluate=async()=>({property_count:0,expected_property:false,link_page:true,ready:true});
+ const pending=await waitHostelworldSession(page,'305209');assert.equal(pending.completed,false);assert.equal(pending.expected_property,false);
 });
