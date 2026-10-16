@@ -36,6 +36,7 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   const snapshots = [];
   let broker;
   let authSignals;
+  let sessionSignals;
   const submission = { fields_match: false, form_valid: false, navigation_observed: false,
     post_observed: false, response_status: null, mismatched_fields: [], oversized_fields: [] };
   const onResponse = response => {
@@ -128,6 +129,13 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
     stage = 'consume_link';
     await page.goto(ownUrl(link).href, { waitUntil: 'domcontentloaded' });
     stage = 'account_check';
+    sessionSignals = await page.evaluate(() => ({
+      login_form: !!document.querySelector('#loginForm'),
+      property_marker: [...document.querySelectorAll('script:not([src])')].some(el =>
+        /gtmPageVars\.propertyID/.test(el.textContent || '')),
+      invoice_link: !!document.querySelector('a[href*="/reports/vatinvoices"]'),
+      secure_link_notice: !!document.querySelector('.login-email'),
+    }));
     if (!await hostelworldIdentity(page, input.property)) fail('account_mismatch');
     authenticated = true;
     stage = 'invoice_navigation';
@@ -146,7 +154,7 @@ export async function discoverHostelworld(page, input, dependencies = {}) {
   } catch (error) {
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: authenticated, failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
-      failure_stage: stage, auth_signals: authSignals, submission,
+      failure_stage: stage, auth_signals: authSignals, session_signals: sessionSignals, submission,
       location: publicLocation('hostelworld', page.url()), snapshots, responses: [] };
   } finally {
     page.off?.('response', onResponse);
