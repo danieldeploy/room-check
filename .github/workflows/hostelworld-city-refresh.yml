@@ -1,4 +1,4 @@
-name: Inspect City Hostelworld filter preconditions
+name: Regenerate inspected City Hostelworld filter
 on:
   push:
     branches: [agent/room-item-assignments]
@@ -17,38 +17,49 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           persist-credentials: false
-      - name: Inspect regeneration preconditions without changing the server
+      - name: Regenerate after read-only inspection and report bounded stage
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           python3 - <<'PYCODE'
-          import sys,io,contextlib,json
+          import sys,io,contextlib,json,urllib.error
           sys.path.insert(0,'deploy')
           from hostelworld_filters import FilterAPI,NAME,expected,rows,verify_filter
-          from cpanel_api import DeploymentError
+          from cpanel_api import DeploymentError,require
+          stage='precondition'
           try:
               with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                  current=rows(FilterAPI('city').call('Email','list_filters'))
-          except Exception:
-              print('{"city_filter_inspection":{"available":false}}')
+                  api=FilterAPI('city'); params=expected('city',3)
+                  before=rows(api.call('Email','list_filters'))
+                  require(len(before)==1,'unexpected_global_filter_configuration')
+                  verify_filter(before[0],params)
+                  stage='store_filter'
+                  api.call('Email','store_filter',oldfiltername=NAME,**params)
+                  stage='read_back'
+                  after=rows(api.call('Email','list_filters'))
+                  require(len(after)==1,'unexpected_global_filter_result')
+                  stage='verify_result'
+                  verify_filter(after[0],params)
+          except Exception as error:
+              facts={'succeeded':False,'stage':stage}
+              if isinstance(error,DeploymentError):
+                  code=str(error)
+                  fixed={'whm_operation_failed','unexpected_http_status','response_too_large',
+                      'invalid_filter_list_response','unexpected_global_filter_configuration',
+                      'unexpected_global_filter_result','filter_disabled','filter_conflict',
+                      'filter_rule_conflict','filter_destination_conflict'}
+                  facts['reason']=code if code in fixed else 'unclassified_validation'
+                  prefix='uapi_operation_failed_city_store_filter_filter_'
+                  if code.startswith(prefix):
+                      facts['reason']='store_filter_rejected'
+                      known={'no_valid_rules','invalid_action','destination','missing_path','permission',
+                          'regex','absolute_path','pipe','save','disabled','not_allowed','invalid','unclassified'}
+                      facts['categories']=[v for v in code[len(prefix):].split('-') if v in known]
+              elif isinstance(error,urllib.error.HTTPError):
+                  facts.update(reason='http_error',http_status=error.code)
+              else:
+                  facts['reason']='transport_or_unexpected_error'
+              print(json.dumps({'city_filter_regeneration':facts}))
               sys.exit(1)
-          facts={'available':True,'single_rule':len(current)==1}
-          if len(current)==1:
-              rule=current[0]; params=expected('city',3)
-              facts.update(own_rule=rule.get('filtername')==NAME,
-                  disabled=bool(rule.get('disabled')),
-                  two_conditions=len(rule.get('rules',[]))==2,
-                  two_actions=len(rule.get('actions',[]))==2)
-              facts['conditions']=[{key:r.get(key)==params.get(key+str(i))
-                  for key in ('part','match','val','opt')}
-                  for i,r in enumerate(rule.get('rules',[]),1)]
-              try:
-                  with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                      verify_filter(rule,params)
-                  facts['verified']=True
-              except DeploymentError as error:
-                  facts['verified']=False
-                  allowed={'filter_disabled','filter_conflict','filter_rule_conflict','filter_destination_conflict'}
-                  facts['reason']=str(error) if str(error) in allowed else 'unclassified'
-          print(json.dumps({'city_filter_inspection':facts}))
+          print('{"city_filter_regeneration":{"succeeded":true,"stage":"verified"}}')
           PYCODE
