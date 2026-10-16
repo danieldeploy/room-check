@@ -29,7 +29,7 @@ class Tests(unittest.TestCase):
         current={'filtername':h.NAME,'rules':[
             {'part':p['part1'],'match':p['match1'],'val':p['val1'],'opt':'and'},
             {'part':p['part2'],'match':p['match2'],'val':p['val2']}],
-            'actions':[{'action':'save','dest':p['dest1']},{'action':'pipe','dest':p['dest2']}]}
+            'actions':[{'action':p['action'+str(i)],'dest':p['dest'+str(i)]} for i in (1,2) if 'action'+str(i) in p]}
         api=Mock(account='city'); api.call.side_effect=[[current],None,[current]]
         refresh_city(api)
         self.assertEqual(api.call.call_args_list[1].kwargs,dict(p,oldfiltername=h.NAME))
@@ -50,12 +50,16 @@ class Tests(unittest.TestCase):
             return {'filtername':h.NAME,'rules':[
                 {'part':p['part1'],'match':p['match1'],'val':p['val1'],'opt':'and'},
                 {'part':p['part2'],'match':p['match2'],'val':p['val2']}],
-                'actions':[{'action':'save','dest':p['dest1']},{'action':'pipe','dest':p['dest2']}]}
-        old=row(dict(params,dest1='/home/city/mail/$domain/$local_part/'))
+                'actions':[{'action':p['action'+str(i)],'dest':p['dest'+str(i)]} for i in (1,2) if 'action'+str(i) in p]}
+        old=row(dict(params,action2='pipe',dest2='hostelworld-city-auth-pipe.php',dest1='/home/city/mail/$domain/$local_part/'))
         api=Mock(account='city')
         api.call.side_effect=[[old],None,[row(params)]]
         h.install(api,22)
-        self.assertEqual(api.call.call_args_list[1].kwargs,params)
+        self.assertEqual(api.call.call_args_list[1].kwargs,dict(params,oldfiltername=h.NAME))
+        dedicated=row(dict(params,action2='pipe',dest2='hostelworld-city-auth-pipe.php'))
+        api.call.reset_mock(); api.call.side_effect=[[dedicated],None,[row(params)]]
+        h.install(api,22)
+        self.assertEqual(api.call.call_args_list[1].kwargs,dict(params,oldfiltername=h.NAME))
         api.call.reset_mock(); api.call.side_effect=[[row(params)],[row(params)]]
         h.install(api,22)
         self.assertEqual(api.call.call_count,2)
@@ -71,7 +75,7 @@ class Tests(unittest.TestCase):
     def test_separate_destinations_and_copy(self):
         welcome=h.expected("welcome",11); city=h.expected("city",22)
         self.assertEqual(welcome["dest2"],"room-check-private/cron/hostelworld-auth-pipe.php 11")
-        self.assertEqual(city["dest2"],"hostelworld-city-auth-pipe.php")
+        self.assertNotIn("action2",city)
         self.assertEqual(city["action1"],"save")
         self.assertEqual(city["dest1"],"/home/city/mail/$domain/$local_part/.HOSTELWORLD/")
         self.assertEqual(welcome["dest1"],"/home/welcome/mail/$domain/$local_part/.Hostelworld/")
@@ -105,8 +109,7 @@ class Tests(unittest.TestCase):
         row={"filtername":h.NAME,"rules":[
             {"part":params["part1"],"match":params["match1"],"val":params["val1"],"opt":"and"},
             {"part":params["part2"],"match":params["match2"],"val":params["val2"]}],
-            "actions":[{"action":"save","dest":params["dest1"]},
-                       {"action":"pipe","dest":params["dest2"]}]}
+            "actions":[{"action":"save","dest":params["dest1"]}]}
         for delivery in ('"'+params["dest1"]+'"',"$home/mail/$domain/$local_part/.HOSTELWORLD/",
                          '"$home/mail/$domain/$local_part/.HOSTELWORLD/"',
                          "$home/mail/$domain/$local_part/.HOSTELWORLD",params["dest1"].rstrip("/")):
@@ -116,6 +119,24 @@ class Tests(unittest.TestCase):
                       '"'+params["dest1"]+'"; other'):
             row["actions"][0]["dest"]=wrong
             with self.assertRaises(h.DeploymentError): h.verify_filter(row,params)
+
+    def test_folder_cron_is_exact_idempotent_and_refuses_conflicts(self):
+        from unittest.mock import Mock
+        row=dict(command=h.CITY_CRON,minute='*',hour='*',day='*',month='*',weekday='*')
+        api=Mock(account='city'); api.call.side_effect=[[],[{'status':1}],[row]]
+        h.install_city_cron(api)
+        self.assertEqual(api.call.call_args_list[1].args,('Cron','add_line'))
+        api.call.reset_mock(); api.call.side_effect=[[row],[row]]
+        h.install_city_cron(api)
+        self.assertEqual(api.call.call_count,2)
+        for existing in ([row,row],[dict(row,minute='*/2')],[dict(row,command=h.CITY_CRON+' extra')]):
+            api.call.reset_mock(); api.call.side_effect=[existing]
+            with self.assertRaises(h.DeploymentError): h.install_city_cron(api)
+            self.assertEqual(api.call.call_count,1)
+        with patch.dict('os.environ',{'WHM_API_TOKEN':'test-only'}):
+            city=h.FilterAPI('city'); welcome=h.FilterAPI('welcome')
+        with self.assertRaises(h.DeploymentError): city.call('Cron','add_line',command='unrelated')
+        with self.assertRaises(h.DeploymentError): welcome.call('Cron','listcron')
 
     def test_whm_rejects_unrelated_file(self):
         with patch.dict("os.environ",{"WHM_API_TOKEN":"test-only"}):
