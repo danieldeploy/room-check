@@ -81,6 +81,7 @@ jobs:
       - name: Run PHP tests
         run: |
           php tests/invoice-booking-verification.php
+          php tests/invoice-hostelworld-verification.php
           php tests/release-backup.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           php tests/invoice-hostelworld-account.php
@@ -217,6 +218,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run install-chrome
+          node --test tests/hostelworld-pdf.integration.mjs
       - name: Verify real Windows Chrome with sandbox enabled
         shell: powershell
         run: |

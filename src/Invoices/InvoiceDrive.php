@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/InvoiceDriveClient.php';
 require_once __DIR__ . '/InvoiceCompany.php';
+require_once __DIR__ . '/InvoiceHostelworldVerification.php';
 require_once __DIR__ . '/InvoiceDriveLayout.php';
 
 /** Caller holds room_check_invoices advisory lock, including manual retries. */
@@ -63,6 +64,12 @@ final class InvoiceDrive
                 $path = $this->vault->path($d['sha256'] . '.' . $d['format']);
                 if (!is_file($path) || !hash_equals($d['sha256'], (string) hash_file('sha256', $path))) throw new RuntimeException('drive_local_missing');
                 [$company, $name] = InvoiceCompany::inspect($path, $d['format']);
+                if ($d['portal']==='hostelworld' && $d['format']==='pdf') {
+                    $check=InvoiceHostelworldVerification::checkPdf($path,(string)$d['property_id'],[
+                        'number'=>$d['invoice_number'],'portal_document_id'=>$d['invoice_number'],'issued_on'=>$d['issued_on'],
+                    ],$d['period'],InvoiceHostelworldVerification::companyNif($this->vault));
+                    [$company,$name]=in_array(false,$check,true)?['review',null]:['validated','Active Lines'];
+                }
                 $this->pdo->prepare('UPDATE invoice_document_delivery SET company_state=?, company_name=? WHERE document_id=?')->execute([$company, $name, $d['id']]);
                 if (!$connected) { $this->client->connect(); $connected = true; }
                 $settings = $this->pdo->query('SELECT * FROM invoice_drive_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);

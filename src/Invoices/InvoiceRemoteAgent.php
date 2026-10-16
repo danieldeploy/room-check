@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 require_once __DIR__ . '/InvoiceAuth.php';
 require_once __DIR__ . '/InvoiceBookingVerification.php';
+require_once __DIR__ . '/InvoiceHostelworldVerification.php';
 
 /** One trusted Windows executor. Every mutation requires the existing MySQL worker lock. */
 final class InvoiceRemoteAgent
@@ -226,13 +227,15 @@ final class InvoiceRemoteAgent
                     $session=InvoiceAccounts::secretName((int)$account['id'],'session');
                     $input['session']=$this->vault->has($session) ? $this->vault->read($session) : [];
                 }
-                if (!in_array($job['kind'],['discover','verify'],true) && !($job['kind']==='login' && $account['portal']==='booking')
+                if (!in_array($job['kind'],['discover','verify'],true) && !($job['kind']==='login' && in_array($account['portal'],['booking','hostelworld'],true))
                     && $account['portal']!=='email') {
                     $map='account-'.$account['id'].'-map.json';
                     if (!$this->vault->has($map) && (int)$account['id']===1 && $account['portal']==='booking') $map='booking-map.json';
                     $file=$this->vault->path($map);
                     if (!is_file($file) || filesize($file)>131072) throw new RuntimeException('connector_unconfigured');
                     $input['map']=json_decode((string)file_get_contents($file),true,32,JSON_THROW_ON_ERROR);
+                    if ($account['portal']==='hostelworld' && (($input['map']['version']??null)!==4
+                        || ($input['map']['configuration_sha256']??null)!==InvoiceHostelworldVerification::configuration($this->vault,(int)$account['id']))) throw new RuntimeException('connector_unconfigured');
                 }
             }
             $lease=['lease'=>bin2hex(random_bytes(32)),'claim_id'=>$claimId,'job'=>$job,'input'=>$input,
@@ -347,6 +350,7 @@ final class InvoiceRemoteAgent
             $this->pdo->beginTransaction();
             try {
                 $code=$result['code'] ?? 'worker_failed';
+                $hostelworld=($lease['input']['portal']??null)==='hostelworld';
                 if (in_array($job['kind'],['discover','login'],true) && isset($result['diagnostic'])) {
                     $draft=$result['diagnostic'];
                     $encoded=is_array($draft) ? json_encode($draft,JSON_THROW_ON_ERROR) : false;
@@ -368,7 +372,7 @@ final class InvoiceRemoteAgent
                     (new InvoiceTaskLifecycle($this->pdo))->complete($this->vault,$job,$result);
                 } elseif (in_array($code,['ok','no_invoices'],true)) {
                     if ($job['kind']==='discover' && !isset($result['diagnostic'])) throw new RuntimeException('invalid_document');
-                    if ($job['kind']==='login' && $this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn()==='booking'
+                    if ($job['kind']==='login' && in_array($this->pdo->query('SELECT portal FROM invoice_accounts WHERE id='.(int)$job['account_id'])->fetchColumn(),['booking','hostelworld'],true)
                         && (($result['diagnostic']['authenticated_session'] ?? null)!==true
                             || ($result['diagnostic']['login_attempted'] ?? null)!==true)) throw new RuntimeException('invalid_document');
                     $ids=$result['documents'] ?? [];
@@ -377,15 +381,19 @@ final class InvoiceRemoteAgent
                         || (!in_array($job['kind'],['collect','verify'],true) && $ids)) throw new RuntimeException('invalid_document');
                     foreach ($ids as $id) if (!is_int($id) || !isset($lease['uploads'][$id])) throw new RuntimeException('invalid_document');
                     $verifiedFiles=[];
-                    if ($job['kind']==='verify' || ($lease['input']['map']['version']??null)===3) {
+                    if ($job['kind']==='verify' || in_array($lease['input']['map']['version']??null,[3,4],true)) {
                         foreach ($ids as $id) {
                             $entry=$lease['uploads'][$id]; $file=$this->uploadPath($lease,$id); clearstatcache(true,$file);
                             if (!is_file($file) || filesize($file)!==$entry['size'] || hash_file('sha256',$file)!==$entry['sha256']) throw new RuntimeException('invalid_document');
                             $verifiedFiles[]=['path'=>$file,'metadata'=>$entry['metadata'],'sha256'=>$entry['sha256']];
-                            if ($job['kind']==='collect' && in_array(false,InvoiceBookingVerification::checkPdf($file,$job['property_id'],$entry['metadata'],$job['period']),true)) throw new RuntimeException('invalid_document');
+                            if ($job['kind']==='collect' && in_array(false,$hostelworld
+                                ? InvoiceHostelworldVerification::checkPdf($file,$job['property_id'],$entry['metadata'],$job['period'],InvoiceHostelworldVerification::companyNif($this->vault))
+                                : InvoiceBookingVerification::checkPdf($file,$job['property_id'],$entry['metadata'],$job['period']),true)) throw new RuntimeException('invalid_document');
                         }
                     }
-                    if ($job['kind']==='verify' && !InvoiceBookingVerification::finish($this->pdo,$this->vault,$job,$result['verification']??null,$verifiedFiles)) throw new RuntimeException('verification_failed');
+                    if ($job['kind']==='verify' && !($hostelworld
+                        ? InvoiceHostelworldVerification::finish($this->pdo,$this->vault,$job,$result['verification']??null,$verifiedFiles)
+                        : InvoiceBookingVerification::finish($this->pdo,$this->vault,$job,$result['verification']??null,$verifiedFiles))) throw new RuntimeException('verification_failed');
                     $documents=(function() use ($ids,$lease): Generator {
                         foreach ($ids as $id) {
                             $entry=$lease['uploads'][$id]; $file=$this->uploadPath($lease,$id);
@@ -395,7 +403,7 @@ final class InvoiceRemoteAgent
                         }
                     })();
                     (new InvoiceTaskLifecycle($this->pdo))->complete($this->vault,$job,$result,$documents);
-                    if ($job['kind']==='collect' && ($lease['input']['map']['version']??null)===3) {
+                    if ($job['kind']==='collect' && in_array($lease['input']['map']['version']??null,[3,4],true)) {
                         // All files passed the server's PDF/date/company checks above.
                         // Record that evidence for new and repeated invoices independently
                         // of Drive configuration; never trust a client company-state flag.

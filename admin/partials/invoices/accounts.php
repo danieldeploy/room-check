@@ -86,6 +86,14 @@ if ($editing) {
 <?php endforeach; ?>
 <form method="post"><?php invoiceHidden('approve_booking_map',$editId); ?><button class="invoice-secondary"><?= it('approve_booking_map') ?></button></form></details>
 <?php endif; ?>
+<?php if ($vault && $a['portal']==='hostelworld' && in_array($editId,[2,3],true)): ?>
+<details class="invoice-options"><summary><?= it('hostelworld_verification') ?></summary><p><?= it('hostelworld_verification_note') ?></p>
+<form method="post"><?php invoiceHidden('verify',$editId); ?><label class="field"><span><?= it('property') ?></span><select name="diagnostic_property"><?php foreach ($repository->collectionProperties($editId) as $propertyId=>$propertyLabel): ?><option value="<?= ie($propertyId) ?>"><?= ie($propertyLabel) ?></option><?php endforeach; ?></select></label><button class="invoice-secondary" <?= !$repository->active($editId) || ($agentStatus['mode']??'')!=='windows'?'disabled':'' ?>><?= it('hostelworld_verify') ?></button></form>
+<?php foreach ($repository->collectionProperties($editId) as $propertyId=>$propertyLabel): if (!InvoiceHostelworldVerification::bound($a,(string)$propertyId)) continue; $verificationFile=InvoiceHostelworldVerification::reportName($editId,(string)$propertyId); if (!$vault->has($verificationFile)) continue; $verification=$vault->read($verificationFile); ?>
+<h4><?= ie($propertyLabel) ?></h4><pre class="invoice-diagnostic"><?= ie(json_encode($verification,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre>
+<?php endforeach; ?>
+<form method="post"><?php invoiceHidden('approve_hostelworld_map',$editId); ?><button class="invoice-secondary"><?= it('approve_booking_map') ?></button></form></details>
+<?php endif; ?>
 <?php if ($a['auth_method']==='sms'): ?><details class="invoice-options"><summary><?= it('sms_device_settings') ?></summary><p><?= it('sms_key_note') ?></p><form method="post"><?php invoiceHidden('sms_token',$editId); ?><button class="invoice-secondary"><?= it('sms_token') ?></button></form></details><?php endif; ?></section>
 <section class="card"><h2><?= it('schedule') ?></h2><p><?= it('schedule_note') ?></p><p><?= it('schedule_validation_note') ?></p>
 <form method="post"><?php invoiceHidden('schedule',$editId); ?><div class="form-grid"><label class="check-row"><input type="checkbox" name="enabled" <?= (int)$a['enabled']?'checked':'' ?> <?= $readiness[$editId]!=='ready' || !(int)$a['is_active']?'disabled':'' ?>><span><?= it('enable_schedule') ?></span></label><label class="field"><span><?= it('day') ?></span><input type="number" name="day" min="1" max="28" value="<?= (int)$a['schedule_day'] ?>" required></label><label class="field"><span><?= it('time') ?></span><input type="time" name="time" value="<?= ie($a['schedule_time']) ?>" required></label></div><button class="primary-button"><?= it('save_schedule') ?></button></form></section>

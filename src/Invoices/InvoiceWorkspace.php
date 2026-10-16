@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/InvoiceHostelworldVerification.php';
 require_once __DIR__ . '/InvoiceService.php';
 
 /** Queries shared by the overview, invoices and activity screens. No secret values leave the vault. */
@@ -83,7 +84,7 @@ final class InvoiceWorkspace
         $s=$this->pdo->prepare("SELECT COALESCE(x.toconline_state,'pending') AS state,COUNT(*) AS total
             FROM invoice_documents d JOIN invoice_accounts a ON a.id=d.account_id
             LEFT JOIN invoice_document_delivery x ON x.document_id=d.id
-            WHERE $where AND a.portal='booking' AND d.format='pdf' GROUP BY COALESCE(x.toconline_state,'pending')");
+            WHERE $where AND a.portal IN ('booking','hostelworld') AND d.format='pdf' GROUP BY COALESCE(x.toconline_state,'pending')");
         $s->execute($params); $counts=['toc_pending'=>0,'toc_submitted'=>0,'toc_accepted'=>0,'toc_existing'=>0,
             'toc_rejected'=>0,'toc_review'=>0,'toc_no_confirmation'=>0,'toc_duplicate'=>0];
         foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -178,9 +179,11 @@ final class InvoiceWorkspace
         if (is_file($mapFile) && filesize($mapFile)<=131072) {
             try {
                 $config=json_decode((string)file_get_contents($mapFile),true,32,JSON_THROW_ON_ERROR);
-                $map=($config['validated']??null)===true && in_array($config['version']??null,[1,2,3],true);
+                $map=($config['validated']??null)===true && in_array($config['version']??null,[1,2,3,4],true);
                 if (($config['version']??null)===1) $map=$map && $id===1 && $account['portal']==='booking';
                 if (($config['version']??null)!==1) $map=$map && ($config['accountId']??null)===$id && ($config['portal']??null)===$account['portal'];
+                if (($config['version']??null)===4) $map=$map && $account['portal']==='hostelworld' && in_array($id,[2,3],true) && ($config['strategy']??null)==='hostelworld-vat-v1' && !empty($config['properties'])
+                    && ($config['configuration_sha256']??null)===InvoiceHostelworldVerification::configuration($vault,$id);
                 if (($config['version']??null)===3) $map=$map && ($config['strategy']??null)==='booking-finance-v1' && !empty($config['properties']);
             } catch (Throwable) { $map=false; }
         }
