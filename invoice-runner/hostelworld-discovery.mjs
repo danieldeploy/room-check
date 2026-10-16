@@ -119,6 +119,26 @@ export async function waitHostelworldSession(page, property) {
       link_page: /^\/login\//.test(location.pathname), ready: document.readyState === 'complete' };
   }, String(property)) };
 }
+export async function confirmHostelworldEntry(page) {
+  if (!/^\/login\/[a-f0-9]{32}$/i.test(ownUrl(page.url()).pathname)) return { offered: false, clicked: false };
+  const control = await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('button.btn-content.large')];
+    const visible = buttons.length === 1 && !buttons[0].disabled && buttons[0].getClientRects().length > 0;
+    const label = visible ? (buttons[0].textContent || '').trim().replace(/\s+/g,' ').toLowerCase() : '';
+    const entry = /^(?:(?:click(?: here)?|proceed|continue) to )?(?:log in|login|sign in)(?: (?:to |into )?(?:your |my )?(?:account|inbox|hostelworld(?: inbox)?))?[.!]?$/.test(label)
+      || /^(?:continue|proceed|confirm login|confirm sign in|continue to (?:hostelworld )?inbox|go to inbox|access (?:hostelworld )?inbox)[.!]?$/.test(label);
+    const text = (document.body?.innerText || '').toLowerCase();
+    const blocked = !!document.querySelector('#loginForm,.login-email,input[type="password"],iframe[src*="captcha"],[role="alert"],.error,.alert-danger,.login-error')
+      || /captcha|verify you are human|checking your browser|unusual traffic|access denied|(?:link|token).{0,60}(?:expired|invalid|already used)/.test(text);
+    return { offered: !!visible, recognized: !!entry, blocked };
+  });
+  if (!control.offered || !control.recognized || control.blocked) return { ...control, clicked: false };
+  await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:10000}).catch(error => {
+    if (error?.name !== 'TimeoutError') throw error;
+  }), page.click('button.btn-content.large')]);
+  ownUrl(page.url());
+  return { ...control, clicked: true };
+}
 export async function discoverHostelworld(initialPage, input, dependencies = {}) {
   let page = initialPage;
   let authPage;
@@ -211,6 +231,14 @@ export async function discoverHostelworld(initialPage, input, dependencies = {})
     ownUrl(page.url());
     stage = 'account_check';
     sessionReadiness = await waitHostelworldSession(page, input.property);
+    if (sessionReadiness.link_page && sessionReadiness.property_count === 0) {
+      const confirmation = await confirmHostelworldEntry(page);
+      if (confirmation.clicked) sessionReadiness = await waitHostelworldSession(page, input.property);
+      sessionReadiness.confirmation_offered = confirmation.offered === true;
+      sessionReadiness.confirmation_recognized = confirmation.recognized === true;
+      sessionReadiness.confirmation_blocked = confirmation.blocked === true;
+      sessionReadiness.confirmation_clicked = confirmation.clicked === true;
+    }
     sessionSignals = await hostelworldSessionSignals(page);
     snapshots.push(await inspectPortalPage(page, 'hostelworld'));
     if (sessionSignals.human_challenge) fail('human_verification');

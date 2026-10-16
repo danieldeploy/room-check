@@ -44,7 +44,8 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
       const h = trace.hostelworld;
       const safe = {};
       if (['account_check','invoice_navigation','invoices_visible'].includes(h.stage)) safe.stage = h.stage;
-      for (const key of ['authenticated','waited','completed','expected_property','link_page','ready'])
+      for (const key of ['authenticated','waited','completed','expected_property','link_page','ready',
+        'confirmation_offered','confirmation_recognized','confirmation_blocked','confirmation_clicked'])
         if (typeof h[key] === 'boolean') safe[key] = h[key];
       if ([0,1,2].includes(h.property_count)) safe.property_count = h.property_count;
       receipt.hostelworld = safe;
