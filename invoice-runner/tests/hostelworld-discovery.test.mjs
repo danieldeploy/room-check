@@ -119,11 +119,52 @@ test('failed sign-in records only bounded POST evidence and detaches its observe
   assert.doesNotMatch(JSON.stringify(result), /FIXTURE_SECRET|fixture-password|other.example/);
 });
 test('wrong property stops before invoice navigation', async () => {
-  const f = flow(false); const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  const f = flow(false); const evaluate = f.page.evaluate;
+  f.page.evaluate = async fn => String(fn).includes('property_marker')
+    ? { login_form: false, property_marker: true, invoice_link: true } : evaluate(fn);
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
   assert.equal(result.failure_code, 'account_mismatch');
   assert.equal(result.authenticated_session, false);
   assert.equal(result.invoice_structure, undefined);
   assert.equal(f.events.at(-1), 'close');
+});
+
+test('plain login after a secure link is submitted once and identity is still checked', async () => {
+  const f = flow(); const evaluate = f.page.evaluate; let observations = 0;
+  f.page.evaluate = async fn => String(fn).includes('property_marker') && ++observations === 1
+    ? { login_form: true, property_marker: false, secure_link_notice: false } : evaluate(fn);
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  assert.equal(result.authenticated_session, true);
+  assert.equal(result.post_link_login_attempted, true);
+  assert.equal(result.validated, false);
+  assert.equal(f.events.filter(x => x === 'submit').length, 2);
+  assert.equal(f.events.filter(x => x === 'receive').length, 1);
+  assert.doesNotMatch(JSON.stringify(result), /fixture-password|fixture-user|a{32}/);
+});
+
+test('a repeated login form or email notice stops without a second email challenge', async () => {
+  for (const repeated of [{ login_form: true }, { secure_link_notice: true }]) {
+    const f = flow(false); const evaluate = f.page.evaluate; let observations = 0;
+    f.page.evaluate = async fn => String(fn).includes('property_marker')
+      ? (++observations === 1 ? { login_form: true } : repeated) : evaluate(fn);
+    const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+    assert.equal(result.failure_code, 'needs_auth');
+    assert.equal(result.post_link_login_attempted, true);
+    assert.equal(f.events.filter(x => x === 'submit').length, 2);
+    assert.equal(f.events.filter(x => x === 'receive').length, 1);
+  }
+});
+
+test('link errors and human checks prevent post-link credential submission', async () => {
+  for (const [flag, code] of [['human_challenge','human_verification'], ['invalid_link','auth_invalid'], ['error_notice','needs_auth']]) {
+    const f = flow(false); const evaluate = f.page.evaluate;
+    f.page.evaluate = async fn => String(fn).includes('property_marker')
+      ? { login_form: true, [flag]: true } : evaluate(fn);
+    const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+    assert.equal(result.failure_code, code);
+    assert.equal(result.post_link_login_attempted, false);
+    assert.equal(f.events.filter(x => x === 'submit').length, 1);
+  }
 });
 
 test('unknown login result is not mislabeled as invalid credentials or retried blindly', async () => {
