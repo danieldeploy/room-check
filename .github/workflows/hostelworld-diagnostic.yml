@@ -13,16 +13,44 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           persist-credentials: false
-      - name: Read bounded City authentication status
+      - name: Read bounded City pipe and filter status
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           python3 - <<'PYCODE'
-          import sys,json,os,urllib.parse,urllib.request
+          import sys,json,os,re,urllib.parse,urllib.request
           sys.path.insert(0,'deploy')
           from cpanel_api import Config,CpanelAPI,WHM_ORIGIN
           config=Config(token=os.environ['WHM_API_TOKEN'],transport='whm',origin=WHM_ORIGIN)
           api=CpanelAPI(config)
+          def read(module,function,**params):
+              query=urllib.parse.urlencode({'api.version':1,'cpanel.user':'city','cpanel.module':module,
+                  'cpanel.function':function,**params})
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel?'+query,
+                  headers={'Authorization':'whm fazenda:'+config.token})
+              with api.opener.open(req,timeout=20) as r: data=json.loads(r.read(262144))
+              result=data.get('data',{}).get('uapi',{})
+              if result.get('status')!=1:
+                  errors=str(result.get('errors',[])).lower()
+                  print(json.dumps({'operation':module+'.'+function,'available':False,
+                      'missing':any(x in errors for x in ['does not exist','no such file','not found']),
+                      'permission':any(x in errors for x in ['permission','denied'])}))
+                  return None
+              return result.get('data')
+          value=read('Fileman','get_file_information',path='/home/city/hostelworld-city-auth-pipe.php')
+          rows=value if isinstance(value,list) else [value] if isinstance(value,dict) else []
+          for row in rows:
+              print(json.dumps({'city_pipe_file':{'exists':bool(row.get('exists')),
+                  'owner_matches':row.get('user')=='city','mode':str(row.get('nicemode')) if re.fullmatch('[0-7]{3,4}',str(row.get('nicemode'))) else None}}))
+          value=read('Variables','get_server_information',name='php_system_default_version')
+          if isinstance(value,dict):
+              version=value.get('php_system_default_version')
+              print(json.dumps({'php_default':version if isinstance(version,str) and re.fullmatch('[a-zA-Z0-9_.-]{1,30}',version) else 'unavailable'}))
+          value=read('Email','list_filters')
+          rows=value if isinstance(value,list) else value.get('filters',[]) if isinstance(value,dict) else []
+          own=[i for i,row in enumerate(rows) if row.get('filtername')=='Room Check Hostelworld Auth v1']
+          print(json.dumps({'city_filters':{'count':len(rows),'own_indices':own,
+              'earlier_delivery_actions':sum(1 for row in rows[:own[0] if own else 0] for a in row.get('actions',[]) if a.get('action') in ['save','finish','fail','redirect','discard'])}}))
           query=urllib.parse.urlencode({'api.version':1,'cpanel.user':'city','cpanel.module':'Fileman',
               'cpanel.function':'get_file_content','dir':'/home/city','file':'hostelworld-city-auth-status.json'})
           req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel?'+query,
