@@ -75,6 +75,9 @@ if ($editing) {
 <?php $draftFile='account-'.$editId.'-map-diagnostic.enc'; if ($vault->has($draftFile)): $draft=$vault->read($draftFile); ?>
 <details class="invoice-options"><summary><?= it('map_diagnostic') ?></summary><p><?= it('map_diagnostic_note') ?></p><pre class="invoice-diagnostic"><?= ie(json_encode($draft,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)) ?></pre></details>
 <?php endif; endif; ?>
+<?php if ($vault && $a['portal']==='hostelworld' && ($hostingStatus=HostelworldHostingStatus::read($vault,$isGerente,$editId))): ?>
+<details class="invoice-options"><summary><?= it('hostelworld_hosting_diagnostic') ?></summary><pre class="invoice-diagnostic"><?= ie(json_encode($hostingStatus,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)) ?></pre></details>
+<?php endif; ?>
 <?php if ($vault && $a['portal']==='booking' && $editId===1): ?>
 <details class="invoice-options"><summary><?= it('booking_verification') ?></summary><p><?= it('booking_verification_note') ?></p>
 <form method="post"><?php invoiceHidden('verify',$editId); ?><label class="field"><span><?= it('property') ?></span><select name="diagnostic_property"><?php foreach ($repository->collectionProperties($editId) as $propertyId=>$propertyLabel): ?><option value="<?= ie($propertyId) ?>"><?= ie($propertyLabel) ?></option><?php endforeach; ?></select></label><button class="invoice-secondary" <?= !$repository->active($editId) || ($agentStatus['mode']??'')!=='windows' || !$a['login_verified_at']?'disabled':'' ?>><?= it('verify') ?></button></form>
