@@ -40,6 +40,15 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
   if (job.input.action === 'verify') {
     receipt.document_count = Array.isArray(result.documents) ? Math.min(result.documents.length, 100) : 0;
     const trace = result.collection_trace;
+    if (job.input.portal === 'hostelworld' && trace?.hostelworld) {
+      const h = trace.hostelworld;
+      const safe = {};
+      if (['account_check','invoice_navigation','invoices_visible'].includes(h.stage)) safe.stage = h.stage;
+      for (const key of ['authenticated','waited','completed','expected_property','link_page','ready'])
+        if (typeof h[key] === 'boolean') safe[key] = h[key];
+      if ([0,1,2].includes(h.property_count)) safe.property_count = h.property_count;
+      receipt.hostelworld = safe;
+    }
     if (['setup', 'session', 'navigation', 'table', 'pdf_download', 'pagination', 'complete'].includes(trace?.stage)) {
       receipt.stage = trace.stage;
       const d = trace.download;

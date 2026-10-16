@@ -93,6 +93,32 @@ export async function hostelworldSessionSignals(page) {
     };
   });
 }
+export async function waitHostelworldSession(page, property) {
+  const facts = { waited: false, completed: false };
+  // A 200 response may still be the intermediate email-link document. Wait
+  // within that tab; never request the one-time link or credentials again.
+  if (/^\/login\//.test(ownUrl(page.url()).pathname)) {
+    facts.waited = true;
+    try {
+      await page.waitForFunction(expected => {
+        const ids = [...document.querySelectorAll('script:not([src])')].flatMap(el =>
+          [...(el.textContent || '').matchAll(/gtmPageVars\.propertyID\s*=\s*['"](\d{1,12})['"]/g)].map(m => m[1]));
+        const text = (document.body?.innerText || '').toLowerCase();
+        return document.readyState !== 'loading' && (ids.includes(expected)
+          || !/^\/login\//.test(location.pathname) || !!document.querySelector('#loginForm,.login-email,[role="alert"],.error,.alert-danger,.login-error')
+          || /verify you are human|checking your browser|unusual traffic|access denied|(?:link|token).{0,60}(?:expired|invalid|already used)/.test(text));
+      }, { timeout: 15000, polling: 200 }, String(property));
+      facts.completed = true;
+    } catch (error) { if (error?.name !== 'TimeoutError') throw error; }
+  }
+  return { ...facts, ...await page.evaluate(expected => {
+    const identityIds = new Set();
+    for (const el of document.querySelectorAll('script:not([src])'))
+      for (const m of (el.textContent || '').matchAll(/gtmPageVars\.propertyID\s*=\s*['"](\d{1,12})['"]/g)) identityIds.add(m[1]);
+    return { property_count: Math.min(2, identityIds.size), expected_property: identityIds.has(expected),
+      link_page: /^\/login\//.test(location.pathname), ready: document.readyState === 'complete' };
+  }, String(property)) };
+}
 export async function discoverHostelworld(initialPage, input, dependencies = {}) {
   let page = initialPage;
   let authPage;
@@ -102,6 +128,7 @@ export async function discoverHostelworld(initialPage, input, dependencies = {})
   let broker;
   let authSignals;
   let sessionSignals;
+  let sessionReadiness;
   let secureLinkNewTab = false;
   const linkNavigation = { request_matches: false, response_status: null, redirect_count: 0 };
   const submission = { fields_match: false, form_valid: false, navigation_observed: false,
@@ -183,7 +210,9 @@ export async function discoverHostelworld(initialPage, input, dependencies = {})
     }
     ownUrl(page.url());
     stage = 'account_check';
+    sessionReadiness = await waitHostelworldSession(page, input.property);
     sessionSignals = await hostelworldSessionSignals(page);
+    snapshots.push(await inspectPortalPage(page, 'hostelworld'));
     if (sessionSignals.human_challenge) fail('human_verification');
     if (sessionSignals.invalid_link) fail('auth_invalid');
     if (sessionSignals.error_notice) fail('needs_auth');
@@ -207,11 +236,13 @@ export async function discoverHostelworld(initialPage, input, dependencies = {})
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: true, account_verified: true, secure_link_new_tab: secureLinkNewTab,
       link_navigation: linkNavigation, post_link_login_attempted: false, navigation_stage: stage,
+      session_readiness: sessionReadiness,
       location: publicLocation('hostelworld', page.url()), snapshots, responses: [], invoice_structure: invoices };
   } catch (error) {
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: authenticated, failure_code: error instanceof PortalError ? error.message : 'browser_unavailable',
       failure_stage: stage, auth_signals: authSignals, session_signals: sessionSignals,
+      session_readiness: sessionReadiness,
       secure_link_new_tab: secureLinkNewTab, link_navigation: linkNavigation, post_link_login_attempted: false, submission,
       location: diagnosticLocation(page), snapshots, responses: [] };
   } finally {
