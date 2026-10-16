@@ -1,0 +1,78 @@
+name: Hostelworld City runtime probe
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/hostelworld-runtime.yml]
+permissions:
+  contents: read
+concurrency:
+  group: hostelworld-city-runtime
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Run once with empty input and remove only the temporary cron
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          python3 - <<'PYCODE'
+          import os,sys,json,re,time,shlex,urllib.request,urllib.parse
+          sys.path.insert(0,'deploy')
+          from cpanel_api import Config,CpanelAPI,WHM_ORIGIN
+          api=CpanelAPI(Config(token=os.environ['WHM_API_TOKEN'],transport='whm',origin=WHM_ORIGIN))
+          def call(module,function,**params):
+              q={'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':module,'cpanel_jsonapi_func':function,**params}
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/cpanel',data=urllib.parse.urlencode(q).encode(),headers={'Authorization':'whm fazenda:'+os.environ['WHM_API_TOKEN']})
+              with api.opener.open(req,timeout=20) as r: value=json.loads(r.read(262144))
+              result=value.get('cpanelresult',{})
+              if result.get('event',{}).get('result')!=1 or result.get('error'): raise RuntimeError('api_operation_failed')
+              return result.get('data',[])
+          def read_result(directory,filename="result.json"):
+              q={'api.version':1,'cpanel.user':'city','cpanel.module':'Fileman','cpanel.function':'get_file_content','dir':directory,'file':filename}
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel',data=urllib.parse.urlencode(q).encode(),headers={'Authorization':'whm fazenda:'+os.environ['WHM_API_TOKEN']})
+              with api.opener.open(req,timeout=20) as r: value=json.loads(r.read(65536))
+              result=value.get('data',{}).get('uapi',{})
+              if result.get('status')!=1: return None
+              data=result.get('data',{})
+              if isinstance(data,list): data=data[0]
+              try: return json.loads(data.get('content',''))
+              except (ValueError,TypeError): return None
+          run=os.environ['GITHUB_RUN_ID']
+          if not re.fullmatch('[0-9]{1,20}',run): raise RuntimeError('invalid_run')
+          directory='/home/city/.hostelworld-runtime-'+run
+          # mkdir is the one-shot fence. No mail, credentials or network calls are
+          # provided to the installed pipe; empty input must fail its MIME parser.
+          php='echo json_encode(["php"=>PHP_VERSION,"sapi"=>PHP_SAPI]);'
+          body='umask 077; if mkdir '+shlex.quote(directory)+' 2>/dev/null; then cd /home/city; /usr/local/bin/php -r '+shlex.quote(php)+' > '+shlex.quote(directory+'/php.json')+' 2>/dev/null; /home/city/hostelworld-city-auth-pipe.php </dev/null >/dev/null 2>&1; echo "{\\\"pipe_exit\\\":$?}" > '+shlex.quote(directory+'/result.json')+'; fi'
+          command='/bin/sh -c '+shlex.quote(body)+' >/dev/null 2>&1'
+          def own_rows(): return [r for r in call('Cron','listcron') if r.get('command')==command]
+          if own_rows(): raise RuntimeError('prior_probe_requires_inspection')
+          try:
+              response=call('Cron','add_line',command=command,minute='*',hour='*',day='*',month='*',weekday='*')
+              if not any(r.get('status')==1 for r in response): raise RuntimeError('cron_not_added')
+              print('{"runtime_probe":"scheduled_once"}',flush=True)
+              result=None
+              for _ in range(18):
+                  time.sleep(5)
+                  result=read_result(directory)
+                  if isinstance(result,dict): break
+              code=result.get('pipe_exit') if isinstance(result,dict) else None
+              runtime=read_result(directory,'php.json') or {}
+              print(json.dumps({'city_php_runtime':{k:v for k,v in runtime.items() if k in ['php','sapi'] and isinstance(v,str) and re.fullmatch('[A-Za-z0-9_.-]{1,30}',v)}}))
+              print(json.dumps({'runtime_probe':{'completed':type(code) is int,'pipe_exit':code if type(code) is int and 0<=code<=255 else None}}))
+          finally:
+              found=own_rows()
+              if len(found)>1: raise RuntimeError('ambiguous_probe_cleanup')
+              if found:
+                  line=found[0].get('count')
+                  if not str(line).isdigit(): raise RuntimeError('invalid_probe_line')
+                  call('Cron','remove_line',line=line)
+              if own_rows(): raise RuntimeError('probe_cleanup_failed')
+              print('{"runtime_probe_cron_removed":true}')
+          PYCODE
