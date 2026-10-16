@@ -13,8 +13,8 @@ test('Windows Hostelworld inspection uses a fresh window without accepting launc
   const runtime = { executablePath: 'C:\\Chrome\\chrome.exe', headless: true,
     args: ['--no-sandbox'], userDataDir: 'C:\\personal-profile', dumpio: true };
   const profile = 'C:\\private\\.browser-fixture';
-  for (const [accountId, property] of [[2, '305209'], [3, '77759']]) {
-    assert.deepEqual(isolatedBrowserLaunchOptions({ action: 'discover', portal: 'hostelworld', accountId, property,
+  for (const [accountId, property] of [[2, '305209'], [3, '77759']]) for (const action of ['discover','login','verify','collect']) {
+    assert.deepEqual(isolatedBrowserLaunchOptions({ action, portal: 'hostelworld', accountId, property,
       headless: true, args: ['--no-sandbox'], userDataDir: 'C:\\other-profile' }, runtime, profile, 'win32'), {
       headless: false, executablePath: runtime.executablePath, userDataDir: profile, timeout: 30000, dumpio: false,
     });
@@ -28,7 +28,7 @@ test('windowed inspection cannot change other portals, accounts, actions or serv
   }
   for (const change of [{ portal: 'booking' }, { portal: 'airbnb' }, { accountId: 1 },
     { accountId: '2' }, { property: '77759' }, { property: undefined },
-    ...['preflight', 'login', 'collect', 'verify'].map(action => ({ action }))]) {
+    ...['preflight', 'unsupported'].map(action => ({ action }))]) {
     const options = isolatedBrowserLaunchOptions({ ...input, ...change }, { headless: false }, '/private/profile', 'win32');
     assert.equal(options.headless, true);
     assert.equal(options.userDataDir, '/private/profile');

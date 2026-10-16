@@ -203,6 +203,7 @@ export async function discoverHostelworld(initialPage, input, dependencies = {})
       issue_date_column: [...document.querySelectorAll('th')].some(el => /^(invoice date|issue date|date issued)$/i.test(el.textContent.trim())),
     }));
     stage = 'invoices_visible';
+    if (dependencies.withInvoices) await dependencies.withInvoices(page);
     return { version: 1, portal: 'hostelworld', validated: false, login_attempted: attempted,
       authenticated_session: true, account_verified: true, secure_link_new_tab: secureLinkNewTab,
       link_navigation: linkNavigation, post_link_login_attempted: false, navigation_stage: stage,

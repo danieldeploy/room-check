@@ -6,7 +6,7 @@ import { assertPrivateDirectory } from './private-storage.mjs';
 // desktop. Keep the disposable profile and all existing launch safeguards.
 // Neither portal data nor runtime configuration can supply arbitrary options.
 export function isolatedBrowserLaunchOptions(input, runtime, profile, platform = process.platform) {
-  const windowed = platform === 'win32' && input.action === 'discover'
+  const windowed = platform === 'win32' && ['discover', 'login', 'verify', 'collect'].includes(input.action)
     && input.portal === 'hostelworld'
     && ((input.accountId === 2 && String(input.property) === '305209')
       || (input.accountId === 3 && String(input.property) === '77759'));

@@ -117,7 +117,23 @@ try {
           return candidate;
         } : undefined,
       };
-      if (input.action === 'discover' || (input.action === 'login' && input.portal === 'booking')) {
+      if (input.portal === 'hostelworld' && ['login','collect','verify'].includes(input.action)) {
+        if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
+        const { discoverHostelworld } = await import('./hostelworld-discovery.mjs');
+        const { collectHostelworldInvoices, validateHostelworldCollectionMap } = await import('./hostelworld-collection.mjs');
+        const target = input.action === 'collect' ? validateHostelworldCollectionMap(input.map, input) : null;
+        let collected;
+        if (collectionTrace) collectionTrace.stage = 'session';
+        const diagnostic = await discoverHostelworld(page, input, input.action === 'login' ? {} : {
+          withInvoices: async workPage => { collected = await collectHostelworldInvoices(workPage,input,target,{trace:collectionTrace}); },
+        });
+        diagnostic.browser_mode = launchOptions.headless ? 'headless' : 'window';
+        if (diagnostic.failure_code) throw new PortalError(diagnostic.failure_code);
+        if (diagnostic.authenticated_session !== true) throw new PortalError('needs_auth');
+        const documents = collected?.documents || [];
+        process.stdout.write(JSON.stringify({ code: input.action === 'collect' && !documents.length ? 'no_invoices' : 'ok',
+          documents, ...(input.action === 'login' ? { diagnostic } : { verification: collected.verification }) }));
+      } else if (input.action === 'discover' || (input.action === 'login' && input.portal === 'booking')) {
         if (path.dirname(await fs.realpath(input.exchangeDir)) !== root) throw new PortalError('auth_unconfigured');
         const { discoverPortal, bookingLoginCode } = await import('./discover-portal.mjs');
         const diagnostic = await discoverPortal(page, { ...input, loginOnly: input.action === 'login' }, loginHooks);
