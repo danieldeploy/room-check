@@ -64,6 +64,18 @@ jobs:
           own=[i for i,row in enumerate(rows) if row.get('filtername')=='Room Check Hostelworld Auth v1']
           print(json.dumps({'city_filters':{'count':len(rows),'own_indices':own,
               'earlier_delivery_actions':sum(1 for row in rows[:own[0] if own else 0] for a in row.get('actions',[]) if a.get('action') in ['save','finish','fail','redirect','discard'])}}))
+          # Synthetic dry-run only: no actual email is sent and no login material is used.
+          sample = "From: diagnostic@hostelworld.com\nTo: diagnostic@example.invalid\nSubject: Login verification\n\nSynthetic filter test without authentication material.\n"
+          trace = read('Email','trace_filter',msg=sample)
+          if trace is not None:
+              rendered = json.dumps(trace).lower()
+              print(json.dumps({'city_filter_trace':{
+                  'available': True,
+                  'pipe_destination_present': 'hostelworld-city-auth-pipe.php' in rendered,
+                  'folder_destination_present': '.hostelworld' in rendered,
+                  'no_deliveries': 'no deliveries' in rendered,
+                  'errors': [label for label in ['syntax error','unrecognized','unknown command','permission denied','not found'] if label in rendered]
+              }}))
           # Delivery metadata explains failures before PHP can write a status.
           # No raw messages, addresses, transport errors, or authentication data
           # are printed. The query is scoped to the City cPanel account.
