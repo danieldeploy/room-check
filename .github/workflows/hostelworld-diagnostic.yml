@@ -86,20 +86,46 @@ jobs:
           with api.opener.open(req,timeout=20) as r: delivery=json.loads(r.read(2097152))
           result=delivery.get('cpanelresult',{})
           clean=[]
+          mailboxes=set()
           for row in result.get('data',[]):
               if not isinstance(row,dict): continue
               relevant=' '.join(str(row.get(k,'')) for k in ['sender','deliveredto','message']).lower()
               stamp=str(row.get('actionunixtime',''))
               if 'hostelworld' not in relevant or not stamp.isdigit() or int(stamp)<1792108800: continue
+              destination=str(row.get('deliveredto',''))
+              mailbox=re.fullmatch(r'/home/city/mail/([a-zA-Z0-9.-]+)/([a-zA-Z0-9_.+-]+)/\.HOSTELWORLD/?',destination)
+              if mailbox: mailboxes.add(mailbox[2]+'@'+mailbox[1])
               message=str(row.get('message','')).lower()
               clean.append({'at':int(stamp),'state':row.get('type') if row.get('type') in ['success','defer','failure','inprogress'] else 'unknown',
                   'pipe':'hostelworld-city-auth-pipe.php' in relevant,
                   'folder':'.hostelworld' in relevant,
+                  'route':{k:row[k] for k in ['router','transport'] if isinstance(row.get(k),str) and re.fullmatch('[a-z_]{1,60}',row[k])},
                   'errors':[label for label in ['permission denied','bad interpreter','not found','parse error','syntax error',
                       'undefined function','failed to open stream','cannot execute','command not found','not permitted','quota','timeout','unrouteable'] if label in message],
                   'exit_codes':re.findall(r'(?:returned|exit code|status)\s+(\d{1,3})\b',message)[:3]})
           print(json.dumps({'city_delivery':{'available':result.get('event',{}).get('result')==1,
               'matched':len(clean),'records':sorted(clean,key=lambda v:v['at'])[-20:]}}))
+          # Inspect rule structure only for the mailbox actually receiving the
+          # Hostelworld deliveries. Never read messages or print its address.
+          print(json.dumps({'city_delivery_mailboxes':len(mailboxes)}))
+          if len(mailboxes)==1:
+              mailbox=next(iter(mailboxes))
+              value=read('Email','list_filters',account=mailbox)
+              filters=value if isinstance(value,list) else value.get('filters',[]) if isinstance(value,dict) else []
+              print(json.dumps({'city_mailbox_filters':[{'index':i,'disabled':bool(f.get('disabled')),
+                  'own':f.get('filtername')=='Room Check Hostelworld Auth v1',
+                  'hostelworld_rule':any('hostelworld' in str(r.get('val','')).lower() for r in f.get('rules',[])),
+                  'actions':[{'action':a.get('action') if a.get('action') in ['save','pipe','finish','fail','deliver'] else 'other',
+                      'hostelworld_folder':'.hostelworld' in str(a.get('dest','')).lower(),
+                      'own_pipe':'hostelworld-city-auth-pipe.php' in str(a.get('dest',''))} for a in f.get('actions',[])]}
+                  for i,f in enumerate(filters)]}))
+              trace=read('Email','trace_filter',account=mailbox,msg=sample)
+              rendered=json.dumps(trace).lower() if trace is not None else ''
+              print(json.dumps({'city_mailbox_trace':{'available':trace is not None,
+                  'pipe_delivery':'pipe message to:' in rendered,
+                  'folder_delivery':'save message to:' in rendered,
+                  'own_pipe':'hostelworld-city-auth-pipe.php' in rendered,
+                  'finish':'finish' in rendered}}))
           value=read('Fileman','get_file_content',dir='/home/city',file='hostelworld-city-auth-status.json')
           if value is None:
               print(json.dumps({'city_auth_status':'not_available'})); sys.exit(0)
