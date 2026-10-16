@@ -40,7 +40,8 @@ test('bootstrap requires the exact account, property and server-approved email t
     assert.equal(hostelworldBinding({ ...configured(), ...change }), false);
 });
 function flow(identity = true) {
-  let url = 'about:blank'; const events = []; let inspect = 0;
+  let url = 'about:blank', authUrl = 'about:blank'; const events = [];
+  const listeners = new Map();
   const page = {
     goto: async value => { url = value; events.push(value.includes('/login/') ? 'consume' : 'navigate'); },
     url: () => url,
@@ -52,9 +53,9 @@ function flow(identity = true) {
       if (body.includes('form.method')) return true;
       if (body.includes('fields_match')) return { fields_match: true, form_valid: true };
       if (body.includes('sent_notice')) return { sent_notice: true, hostel_matches: true };
-      if (body.includes('property_marker')) return { login_form: !identity, property_marker: identity,
-        invoice_link: identity, secure_link_notice: false };
-      if (body.includes('const ids')) { inspect++; return identity; }
+      if (body.includes('property_marker')) return { login_form: false, property_marker: true,
+        invoice_link: true, secure_link_notice: false };
+      if (body.includes('const ids')) return identity;
       if (body.includes('pdf_links')) return { pdf_links: 2, pagination: true, issue_date_column: false };
       throw new Error('unexpected evaluation');
     },
@@ -65,10 +66,30 @@ function flow(identity = true) {
     waitForNavigation: async () => {},
     on: () => {}, off: () => {},
   };
+  const authPage = {
+    evaluate: fn => page.evaluate(fn),
+    goto: async value => {
+      assert.ok(events.includes('guard_on'));
+      assert.equal(url, 'https://inbox.hostelworld.com/trylogin.php', 'the waiting tab is preserved');
+      events.push(value.includes('/login/') ? 'consume' : 'invoice_navigation');
+      authUrl = value.includes('/login/') ? 'https://inbox.hostelworld.com/loggedin.php' : value;
+      const initial = { url: () => value };
+      return { status: () => 200, request: () => ({ url: () => authUrl, redirectChain: () => [initial] }) };
+    },
+    url: () => authUrl,
+    browserContext: () => context,
+    setDefaultNavigationTimeout: () => {}, setDefaultTimeout: () => {},
+    setRequestInterception: async enabled => events.push(enabled ? 'guard_on' : 'guard_off'),
+    on: (name, handler) => listeners.set(name, handler),
+    off: (name, handler) => { assert.equal(listeners.get(name), handler); listeners.delete(name); },
+    close: async () => events.push('auth_tab_closed'),
+  };
+  const context = { newPage: async () => { events.push('new_tab'); return authPage; } };
+  page.browserContext = () => context;
   const broker = { prepare: async () => events.push('prepare'), value: async () => {
     events.push('receive'); return 'https://inbox.hostelworld.com/login/' + 'a'.repeat(32);
   }, close: async () => events.push('close') };
-  return { page, broker, events };
+  return { page, authPage, context, broker, events, listeners };
 }
 test('prepared email challenge precedes submission and discovery never validates collection', async () => {
   const f = flow(); const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
@@ -78,6 +99,15 @@ test('prepared email challenge precedes submission and discovery never validates
   assert.equal(result.invoice_structure.issue_date_column, false);
   assert.ok(f.events.indexOf('prepare') < f.events.indexOf('submit'));
   assert.ok(f.events.indexOf('receive') < f.events.indexOf('consume'));
+  assert.ok(f.events.indexOf('new_tab') < f.events.indexOf('guard_on'));
+  assert.ok(f.events.indexOf('guard_on') < f.events.indexOf('consume'));
+  assert.equal(result.secure_link_new_tab, true);
+  assert.equal(result.post_link_login_attempted, false);
+  assert.deepEqual(result.link_navigation, { request_matches: true, response_status: 200, redirect_count: 1 });
+  assert.equal(f.events.filter(x => x === 'submit').length, 1);
+  assert.equal(f.page.url(), 'https://inbox.hostelworld.com/trylogin.php');
+  assert.equal(f.listeners.size, 0);
+  assert.ok(f.events.includes('auth_tab_closed'));
   assert.equal(f.events.at(-1), 'close');
   assert.doesNotMatch(JSON.stringify(result), /fixture-|a{32}|cookies/);
 });
@@ -119,52 +149,81 @@ test('failed sign-in records only bounded POST evidence and detaches its observe
   assert.doesNotMatch(JSON.stringify(result), /FIXTURE_SECRET|fixture-password|other.example/);
 });
 test('wrong property stops before invoice navigation', async () => {
-  const f = flow(false); const evaluate = f.page.evaluate;
-  f.page.evaluate = async fn => String(fn).includes('property_marker')
-    ? { login_form: false, property_marker: true, invoice_link: true } : evaluate(fn);
+  const f = flow(false);
   const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
   assert.equal(result.failure_code, 'account_mismatch');
   assert.equal(result.authenticated_session, false);
   assert.equal(result.invoice_structure, undefined);
+  assert.equal(f.events.includes('invoice_navigation'), false);
+  assert.ok(f.events.includes('auth_tab_closed'));
   assert.equal(f.events.at(-1), 'close');
 });
 
-test('plain login after a secure link is submitted once and identity is still checked', async () => {
-  const f = flow(); const evaluate = f.page.evaluate; let observations = 0;
-  f.page.evaluate = async fn => String(fn).includes('property_marker') && ++observations === 1
-    ? { login_form: true, property_marker: false, secure_link_notice: false } : evaluate(fn);
-  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
-  assert.equal(result.authenticated_session, true);
-  assert.equal(result.post_link_login_attempted, true);
-  assert.equal(result.validated, false);
-  assert.equal(f.events.filter(x => x === 'submit').length, 2);
-  assert.equal(f.events.filter(x => x === 'receive').length, 1);
-  assert.doesNotMatch(JSON.stringify(result), /fixture-password|fixture-user|a{32}/);
-});
-
-test('a repeated login form or email notice stops without a second email challenge', async () => {
+test('a new tab returning login or an email notice stops without submitting credentials again', async () => {
   for (const repeated of [{ login_form: true }, { secure_link_notice: true }]) {
-    const f = flow(false); const evaluate = f.page.evaluate; let observations = 0;
-    f.page.evaluate = async fn => String(fn).includes('property_marker')
-      ? (++observations === 1 ? { login_form: true } : repeated) : evaluate(fn);
+    const f = flow(false); const evaluate = f.authPage.evaluate;
+    f.authPage.evaluate = async fn => String(fn).includes('property_marker') ? repeated : evaluate(fn);
     const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
     assert.equal(result.failure_code, 'needs_auth');
-    assert.equal(result.post_link_login_attempted, true);
-    assert.equal(f.events.filter(x => x === 'submit').length, 2);
+    assert.equal(result.secure_link_new_tab, true);
+    assert.equal(result.post_link_login_attempted, false);
+    assert.equal(f.events.filter(x => x === 'submit').length, 1);
     assert.equal(f.events.filter(x => x === 'receive').length, 1);
+    assert.ok(f.events.includes('auth_tab_closed'));
+    assert.doesNotMatch(JSON.stringify(result), /fixture-password|fixture-user|a{32}/);
   }
 });
 
 test('link errors and human checks prevent post-link credential submission', async () => {
   for (const [flag, code] of [['human_challenge','human_verification'], ['invalid_link','auth_invalid'], ['error_notice','needs_auth']]) {
-    const f = flow(false); const evaluate = f.page.evaluate;
-    f.page.evaluate = async fn => String(fn).includes('property_marker')
+    const f = flow(false); const evaluate = f.authPage.evaluate;
+    f.authPage.evaluate = async fn => String(fn).includes('property_marker')
       ? { login_form: true, [flag]: true } : evaluate(fn);
     const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
     assert.equal(result.failure_code, code);
     assert.equal(result.post_link_login_attempted, false);
     assert.equal(f.events.filter(x => x === 'submit').length, 1);
   }
+});
+
+test('a tab in a different context is rejected before the link is opened', async () => {
+  const f = flow(); f.authPage.browserContext = () => ({});
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  assert.equal(result.failure_code, 'browser_unavailable');
+  assert.equal(result.failure_stage, 'open_auth_tab');
+  assert.equal(result.secure_link_new_tab, false);
+  assert.equal(f.events.includes('consume'), false);
+  assert.ok(f.events.includes('auth_tab_closed'));
+});
+
+test('the new tab keeps destination and secret guards before consuming the link', async () => {
+  const f = flow(); const navigate = f.authPage.goto; const actions = [];
+  f.authPage.goto = async value => {
+    const listener = f.listeners.get('request');
+    for (const [url, method] of [['https://foreign.example/login', 'GET'],
+      ['https://inbox.hostelworld.com/?password=fixture-password', 'GET'],
+      ['https://foreign.example/submit', 'POST']]) {
+      listener({ url: () => url, method: () => method, isNavigationRequest: () => true,
+        isInterceptResolutionHandled: () => false,
+        abort: async () => actions.push('abort'), continue: async () => actions.push('continue') });
+    }
+    return navigate(value);
+  };
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  assert.equal(result.authenticated_session, true);
+  assert.deepEqual(actions, Array(6).fill('abort'));
+  assert.equal(f.listeners.size, 0);
+});
+
+test('navigation failure closes the extra tab and never emits the link or error message', async () => {
+  const f = flow(); f.authPage.goto = async () => { throw new Error('PRIVATE_LINK_VALUE'); };
+  const result = await discoverHostelworld(f.page, configured(), { broker: f.broker });
+  assert.equal(result.failure_code, 'browser_unavailable');
+  assert.equal(result.failure_stage, 'consume_link');
+  assert.ok(f.events.includes('guard_off'));
+  assert.ok(f.events.includes('auth_tab_closed'));
+  assert.equal(f.events.at(-1), 'close');
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE_LINK_VALUE|fixture-password|a{32}/);
 });
 
 test('unknown login result is not mislabeled as invalid credentials or retried blindly', async () => {
