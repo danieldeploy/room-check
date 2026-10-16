@@ -4,6 +4,23 @@ export class AgentError extends Error {
   constructor(code, retry = false) { super(code); this.retry = retry; }
 }
 
+// Validate the one-time value against the leased job before writing or acknowledging it.
+// The value must never be included in errors or diagnostics.
+export function validateChallengeValue(input, method, value) {
+  if (typeof value !== 'string' || method !== input.authMethod) throw new AgentError('auth_invalid');
+  if (input.portal === 'hostelworld' && method === 'email') {
+    const targets = input.hostelworldAuthTargets;
+    if (targets?.length !== 1 || targets[0].host !== 'inbox.hostelworld.com'
+        || targets[0].path !== '/login/'
+        || !/^https:\/\/inbox\.hostelworld\.com\/login\/[a-fA-F0-9]{32}(?:\?Language=[A-Za-z]{2,20})?$/.test(value)) {
+      throw new AgentError('auth_invalid');
+    }
+  } else if (!['sms', 'email'].includes(method) || !/^\d{6}$/.test(value)) {
+    throw new AgentError('auth_invalid');
+  }
+  return value;
+}
+
 export function validateEndpoint(value) {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash

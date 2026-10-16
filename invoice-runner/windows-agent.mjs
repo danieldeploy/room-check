@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import { AgentClient, AgentError, documentParts } from './agent-client.mjs';
+import { AgentClient, AgentError, documentParts, validateChallengeValue } from './agent-client.mjs';
 import { assertPrivateDirectory } from './private-storage.mjs';
 import { writeTaskReceipt } from './task-receipt.mjs';
 import { removePrivateBookingLoginMetadata, writeBookingLoginReport } from './booking-login-report.mjs';
@@ -105,7 +105,7 @@ async function execute(client, root, runtime, job, browserSupervisor) {
             await privateWrite(path.join(exchange, `ready-${current.id}`), 'ready');
           }
           if (reply.value !== null && reply.value !== undefined) {
-            if (!['sms', 'email'].includes(current.method) || !/^\d{6}$/.test(reply.value)) throw new AgentError('auth_invalid');
+            validateChallengeValue(job.input, current.method, reply.value);
             await privateWrite(path.join(exchange, `response-${current.id}.json`), JSON.stringify({ value: reply.value }));
             await request({ action: 'challenge', challenge: current, ack: true });
             challenge.delivered = true;
