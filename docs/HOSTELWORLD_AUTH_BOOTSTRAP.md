@@ -11,9 +11,18 @@ signed City bridge, message freshness, active challenge and single-use checks
 remain in force. No unvalidated map or incoming email chooses a destination.
 
 The worker checks the login form action, prepares the email challenge before
-submitting credentials, consumes the link once and verifies server-rendered
-property identity before navigating to VAT invoices. Failure returns a bounded
+submitting credentials, consumes the link once in a new tab of the same browser
+context and verifies server-rendered property identity before navigating to VAT
+invoices. The original waiting tab remains open. The new tab has the same
+destination and secret guards before navigation and is closed after inspection.
+A returned login form stops the task without another credential submission.
+Failure returns a bounded
 stage/code without credential values, response bodies or token URLs.
+
+After a release, verify that the Windows executor has the approved runner files;
+publishing the hosting copy does not update the Windows installation. Follow the
+pause/idle/update/probe/resume procedure in `WINDOWS_INVOICE_AGENT.md` and compare
+source checksums before the production acceptance test.
 
 Inspection remains an unvalidated structural diagnostic. It does not enable
 scheduling, approve a collection map, download invoices, or infer issue dates
