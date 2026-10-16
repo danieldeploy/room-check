@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install only the two authorized Hostelworld pipes; never read mailboxes."""
+"""Install the authorized Hostelworld filters and the local City folder worker."""
 import json
 import os
 import pathlib
@@ -10,7 +10,8 @@ import urllib.request
 from cpanel_api import Config, CpanelAPI, DeploymentError, require, WHM_ORIGIN
 
 NAME = "Room Check Hostelworld Auth v1"
-FILES = {"hostelworld-city-auth-pipe.php", "HostelworldMailMessage.php", "HostelworldBridge.php", "hostelworld-city-auth.key", "HostelworldLinkToken.php", "hostelworld-city-auth-targets.json"}
+FILES = {"hostelworld-city-auth-pipe.php", "HostelworldMailMessage.php", "HostelworldBridge.php", "HostelworldFolderQueue.php", "hostelworld-city-auth.key", "HostelworldLinkToken.php", "hostelworld-city-auth-targets.json"}
+CITY_CRON = "cd /home/city && /usr/local/bin/php -q /home/city/hostelworld-city-auth-pipe.php --poll-auth-folder >/dev/null 2>&1"
 
 class FilterAPI:
     def __init__(self, account):
@@ -21,8 +22,13 @@ class FilterAPI:
 
     def call(self, module, function, **params):
         allowed = {("Email","list_filters"), ("Email","store_filter"),
+                   ("Cron","listcron"), ("Cron","add_line"),
                    ("Fileman","get_file_content"), ("Fileman","save_file_content"), ("Fileman","fileop")}
         require((module,function) in allowed, "operation_not_allowed")
+        if module == "Cron":
+            require(self.account == "city" and (function == "listcron" and not params
+                or function == "add_line" and params == dict(command=CITY_CRON,
+                    minute="*",hour="*",day="*",month="*",weekday="*")), "cron_not_allowed")
         if module == "Fileman" and function != "fileop":
             if self.account == "welcome":
                 require(function == "get_file_content" and params == {
@@ -35,6 +41,7 @@ class FilterAPI:
             require(self.account == "city" and params.get("sourcefiles") in FILES
                     and params.get("op") == "chmod" and params.get("metadata") in ("0600","0700")
                     and params.get("doubledecode") == 0, "chmod_not_allowed")
+        if function == "fileop" or module == "Cron":
             route = "/json-api/cpanel"
             data = {"cpanel_jsonapi_user":self.account,"cpanel_jsonapi_apiversion":2,
                     "cpanel_jsonapi_module":module,"cpanel_jsonapi_func":function,**params}
@@ -52,9 +59,9 @@ class FilterAPI:
             raw=response.read(2*1024*1024+1)
         require(len(raw)<=2*1024*1024,"response_too_large")
         p=json.loads(raw)
-        if function == "fileop":
+        if function == "fileop" or module == "Cron":
             r=p.get("cpanelresult",{})
-            require(not r.get("error") and r.get("event",{}).get("result")==1,"chmod_failed")
+            require(not r.get("error") and r.get("event",{}).get("result")==1,"api2_operation_failed")
             return r.get("data")
         require(p.get("metadata",{}).get("result")==1,"whm_operation_failed")
         r=p.get("data",{}).get("uapi",{})
@@ -95,19 +102,20 @@ def expected(account, identifier):
     require(account in ("welcome","city") and type(identifier) is int and identifier > 0,"invalid_account_binding")
     destination = ("room-check-private/cron/hostelworld-auth-pipe.php "+str(identifier)
                    if account=="welcome" else "hostelworld-city-auth-pipe.php")
-    return dict(filtername=NAME,part1="$header_from:",match1="matches",
+    params = dict(filtername=NAME,part1="$header_from:",match1="matches",
         val1=r"(?i)@(?:[a-z0-9-]+\.)*hostelworld\.com(?:[> \t]|$)",opt1="and",
         part2="$header_subject:",match2="matches",
         val2=r"(?i)(login|sign[ _-]*in|security|verification|code|authentication)",
         action1="save",dest1="/home/"+account+"/mail/$domain/$local_part/"+
-            (".Hostelworld/" if account=="welcome" else ".HOSTELWORLD/"),
-        action2="pipe",dest2=destination)
+            (".Hostelworld/" if account=="welcome" else ".HOSTELWORLD/"))
+    if account == "welcome": params.update(action2="pipe",dest2=destination)
+    return params
 
 def verify_filter(row, params):
     require(row.get("filtername")==NAME and not row.get("disabled"),"filter_disabled")
     rules=row.get("rules",[])
     actions=row.get("actions",[])
-    require(len(rules)==2 and len(actions)==2,"filter_conflict")
+    require(len(rules)==2 and len(actions)==(2 if "action2" in params else 1),"filter_conflict")
     for i,r in enumerate(rules,1):
         for key in ("part","match","val"):
             require(r.get(key)==params[key+str(i)],"filter_rule_conflict")
@@ -150,14 +158,37 @@ def install(api, identifier):
         try:
             verify_filter(matches[0],params)
         except DeploymentError:
-            previous=dict(params,dest1="/home/"+api.account+"/mail/$domain/$local_part/")
-            verify_filter(matches[0],previous)
-            api.call("Email","store_filter",**params)
+            previous=[dict(params,dest1="/home/"+api.account+"/mail/$domain/$local_part/")]
+            if api.account == "city":
+                legacy=dict(params,action2="pipe",dest2="hostelworld-city-auth-pipe.php")
+                previous.extend([legacy,dict(legacy,dest1="/home/city/mail/$domain/$local_part/")])
+            for candidate in previous:
+                try: verify_filter(matches[0],candidate); break
+                except DeploymentError: continue
+            else: raise DeploymentError("filter_migration_conflict")
+            api.call("Email","store_filter",oldfiltername=NAME,**params)
     else: api.call("Email","store_filter",**params)
     matches=[r for r in rows(api.call("Email","list_filters")) if r.get("filtername")==NAME]
     require(len(matches)==1,"filter_missing_after_creation")
     verify_filter(matches[0],params)
     print(json.dumps({"account":api.account,"filter":NAME,"state":"verified"}))
+
+def install_city_cron(api):
+    require(api.account == "city", "invalid_cron_account")
+    def current():
+        value=api.call("Cron","listcron")
+        require(isinstance(value,list),"invalid_cron_list")
+        found=[r for r in value if "hostelworld-city-auth-pipe.php" in str(r.get("command",""))]
+        require(len(found)<=1,"ambiguous_city_cron")
+        if found:
+            require(found[0].get("command")==CITY_CRON and all(str(found[0].get(k))=="*"
+                for k in ("minute","hour","day","month","weekday")),"city_cron_conflict")
+        return found
+    if not current():
+        result=api.call("Cron","add_line",command=CITY_CRON,minute="*",hour="*",day="*",month="*",weekday="*")
+        require(isinstance(result,list) and any(r.get("status")==1 for r in result),"city_cron_add_failed")
+    require(len(current())==1,"city_cron_missing")
+    print('{"city_folder_worker":"verified"}')
 
 def main():
     welcome=FilterAPI("welcome"); city=FilterAPI("city")
@@ -173,6 +204,7 @@ def main():
         "hostelworld-city-auth-pipe.php":(root/"deploy/hostelworld-city-auth-pipe.php").read_text(),
         "HostelworldMailMessage.php":(root/"src/Invoices/HostelworldMailMessage.php").read_text(),
         "HostelworldBridge.php":(root/"src/Invoices/HostelworldBridge.php").read_text(),
+        "HostelworldFolderQueue.php":(root/"src/Invoices/HostelworldFolderQueue.php").read_text(),
         "HostelworldLinkToken.php":(root/"src/Invoices/HostelworldLinkToken.php").read_text(),
         "hostelworld-city-auth-targets.json":json.dumps(provision.get("link_targets",{}).get("city",[])),
         "hostelworld-city-auth.key":provision["key"],
@@ -189,6 +221,7 @@ def main():
             city.call("Fileman","save_file_content",dir="/home/city",file=name,content=value)
             city.call("Fileman","fileop",op="chmod",sourcefiles=name,metadata=mode,doubledecode=0)
         require(content(city.call("Fileman","get_file_content",dir="/home/city",file=name))==value,"city_file_verify_failed")
+    install_city_cron(city)
     install(welcome,ids["welcome"])
     install(city,ids["city"])
 
