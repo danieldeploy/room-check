@@ -73,10 +73,14 @@ export function validateHostelworldCollectionMap(map, input) {
 
 export async function readHostelworldTable(page) {
   return page.evaluate(() => {
-    const tables = [...document.querySelectorAll('table.table-block')].filter(t => t.querySelector('tr[id^="invoice-"]'));
+    const regions = [...document.querySelectorAll('.vat-invoices')];
+    if (regions.length !== 1) return { tables: 0 };
+    const headers = [...regions[0].querySelectorAll('.table-header table.table-block')];
+    if (headers.length !== 1) return { tables: 0 };
+    const tables = [...regions[0].querySelectorAll('table.table-block')].filter(t => t.querySelector('tr[id^="invoice-"]'));
     if (tables.length !== 1) return { tables: tables.length };
     const table = tables[0];
-    return { tables: 1, headers: [...table.querySelectorAll('th')].map(x => x.textContent),
+    return { tables: 1, headers: [...headers[0].querySelectorAll('th')].map(x => x.textContent),
       rows: [...table.querySelectorAll('tr[id^="invoice-"]')].slice(0,401).map(row => ({
         id: row.id.replace(/^invoice-/,''), number: row.querySelector('td')?.textContent.trim(),
         links: [...row.querySelectorAll('a[href*="/reports/vatinvoices/pdf/"]')].map(a => a.href),
