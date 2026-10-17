@@ -485,6 +485,8 @@ final class InvoiceText
         'alert_sent' => ['Aviso WhatsApp enviado', 'WhatsApp alert sent'],
         'alert_failed' => ['Envio do aviso WhatsApp não confirmado', 'WhatsApp alert delivery unconfirmed'],
         'alert_resolved' => ['Resolvido', 'Resolved'],
+        'notice_cloudbeds_review' => ['Existem emails Cloudbeds cuja assinatura já não pode ser validada. Apenas as faturas autenticadas foram tratadas.', 'Some Cloudbeds emails have signatures that can no longer be validated. Only authenticated invoices were processed.'],
+        'notice_cloudbeds_review_action' => ['Consulte os emails preservados na pasta Cloudbeds da conta indicada. Peça uma nova cópia ao fornecedor se faltar alguma fatura do período.', 'Review the emails preserved in the indicated account’s Cloudbeds folder. Request a new copy from the supplier if an invoice for the period is missing.'],
         'notice_0' => ['A ligação ao Google Drive expirou.', 'The Google Drive connection has expired.'],
         'notice_1' => ['O Google Drive está sem espaço.', 'Google Drive has no available space.'],
         'notice_2' => ['O destino Google Drive não está configurado.', 'The Google Drive destination is not configured.'],
