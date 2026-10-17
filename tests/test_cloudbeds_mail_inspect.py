@@ -82,6 +82,16 @@ class Tests(unittest.TestCase):
         self.assertNotIn("PRIVATE", json.dumps(result))
         self.assertNotIn("SECRET", json.dumps(result))
 
+    def test_pdf_report_never_contains_invoice_values(self):
+        result = c.pdf_text_shape("Cloudbeds Invoice A1234567\nInvoice Date: 09/15/2026\n"
+                                  "Bill To: Active Lines PT123456789\nPRIVATE_NAME 999.99\n"
+                                  "Due Date: 10/15/2026\n")
+        self.assertTrue(result["active_lines"])
+        self.assertTrue(result["invoice_number_after_label"])
+        self.assertEqual(result["dates"]["invoice_date"]["following_formats"], ["numeric_slash"])
+        for forbidden in ("1234567", "123456789", "2026", "999.99", "PRIVATE_NAME"):
+            self.assertNotIn(forbidden, json.dumps(result))
+
 
 if __name__ == "__main__":
     unittest.main()

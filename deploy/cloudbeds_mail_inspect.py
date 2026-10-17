@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 import urllib.parse
 import urllib.request
 
@@ -41,6 +42,52 @@ def family(host):
     return "other"
 
 
+def pdf_text_shape(text):
+    """Only fixed label/format facts, never extracted text or invoice values."""
+    labels = {
+        "invoice_date": r"\binvoice\s+date\b", "issue_date": r"\b(?:issue\s+date|date\s+of\s+issue)\b",
+        "invoice_number": r"\binvoice\s*(?:number|no\.?|#)\b", "invoice": r"\binvoice\b",
+        "due_date": r"\bdue\s+date\b", "bill_to": r"\bbill(?:ed)?\s+to\b",
+        "vat_number": r"\b(?:vat|tax)\s*(?:number|id|no\.?)\b", "nif": r"\bnif\b",
+        "receipt": r"\breceipt\b", "payment_confirmation": r"\bpayment\s+confirmation\b",
+    }
+    formats = {"iso": r"20\d{2}-\d{2}-\d{2}",
+               "numeric_slash": r"\d{1,2}/\d{1,2}/20\d{2}",
+               "numeric_dash": r"\d{1,2}-\d{1,2}-20\d{2}",
+               "month_first": r"[A-Za-z]{3,9}\s+\d{1,2},?\s+20\d{2}",
+               "day_first": r"\d{1,2}\s+[A-Za-z]{3,9}\s+20\d{2}"}
+    dates = {}
+    for label in ("invoice_date", "issue_date", "due_date"):
+        matches = list(re.finditer(labels[label], text, re.I))
+        values = [text[m.end():m.end()+60].lstrip(" \t\r\n:") for m in matches]
+        dates[label] = {"count": len(matches), "following_formats": sorted({
+            name for value in values for name, pattern in formats.items() if re.match(pattern, value)})}
+    return {"text_extracted": bool(text.strip()),
+            "labels": [name for name, pattern in labels.items() if re.search(pattern, text, re.I)],
+            "dates": dates,
+            "cloudbeds": bool(re.search(r"\bcloudbeds\b", text, re.I)),
+            "active_lines": bool(re.search(r"\bactive\s+lines\b", text, re.I)),
+            "welcome": bool(re.search(r"\bwelcome\s+(?:hostel|guest)", text, re.I)),
+            "city": bool(re.search(r"\bcity\s+(?:center|centre)\s+hostel", text, re.I)),
+            "portuguese_tax_format": bool(re.search(r"\bPT\s*\d{9}\b", text, re.I)),
+            "invoice_a_number": bool(re.search(r"\bA\d{6,12}\b", text)),
+            "invoice_number_after_label": bool(re.search(r"\binvoice\s*(?:number|no\.?|#)?\s*:?\s*A\d{6,12}\b", text, re.I))}
+
+
+def pdf_shape(content):
+    if not content.startswith(b"%PDF-") or len(content) > 2*1024*1024:
+        return {"error": "invalid_pdf"}
+    try:
+        result = subprocess.run(["pdftotext", "-f", "1", "-l", "10", "-layout", "-enc", "UTF-8", "-", "-"],
+                                input=content, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=10, check=True)
+        if len(result.stdout) > 2*1024*1024:
+            return {"error": "text_limit"}
+        return pdf_text_shape(result.stdout.decode("utf-8", errors="replace"))
+    except (OSError, subprocess.SubprocessError):
+        return {"error": "text_unavailable"}
+
+
 def shape(raw):
     require(0 < len(raw) <= MAX_MAIL, "message_size")
     message = BytesParser(policy=email.policy.default).parsebytes(raw)
@@ -49,6 +96,7 @@ def shape(raw):
     texts = []
     types = {"plain": 0, "html": 0, "pdf": 0, "other_attachment": 0}
     pdf_headers = 0
+    pdf_shapes = []
     parts = list(message.walk())
     require(len(parts) <= 64, "mime_parts")
     for part in parts:
@@ -60,6 +108,7 @@ def shape(raw):
         if mime == "application/pdf" or (part.get_filename() or "").lower().endswith(".pdf"):
             types["pdf"] += 1
             pdf_headers += int(content.startswith(b"%PDF-"))
+            pdf_shapes.append(pdf_shape(content))
         elif part.get_content_disposition() == "attachment":
             types["other_attachment"] += 1
         elif mime in ("text/plain", "text/html"):
@@ -86,6 +135,9 @@ def shape(raw):
             continue
     plain = re.sub(r"<[^>]*>", " ", body)
     return {"sender_provider": sender_family, "mime": types,
+            "pdf_shapes": pdf_shapes,
+            "dkim_providers": sorted(set(family(m.group(1)) for value in message.get_all("DKIM-Signature", [])
+                for m in re.finditer(r"(?:^|;)\s*d=([^;\s]+)", str(value), re.I))),
             "pdf_signature_count": pdf_headers,
             "subject_markers": markers(str(message.get("Subject", ""))),
             "body_markers": markers(plain),
