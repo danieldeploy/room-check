@@ -35,6 +35,13 @@ test('legacy labelled dates accept unambiguous formats and never guess numeric o
  const trace={};assert.deepEqual(hostelworldIssueDates('Date: 03/09/2021',trace),[]);
  assert.deepEqual(trace.pdf_date,{reason:'ambiguous_numeric',labels:1,candidates:0});
 });
+test('PDF text may split a four-digit year into two fragments after a named month',()=>{
+ for(const value of ['3 September 20 21','September 3, 20\n21'])
+  assert.deepEqual(hostelworldIssueDates('Date: '+value),['2021-09-03']);
+ for(const value of ['3 September 20 2 1','3 September 20 211','31 February 20 21','3 Unknown 20 21'])
+  assert.deepEqual(hostelworldIssueDates('Date: '+value),[]);
+ assert.equal(hostelworldIssueDates('Date: 3 September 20 21\nInvoice date: 4 September 2021').length,2);
+});
 test('printed leading zeroes preserve the exact numeric property and reject conflicting labels',()=>{
  const trace={}; const padded=text.replace('H305209','H077759');
  assert.equal(hostelworldPdfIdentity(padded,'77759',trace).issued_on,'2026-08-03');

@@ -76,3 +76,11 @@ and generic month/weekday/ordinal classes are retained. No date, word, number,
 PDF content or URL is persisted. The receipt independently enforces its fixed
 vocabulary and bounds. This does not accept any new date format, change account
 permissions or bypass verification; failed dates still stop the collection.
+
+Fragmented PDF year: an observed unsupported date had a named month followed by
+two two-digit text fragments. For labelled English-month dates, Node and PHP may
+join whitespace between the literal `20` and exactly two final year digits.
+This handles PDF text-item spacing without inferring a century or numeric
+day/month order. Invalid calendars, unknown months, extra digits and conflicting
+issue dates still fail. Equivalent synthetic cases cover both independent readers;
+real account verification remains required before approval or monthly scheduling.

@@ -36,10 +36,10 @@ export function hostelworldIssueDates(text, trace = null) {
     if (label[1]) continue;
     labels++; const value = text.slice(label.index + label[0].length, label.index + label[0].length + 80);
     let day, month, year, match;
-    if ((match = /^(\d{1,2})(?:st|nd|rd|th)?[\s./-]*([A-Za-z]{3,9})[\s,./-]*(20\d{2})\b/i.exec(value))) {
-      day=Number(match[1]); month=monthNumber(match[2]); year=Number(match[3]);
-    } else if ((match = /^([A-Za-z]{3,9})\s*(\d{1,2})(?:st|nd|rd|th)?[\s,./-]+(20\d{2})\b/i.exec(value))) {
-      month=monthNumber(match[1]); day=Number(match[2]); year=Number(match[3]);
+    if ((match = /^(\d{1,2})(?:st|nd|rd|th)?[\s./-]*([A-Za-z]{3,9})[\s,./-]*(20\s*\d{2})\b/i.exec(value))) {
+      day=Number(match[1]); month=monthNumber(match[2]); year=Number(match[3].replace(/\s/g,''));
+    } else if ((match = /^([A-Za-z]{3,9})\s*(\d{1,2})(?:st|nd|rd|th)?[\s,./-]+(20\s*\d{2})\b/i.exec(value))) {
+      month=monthNumber(match[1]); day=Number(match[2]); year=Number(match[3].replace(/\s/g,''));
     } else if ((match = /^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/.exec(value))) {
       year=Number(match[1]); month=Number(match[2]); day=Number(match[3]);
     } else if ((match = /^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b/.exec(value))) {
