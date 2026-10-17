@@ -17,6 +17,15 @@ test('collection requires exact validated account, property and extraction strat
  for(const patch of [{validated:false},{version:3},{accountId:3},{strategy:'other'}]) assert.throws(()=>validateHostelworldCollectionMap({...map,...patch},input));
  assert.throws(()=>validateHostelworldCollectionMap(map,{...input,periodBasis:'service_month'}));
 });
+test('printed leading zeroes preserve the exact numeric property and reject conflicting labels',()=>{
+ const trace={}; const padded=text.replace('H305209','H077759');
+ assert.equal(hostelworldPdfIdentity(padded,'77759',trace).issued_on,'2026-08-03');
+ assert.deepEqual(trace.pdf_identity,{issuer_verified:true,property_label_found:true,property_verified:true,property_zero_padded:true});
+ for(const bad of [padded.replace('077759','177759'),padded.replace('077759','0777590'),padded+'\nHostel Number: H305209'])
+  assert.throws(()=>hostelworldPdfIdentity(bad,'77759'),/account_mismatch/);
+ assert.throws(()=>hostelworldPdfIdentity(text.replace('Hostel Number','Other Number'),'77759',trace),/account_mismatch/);
+ assert.equal(trace.pdf_identity.property_label_found,false);
+});
 function row(id) {return {id,number:id,links:[root+'/pdf/'+id]};}
 function fixture(pages,dates) {
  let n=0,url=root; const downloaded=[];

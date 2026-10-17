@@ -41,3 +41,12 @@ headings, foreign links, skipped pages and ambiguous tables still fail closed.
 Local verification receipts may retain bounded table/header/row/navigation counts,
 never URLs, heading text or invoice values. Synthetic combined/split-layout and
 dual-navigation tests precede a real City verification and approval.
+
+Printed property identity: strip only leading zeroes from the labelled numeric
+Hostel Number before comparing it with the already bound property, in both Node
+and PHP. Different or conflicting numbers fail; issuer, company and date checks
+are unchanged. Existing manager approval remains mandatory. Private receipts may
+retain four identity booleans and a bounded scanned-PDF count to locate failures,
+never the extracted text or number. Synthetic padded, wrong and conflicting IDs
+are tested before production verification; padding is not assumed to explain a
+production rejection until that verification establishes the result.

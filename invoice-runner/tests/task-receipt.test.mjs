@@ -129,3 +129,12 @@ test('Hostelworld table diagnostics contain bounded counts without page or invoi
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(root,'task-59-receipt.json'),'utf8')).table,{});
  } finally {await fs.rm(root,{recursive:true,force:true});}
 });
+test('Hostelworld PDF identity diagnostic excludes extracted values',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'hw-identity-receipt-'));
+ try {
+  await writeTaskReceipt(root,{id:60,input:{action:'verify',portal:'hostelworld'}},{code:'account_mismatch',collection_trace:{stage:'pdf_download',scanned_documents:1,pdf_identity:{issuer_verified:true,property_label_found:true,property_verified:false,property_zero_padded:false,text:'PRIVATE_PDF',number:'PRIVATE_NUMBER'}}},{accepted:true,state:'failed'});
+  const raw=await fs.readFile(path.join(root,'task-60-receipt.json'),'utf8');
+  assert.equal(raw.includes('PRIVATE_'),false);assert.equal(JSON.parse(raw).scanned_documents,1);
+  assert.deepEqual(JSON.parse(raw).pdf_identity,{issuer_verified:true,property_label_found:true,property_verified:false,property_zero_padded:false});
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});

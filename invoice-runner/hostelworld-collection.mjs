@@ -9,10 +9,15 @@ const fail = code => { throw new PortalError(code); };
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 
-export function hostelworldPdfIdentity(text, property) {
+export function hostelworldPdfIdentity(text, property, trace = null) {
   if (typeof text !== 'string' || text.length > 1024 * 1024 || !/^\d{1,12}$/.test(property)) fail('invalid_document');
-  if (!/hostelworld\.com/i.test(text)
-      || !new RegExp('Hostel\\s+Number\\s*:\\s*H?' + property + '(?!\\d)', 'i').test(text)) fail('account_mismatch');
+  const issuer = /hostelworld\.com/i.test(text);
+  const labels = [...text.matchAll(/\bHostel\s+Number\s*:\s*H?(\d{1,12})(?!\d)/gi)].map(m => m[1]);
+  const numbers = new Set(labels.map(n => n.replace(/^0+/, '') || '0'));
+  const matched = numbers.size === 1 && numbers.has(property);
+  if (trace) trace.pdf_identity = { issuer_verified: issuer, property_label_found: labels.length > 0,
+    property_verified: matched, property_zero_padded: matched && labels.some(n => n.startsWith('0')) };
+  if (!issuer || !matched) fail('account_mismatch');
   const dates = new Set();
   for (const match of text.matchAll(/\b(?:(due\s+date|payment\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(20\d{2})\b/gi)) {
     if (match[1]) continue;
@@ -25,7 +30,7 @@ export function hostelworldPdfIdentity(text, property) {
   return { issued_on: [...dates][0] };
 }
 
-export async function readHostelworldPdf(content, property) {
+export async function readHostelworldPdf(content, property, trace = null) {
   const bytes = Buffer.from(content, 'base64');
   if (bytes.length < 8 || bytes.length > 2 * 1024 * 1024 || bytes.subarray(0,5).toString() !== '%PDF-'
       || !bytes.subarray(-2048).includes(Buffer.from('%%EOF'))) fail('invalid_document');
@@ -46,7 +51,7 @@ export async function readHostelworldPdf(content, property) {
         if (text.length > 1024 * 1024) fail('invalid_document');
         page.cleanup();
       }
-      return hostelworldPdfIdentity(text, property);
+      return hostelworldPdfIdentity(text, property, trace);
     })(), new Promise((_, reject) => { timer = setTimeout(() => reject(new PortalError('invalid_document')), 15000); })]);
   } catch (error) {
     if (error instanceof PortalError) throw error;
@@ -131,13 +136,14 @@ export async function collectHostelworldInvoices(page, input, target = null, dep
       if (url.origin !== ORIGIN || url.pathname !== `${ROOT}/pdf/${row.id}` || url.search || url.hash) fail('portal_changed');
       if (seen.has(row.id)) continue;
       seen.add(row.id); scanned++;
+      if (dependencies.trace) dependencies.trace.scanned_documents = Math.min(scanned,401);
       if (scanned > 400) fail('document_limit');
-      if (dependencies.trace) dependencies.trace.stage = 'pdf_download';
+      if (dependencies.trace) { dependencies.trace.stage = 'pdf_download'; delete dependencies.trace.pdf_identity; }
       const content = await download(page,url.href);
       if (typeof content !== 'string') fail('invalid_document');
       const size = Buffer.byteLength(content,'base64'); downloaded += size;
       if (downloaded > 100 * 1024 * 1024) fail('document_limit');
-      const pdf = await readPdf(content,input.property);
+      const pdf = await readPdf(content,input.property,dependencies.trace);
       if (pdf.issued_on.slice(0,7) !== input.period) continue;
       selectedBytes += size;
       if (selectedBytes > 20 * 1024 * 1024 || documents.length >= 100) fail('document_limit');

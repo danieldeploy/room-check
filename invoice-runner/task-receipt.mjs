@@ -58,6 +58,15 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
       }
       receipt.table = safe;
     }
+    if (job.input.portal === 'hostelworld' && trace?.pdf_identity) {
+      const safe = {};
+      for (const key of ['issuer_verified','property_label_found','property_verified','property_zero_padded'])
+        if (typeof trace.pdf_identity[key] === 'boolean') safe[key] = trace.pdf_identity[key];
+      receipt.pdf_identity = safe;
+    }
+    if (job.input.portal === 'hostelworld' && Number.isInteger(trace?.scanned_documents)
+        && trace.scanned_documents >= 0 && trace.scanned_documents <= 401)
+      receipt.scanned_documents = trace.scanned_documents;
     if (['setup', 'session', 'navigation', 'table', 'pdf_download', 'pagination', 'complete'].includes(trace?.stage)) {
       receipt.stage = trace.stage;
       const d = trace.download;
