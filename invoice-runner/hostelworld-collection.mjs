@@ -104,6 +104,12 @@ export async function collectHostelworldInvoices(page, input, target = null, dep
   const readPdf = dependencies.readPdf || readHostelworldPdf;
   const download = dependencies.download || ((p,url) => pdfContent(p,url,'hostelworld'));
   const identity = dependencies.identity || hostelworldIdentity;
+  if (dependencies.trace) delete dependencies.trace.table_failure;
+  const rejectTable = (reason, rowIndex = null) => {
+    if (dependencies.trace) dependencies.trace.table_failure = { reason,
+      ...(rowIndex === null ? {} : { row_index: rowIndex + 1 }) };
+    fail('portal_changed');
+  };
   const pages = new Set(), seen = new Set(), documents = [];
   let structure, scanned = 0, downloaded = 0, selectedBytes = 0;
   for (let index=0; index<20; index++) {
@@ -121,19 +127,23 @@ export async function collectHostelworldInvoices(page, input, target = null, dep
         Array.isArray(raw?.next) ? Math.min(raw.next.length,3) : 0),
     };
     if (raw?.tables !== 1 || !Array.isArray(raw.rows) || !raw.rows.length || raw.rows.length > 400
-        || !Array.isArray(raw.headers) || !Array.isArray(raw.next) || raw.next.length > 2) fail('portal_changed');
-    const current = hostelworldStructure(raw.headers);
+        || !Array.isArray(raw.headers) || !Array.isArray(raw.next) || raw.next.length > 2) rejectTable('table_shape');
+    let current;
+    try { current = hostelworldStructure(raw.headers); }
+    catch (error) { if (error instanceof PortalError) rejectTable('headers'); throw error; }
     if (structure && structure.headers_sha256 !== current.headers_sha256
-        || target && target.headers_sha256 !== current.headers_sha256) fail('portal_changed');
+        || target && target.headers_sha256 !== current.headers_sha256) rejectTable('headers_changed');
     structure = current;
     const fingerprint = digest(raw.rows.map(r=>r.id));
-    if (pages.has(fingerprint)) fail('portal_changed');
+    if (pages.has(fingerprint)) rejectTable('repeated_page');
     pages.add(fingerprint);
-    for (const row of raw.rows) {
-      if (!/^\d{1,12}$/.test(row.id || '') || row.number !== row.id || !Array.isArray(row.links)
-          || new Set(row.links).size !== 1) fail('portal_changed');
+    for (const [rowIndex, row] of raw.rows.entries()) {
+      // The bound source identifier comes from the row and PDF path. The first
+      // column is a display number and need not repeat that internal identifier.
+      if (!/^\d{1,12}$/.test(row.id || '') || !Array.isArray(row.links)
+          || new Set(row.links).size !== 1) rejectTable('row_shape',rowIndex);
       const url = new URL(row.links[0]);
-      if (url.origin !== ORIGIN || url.pathname !== `${ROOT}/pdf/${row.id}` || url.search || url.hash) fail('portal_changed');
+      if (url.origin !== ORIGIN || url.pathname !== `${ROOT}/pdf/${row.id}` || url.search || url.hash) rejectTable('pdf_link',rowIndex);
       if (seen.has(row.id)) continue;
       seen.add(row.id); scanned++;
       if (dependencies.trace) dependencies.trace.scanned_documents = Math.min(scanned,401);
