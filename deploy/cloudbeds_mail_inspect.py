@@ -110,6 +110,20 @@ def child_name(row):
     return name
 
 
+def error_facts(errors):
+    """Classify failures without printing even a fragment of the server response."""
+    text = json.dumps(errors).lower()
+    return {key: any(word in text for word in words) for key, words in {
+        "missing_path": ("does not exist", "no such file", "not found", "could not find"),
+        "permission": ("permission", "denied", "not permitted"),
+        "parameter": ("parameter", "argument", "must specify", "must provide"),
+        "function": ("function", "module", "disabled", "not implemented"),
+        "encoding": ("charset", "encoding", "utf-8"),
+        "mentions_dir": ("dir",), "mentions_path": ("path",),
+        "mentions_types": ("types",), "mentions_file": ("file",),
+    }.items()}
+
+
 class MailAPI:
     def __init__(self, account):
         require(account in ROOTS, "account_not_allowed")
@@ -117,6 +131,9 @@ class MailAPI:
         self.root = ROOTS[account]
         self.allowed_dirs = {self.root}
         self.allowed_files = set()
+        self.stage = "mailbox_metadata"
+        self.last_operation = "none"
+        self.failure_facts = {}
         self.config = Config(token=os.environ.get("WHM_API_TOKEN", ""), transport="whm",
                              origin=WHM_ORIGIN, whm_target_account=account)
         self.opener = CpanelAPI(self.config).opener
@@ -128,12 +145,14 @@ class MailAPI:
                     and params["dir"] in self.allowed_dirs
                     and params["show_hidden"] == 1 and params["types"] == "file|dir", "listing_not_allowed")
         elif function == "get_file_information":
-            require(set(params) == {"path"} and params["path"] in self.allowed_dirs, "metadata_not_allowed")
+            require(set(params) == {"path", "show_hidden"} and params["path"] in self.allowed_dirs
+                    and params["show_hidden"] == 1, "metadata_not_allowed")
         else:
             require(set(params) == {"dir", "file", "from_charset", "to_charset"}
                     and (params["dir"], params["file"]) in self.allowed_files
                     and params["from_charset"] == "ISO-8859-1"
                     and params["to_charset"] == "UTF-8", "content_not_allowed")
+        self.last_operation = function
         query = {"api.version": 1, "cpanel.user": self.account, "cpanel.module": "Fileman",
                  "cpanel.function": function, **params}
         request = urllib.request.Request(WHM_ORIGIN + "/json-api/uapi_cpanel",
@@ -145,11 +164,13 @@ class MailAPI:
         payload = json.loads(raw)
         require(payload.get("metadata", {}).get("result") == 1, "whm_read_failed")
         result = payload.get("data", {}).get("uapi", {})
+        if result.get("status") != 1 or result.get("errors"):
+            self.failure_facts = error_facts(result.get("errors"))
         require(result.get("status") == 1 and not result.get("errors"), "mail_read_failed")
         return result.get("data")
 
     def listing(self, directory):
-        meta = self.call("get_file_information", path=directory)
+        meta = self.call("get_file_information", path=directory, show_hidden=1)
         meta_rows = meta if isinstance(meta, list) else [meta]
         require(len(meta_rows) == 1 and meta_rows[0].get("type") == "dir", "directory_required")
         result = rows(self.call("list_files", dir=directory, show_hidden=1, types="file|dir"))
@@ -167,6 +188,7 @@ class MailAPI:
         require(len(folders) <= 2, "ambiguous_folder")
         candidates = []
         for folder in folders:
+            self.stage = "cloudbeds_folder"
             self.allowed_dirs.add(folder)
             for row in self.listing(folder):
                 if row.get("file") in (".", ".."):
@@ -176,6 +198,7 @@ class MailAPI:
                     continue
                 directory = folder + "/" + name
                 self.allowed_dirs.add(directory)
+                self.stage = "maildir_listing"
                 for entry in self.listing(directory):
                     if entry.get("file") in (".", ".."):
                         continue
@@ -187,6 +210,7 @@ class MailAPI:
                         candidates.append((float(entry.get("mtime", 0)), directory, filename))
         reports = []
         for _, directory, filename in sorted(candidates, reverse=True)[:20]:
+            self.stage = "message_read"
             self.allowed_files.add((directory, filename))
             value = self.call("get_file_content", dir=directory, file=filename,
                               from_charset="ISO-8859-1", to_charset="UTF-8")
@@ -194,6 +218,7 @@ class MailAPI:
                 value = value[0]
             require(isinstance(value, dict) and isinstance(value.get("content"), str), "invalid_content")
             raw = value["content"].encode("latin-1")
+            self.stage = "mime_shape"
             reports.append(shape(raw))
             del raw, value
         return {"account": self.account, "folder_found": bool(folders),
@@ -203,12 +228,17 @@ class MailAPI:
 def main():
     failed = False
     for account in ROOTS:
+        api = None
         try:
-            print(json.dumps({"cloudbeds_mail_shape": MailAPI(account).inspect()}), flush=True)
+            api = MailAPI(account)
+            print(json.dumps({"cloudbeds_mail_shape": api.inspect()}), flush=True)
         except Exception as failure:
             # No exception repr, server response, file name or original mail in CI logs.
             code = str(failure) if isinstance(failure, DeploymentError) and str(failure) in ERRORS else "inspection_unavailable"
-            print(json.dumps({"cloudbeds_mail_shape": {"account": account, "error": code}}), flush=True)
+            facts = {"account": account, "error": code}
+            if api is not None:
+                facts.update(stage=api.stage, operation=api.last_operation, error_facts=api.failure_facts)
+            print(json.dumps({"cloudbeds_mail_shape": facts}), flush=True)
             failed = True
     return int(failed)
 

@@ -73,6 +73,14 @@ class Tests(unittest.TestCase):
             with self.assertRaises(c.DeploymentError):
                 api.listing(api.root)
             self.assertEqual(call.call_count, 1)
+            self.assertEqual(call.call_args.kwargs, {"path": api.root, "show_hidden": 1})
+
+    def test_failure_diagnostics_do_not_echo_server_data(self):
+        result = c.error_facts(['Missing parameter dir. PRIVATE_FILENAME SECRET_TOKEN'])
+        self.assertTrue(result["parameter"])
+        self.assertTrue(result["mentions_dir"])
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        self.assertNotIn("SECRET", json.dumps(result))
 
 
 if __name__ == "__main__":
