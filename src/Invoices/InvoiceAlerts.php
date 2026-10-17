@@ -56,6 +56,7 @@ final class InvoiceAlerts
     public static function reason(string $code): string
     {
         return match ($code) {
+            'cloudbeds_mail_review' => 'Existem emails Cloudbeds cuja assinatura já não pode ser validada. Apenas as faturas autenticadas foram tratadas.',
             'drive_auth' => 'A ligação ao Google Drive expirou.',
             'drive_quota' => 'O Google Drive está sem espaço.',
             'drive_not_configured', 'drive_invalid_id' => 'O destino Google Drive não está configurado.',
@@ -73,6 +74,7 @@ final class InvoiceAlerts
     public static function action(string $code): string
     {
         return match ($code) {
+            'cloudbeds_mail_review' => 'Consulte os emails preservados na pasta Cloudbeds da conta indicada. Peça uma nova cópia ao fornecedor se faltar alguma fatura do período.',
             'drive_auth' => 'No módulo Faturas e Portais, volte a ligar a conta Google Drive e clique em Tentar novamente.',
             'drive_quota' => 'Liberte espaço no Google Drive e clique em Tentar novamente no módulo.',
             'drive_not_configured', 'drive_invalid_id', 'drive_account_mismatch', 'drive_permission', 'drive_not_found' => 'Verifique a ligação e a pasta da conta daniel.ciorcas@welcomehostel.pt e clique em Tentar novamente.',

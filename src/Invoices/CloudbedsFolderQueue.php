@@ -44,13 +44,13 @@ final class CloudbedsFolderQueue
                 $raw=file_get_contents($path,false,null,0,CloudbedsMailMessage::MAX_BYTES+1);
                 if (!is_string($raw) || strlen($raw)>CloudbedsMailMessage::MAX_BYTES) continue;
                 $hash=hash('sha256',$raw); $old=$state[$hash]??[];
-                if (($old['done']??false)===true || (($old['processor']??0)===2 && (int)($old['retry_at']??0)>time())) continue;
+                if (($old['done']??false)===true || (($old['processor']??0)===3 && (int)($old['retry_at']??0)>time())) continue;
                 if (++$attempts>40) break;
                 try { $outcome=$consume($raw); } catch (Throwable) { $outcome=false; }
-                $accepted=$outcome===true || $outcome==='historical';
+                $accepted=$outcome===true || in_array($outcome,['historical','review'],true);
                 unset($raw);
-                $tries=($old['processor']??0)===2?(int)($old['attempts']??0)+1:1;
-                $state[$hash]=['done'=>$accepted,'processor'=>2,'historical'=>$outcome==='historical','attempts'=>$tries,
+                $tries=($old['processor']??0)===3?(int)($old['attempts']??0)+1:1;
+                $state[$hash]=['done'=>$accepted,'processor'=>3,'historical'=>$outcome==='historical','review'=>$outcome==='review','attempts'=>$tries,
                     'retry_at'=>$accepted?0:time()+min(10800,60*(2**min(8,$tries-1)))];
                 $accepted?$done++:$failed++;
                 if (count($state)>5000) throw new RuntimeException('document_limit');
@@ -62,7 +62,8 @@ final class CloudbedsFolderQueue
             } finally { if (is_file($tmp)) unlink($tmp); }
             $pending=count(array_filter($state,static fn(array $entry):bool=>($entry['done']??false)!==true));
             $historical=count(array_filter($state,static fn(array $entry):bool=>($entry['historical']??false)===true));
-            return ['folder_found'=>true,'processed'=>$done,'retry'=>$pending,'historical'=>$historical];
+            $review=count(array_filter($state,static fn(array $entry):bool=>($entry['review']??false)===true));
+            return ['folder_found'=>true,'processed'=>$done,'retry'=>$pending,'historical'=>$historical,'review'=>$review];
         } finally { flock($lock,LOCK_UN); fclose($lock); }
     }
 }

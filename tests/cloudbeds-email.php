@@ -59,6 +59,19 @@ cbCheck(CloudbedsBridge::validate($packet,'welcome')===[hash('sha256',$pdf)=>$pd
 cbCheck(!str_contains(json_encode($packet),'info@') && !str_contains(json_encode($packet),'Subject'),'No mail headers in bridge');
 cbReject(fn()=>CloudbedsBridge::packet($signed,'city',$resolver),'City cannot receive Welcome mail');
 cbReject(fn()=>CloudbedsBridge::packet($raw,'welcome',$resolver),'Spoofed unsigned sender rejected');
+foreach (['v=DKIM1; k=rsa; p;', 'v=DKIM1; k=rsa; p='] as $keyRecord) {
+    // Malformed key records remain a hard rejection, never an invoice packet.
+    cbReject(fn()=>CloudbedsBridge::packet($signed,'welcome',static fn()=>[['txt'=>$keyRecord]]),'Missing public keys cannot authenticate invoices');
+}
+foreach (['v=DKIM1; k=rsa; p=',str_replace('k=rsa;','k=rsa; t=y;',$txt)] as $keyRecord) {
+    $keyResolver=static fn()=>[['txt'=>$keyRecord]];
+    cbCheck(!CloudbedsMailAuthentication::verify($signed,$keyResolver)['verified'],'Unavailable key is never authenticated');
+    try { CloudbedsBridge::packet($signed,'welcome',$keyResolver); throw new LogicException('Expected review'); }
+    catch (RuntimeException $e) { cbCheck($e->getMessage()==='mail_review','Permanent key refusal is held for review without PDF delivery'); }
+}
+try { CloudbedsBridge::packet($signed,'welcome',static fn()=>[]); throw new LogicException('Expected transient rejection'); }
+catch (RuntimeException $e) { cbCheck($e->getMessage()==='auth_invalid','Temporary DNS lookup failures remain retryable'); }
+
 cbReject(fn()=>CloudbedsBridge::packet($signed.'tampered','welcome',$resolver),'Tampered body rejected');
 cbReject(fn()=>CloudbedsBridge::packet($sign($headers,$body,'l=10; '),'welcome',$resolver),'Partial signature rejected');
 cbReject(fn()=>CloudbedsBridge::packet($sign($headers,$body,'x='.(time()-1).'; '),'welcome',$resolver),'Expired signature rejected');
@@ -87,7 +100,7 @@ try {
     $inbox=new CloudbedsInbox($pdo,$vault); $inbox->receive($packet,'welcome'); $inbox->receive($packet,'welcome');
     cbCheck(count(glob($dir.'/cloudbeds-inbox-*'))===1,'Duplicate deliveries have one encrypted inbox entry');
     cbCheck(!str_contains(file_get_contents(glob($dir.'/cloudbeds-inbox-*')[0]),base64_encode($pdf)),'Inbox encrypts PDFs');
-    $inbox->index(); $inbox->heartbeat('welcome',['folder_found'=>true,'processed'=>1,'retry'=>0]);
+    $inbox->index(); $inbox->heartbeat('welcome',['folder_found'=>true,'processed'=>1,'retry'=>0,'review'=>1]);
     $job=['id'=>1,'account_id'=>4,'property_id'=>'welcome','kind'=>'collect','period'=>'2026-08'];
     cbCheck($inbox->collect($job)===['imported'=>0,'duplicates'=>0],'Selected issue month excludes service month');
     $job['period']='2026-09'; $job['id']=2;
@@ -117,6 +130,16 @@ try {
     $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static fn($value)=>$value===$oldMail?'historical':false);
     cbCheck($scan['historical']===1 && $scan['retry']===0,'Old pending entries are reclassified without waiting or blocking verified current mail');
     cbCheck(file_get_contents($dir.'/mail/.Cloudbeds/cur/older')===$oldMail,'Historical original retained unchanged');
+    $reviewMail=$raw."\r\nreview-test-only"; file_put_contents($dir.'/mail/.Cloudbeds/cur/review',$reviewMail);
+    $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static fn()=>'review');
+    cbCheck($scan['review']===1 && $scan['retry']===0,'Permanent key failures stay visible without blocking authenticated mail');
+    cbCheck(file_get_contents($dir.'/mail/.Cloudbeds/cur/review')===$reviewMail,'Review original retained unchanged');
+    $called=0; CloudbedsFolderQueue::run($dir.'/mail',$dir,static function()use(&$called){$called++;return false;});
+    cbCheck($called===0,'Review mail does not enter an endless retry loop');
+    file_put_contents($dir.'/mail/.Cloudbeds/cur/transient',$raw."\r\ntransient-test-only");
+    $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static fn()=>false);
+    cbCheck($scan['review']===1 && $scan['retry']===1,'Transient delivery failures still block incomplete scans and retry');
+
 } finally {
     $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
     foreach ($it as $f) $f->isDir()?rmdir($f->getPathname()):unlink($f->getPathname()); rmdir($dir);

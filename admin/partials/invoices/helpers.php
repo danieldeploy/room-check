@@ -23,7 +23,7 @@ function invoiceHidden(string $action,int $account=0): void {
 }
 function invoiceTaskCard(array $job): void {
     global $isGerente,$canRun,$readiness;
-    ?><article class="invoice-record"><div class="invoice-record-heading"><h3><?= ie(InvoiceAccounts::PORTALS[$job['portal']].' — '.$job['account_label']) ?></h3><?php invoiceStatus($job['result_code']==='session_active'?'session_active_badge':$job['state']); ?></div>
+    ?><article class="invoice-record"><div class="invoice-record-heading"><h3><?= ie(InvoiceAccounts::PORTALS[$job['portal']].' — '.$job['account_label']) ?></h3><?php invoiceStatus($job['result_code']==='cloudbeds_mail_review'?'partial':($job['result_code']==='session_active'?'session_active_badge':$job['state'])); ?></div>
     <p><?= ie($job['property_label'] ?? $job['property_id']) ?></p><dl class="invoice-facts"><div><dt><?= it('created') ?></dt><dd><?= ie(invoiceTime($job['created_at'])) ?></dd></div><div><dt><?= it('period') ?></dt><dd><?= ie($job['period']) ?></dd></div><div><dt><?= it('operation') ?></dt><dd><?= it($job['kind']) ?></dd></div><div><dt><?= it('counts') ?></dt><dd><?= (int)$job['imported_count'] ?> / <?= (int)$job['duplicate_count'] ?></dd></div></dl>
     <?php if ($job['result_code']): ?><p><?= it($job['result_code']) ?></p><?php endif; ?>
     <?php if ($job['next_attempt_at']): ?><p><?= it('next_attempt') ?>: <?= ie(invoiceTime($job['next_attempt_at'])) ?></p><?php endif; ?>

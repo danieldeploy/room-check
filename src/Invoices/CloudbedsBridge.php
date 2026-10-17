@@ -19,6 +19,7 @@ final class CloudbedsBridge
         // originals for review instead of retrying mail outside the verifier's window.
         if ($date!==false && $date<($now??time())-730*86400) throw new RuntimeException('mail_outside_window');
         $auth=CloudbedsMailAuthentication::verify($raw,$resolver,$now);
+        if (in_array($auth['code']??'',['key_revoked','key_policy'],true)) throw new RuntimeException('mail_review');
         if (empty($auth['verified']) || ($auth['recipient']??'')!==self::RECIPIENTS[$source]) throw new RuntimeException('auth_invalid');
         return ['version'=>1,'source'=>$source,'mail_sha256'=>hash('sha256',$raw),
             'pdfs'=>array_map('base64_encode',array_values($pdfs))];

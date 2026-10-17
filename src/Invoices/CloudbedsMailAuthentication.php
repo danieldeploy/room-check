@@ -154,10 +154,11 @@ final class CloudbedsMailAuthentication
             if (!is_array($records) || count($records)!==1) return ['verified'=>false,'code'=>'dns_unavailable'];
             $failure['facts']['verification_stage']='dns_key';
             $record=$records[0]; $key=self::tags(isset($record['entries'])?implode('',$record['entries']):(string)($record['txt']??''));
-            if (($key['v']??'DKIM1')!=='DKIM1' || ($key['k']??'rsa')!=='rsa' || empty($key['p'])
+            if (empty($key['p'])) return ['verified'=>false,'code'=>'key_revoked'];
+            if (($key['v']??'DKIM1')!=='DKIM1' || ($key['k']??'rsa')!=='rsa'
                 || !array_intersect(explode(':',$key['s']??'*'),['*','email'])
                 || !in_array('sha256',explode(':',$key['h']??'sha256'),true)
-                || in_array('y',explode(':',$key['t']??''),true)) return $failure;
+                || in_array('y',explode(':',$key['t']??''),true)) return ['verified'=>false,'code'=>'key_policy'];
             $failure['facts']['verification_stage']='public_key';
             $keyBytes=base64_decode(preg_replace('/\s+/','',$key['p']),true);
             if ($keyBytes===false) return $failure;
