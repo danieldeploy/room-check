@@ -99,3 +99,11 @@ Expedia and other email suppliers are outside this change.
 
 The read-only authentication diagnostic records only fixed verification-stage names.
 It does not relax signature checks or publish failed header values.
+
+Permanent DNS key revocation or key-policy refusal preserves the original message
+for review and never delivers its PDF to the Hub. These messages are counted
+separately from transient failures so authenticated invoices can continue.
+Collection history shows a bilingual review warning and uses the existing alert
+queue, deduplicated by account and selected month. A successful functional check
+proves delivery of the authenticated invoices, not completeness of unverified
+archived mail. DNS lookup/network failures remain retryable.

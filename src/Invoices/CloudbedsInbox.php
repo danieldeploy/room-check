@@ -31,7 +31,8 @@ final class CloudbedsInbox
             || !is_int($scan['processed']??null) || !is_int($scan['retry']??null)
             || $scan['processed']<0 || $scan['processed']>40 || $scan['retry']<0 || $scan['retry']>5000) throw new RuntimeException('invalid_request');
         $this->vault->save('cloudbeds-source-'.$source.'.enc',['at'=>time(),'folder_found'=>true,'processed'=>$scan['processed'],'retry'=>$scan['retry'],
-            'historical'=>is_int($scan['historical']??null)?min(5000,max(0,$scan['historical'])):0]);
+            'historical'=>is_int($scan['historical']??null)?min(5000,max(0,$scan['historical'])):0,
+            'review'=>is_int($scan['review']??null)?min(5000,max(0,$scan['review'])):0]);
     }
     public function index(): void
     {
@@ -105,8 +106,11 @@ final class CloudbedsInbox
             $this->pdo->prepare("UPDATE invoice_tasks SET state='running',attempts=?,started_at=? WHERE id=?")->execute([$job['attempts'],InvoiceService::utcNow(),$job['id']]);
             try {
                 $r=$this->collect($job); $code=$r['imported']+$r['duplicates']>0?'ok':'no_invoices';
+                $scan=$this->vault->read('cloudbeds-source-'.$job['property_id'].'.enc');
+                if (($scan['review']??0)>0) $code='cloudbeds_mail_review';
                 $this->pdo->prepare("UPDATE invoice_tasks SET state='completed',result_code=?,active_key=NULL,finished_at=? WHERE id=?")
                     ->execute([$code,InvoiceService::utcNow(),$job['id']]);
+                if ($code==='cloudbeds_mail_review') $alerts->queue($job,$code);
                 $this->pdo->prepare("UPDATE invoice_accounts SET status='ready',login_verified_at=? WHERE id=?")->execute([InvoiceService::utcNow(),$job['account_id']]);
             } catch (Throwable $e) { (new InvoiceTaskLifecycle($this->pdo))->fail($job,$e->getMessage(),$alerts); }
         }

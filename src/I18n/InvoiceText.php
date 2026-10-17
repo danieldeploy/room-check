@@ -346,6 +346,7 @@ final class InvoiceText
         'portal_changed' => ['Não foi possível confirmar os dados do portal. É necessária revisão do conector.', 'Portal data could not be verified. The connector needs review.'],
         'invalid_document' => ['Foi recusado um documento inválido ou de outro período.', 'An invalid document or one from another period was rejected.'],
         'invoice_conflict' => ['Já existe este número de fatura com conteúdo diferente. Requer revisão.', 'This invoice number already exists with different content. Review is required.'],
+        'cloudbeds_mail_review' => ['Foram tratadas apenas as faturas autenticadas. Existem outros emails Cloudbeds com assinatura indisponível, preservados na pasta original para revisão. Se faltar alguma fatura do período, peça uma nova cópia ao fornecedor.', 'Only authenticated invoices were processed. Other Cloudbeds emails have unavailable signatures and remain in the original folder for review. Request a new copy from the supplier if an invoice for the period is missing.'],
         'no_invoices' => ['Sem faturas emitidas no período selecionado.', 'No invoices issued in the selected period.'],
         'ok' => ['Concluído com sucesso.', 'Completed successfully.'],
         'interrupted' => ['A execução foi interrompida. Pode repetir a recolha.', 'The run was interrupted. You can repeat the collection.'],

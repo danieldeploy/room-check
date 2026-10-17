@@ -40,6 +40,7 @@ function cloudbedsConsume(string $raw): bool|string {
         return $packet===null || cloudbedsSend($packet);
     } catch (Throwable $e) {
         if ($e->getMessage()==='mail_outside_window') return 'historical';
+        if ($e->getMessage()==='mail_review') return 'review';
         $facts=['stage'=>in_array($e->getMessage(),['auth_invalid','invalid_document','document_limit'],true)?$e->getMessage():'parse_retry'];
         if ($e->getMessage()==='auth_invalid') {
             $auth=CloudbedsMailAuthentication::verify(CloudbedsMailMessage::wire($raw));

@@ -124,7 +124,7 @@ def report():
         directory="/home/city" if account == "city" else "/home/welcome/room-check-private"
         try:
             state=json.loads(content(api.call("Fileman", "get_file_content", dir=directory, file="cloudbeds-mail-status.json")))
-            safe={k:v for k,v in state.items() if (k in ("at","processed","retry","historical","http_status") and type(v) is int)
+            safe={k:v for k,v in state.items() if (k in ("at","processed","retry","historical","review","http_status") and type(v) is int)
                   or (k == "folder_found" and type(v) is bool)
                   or (k == "stage" and v in ("scan_complete","delivery_retry","auth_invalid","invalid_document","document_limit","parse_retry","configuration_retry"))
                   or (k == "auth_code" and v in ("recipient_mismatch","unsigned","unsupported","unaligned","expired","unsigned_fields","dns_unavailable","body_mismatch","signature_mismatch","unverified"))}
@@ -142,7 +142,7 @@ def report():
             safe["sources"][source]["tasks"]=[{k:v for k,v in task.items() if
                 (k in ("imported_count","duplicate_count") and str(v).isdigit()) or
                 (k == "state" and v in ("completed","failed","retry","running","queued")) or
-                (k == "result_code" and v in ("ok","no_invoices","invalid_document","account_mismatch","network_error","verification_failed","invoice_conflict"))}
+                (k == "result_code" and v in ("ok","no_invoices","invalid_document","account_mismatch","network_error","verification_failed","invoice_conflict","cloudbeds_mail_review"))}
                 for task in row.get("tasks",[])[:2]]
             allowed=("verified","pending","retry","failed","validated","review","toc_submitted","toc_accepted","toc_existing","toc_duplicate","toc_rejected","toc_retry","toc_review","toc_no_confirmation","toc_uncertain","toc_sending")
             safe["sources"][source]["delivery"]=[{k:v for k,v in item.items() if
