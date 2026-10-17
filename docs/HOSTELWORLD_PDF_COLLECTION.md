@@ -59,3 +59,12 @@ This changes no permissions or approval gates. A fixed table-failure reason and
 bounded row position distinguish malformed rows from changed headings without
 recording invoice values. Tests reject mismatched row/PDF IDs before downloading
 and confirm that presentation differences do not change the source identity.
+
+Legacy issue dates: Node and PHP accept labelled English month names, Sept,
+ordinal days, separators, month-first English dates and year-first numeric dates.
+Day/month numeric forms are accepted only when their order is unambiguous.
+Original/previous/related invoice dates and due/payment dates are not the current
+issue date. Missing, conflicting, invalid or ambiguous dates still reject the
+document; no service-month inference is made. Private receipts retain only a
+fixed date-check reason and bounded counts. Synthetic equivalent date formats,
+invalid calendars, references and ambiguity cases precede production verification.

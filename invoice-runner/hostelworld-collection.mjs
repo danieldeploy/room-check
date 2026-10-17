@@ -9,6 +9,36 @@ const fail = code => { throw new PortalError(code); };
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 
+export function hostelworldIssueDates(text, trace = null) {
+  const dates = new Set(); let labels = 0, reason = null;
+  const monthNumber = value => {
+    const v = value.toLowerCase();
+    return v === 'sept' ? 9 : months.findIndex(m => m === v || m.slice(0,3) === v) + 1;
+  };
+  for (const label of text.matchAll(/\b(?:(due\s+date|payment\s+date|(?:original|previous|related)\s+invoice\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*/gi)) {
+    if (label[1]) continue;
+    labels++; const value = text.slice(label.index + label[0].length, label.index + label[0].length + 80);
+    let day, month, year, match;
+    if ((match = /^(\d{1,2})(?:st|nd|rd|th)?[\s./-]*([A-Za-z]{3,9})[\s,./-]*(20\d{2})\b/i.exec(value))) {
+      day=Number(match[1]); month=monthNumber(match[2]); year=Number(match[3]);
+    } else if ((match = /^([A-Za-z]{3,9})\s*(\d{1,2})(?:st|nd|rd|th)?[\s,./-]+(20\d{2})\b/i.exec(value))) {
+      month=monthNumber(match[1]); day=Number(match[2]); year=Number(match[3]);
+    } else if ((match = /^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/.exec(value))) {
+      year=Number(match[1]); month=Number(match[2]); day=Number(match[3]);
+    } else if ((match = /^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b/.exec(value))) {
+      const a=Number(match[1]), b=Number(match[2]); year=Number(match[3]);
+      if (a > 12 && b <= 12 || a === b) {day=a;month=b;}
+      else if (b > 12 && a <= 12) {day=b;month=a;}
+      else {reason='ambiguous_numeric';continue;}
+    } else {reason='unsupported_format';continue;}
+    try { dates.add(invoiceDate(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`, 'YYYY-MM-DD')); }
+    catch {reason='invalid_calendar';}
+  }
+  reason ||= dates.size > 1 ? 'conflicting_dates' : dates.size === 1 ? 'verified' : 'missing_date';
+  if (trace) trace.pdf_date = {reason,labels:Math.min(labels,3),candidates:Math.min(dates.size,3)};
+  return reason === 'verified' || reason === 'conflicting_dates' ? [...dates] : [];
+}
+
 export function hostelworldPdfIdentity(text, property, trace = null) {
   if (typeof text !== 'string' || text.length > 1024 * 1024 || !/^\d{1,12}$/.test(property)) fail('invalid_document');
   const issuer = /hostelworld\.com/i.test(text);
@@ -18,16 +48,9 @@ export function hostelworldPdfIdentity(text, property, trace = null) {
   if (trace) trace.pdf_identity = { issuer_verified: issuer, property_label_found: labels.length > 0,
     property_verified: matched, property_zero_padded: matched && labels.some(n => n.startsWith('0')) };
   if (!issuer || !matched) fail('account_mismatch');
-  const dates = new Set();
-  for (const match of text.matchAll(/\b(?:(due\s+date|payment\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(20\d{2})\b/gi)) {
-    if (match[1]) continue;
-    const month = months.findIndex(m => m === match[3].toLowerCase() || m.slice(0,3) === match[3].toLowerCase());
-    if (month < 0) fail('invalid_document');
-    try { dates.add(invoiceDate(`${match[4]}-${String(month+1).padStart(2,'0')}-${match[2].padStart(2,'0')}`, 'YYYY-MM-DD')); }
-    catch { fail('invalid_document'); }
-  }
-  if (dates.size !== 1) fail('invalid_document');
-  return { issued_on: [...dates][0] };
+  const dates = hostelworldIssueDates(text,trace);
+  if (dates.length !== 1) fail('invalid_document');
+  return { issued_on: dates[0] };
 }
 
 export async function readHostelworldPdf(content, property, trace = null) {
@@ -148,7 +171,7 @@ export async function collectHostelworldInvoices(page, input, target = null, dep
       seen.add(row.id); scanned++;
       if (dependencies.trace) dependencies.trace.scanned_documents = Math.min(scanned,401);
       if (scanned > 400) fail('document_limit');
-      if (dependencies.trace) { dependencies.trace.stage = 'pdf_download'; delete dependencies.trace.pdf_identity; }
+      if (dependencies.trace) { dependencies.trace.stage = 'pdf_download'; delete dependencies.trace.pdf_identity; delete dependencies.trace.pdf_date; }
       const content = await download(page,url.href);
       if (typeof content !== 'string') fail('invalid_document');
       const size = Buffer.byteLength(content,'base64'); downloaded += size;

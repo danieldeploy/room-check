@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hostelworldPdfIdentity, hostelworldStructure, validateHostelworldCollectionMap, collectHostelworldInvoices } from '../hostelworld-collection.mjs';
+import { hostelworldPdfIdentity, hostelworldIssueDates, hostelworldStructure, validateHostelworldCollectionMap, collectHostelworldInvoices } from '../hostelworld-collection.mjs';
 const input = {authMethod:'email',credentials:{hostel_number:'305209'},hostelworldAuthTargets:[{host:'inbox.hostelworld.com',path:'/login/'}],accountId:2,portal:'hostelworld',property:'305209',periodBasis:'issue_month',period:'2026-08'};
 const headers=['Invoice #','Invoice Type','Period Starting','Period Ending','Net Fee','VAT Amount'];
 const root='https://inbox.hostelworld.com/reports/vatinvoices';
@@ -16,6 +16,15 @@ test('collection requires exact validated account, property and extraction strat
  assert.equal(validateHostelworldCollectionMap(map,input).verified,true);
  for(const patch of [{validated:false},{version:3},{accountId:3},{strategy:'other'}]) assert.throws(()=>validateHostelworldCollectionMap({...map,...patch},input));
  assert.throws(()=>validateHostelworldCollectionMap(map,{...input,periodBasis:'service_month'}));
+});
+test('legacy labelled dates accept unambiguous formats and never guess numeric order',()=>{
+ for(const value of ['3rd September 2021','03-Sept-2021','September 3, 2021','3September2021','2021-09-03'])
+  assert.deepEqual(hostelworldIssueDates('Date: '+value),['2021-09-03']);
+ for(const value of ['23/09/2021','09/23/2021'])assert.deepEqual(hostelworldIssueDates('Date: '+value),['2021-09-23']);
+ for(const value of ['03/09/2021','31 February 2021','3 Unknown 2021'])assert.deepEqual(hostelworldIssueDates('Date: '+value),[]);
+ assert.deepEqual(hostelworldIssueDates('Date: 3 September 2021\nOriginal invoice date: 3 August 2021'),['2021-09-03']);
+ const trace={};assert.deepEqual(hostelworldIssueDates('Date: 03/09/2021',trace),[]);
+ assert.deepEqual(trace.pdf_date,{reason:'ambiguous_numeric',labels:1,candidates:0});
 });
 test('printed leading zeroes preserve the exact numeric property and reject conflicting labels',()=>{
  const trace={}; const padded=text.replace('H305209','H077759');

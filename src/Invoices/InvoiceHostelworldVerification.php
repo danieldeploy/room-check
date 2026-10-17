@@ -30,19 +30,31 @@ final class InvoiceHostelworldVerification
     }
     public static function issueDates(string $text): array
     {
-        preg_match_all('/\b(?:(due\s+date|payment\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*(\d{1,2}\s+[A-Za-z]{3,9}\s+20\d{2})\b/iu',$text,$matches,PREG_SET_ORDER);
+        preg_match_all('/\b(?:(due\s+date|payment\s+date|(?:original|previous|related)\s+invoice\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*/iu',$text,$matches,PREG_SET_ORDER|PREG_OFFSET_CAPTURE);
+        $months=['january','february','march','april','may','june','july','august','september','october','november','december'];
+        $monthNumber=static function(string $value) use($months): int {
+            $v=strtolower($value); if($v==='sept')return 9;
+            foreach($months as $i=>$month)if($v===$month || $v===substr($month,0,3))return $i+1;
+            return 0;
+        };
         $dates=[];
         foreach ($matches as $match) {
-            if ($match[1]!=='') continue;
-            $raw=$match[2];
-            $value=preg_replace('/\s+/',' ',trim($raw)); $valid=false;
-            foreach (['j F Y','j M Y'] as $format) {
-                $date=DateTimeImmutable::createFromFormat('!'.$format,$value); $errors=DateTimeImmutable::getLastErrors();
-                if ($date && (!$errors || (!$errors['warning_count'] && !$errors['error_count']))) {
-                    $dates[]=$date->format('Y-m-d'); $valid=true; break;
-                }
-            }
-            if (!$valid) return [];
+            if (($match[1][0]??'')!=='') continue;
+            $value=substr($text,$match[0][1]+strlen($match[0][0]),80);
+            if(preg_match('/\A(\d{1,2})(?:st|nd|rd|th)?[\s.\/-]*([A-Za-z]{3,9})[\s,.\/-]*(20\d{2})\b/i',$value,$m)) {
+                $day=(int)$m[1];$month=$monthNumber($m[2]);$year=(int)$m[3];
+            } elseif(preg_match('/\A([A-Za-z]{3,9})\s*(\d{1,2})(?:st|nd|rd|th)?[\s,.\/-]+(20\d{2})\b/i',$value,$m)) {
+                $month=$monthNumber($m[1]);$day=(int)$m[2];$year=(int)$m[3];
+            } elseif(preg_match('/\A(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/',$value,$m)) {
+                $year=(int)$m[1];$month=(int)$m[2];$day=(int)$m[3];
+            } elseif(preg_match('/\A(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/',$value,$m)) {
+                $a=(int)$m[1];$b=(int)$m[2];$year=(int)$m[3];
+                if(($a>12 && $b<=12) || $a===$b){$day=$a;$month=$b;}
+                elseif($b>12 && $a<=12){$day=$b;$month=$a;}
+                else return [];
+            } else return [];
+            if(!checkdate($month,$day,$year))return [];
+            $dates[]=sprintf('%04d-%02d-%02d',$year,$month,$day);
         }
         return array_values(array_unique($dates));
     }
