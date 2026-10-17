@@ -70,6 +70,10 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
       for (const key of ['labels','candidates'])
         if (Number.isInteger(trace.pdf_date[key]) && trace.pdf_date[key] >= 0 && trace.pdf_date[key] <= 3)
           receipt.pdf_date[key] = trace.pdf_date[key];
+      const shape = trace.pdf_date.shape;
+      if (trace.pdf_date.reason === 'unsupported_format' && Array.isArray(shape) && shape.length <= 20
+          && shape.every(token => typeof token === 'string' && /^(?:digits_[1-5]|letters_(?:[1-9]|10)|space|month|ordinal|weekday|slash|dash|dot|comma|colon|other)$/.test(token)))
+        receipt.pdf_date.shape = shape;
     }
     if (job.input.portal === 'hostelworld'
         && ['table_shape','headers','headers_changed','repeated_page','row_shape','pdf_link'].includes(trace?.table_failure?.reason)) {

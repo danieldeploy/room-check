@@ -68,3 +68,11 @@ issue date. Missing, conflicting, invalid or ambiguous dates still reject the
 document; no service-month inference is made. Private receipts retain only a
 fixed date-check reason and bounded counts. Synthetic equivalent date formats,
 invalid calendars, references and ambiguity cases precede production verification.
+
+Unsupported-date diagnosis: for the existing manager-triggered verification only,
+the private receipt may record at most 20 token classes from the first 80 characters
+after the date label. Only digit/letter lengths (capped), whitespace, punctuation,
+and generic month/weekday/ordinal classes are retained. No date, word, number,
+PDF content or URL is persisted. The receipt independently enforces its fixed
+vocabulary and bounds. This does not accept any new date format, change account
+permissions or bypass verification; failed dates still stop the collection.

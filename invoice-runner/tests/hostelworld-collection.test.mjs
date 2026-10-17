@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hostelworldPdfIdentity, hostelworldIssueDates, hostelworldStructure, validateHostelworldCollectionMap, collectHostelworldInvoices } from '../hostelworld-collection.mjs';
+import { hostelworldPdfIdentity, hostelworldIssueDates, hostelworldDateShape, hostelworldStructure, validateHostelworldCollectionMap, collectHostelworldInvoices } from '../hostelworld-collection.mjs';
 const input = {authMethod:'email',credentials:{hostel_number:'305209'},hostelworldAuthTargets:[{host:'inbox.hostelworld.com',path:'/login/'}],accountId:2,portal:'hostelworld',property:'305209',periodBasis:'issue_month',period:'2026-08'};
 const headers=['Invoice #','Invoice Type','Period Starting','Period Ending','Net Fee','VAT Amount'];
 const root='https://inbox.hostelworld.com/reports/vatinvoices';
 const text='Hostelworld.com\nHostel Number: H305209\nDate: 3 August 2026\nPeriod: July 2026\nDue date: 8 September 2026';
+test('unsupported date shape retains only bounded token classes, never values',()=>{
+ const trace={}; assert.deepEqual(hostelworldIssueDates('Date: 14.08.26',trace),[]);
+ assert.deepEqual(trace.pdf_date,{reason:'unsupported_format',labels:1,candidates:0,shape:['digits_2','dot','digits_2','dot','digits_2']});
+ assert.deepEqual(hostelworldDateShape('14.08.26'),hostelworldDateShape('27.12.19'));
+ assert.deepEqual(hostelworldDateShape('Mon 3rd August 2026'),['weekday','space','digits_1','ordinal','space','month','space','digits_4']);
+ assert.equal(hostelworldDateShape('x '.repeat(100)).length,20);
+ assert.deepEqual(hostelworldDateShape('12345678901234567890'),['digits_5']);
+ assert.deepEqual(hostelworldDateShape('PRIVATEVALUE'),['letters_10']);
+});
 test('PDF issue date is distinct from service month and due date',()=>{
  assert.deepEqual(hostelworldPdfIdentity(text,'305209'),{issued_on:'2026-08-03'});
  for(const value of [text.replace('3 August','31 February'),text+'\nInvoice date: 4 August 2026',text.replace('Date: 3 August 2026',''),text.replace('Hostelworld.com','Other issuer')]) assert.throws(()=>hostelworldPdfIdentity(value,'305209'));
