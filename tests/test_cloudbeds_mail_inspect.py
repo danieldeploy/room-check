@@ -5,6 +5,7 @@ import sys
 import unittest
 from email.message import EmailMessage
 from unittest.mock import patch
+import urllib.parse
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy"))
 import cloudbeds_mail_inspect as c
@@ -81,6 +82,22 @@ class Tests(unittest.TestCase):
         self.assertTrue(result["mentions_dir"])
         self.assertNotIn("PRIVATE", json.dumps(result))
         self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_mail_read_explicitly_disables_html_rewriting(self):
+        with patch.dict(os.environ, {"WHM_API_TOKEN": "synthetic-test-only"}):
+            api = c.MailAPI("welcome")
+        params = {"dir": api.root+"/.Cloudbeds/cur", "file": "synthetic",
+                  "from_charset": "ISO-8859-1", "to_charset": "UTF-8"}
+        api.allowed_files.add((params["dir"], params["file"]))
+        with patch.object(api.opener, "open") as opened:
+            with self.assertRaises(c.DeploymentError): api.call("get_file_content", **params)
+            with self.assertRaises(c.DeploymentError): api.call("get_file_content", **params, update_html_document_encoding=1)
+            opened.assert_not_called()
+            opened.return_value.__enter__.return_value.read.return_value = json.dumps({
+                "metadata": {"result": 1}, "data": {"uapi": {"status": 1, "data": {"content": "synthetic"}}}}).encode()
+            api.call("get_file_content", **params, update_html_document_encoding=0)
+            body = urllib.parse.parse_qs(opened.call_args.args[0].data.decode())
+            self.assertEqual(body["update_html_document_encoding"], ["0"])
 
     def test_pdf_report_never_contains_invoice_values(self):
         result = c.pdf_text_shape("Cloudbeds Invoice A1234567\nInvoice Date: 09/15/2026\n"
