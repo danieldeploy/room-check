@@ -26,6 +26,41 @@ final class CloudbedsMailAuthentication
         return strtolower($name).':'.trim(preg_replace('/[ \t]+/',' ',$value)," \t");
     }
 
+    /** Parse a bounded mailbox list only after To has been required in h=.
+     * Exactly one known house mailbox must occur. Other signed billing contacts
+     * may be present, but groups, comments and ambiguous source lists stay manual.
+     */
+    private static function recipient(string $value): ?string
+    {
+        if (strlen($value)>4096 || preg_match('/[\x00-\x1f\x7f]/',$value)) return null;
+        $parts=[]; $start=0; $quote=false; $escape=false; $angle=false;
+        for ($i=0,$length=strlen($value);$i<$length;$i++) {
+            $c=$value[$i];
+            if ($quote) {
+                if ($escape) { $escape=false; continue; }
+                if ($c==='\\') { $escape=true; continue; }
+                if ($c==='"') $quote=false;
+                continue;
+            }
+            if ($c==='"') { $quote=true; continue; }
+            if ($c==='<') { if ($angle) return null; $angle=true; continue; }
+            if ($c==='>') { if (!$angle) return null; $angle=false; continue; }
+            if (str_contains('():;\\',$c)) return null;
+            if ($c===',' && !$angle) { $parts[]=trim(substr($value,$start,$i-$start)); $start=$i+1; }
+        }
+        if ($quote || $escape || $angle) return null;
+        $parts[]=trim(substr($value,$start));
+        if (count($parts)>10) return null;
+        $houses=[];
+        foreach ($parts as $part) {
+            if (!preg_match('/\A(?:[^<>]*<([^<>]+)>|([^<>]+))\z/',$part,$match)) return null;
+            $address=strtolower(trim(($match[1]??'')!==''?$match[1]:($match[2]??'')));
+            if (!filter_var($address,FILTER_VALIDATE_EMAIL)) return null;
+            if (in_array($address,['info@welcomehostel.pt','info@citycenterhostel.pt'],true)) $houses[]=$address;
+        }
+        return count($houses)===1?$houses[0]:null;
+    }
+
     /** Each aligned signature is verified against the original, unchanged message.
      * Multiple signatures are common with mail relays; unaligned signatures cannot
      * grant trust. Never remove headers to manufacture a different signed message.
@@ -127,8 +162,8 @@ final class CloudbedsMailAuthentication
             if (!preg_match('/\A(?:[^<>]*<[a-z0-9._+-]+@cloudbeds\.com>|[a-z0-9._+-]+@cloudbeds\.com)\z/i',$from)) return $failure;
             $failure['facts']['verification_stage']='recipient_format';
             $to=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['to'][0],2)[1]));
-            if (!preg_match('/\A(?:[^<>]*<([a-z0-9._+-]+@(welcomehostel|citycenterhostel)\.pt)>|([a-z0-9._+-]+@(welcomehostel|citycenterhostel)\.pt))\z/i',$to,$m)) return $failure;
-            $recipient=strtolower(($m[1]??'')!==''?$m[1]:$m[3]);
+            $recipient=self::recipient($to);
+            if ($recipient===null) return $failure;
             $canonicalBody=$body;
             if ($bMode==='relaxed') {
                 $canonicalBody=preg_replace('/[ \t]+/',' ',$canonicalBody);

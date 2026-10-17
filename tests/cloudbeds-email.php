@@ -55,6 +55,16 @@ cbCheck(!$invalidRecipient['verified'] && ($invalidRecipient['facts']['verificat
 cbCheck(!str_contains(json_encode($invalidRecipient),'private@example.test'),'No recipient value in auth failure');
 try { CloudbedsBridge::packet($signed,'welcome',$resolver,time()+731*86400); throw new LogicException('Expected historical classification'); }
 catch (RuntimeException $e) { cbCheck($e->getMessage()==='mail_outside_window','Historical mail is retained separately from current retry failures'); }
+foreach (['info@welcomehostel.pt, accounts@example.test', '"Billing, Contact" <accounts@example.test>, House <info@welcomehostel.pt>'] as $to) {
+    $mail=$sign(array_map(static fn($h)=>str_starts_with($h,'To:')?'To: '.$to:$h,$headers),$body);
+    cbCheck(CloudbedsBridge::packet($mail,'welcome',$resolver)['source']==='welcome','Signed additional billing recipients accepted');
+    cbReject(fn()=>CloudbedsBridge::packet($mail,'city',$resolver),'Signed list cannot cross source accounts');
+    cbReject(fn()=>CloudbedsBridge::packet(str_replace('accounts@example.test','tampered@example.test',$mail),'welcome',$resolver),'Signed extra recipient cannot be tampered');
+}
+foreach (['info@welcomehostel.pt, info@citycenterhostel.pt', 'info@welcomehostel.pt,', '"Unclosed <info@welcomehostel.pt>',
+    'Group: info@welcomehostel.pt;', 'info@welcomehostel.pt.evil.test', 'private@example.test', 'x <info@welcomehostel.pt> extra'] as $to) {
+    cbReject(fn()=>CloudbedsBridge::packet($sign(array_map(static fn($h)=>str_starts_with($h,'To:')?'To: '.$to:$h,$headers),$body),'welcome',$resolver),'Ambiguous or invalid source list rejected');
+}
 cbCheck(CloudbedsBridge::validate($packet,'welcome')===[hash('sha256',$pdf)=>$pdf],'Authenticated PDF packet');
 cbCheck(!str_contains(json_encode($packet),'info@') && !str_contains(json_encode($packet),'Subject'),'No mail headers in bridge');
 cbReject(fn()=>CloudbedsBridge::packet($signed,'city',$resolver),'City cannot receive Welcome mail');

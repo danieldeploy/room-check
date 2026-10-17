@@ -99,3 +99,7 @@ Expedia and other email suppliers are outside this change.
 
 The read-only authentication diagnostic records only fixed verification-stage names.
 It does not relax signature checks or publish failed header values.
+
+A signed To mailbox list may include other billing contacts when exactly one known
+house mailbox is present. Ambiguous lists containing both houses remain rejected;
+all addresses and attachment bytes remain covered by the original DKIM signature.
