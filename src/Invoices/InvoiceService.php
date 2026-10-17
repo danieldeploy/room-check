@@ -26,7 +26,8 @@ final class InvoiceService
     public function enqueue(string $kind, string $property, string $period, ?int $actor, ?string $scheduleKey = null, int $accountId = 1): int
     {
         $accounts = new InvoiceAccounts($this->pdo);
-        $accounts->get($accountId);
+        $targetAccount=$accounts->get($accountId);
+        if ($targetAccount['portal']==='cloudbeds' && $kind!=='collect') throw new RuntimeException('invalid_request');
         if ($kind !== 'preflight' && !$accounts->active($accountId)) throw new RuntimeException('account_inactive');
         if (!in_array($kind, ['preflight', 'login', 'collect', 'discover', 'verify'], true) || !self::validPeriod($period)
             || !array_key_exists($property, $accounts->properties($accountId))) throw new RuntimeException('invalid_request');

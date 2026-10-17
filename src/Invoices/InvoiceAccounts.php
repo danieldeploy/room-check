@@ -5,7 +5,7 @@ require_once __DIR__ . '/InvoiceVault.php';
 final class InvoiceAccounts
 {
     public const PORTALS = ['booking' => 'Booking.com', 'hostelworld' => 'Hostelworld', 'airbnb' => 'Airbnb',
-        'email' => 'Email', 'expedia' => 'Expedia', 'hostelsclub' => 'HostelsClub'];
+        'cloudbeds' => 'Cloudbeds', 'email' => 'Email', 'expedia' => 'Expedia', 'hostelsclub' => 'HostelsClub'];
     public const METHODS = ['password', 'sms', 'email', 'totp'];
 
     public function __construct(private readonly PDO $pdo) {}
@@ -185,6 +185,7 @@ final class InvoiceAccounts
     public function saveCredentials(InvoiceVault $vault, int $id, array $input): void
     {
         $account = $this->get($id);
+        if ($account['portal']==='cloudbeds') throw new RuntimeException('invalid_request');
         $data = $this->credentials($vault, $id);
         $original = $data;
         // Blank secret fields preserve existing values; secrets are never sent back in HTML.

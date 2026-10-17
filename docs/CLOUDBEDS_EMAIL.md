@@ -1,6 +1,6 @@
 # Cloudbeds email discovery
 
-This first step is a read-only discovery, not an enabled Cloudbeds connector.
+The initial discovery is complete. The email connector is implemented; production acceptance remains a separate required check.
 
 - Expected behaviour: determine whether recent real Cloudbeds mail contains PDF
   attachments, document links, or payment confirmations before writing an extractor.
@@ -28,7 +28,65 @@ metadata to the Hub over signed HTTPS. These flows do not prove that a reusable
 IMAP password for either mailbox exists in the Hub vault. They do provide the
 established hosting access and mail-processing pattern to reuse here.
 
-The pending Cloudbeds connector must validate a real invoice PDF, company and issue
-date, group by issue year/month, prevent repeat delivery, preserve mailbox originals
-and use the existing Drive/retry/TOConline pipeline. Payment receipts are not invoices.
+The Cloudbeds connector validates real PDF invoices, company NIF and issue date, groups by issue year/month, prevents repeat delivery, preserves mailbox originals and uses the existing Drive/retry/TOConline pipeline. Payment receipts are not invoices.
 Airbnb delivery remains excluded and the existing TOConline test button remains.
+
+
+## Connector specification
+
+- Expected behaviour: receive PDF invoices from the existing Cloudbeds folders in
+  Welcome and City; validate Cloudbeds, Active Lines, the configured company NIF,
+  invoice number and issue date, then reuse Drive and TOConline delivery.
+- Permissions: gerente manages collection and schedules. The existing protected
+  hosting credential provisions only the reviewed filters, files and local workers.
+  No Cloudbeds login or new mailbox credential is required.
+- Inputs and data: the two fixed info mailboxes, MIME up to 4 MiB, PDF attachments
+  up to 2 MiB, and the selected issue year/month. Mailbox originals and flags are
+  untouched. City sends only PDFs and a message digest to the Hub, never its email
+  body or authentication material to the Welcome mailbox.
+- Failures: unsupported signatures, malformed PDFs, wrong companies and ambiguous
+  dates remain private for review. Network delivery retries after three hours;
+  collection uses the existing task history and alerts. Drive and TOConline retain
+  their existing retries, uncertainty handling and confirmation ledger.
+- Acceptance: signed synthetic mail, PDF parsing, wrong company, receipt, wrong
+  month, repeat collection and cross-account isolation tests. Production requires
+  a real selected-month document from each source, verified Drive storage,
+  TOConline acceptance/existing-document confirmation and a duplicate repeat.
+
+Read-only inspection on 17 October 2026 found PDFs in both accounts, alongside
+payment confirmations without attachments. The PDFs use Invoice Number, Invoice
+Date with an English month name, VAT Number, Cloudbeds and Active Lines. No private
+invoice values or samples are committed.
+
+The receiver verifies the original Cloudbeds DKIM signature, full body, signed
+interpretation headers and exact source recipient. Historical mail is bounded to
+two years; DKIM expiry is still enforced. Each source has a separate HMAC bridge
+key, with TLS and a five-minute timestamp window. Subjects and receipt wording
+cannot establish invoice identity. No download links are followed.
+
+CloudbedsInbox encrypts incoming PDFs and provenance, validates their content and
+serves the shared collection queue without the Windows browser worker. The
+selected period must match the issue date, irrespective of service/due dates.
+PDF hash and invoice number prevent duplicate imports; the existing TOConline
+ledger also deduplicates a Cloudbeds invoice across the two source accounts.
+Drive and TOConline revalidate the PDF before delivery. Staged PDF bytes are
+removed after import; the normal Drive cleanup owns local imported-file deletion.
+
+## Provisioning and rollout
+
+The guarded release creates two bound Cloudbeds accounts and private receiver
+configuration. The post-release installer adds separate copy-preserving filters
+and minute workers, verifies exact bindings, and refuses conflicts. Welcome also
+uses the private pipe; City uses its local folder worker, as already established
+for Hostelworld. Folder polling recovers deliveries where an earlier mailbox rule
+stops later filter rules. Existing Hostelworld/Booking/TOConline filters are kept.
+
+A one-time acceptance request collects the previous calendar month after both
+source scans are current, followed by one repeat to verify deduplication. Monthly
+collection is enabled at day 5, 04:00 Europe/Lisbon only after Drive and TOConline
+confirmation pass for both sources. Later deployments preserve user settings.
+The separate cloudbeds-acceptance CI job reads only fixed status fields and
+separates deployment from verification of a complete real cycle.
+
+Airbnb remains excluded from TOConline, the TOConline test button remains, and
+Expedia and other email suppliers are outside this change.

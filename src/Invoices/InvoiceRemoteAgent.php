@@ -187,7 +187,7 @@ final class InvoiceRemoteAgent
         if ($old) $this->cleanup($old);
         $service=new InvoiceService($this->pdo);
         $service->scheduleDue(new DateTimeImmutable('now'));
-        $s=$this->pdo->prepare("SELECT * FROM invoice_tasks WHERE state IN ('queued','retry') AND (next_attempt_at IS NULL OR next_attempt_at<=?) ORDER BY attempts,id LIMIT 1");
+        $s=$this->pdo->prepare("SELECT * FROM invoice_tasks WHERE account_id NOT IN (SELECT id FROM invoice_accounts WHERE portal='cloudbeds') AND state IN ('queued','retry') AND (next_attempt_at IS NULL OR next_attempt_at<=?) ORDER BY attempts,id LIMIT 1");
         $s->execute([InvoiceService::utcNow()]); $job=$s->fetch(PDO::FETCH_ASSOC);
         if (!$job) return ['job'=>null];
         $accounts=new InvoiceAccounts($this->pdo); $account=$accounts->get((int)$job['account_id']);

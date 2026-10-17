@@ -28,7 +28,8 @@ if ($editing) {
 </form>
 <?php endif; ?></section>
 <?php if ($editing && !$editing['archived_at']): $a=$editing; ?>
-<section class="card"><h2><?= it('access') ?></h2><p><?= it('access_steps') ?></p><div class="invoice-status-line"><?php invoiceStatus($readiness[$editId]); ?></div>
+<section class="card"><h2><?= it('access') ?></h2>
+<?php if ($a['portal']==='cloudbeds'): ?><p><?= it('cloudbeds_email_access') ?></p><?php else: ?><p><?= it('access_steps') ?></p><div class="invoice-status-line"><?php invoiceStatus($readiness[$editId]); ?></div>
 <?php if ($a['login_verified_at']): ?><p><?= it('last_access_check') ?>: <?= ie(invoiceTime($a['login_verified_at'])) ?></p><?php endif; ?>
 <?php if ($readiness[$editId]==='integration_unavailable'): ?><p><?= it('integration_unavailable_note') ?></p><?php elseif ($readiness[$editId]==='integration_setup'): ?><p><?= it('integration_setup_note') ?></p><?php endif; ?>
 <details <?= $readiness[$editId]==='integration_setup'?'open':'' ?>><summary><?= it('credentials_heading') ?></summary><p><?= it('secret_note') ?></p><p><?= it('credentials_change_note') ?></p>
@@ -94,7 +95,7 @@ if ($editing) {
 <?php endforeach; ?>
 <form method="post"><?php invoiceHidden('approve_hostelworld_map',$editId); ?><button class="invoice-secondary"><?= it('approve_booking_map') ?></button></form></details>
 <?php endif; ?>
-<?php if ($a['auth_method']==='sms'): ?><details class="invoice-options"><summary><?= it('sms_device_settings') ?></summary><p><?= it('sms_key_note') ?></p><form method="post"><?php invoiceHidden('sms_token',$editId); ?><button class="invoice-secondary"><?= it('sms_token') ?></button></form></details><?php endif; ?></section>
+<?php if ($a['auth_method']==='sms'): ?><details class="invoice-options"><summary><?= it('sms_device_settings') ?></summary><p><?= it('sms_key_note') ?></p><form method="post"><?php invoiceHidden('sms_token',$editId); ?><button class="invoice-secondary"><?= it('sms_token') ?></button></form></details><?php endif; ?><?php endif; ?></section>
 <section class="card"><h2><?= it('schedule') ?></h2><p><?= it('schedule_note') ?></p><p><?= it('schedule_validation_note') ?></p>
 <form method="post"><?php invoiceHidden('schedule',$editId); ?><div class="form-grid"><label class="check-row"><input type="checkbox" name="enabled" <?= (int)$a['enabled']?'checked':'' ?> <?= $readiness[$editId]!=='ready' || !(int)$a['is_active']?'disabled':'' ?>><span><?= it('enable_schedule') ?></span></label><label class="field"><span><?= it('day') ?></span><input type="number" name="day" min="1" max="28" value="<?= (int)$a['schedule_day'] ?>" required></label><label class="field"><span><?= it('time') ?></span><input type="time" name="time" value="<?= ie($a['schedule_time']) ?>" required></label></div><button class="primary-button"><?= it('save_schedule') ?></button></form></section>
 <section class="card"><details><summary><?= it('archive_account') ?></summary><p><?= it('archive_account_note') ?></p><form method="post"><?php invoiceHidden('archive_account',$editId); ?><button class="invoice-secondary"><?= it('archive_account') ?></button></form></details></section>
@@ -107,7 +108,7 @@ if ($editing) {
 $portalAccounts=array_filter($accounts,fn($a)=>$a['portal']===$portal && ($showArchived || !$a['archived_at'])); if (!$portalAccounts) continue; $shown++; ?>
 <section class="card"><h2><?= ie($portalName) ?></h2><div class="invoice-record-grid"><?php foreach ($portalAccounts as $a): ?><article class="invoice-record"><div class="invoice-record-heading"><h3><?= ie($a['label']) ?></h3><?php invoiceStatus($a['archived_at']?'archived':((int)$a['is_active']?'active':'inactive')); ?></div>
 <?php $linked=$repository->activeProperties((int)$a['id']); if (count($linked)>1) unset($linked['account']); ?><p><?= ie(implode(', ',$linked)) ?></p>
-<dl class="invoice-facts"><div><dt><?= it('access') ?></dt><dd><?php invoiceStatus($readiness[$a['id']]); ?></dd></div><div><dt><?= it('second_factor') ?></dt><dd><?= it('method_'.$a['auth_method']) ?></dd></div><div><dt><?= it('schedule') ?></dt><dd><?php invoiceStatus((int)$a['enabled']?'enabled':'disabled'); ?></dd></div><div><dt><?= it('last_success') ?></dt><dd><?= ie(invoiceTime($a['last_success'])) ?></dd></div></dl>
+<dl class="invoice-facts"><div><dt><?= it('access') ?></dt><dd><?php invoiceStatus($readiness[$a['id']]); ?></dd></div><div><dt><?= it('second_factor') ?></dt><dd><?= it($a['portal']==='cloudbeds'?'cloudbeds_email_method':'method_'.$a['auth_method']) ?></dd></div><div><dt><?= it('schedule') ?></dt><dd><?php invoiceStatus((int)$a['enabled']?'enabled':'disabled'); ?></dd></div><div><dt><?= it('last_success') ?></dt><dd><?= ie(invoiceTime($a['last_success'])) ?></dd></div></dl>
 <div class="form-actions"><?php if ($isGerente): ?><a href="<?= ie(invoiceUrl('accounts',['edit'=>$a['id']])) ?>"><?= it('manage_account') ?></a><?php endif; ?><a href="<?= ie(invoiceUrl('documents',['account'=>$a['id'],'portal'=>$portal,'property'=>''])) ?>"><?= it('view_invoices') ?></a><a href="<?= ie(invoiceUrl('activity',['account'=>$a['id'],'portal'=>$portal,'property'=>''])) ?>"><?= it('view_activity') ?></a></div></article><?php endforeach; ?></div></section>
 <?php endforeach; ?><?php if (!$shown): ?><section class="card"><p><?= it('no_accounts_filter') ?></p></section><?php endif; ?>
 </div>

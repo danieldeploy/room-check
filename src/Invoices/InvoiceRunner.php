@@ -9,6 +9,7 @@ require_once __DIR__ . '/InvoiceTocMailbox.php';
 require_once __DIR__ . '/InvoiceTocPipe.php';
 require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 require_once __DIR__ . '/InvoiceNotificationTest.php';
+require_once __DIR__.'/CloudbedsInbox.php';
 
 final class InvoiceRunner
 {
@@ -19,6 +20,7 @@ final class InvoiceRunner
     {
         require_once __DIR__ . '/InvoiceRemoteAgent.php';
         $remote = new InvoiceRemoteAgent($this->pdo, $this->config);
+        try { (new CloudbedsInbox($this->pdo,new InvoiceVault((string)($this->config['private_dir']??''))))->run($this->config); } catch (Throwable) {}
         try {
             (new InvoiceNotificationTest($this->pdo,new InvoiceVault((string)($this->config['private_dir']??'')),
                 $this->config['whatsapp']??[]))->dispatch();
@@ -40,7 +42,7 @@ final class InvoiceRunner
         $this->pdo->exec("UPDATE invoice_drive_alerts SET state='failed' WHERE state='sending'");
         try { $this->archive(); } catch (Throwable) {}
         $service->scheduleDue(new DateTimeImmutable('now'));
-        $s = $this->pdo->prepare("SELECT * FROM invoice_tasks WHERE state IN ('queued', 'retry') AND (next_attempt_at IS NULL OR next_attempt_at <= ?) ORDER BY id LIMIT 20");
+        $s = $this->pdo->prepare("SELECT * FROM invoice_tasks WHERE account_id NOT IN (SELECT id FROM invoice_accounts WHERE portal='cloudbeds') AND state IN ('queued', 'retry') AND (next_attempt_at IS NULL OR next_attempt_at <= ?) ORDER BY id LIMIT 20");
         $s->execute([$now]);
         // Round-robin across accounts: one account cannot monopolize a cron invocation.
         $queues = [];
