@@ -50,6 +50,14 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
       if ([0,1,2].includes(h.property_count)) safe.property_count = h.property_count;
       receipt.hostelworld = safe;
     }
+    if (job.input.portal === 'hostelworld' && trace?.table) {
+      const safe = {};
+      for (const [key,max] of Object.entries({tables:3,headers:21,rows:401,next_links:3,max_next_links:3})) {
+        const value = trace.table[key];
+        if (Number.isInteger(value) && value >= 0 && value <= max) safe[key] = value;
+      }
+      receipt.table = safe;
+    }
     if (['setup', 'session', 'navigation', 'table', 'pdf_download', 'pagination', 'complete'].includes(trace?.stage)) {
       receipt.stage = trace.stage;
       const d = trace.download;

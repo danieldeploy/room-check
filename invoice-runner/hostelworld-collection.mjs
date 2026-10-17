@@ -75,7 +75,9 @@ export async function readHostelworldTable(page) {
   return page.evaluate(() => {
     const regions = [...document.querySelectorAll('.vat-invoices')];
     if (regions.length !== 1) return { tables: 0 };
-    const headers = [...regions[0].querySelectorAll('.table-header table.table-block')];
+    // Some accounts render the heading and rows together; others split them.
+    const headers = [...regions[0].querySelectorAll('table.table-block')].filter(t =>
+      t.querySelector('th')?.textContent.trim().replace(/\s+/g,' ').toLowerCase() === 'invoice #');
     if (headers.length !== 1) return { tables: 0 };
     const tables = [...regions[0].querySelectorAll('table.table-block')].filter(t => t.querySelector('tr[id^="invoice-"]'));
     if (tables.length !== 1) return { tables: tables.length };
@@ -105,8 +107,16 @@ export async function collectHostelworldInvoices(page, input, target = null, dep
         || location.search || !await identity(page,input.property)) fail('account_mismatch');
     if (dependencies.trace) dependencies.trace.stage = 'table';
     const raw = await readTable(page);
+    if (dependencies.trace) dependencies.trace.table = {
+      tables: Number.isInteger(raw?.tables) ? Math.min(Math.max(raw.tables,0),3) : 0,
+      headers: Array.isArray(raw?.headers) ? Math.min(raw.headers.length,21) : 0,
+      rows: Array.isArray(raw?.rows) ? Math.min(raw.rows.length,401) : 0,
+      next_links: Array.isArray(raw?.next) ? Math.min(raw.next.length,3) : 0,
+      max_next_links: Math.max(dependencies.trace.table?.max_next_links || 0,
+        Array.isArray(raw?.next) ? Math.min(raw.next.length,3) : 0),
+    };
     if (raw?.tables !== 1 || !Array.isArray(raw.rows) || !raw.rows.length || raw.rows.length > 400
-        || !Array.isArray(raw.headers) || !Array.isArray(raw.next) || raw.next.length > 1) fail('portal_changed');
+        || !Array.isArray(raw.headers) || !Array.isArray(raw.next) || raw.next.length > 2) fail('portal_changed');
     const current = hostelworldStructure(raw.headers);
     if (structure && structure.headers_sha256 !== current.headers_sha256
         || target && target.headers_sha256 !== current.headers_sha256) fail('portal_changed');
@@ -143,11 +153,18 @@ export async function collectHostelworldInvoices(page, input, target = null, dep
         pagination_mode: pages.size > 1 ? 'next_page' : 'single_page', pages: pages.size,
         scanned_documents: scanned, structure } };
     }
-    const next = new URL(raw.next[0]);
-    if (next.origin !== ORIGIN || !/^\/reports\/vatinvoices\/[1-9]\d{0,2}$/.test(next.pathname)
-        || next.search || (next.hash && !/^#invoice-\d{1,12}$/.test(next.hash))) fail('portal_changed');
-    next.hash = '';
-    if (next.href === location.href) fail('portal_changed');
+    // Show More and Show All can point to different cumulative page counts.
+    // Validate both, then advance exactly one page so no invoice is skipped.
+    const candidates = raw.next.map(value => {
+      const next = new URL(value);
+      if (next.origin !== ORIGIN || !/^\/reports\/vatinvoices\/[1-9]\d{0,2}$/.test(next.pathname)
+          || next.search || (next.hash && !/^#invoice-\d{1,12}$/.test(next.hash))) fail('portal_changed');
+      next.hash = '';
+      return next;
+    }).sort((a,b) => Number(a.pathname.split('/').at(-1)) - Number(b.pathname.split('/').at(-1)));
+    const next = candidates[0];
+    const currentPage = location.pathname === ROOT ? 1 : Number(location.pathname.split('/').at(-1));
+    if (Number(next.pathname.split('/').at(-1)) !== currentPage + 1) fail('portal_changed');
     await page.goto(next.href,{waitUntil:'domcontentloaded'});
   }
   fail('document_limit');
