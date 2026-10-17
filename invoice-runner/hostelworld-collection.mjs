@@ -9,8 +9,25 @@ const fail = code => { throw new PortalError(code); };
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 
+// Structural diagnosis only: never retain digits, words or the date itself.
+export function hostelworldDateShape(value) {
+  const punctuation = {'/':'slash','-':'dash','.':'dot',',':'comma',':':'colon'};
+  return (value.slice(0,80).match(/\d+|[A-Za-z]+|\s+|[^A-Za-z\d\s]/g) || []).slice(0,20).map(token => {
+    if (/^\d+$/.test(token)) return `digits_${Math.min(token.length,5)}`;
+    if (/^\s+$/.test(token)) return 'space';
+    if (/^[A-Za-z]+$/.test(token)) {
+      const word = token.toLowerCase();
+      if (word === 'sept' || months.some(m => m === word || m.slice(0,3) === word)) return 'month';
+      if (['st','nd','rd','th'].includes(word)) return 'ordinal';
+      if (['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].some(d=>d===word||d.slice(0,3)===word)) return 'weekday';
+      return `letters_${Math.min(token.length,10)}`;
+    }
+    return punctuation[token] || 'other';
+  });
+}
+
 export function hostelworldIssueDates(text, trace = null) {
-  const dates = new Set(); let labels = 0, reason = null;
+  const dates = new Set(); let labels = 0, reason = null, shape;
   const monthNumber = value => {
     const v = value.toLowerCase();
     return v === 'sept' ? 9 : months.findIndex(m => m === v || m.slice(0,3) === v) + 1;
@@ -30,12 +47,12 @@ export function hostelworldIssueDates(text, trace = null) {
       if (a > 12 && b <= 12 || a === b) {day=a;month=b;}
       else if (b > 12 && a <= 12) {day=b;month=a;}
       else {reason='ambiguous_numeric';continue;}
-    } else {reason='unsupported_format';continue;}
+    } else {reason='unsupported_format';shape=hostelworldDateShape(value);continue;}
     try { dates.add(invoiceDate(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`, 'YYYY-MM-DD')); }
     catch {reason='invalid_calendar';}
   }
   reason ||= dates.size > 1 ? 'conflicting_dates' : dates.size === 1 ? 'verified' : 'missing_date';
-  if (trace) trace.pdf_date = {reason,labels:Math.min(labels,3),candidates:Math.min(dates.size,3)};
+  if (trace) trace.pdf_date = {reason,labels:Math.min(labels,3),candidates:Math.min(dates.size,3),...(shape ? {shape} : {})};
   return reason === 'verified' || reason === 'conflicting_dates' ? [...dates] : [];
 }
 

@@ -158,3 +158,14 @@ test('Hostelworld date diagnostics never retain date values or PDF text',async()
   assert.deepEqual(JSON.parse(raw).pdf_date,{reason:'unsupported_format',labels:1,candidates:0});
  } finally {await fs.rm(root,{recursive:true,force:true});}
 });
+test('Hostelworld date shape accepts only a bounded fixed vocabulary',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'hw-date-shape-'));
+ try {
+  for (const [index,shape] of [ ['digits_2','dot','digits_2'],['PRIVATE_DATE'],Array(21).fill('space'),['digits_6'],['letters_11'] ].entries()) {
+   await writeTaskReceipt(root,{id:70+index,input:{action:'verify',portal:'hostelworld'}},{code:'invalid_document',collection_trace:{pdf_date:{reason:'unsupported_format',labels:1,candidates:0,shape}}},{accepted:true,state:'failed'});
+   const raw=await fs.readFile(path.join(root,`task-${70+index}-receipt.json`),'utf8');
+   assert.equal(raw.includes('PRIVATE_'),false);
+   assert.equal(Object.hasOwn(JSON.parse(raw).pdf_date,'shape'),index===0);
+  }
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});
