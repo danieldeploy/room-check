@@ -112,7 +112,7 @@ def expected(account, identifier):
     return params
 
 def verify_filter(row, params):
-    require(row.get("filtername")==NAME and not row.get("disabled"),"filter_disabled")
+    require(row.get("filtername")==params["filtername"] and not row.get("disabled"),"filter_disabled")
     rules=row.get("rules",[])
     actions=row.get("actions",[])
     require(len(rules)==2 and len(actions)==(2 if "action2" in params else 1),"filter_conflict")

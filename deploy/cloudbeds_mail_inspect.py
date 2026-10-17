@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import subprocess
+import pathlib
 import urllib.parse
 import urllib.request
 
@@ -134,7 +135,22 @@ def shape(raw):
         except ValueError:
             continue
     plain = re.sub(r"<[^>]*>", " ", body)
+    authentication = {}
+    checker = pathlib.Path(__file__).with_name("cloudbeds_mail_check.php")
+    if types["pdf"] and checker.is_file():
+        try:
+            result = subprocess.run(["php", str(checker)], input=raw, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, timeout=30, check=True)
+            facts = json.loads(result.stdout)
+            for key in ("welcome_recipient", "city_recipient"):
+                if type(facts.get(key)) is bool: authentication[key] = facts[key]
+            if facts.get("auth") in ("verified", "unsigned", "unsupported", "unaligned", "expired", "unsigned_fields",
+                    "dns_unavailable", "body_mismatch", "signature_mismatch", "unverified", "parse_failed"):
+                authentication["auth"] = facts["auth"]
+        except (OSError, ValueError, subprocess.SubprocessError):
+            authentication = {"auth": "unavailable"}
     return {"sender_provider": sender_family, "mime": types,
+            "authentication": authentication,
             "pdf_shapes": pdf_shapes,
             "dkim_providers": sorted(set(family(m.group(1)) for value in message.get_all("DKIM-Signature", [])
                 for m in re.finditer(r"(?:^|;)\s*d=([^;\s]+)", str(value), re.I))),

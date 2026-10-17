@@ -36,6 +36,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_filters.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cloudbeds_mail_inspect.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cloudbeds_email.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_recovery.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
@@ -83,6 +84,7 @@ jobs:
         run: |
           php tests/invoice-booking-verification.php
           php tests/invoice-hostelworld-verification.php
+          php tests/cloudbeds-email.php
           php tests/release-backup.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           php tests/invoice-hostelworld-account.php
@@ -187,11 +189,34 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: python3 deploy/hostelworld_filters.py
 
+      - name: Install and verify separate Cloudbeds email receivers
+        if: vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cloudbeds_email.py
+
       - name: Report safe Hostelworld release readiness
         if: always()
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: python3 deploy/hostelworld_status.py
+
+  cloudbeds-acceptance:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/room-item-assignments' && vars.HUB_DEPLOY_ENABLED == 'true'
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Read real Cloudbeds archive and confirmation results
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cloudbeds_email.py --wait-status
 
   windows-agent:
     runs-on: windows-latest

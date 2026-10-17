@@ -84,7 +84,7 @@ final class InvoiceWorkspace
         $s=$this->pdo->prepare("SELECT COALESCE(x.toconline_state,'pending') AS state,COUNT(*) AS total
             FROM invoice_documents d JOIN invoice_accounts a ON a.id=d.account_id
             LEFT JOIN invoice_document_delivery x ON x.document_id=d.id
-            WHERE $where AND a.portal IN ('booking','hostelworld') AND d.format='pdf' GROUP BY COALESCE(x.toconline_state,'pending')");
+            WHERE $where AND a.portal IN ('booking','hostelworld','cloudbeds') AND d.format='pdf' GROUP BY COALESCE(x.toconline_state,'pending')");
         $s->execute($params); $counts=['toc_pending'=>0,'toc_submitted'=>0,'toc_accepted'=>0,'toc_existing'=>0,
             'toc_rejected'=>0,'toc_review'=>0,'toc_no_confirmation'=>0,'toc_duplicate'=>0];
         foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -172,6 +172,10 @@ final class InvoiceWorkspace
         if (in_array($account['portal'],['expedia','hostelsclub','email'],true)) return 'integration_unavailable';
         if (!$vault) return 'integration_setup';
         $id=(int)$account['id'];
+        if ($account['portal']==='cloudbeds') {
+            $settings=$vault->has('cloudbeds-settings.enc')?$vault->read('cloudbeds-settings.enc'):[];
+            return in_array($id,$settings['account_ids']??[],true) ? (empty($account['login_verified_at'])?'access_to_test':'ready') : 'integration_setup';
+        }
         $credentials=$vault->has(InvoiceAccounts::secretName($id,'credentials')) || ($id===1 && $vault->has('booking-credentials.enc'));
         $mapFile=$vault->path('account-'.$id.'-map.json');
         if (!is_file($mapFile) && $id===1 && $account['portal']==='booking') $mapFile=$vault->path('booking-map.json');

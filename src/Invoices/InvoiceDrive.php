@@ -4,6 +4,7 @@ require_once __DIR__ . '/InvoiceDriveClient.php';
 require_once __DIR__ . '/InvoiceCompany.php';
 require_once __DIR__ . '/InvoiceHostelworldVerification.php';
 require_once __DIR__ . '/InvoiceDriveLayout.php';
+require_once __DIR__.'/CloudbedsInvoice.php';
 
 /** Caller holds room_check_invoices advisory lock, including manual retries. */
 final class InvoiceDrive
@@ -69,6 +70,10 @@ final class InvoiceDrive
                         'number'=>$d['invoice_number'],'portal_document_id'=>$d['invoice_number'],'issued_on'=>$d['issued_on'],
                     ],$d['period'],InvoiceHostelworldVerification::companyNif($this->vault));
                     [$company,$name]=in_array(false,$check,true)?['review',null]:['validated','Active Lines'];
+                }
+                if ($d['portal']==='cloudbeds') {
+                    if (!CloudbedsInvoice::matches($path,$d,InvoiceHostelworldVerification::companyNif($this->vault))) throw new RuntimeException('drive_verify');
+                    [$company,$name]=['validated','Active Lines'];
                 }
                 $this->pdo->prepare('UPDATE invoice_document_delivery SET company_state=?, company_name=? WHERE document_id=?')->execute([$company, $name, $d['id']]);
                 if (!$connected) { $this->client->connect(); $connected = true; }

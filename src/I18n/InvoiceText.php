@@ -387,6 +387,8 @@ final class InvoiceText
         'method_password' => ['Sem 2FA configurado', 'No 2FA configured'],
         'method_sms' => ['2FA por SMS', 'SMS 2FA'],
         'method_email' => ['2FA por email', 'Email 2FA'],
+        'cloudbeds_email_access' => ['As faturas são recebidas pelo email desta casa. O email original é preservado. A recolha valida a empresa e o mês de emissão antes de arquivar e enviar ao TOConline.', 'Invoices are received through this property’s email. The original email is preserved. Collection validates the company and issue month before archiving and sending to TOConline.'],
+        'cloudbeds_email_method' => ['Receção de faturas por email', 'Invoice reception by email'],
         'hostelworld_filter_auth_note' => ['O código de autenticação só é recebido através do filtro dedicado do Hostelworld. Não é necessário acesso IMAP.', 'The authentication code is received only through the dedicated Hostelworld filter. IMAP access is not required.'],
         'hostelworld_hosting_diagnostic' => ['Diagnóstico privado da entrega de email', 'Private email delivery diagnostic'],
         'method_totp' => ['Google Authenticator (TOTP)', 'Google Authenticator (TOTP)'],

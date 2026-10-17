@@ -49,7 +49,7 @@ final class InvoiceToconline
         // Booking invoice numbers identify the supplier invoice across properties and accounts.
         $number=strtoupper(trim((string)$d['invoice_number']));
         $portal=$d['portal']??''; $scope=$portal;
-        if (!in_array($portal,['booking','hostelworld'],true) || $number==='') throw new RuntimeException('toc_ineligible');
+        if (!in_array($portal,['booking','hostelworld','cloudbeds'],true) || $number==='') throw new RuntimeException('toc_ineligible');
         if ($portal==='hostelworld') {
             $property=(string)($d['property_id']??'');
             if (!in_array($property,['305209','77759'],true) || !preg_match('/\A\d{1,12}\z/',$number)) throw new RuntimeException('toc_ineligible');
@@ -60,8 +60,8 @@ final class InvoiceToconline
 
     public static function message(string $pdf, string $key, string $sender, string $portal='booking'): array
     {
-        if (!in_array($portal,['booking','hostelworld'],true)) throw new RuntimeException('toc_ineligible');
-        $label=$portal==='booking'?'Booking':'Hostelworld';
+        if (!in_array($portal,['booking','hostelworld','cloudbeds'],true)) throw new RuntimeException('toc_ineligible');
+        $label=['booking'=>'Booking','hostelworld'=>'Hostelworld','cloudbeds'=>'Cloudbeds'][$portal];
         if (!preg_match('/\A[a-f0-9]{64}\z/',$key) || !filter_var($sender,FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/',$sender)) throw new RuntimeException('toc_invalid_settings');
         $boundary='hub_'.bin2hex(random_bytes(16));
         $headers=['From: '.$sender,'Reply-To: '.$sender,'MIME-Version: 1.0',
@@ -117,7 +117,7 @@ final class InvoiceToconline
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
         if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
         $ledger=$this->ledger(); $settings=$this->settings(); $matches=[];
-        preg_match_all('/(?:(?:booking|hostelworld)[-_]|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
+        preg_match_all('/(?:(?:booking|hostelworld|cloudbeds)[-_]|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
         foreach (array_unique($tokens[1]) as $key) {
             $entry=$ledger[strtolower($key)]??null;
             if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(int)$entry['document_id']]=true;
@@ -164,7 +164,7 @@ final class InvoiceToconline
         // A crash after writing intent must never cause another submission.
         foreach ($ledger as &$entry) if ($entry['state']==='toc_sending') $entry['state']='toc_uncertain';
         unset($entry); $this->vault->save('toconline-ledger.enc',$ledger);
-        $query="SELECT d.*,x.drive_id,x.drive_parent,a.portal FROM invoice_documents d JOIN invoice_document_delivery x ON x.document_id=d.id JOIN invoice_accounts a ON a.id=d.account_id WHERE x.drive_state='verified' AND x.company_state='validated' AND d.format='pdf' AND a.portal IN ('booking','hostelworld')";
+        $query="SELECT d.*,x.drive_id,x.drive_parent,a.portal FROM invoice_documents d JOIN invoice_document_delivery x ON x.document_id=d.id JOIN invoice_accounts a ON a.id=d.account_id WHERE x.drive_state='verified' AND x.company_state='validated' AND d.format='pdf' AND a.portal IN ('booking','hostelworld','cloudbeds')";
         $s=$this->pdo->prepare($query.($pilotId?' AND d.id=?':' AND x.toconline_state IN (\'pending\',\'toc_retry\',\'toc_sending\')').' ORDER BY d.id LIMIT 20');
         $s->execute($pilotId?[$pilotId]:[]); $rows=$s->fetchAll(PDO::FETCH_ASSOC);
         if ($pilotId && !$rows) throw new RuntimeException('toc_ineligible');
@@ -188,6 +188,14 @@ final class InvoiceToconline
                             'number'=>$d['invoice_number'],'portal_document_id'=>$d['invoice_number'],'issued_on'=>$d['issued_on'],
                         ],$d['period'],$settings['nif']);
                         if (in_array(false,$checks,true)) throw new RuntimeException('toc_ineligible');
+                    } finally { if (is_file($temporary)) unlink($temporary); }
+                }
+                if ($d['portal']==='cloudbeds') {
+                    require_once __DIR__.'/CloudbedsInvoice.php';
+                    $temporary=$this->vault->path('cloudbeds-toc-'.bin2hex(random_bytes(16)).'.pdf');
+                    try {
+                        InvoiceVault::atomicWrite($temporary,$pdf);
+                        if (!CloudbedsInvoice::matches($temporary,$d,$settings['nif'])) throw new RuntimeException('toc_ineligible');
                     } finally { if (is_file($temporary)) unlink($temporary); }
                 }
                 $message=self::message($pdf,$identity,$settings['sender'],$d['portal']);
