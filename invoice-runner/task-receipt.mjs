@@ -64,6 +64,12 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
         if (typeof trace.pdf_identity[key] === 'boolean') safe[key] = trace.pdf_identity[key];
       receipt.pdf_identity = safe;
     }
+    if (job.input.portal === 'hostelworld'
+        && ['table_shape','headers','headers_changed','repeated_page','row_shape','pdf_link'].includes(trace?.table_failure?.reason)) {
+      receipt.table_failure = {reason:trace.table_failure.reason};
+      if (Number.isInteger(trace.table_failure.row_index) && trace.table_failure.row_index >= 1
+          && trace.table_failure.row_index <= 400) receipt.table_failure.row_index = trace.table_failure.row_index;
+    }
     if (job.input.portal === 'hostelworld' && Number.isInteger(trace?.scanned_documents)
         && trace.scanned_documents >= 0 && trace.scanned_documents <= 401)
       receipt.scanned_documents = trace.scanned_documents;

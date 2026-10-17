@@ -50,3 +50,12 @@ retain four identity booleans and a bounded scanned-PDF count to locate failures
 never the extracted text or number. Synthetic padded, wrong and conflicting IDs
 are tested before production verification; padding is not assumed to explain a
 production rejection until that verification establishes the result.
+
+Source identity and display numbers: collection uses the exact numeric identifier
+shared by the row ID and same-origin PDF path. The first-column display number is
+not an additional identity requirement and is not used to name or correlate the
+download. PDF property, issuer, company and issue-date checks remain mandatory.
+This changes no permissions or approval gates. A fixed table-failure reason and
+bounded row position distinguish malformed rows from changed headings without
+recording invoice values. Tests reject mismatched row/PDF IDs before downloading
+and confirm that presentation differences do not change the source identity.

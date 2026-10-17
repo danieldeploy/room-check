@@ -44,11 +44,21 @@ test('all pages are scanned by PDF date, cumulative rows downloaded once',async(
 });
 test('loops, foreign links, account changes and ambiguous rows fail without partial success',async()=>{
  const good=table(['901'],[root+'/2']);
- for(const pages of [[good,good],[table(['901'],['https://other.example/reports/vatinvoices/2'])],[{...table(['901']),rows:[{...row('901'),number:'902'}]}],[{...table(['901']),rows:[{...row('901'),links:['https://other.example/pdf/901']}]}]]) {
+ for(const pages of [[good,good],[table(['901'],['https://other.example/reports/vatinvoices/2'])],[{...table(['901']),rows:[{...row('901'),id:'invalid'}]}],[{...table(['901']),rows:[{...row('901'),links:['https://other.example/pdf/901']}]}]]) {
   const f=fixture(pages,{'901':'2026-08-03'});await assert.rejects(collectHostelworldInvoices(f.page,input,null,f.dependencies),/portal_changed/);
  }
  const f=fixture([table(['901'])],{'901':'2026-08-03'});f.dependencies.identity=async()=>false;
  await assert.rejects(collectHostelworldInvoices(f.page,input,null,f.dependencies),/account_mismatch/);
+});
+test('display numbers do not replace the bound row/PDF source identity',async()=>{
+ const display={...table(['901']),rows:[{...row('901'),number:'INV-000901'}]};
+ const f=fixture([display],{'901':'2026-08-03'});
+ assert.equal((await collectHostelworldInvoices(f.page,input,null,f.dependencies)).documents[0].portal_document_id,'901');
+ const wrong={...table(['901']),rows:[{...row('901'),links:[root+'/pdf/902']}]};
+ const bad=fixture([wrong],{'902':'2026-08-03'});bad.dependencies.trace={};
+ await assert.rejects(collectHostelworldInvoices(bad.page,input,null,bad.dependencies),/portal_changed/);
+ assert.deepEqual(bad.dependencies.trace.table_failure,{reason:'pdf_link',row_index:1});
+ assert.deepEqual(bad.downloaded,[]);
 });
 test('verification needs a PDF from the selected issue month; validated collection may be empty',async()=>{
  const f=fixture([table(['901'])],{'901':'2026-07-03'});

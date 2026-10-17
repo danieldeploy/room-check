@@ -138,3 +138,15 @@ test('Hostelworld PDF identity diagnostic excludes extracted values',async()=>{
   assert.deepEqual(JSON.parse(raw).pdf_identity,{issuer_verified:true,property_label_found:true,property_verified:false,property_zero_padded:false});
  } finally {await fs.rm(root,{recursive:true,force:true});}
 });
+test('Hostelworld table failure reports only a fixed reason and bounded row position',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'hw-table-failure-'));
+ try {
+  const job={id:61,input:{action:'verify',portal:'hostelworld'}};
+  await writeTaskReceipt(root,job,{code:'portal_changed',collection_trace:{stage:'table',table_failure:{reason:'row_shape',row_index:41,number:'PRIVATE_NUMBER',links:['PRIVATE_LINK']}}},{accepted:true,state:'failed'});
+  const raw=await fs.readFile(path.join(root,'task-61-receipt.json'),'utf8');
+  assert.equal(raw.includes('PRIVATE_'),false);
+  assert.deepEqual(JSON.parse(raw).table_failure,{reason:'row_shape',row_index:41});
+  await writeTaskReceipt(root,{...job,id:62},{code:'portal_changed',collection_trace:{stage:'table',table_failure:{reason:'PRIVATE_TEXT',row_index:401}}},{accepted:true,state:'failed'});
+  assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(path.join(root,'task-62-receipt.json'),'utf8')),'table_failure'),false);
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});
