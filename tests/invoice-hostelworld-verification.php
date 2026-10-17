@@ -29,6 +29,10 @@ if (realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
         $text=InvoicePdfText::read($file,false);
         $check(!in_array(false,InvoiceHostelworldVerification::checkText($text,'305209',$m,'2026-08','500000000'),true),'PHP fallback parser');
         $check(!InvoiceHostelworldVerification::checkText($text,'77759',$m,'2026-08','500000000')['property_verified'],'Wrong property');
+        $padded=str_replace('H305209','H077759',$text);
+        $check(InvoiceHostelworldVerification::checkText($padded,'77759',$m,'2026-08','500000000')['property_verified'],'Leading zeroes preserve numeric property');
+        foreach ([str_replace('077759','177759',$padded),str_replace('077759','0777590',$padded),$padded."\nHostel Number: H305209"] as $wrong)
+            $check(!InvoiceHostelworldVerification::propertyMatches($wrong,'77759'),'Conflicting or different numeric property');
         $check(!InvoiceHostelworldVerification::checkText($text,'305209',$m,'2026-08','500000001')['company_verified'],'Wrong NIF');
         $check(!InvoiceHostelworldVerification::checkText($text,'305209',$m,'2026-07','500000000')['issue_date_verified'],'Service month is not issue month');
         $check(InvoiceHostelworldVerification::issueDates($text."\nDue date: 9 September 2026")==['2026-08-03'],'Ignore due date');

@@ -46,6 +46,12 @@ final class InvoiceHostelworldVerification
         }
         return array_values(array_unique($dates));
     }
+    public static function propertyMatches(string $text,string $property): bool
+    {
+        preg_match_all('/\bHostel\s+Number\s*:\s*H?(\d{1,12})(?!\d)/iu',$text,$matches);
+        $numbers=array_values(array_unique(array_map(static fn(string $n): string=>ltrim($n,'0')?:'0',$matches[1])));
+        return count($numbers)===1 && $numbers[0]===$property;
+    }
     public static function checkText(string $text,string $property,array $metadata,string $period,string $nif): array
     {
         $dates=self::issueDates($text); $number=(string)($metadata['number']??'');
@@ -54,7 +60,7 @@ final class InvoiceHostelworldVerification
             'issuer_verified'=>preg_match('/hostelworld\.com/iu',$text)===1,
             'company_verified'=>preg_match('/\A\d{9}\z/',$nif)===1
                 && preg_match('/VAT\s+Number\s*:\s*PT\s*'.preg_quote($nif,'/').'(?!\d)/iu',$text)===1,
-            'property_verified'=>preg_match('/Hostel\s+Number\s*:\s*H?'.preg_quote($property,'/').'(?!\d)/iu',$text)===1,
+            'property_verified'=>self::propertyMatches($text,$property),
             // The portal's stable row/PDF identifier is not printed in these PDFs.
             'source_id_consistent'=>preg_match('/\A\d{1,12}\z/',$number)===1 && ($metadata['portal_document_id']??null)===$number,
             'issue_date_unambiguous'=>count($dates)===1,
