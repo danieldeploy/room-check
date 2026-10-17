@@ -13,10 +13,11 @@ try {
         $accounts=new InvoiceAccounts($pdo); $settings=$vault->has('cloudbeds-settings.enc')?$vault->read('cloudbeds-settings.enc'):[];
         $ids=[];
         foreach (['welcome'=>'Cloudbeds Welcome','city'=>'Cloudbeds City Center'] as $source=>$label) {
-            $s=$pdo->prepare("SELECT id FROM invoice_accounts WHERE portal='cloudbeds' AND label=?"); $s->execute([$label]); $id=$s->fetchColumn();
+            $id=$settings['account_ids'][$source]??null;
+            if (!$id) { $s=$pdo->prepare("SELECT id FROM invoice_accounts WHERE portal='cloudbeds' AND label=?"); $s->execute([$label]); $id=$s->fetchColumn(); }
             if (!$id) $id=$accounts->create('cloudbeds',$label,[$source=>$source==='welcome'?'Welcome Guest House':'City Center Guest House'],'email');
             $id=(int)$id; $a=$accounts->get($id);
-            if (array_keys($accounts->properties($id))!==[$source] || $a['period_basis']!=='issue_month' || $a['auth_method']!=='email'
+            if ($a['portal']!=='cloudbeds' || array_keys($accounts->properties($id))!==[$source] || $a['period_basis']!=='issue_month' || $a['auth_method']!=='email'
                 || (isset($settings['account_ids'][$source]) && $settings['account_ids'][$source]!==$id)) throw new RuntimeException('binding_conflict');
             $ids[$source]=$id;
         }

@@ -24,6 +24,8 @@ $machineJsonExceptions = [
     'invoice-auth.php' => true,
     // Signed City mail pipe: boolean machine protocol without user-facing text.
     'invoice-hostelworld-hook.php' => true,
+    // Signed invoice attachments: boolean machine protocol, no user-facing text.
+    'invoice-cloudbeds-hook.php' => true,
     // Windows agent: fixed machine protocol, no user-facing translated text.
     'invoice-agent.php' => true,
 ];
