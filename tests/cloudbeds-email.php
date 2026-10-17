@@ -96,7 +96,7 @@ try {
     cbReject(fn()=>InvoiceToconline::keys(array_replace($d,['portal'=>'airbnb']),'500000000'),'Airbnb remains excluded');
     $tocKey=InvoiceToconline::keys($d,'500000000')[0];
     cbCheck(str_contains(InvoiceToconline::message($pdf,$tocKey,'info@welcomehostel.pt','cloudbeds')['body'],'cloudbeds-'.$tocKey.'.pdf'),'Cloudbeds attachment correlation');
-    $receipt="From: no_reply@toconline.pt\r\nTo: info@welcomehostel.pt\r\nSubject: Ficheiros arquivados com sucesso\r\nDate: ".gmdate('r')."\r\n\r\ncloudbeds_".$tocKey.'.pdf';
+    $receipt="From: no_reply@toconline.pt\r\nTo: info@welcomehostel.pt\r\nSubject: Ficheiros arquivados com sucesso - Active Lines, Lda\r\nDate: ".gmdate('r')."\r\n\r\ncloudbeds_".$tocKey.'.pdf';
     cbCheck(InvoiceTocPipe::parse($receipt)['outcome']==='toc_accepted','Existing TOConline parser supports Cloudbeds identity');
     mkdir($dir.'/mail',0700); mkdir($dir.'/mail/.Cloudbeds',0700); mkdir($dir.'/mail/.Cloudbeds/cur',0700); mkdir($dir.'/mail/.Cloudbeds/new',0700);
     file_put_contents($dir.'/mail/.Cloudbeds/cur/original:2,S',$raw); $called=0;

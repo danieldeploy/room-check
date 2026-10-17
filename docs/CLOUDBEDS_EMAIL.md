@@ -45,7 +45,7 @@ Airbnb delivery remains excluded and the existing TOConline test button remains.
   untouched. City sends only PDFs and a message digest to the Hub, never its email
   body or authentication material to the Welcome mailbox.
 - Failures: unsupported signatures, malformed PDFs, wrong companies and ambiguous
-  dates remain private for review. Network delivery retries after three hours;
+  dates remain private for review. Email delivery retries with bounded backoff;
   collection uses the existing task history and alerts. Drive and TOConline retain
   their existing retries, uncertainty handling and confirmation ledger.
 - Acceptance: signed synthetic mail, PDF parsing, wrong company, receipt, wrong

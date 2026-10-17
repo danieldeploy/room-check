@@ -261,15 +261,7 @@ final class InvoiceToconline
         }
         if ($ledger[$identity]!==$ledger[$content]) throw new RuntimeException('toc_ineligible');
         $this->drive->connect(); $pdf=$this->drive->verifiedPdf($d); self::assertPdf($pdf,$d);
-        if ($d['portal']==='cloudbeds') {
-                    require_once __DIR__.'/CloudbedsInvoice.php';
-                    $temporary=$this->vault->path('cloudbeds-toc-'.bin2hex(random_bytes(16)).'.pdf');
-                    try {
-                        InvoiceVault::atomicWrite($temporary,$pdf);
-                        if (!CloudbedsInvoice::matches($temporary,$d,$settings['nif'])) throw new RuntimeException('toc_ineligible');
-                    } finally { if (is_file($temporary)) unlink($temporary); }
-                }
-                $message=self::message($pdf,$identity,$settings['sender']);
+        $message=self::message($pdf,$identity,$settings['sender']);
         $attemptId=bin2hex(random_bytes(16));
         // Fresh email ID, unchanged attachment filename/PDF for original receipt correlation.
         $message['headers'][3]='Message-ID: <toc-diagnostic-'.$attemptId.'@check.welcomehostel.pt>';

@@ -48,7 +48,9 @@ final class CloudbedsFolderQueue
                 if (++$attempts>40) break;
                 try { $accepted=$consume($raw)===true; } catch (Throwable) { $accepted=false; }
                 unset($raw);
-                $state[$hash]=['done'=>$accepted,'retry_at'=>$accepted?0:time()+10800];
+                $tries=(int)($old['attempts']??0)+1;
+                $state[$hash]=['done'=>$accepted,'attempts'=>$tries,
+                    'retry_at'=>$accepted?0:time()+min(10800,60*(2**min(8,$tries-1)))];
                 $accepted?$done++:$failed++;
                 if (count($state)>5000) throw new RuntimeException('document_limit');
             }
