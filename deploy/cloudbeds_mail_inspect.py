@@ -216,10 +216,10 @@ class MailAPI:
             require(set(params) == {"path", "show_hidden"} and params["path"] in self.allowed_dirs
                     and params["show_hidden"] == 1, "metadata_not_allowed")
         else:
-            require(set(params) == {"dir", "file", "from_charset", "to_charset"}
+            require(set(params) == {"dir", "file", "from_charset", "to_charset", "update_html_document_encoding"}
                     and (params["dir"], params["file"]) in self.allowed_files
                     and params["from_charset"] == "ISO-8859-1"
-                    and params["to_charset"] == "UTF-8", "content_not_allowed")
+                    and params["to_charset"] == "UTF-8" and params["update_html_document_encoding"] == 0, "content_not_allowed")
         self.last_operation = function
         query = {"api.version": 1, "cpanel.user": self.account, "cpanel.module": "Fileman",
                  "cpanel.function": function, **params}
@@ -281,7 +281,7 @@ class MailAPI:
             self.stage = "message_read"
             self.allowed_files.add((directory, filename))
             value = self.call("get_file_content", dir=directory, file=filename,
-                              from_charset="ISO-8859-1", to_charset="UTF-8")
+                              from_charset="ISO-8859-1", to_charset="UTF-8", update_html_document_encoding=0)
             if isinstance(value, list) and len(value) == 1:
                 value = value[0]
             require(isinstance(value, dict) and isinstance(value.get("content"), str), "invalid_content")
