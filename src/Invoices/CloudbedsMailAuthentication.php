@@ -65,6 +65,7 @@ final class CloudbedsMailAuthentication
         $failure=['verified'=>false,'code'=>'unverified'];
         try {
             if (strlen($raw)>4194304 || str_contains($raw,"\0")) return $failure;
+            $failure['facts']['verification_stage']='wire';
             // Exim may transport LF line endings; DKIM's wire representation uses CRLF.
             $raw=preg_replace('/(?<!\r)\n/',"\r\n",$raw);
             if (preg_match('/\r(?!\n)/',$raw)) return $failure;
@@ -77,21 +78,26 @@ final class CloudbedsMailAuthentication
             }
             if (empty($headers['dkim-signature'])) return ['verified'=>false,'code'=>'unsigned'];
             if (!isset($headers['dkim-signature'][$signatureIndex])) return $failure;
+            $failure['facts']['verification_stage']='header_multiplicity';
             foreach (['from','to','subject','date'] as $required) if (count($headers[$required]??[])!==1) return $failure;
             foreach (['message-id','mime-version','content-type','content-transfer-encoding'] as $single) if (count($headers[$single]??[])>1) return $failure;
             $signature=$headers['dkim-signature'][$signatureIndex]; $tags=self::tags(explode(':',$signature,2)[1]);
             if (($tags['d']??'')!=='cloudbeds.com') return ['verified'=>false,'code'=>'unaligned'];
             if (($tags['v']??'')!=='1' || ($tags['a']??'')!=='rsa-sha256' || isset($tags['l'])
                 || ($tags['q']??'dns/txt')!=='dns/txt') return ['verified'=>false,'code'=>'unsupported'];
+            $failure['facts']['verification_stage']='signer_identity';
             if (isset($tags['i']) && !preg_match('/@cloudbeds\.com\z/',$tags['i'])) return $failure;
+            $failure['facts']['verification_stage']='selector';
             $selector=$tags['s']??'';
             if (strlen($selector)>200 || !preg_match('/\A[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*\z/',$selector)) return $failure;
+            $failure['facts']['verification_stage']='signature_time';
             $now??=time();
             foreach (['t','x'] as $timeTag) if (isset($tags[$timeTag]) && !preg_match('/\A[0-9]{1,12}\z/',$tags[$timeTag])) return $failure;
             if (isset($tags['x']) && ((int)$tags['x']<$now || (int)$tags['x']<(int)($tags['t']??0))) return ['verified'=>false,'code'=>'expired'];
             if (isset($tags['t']) && (int)$tags['t']>$now+300) return $failure;
             $date=strtotime(trim(explode(':',$headers['date'][0],2)[1]));
             if (!$date || $date>$now+300 || $date<$now-730*86400) return ['verified'=>false,'code'=>'expired'];
+            $failure['facts']['verification_stage']='canonicalization';
             $modes=explode('/',$tags['c']??'simple/simple'); $hMode=$modes[0]; $bMode=$modes[1]??'simple';
             if (count($modes)>2 || !in_array($hMode,['simple','relaxed'],true) || !in_array($bMode,['simple','relaxed'],true)) return $failure;
             $signed=array_map('strtolower',explode(':',preg_replace('/\s+/','',$tags['h']??'')));
@@ -116,8 +122,10 @@ final class CloudbedsMailAuthentication
                 if (isset($headers[$name]) && !in_array($name,$signed,true)) $unsigned[]=$name;
             }
             if ($unsigned) return ['verified'=>false,'code'=>'unsigned_fields','facts'=>array_merge($facts,['unsigned_fields'=>$unsigned])];
+            $failure['facts']['verification_stage']='from_format';
             $from=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['from'][0],2)[1]));
             if (!preg_match('/\A(?:[^<>]*<[a-z0-9._+-]+@cloudbeds\.com>|[a-z0-9._+-]+@cloudbeds\.com)\z/i',$from)) return $failure;
+            $failure['facts']['verification_stage']='recipient_format';
             $to=trim(preg_replace('/\r\n[ \t]+/',' ',explode(':',$headers['to'][0],2)[1]));
             if (!preg_match('/\A(?:[^<>]*<([a-z0-9._+-]+@(welcomehostel|citycenterhostel)\.pt)>|([a-z0-9._+-]+@(welcomehostel|citycenterhostel)\.pt))\z/i',$to,$m)) return $failure;
             $recipient=strtolower(($m[1]??'')!==''?$m[1]:$m[3]);
@@ -130,23 +138,27 @@ final class CloudbedsMailAuthentication
             $canonicalBody=$canonicalBody===''&&$bMode==='relaxed'?'':$canonicalBody."\r\n";
             $bh=base64_decode(preg_replace('/\s+/','',$tags['bh']??''),true);
             if ($bh===false || !hash_equals(hash('sha256',$canonicalBody,true),$bh)) return ['verified'=>false,'code'=>'body_mismatch'];
+            $failure['facts']['verification_stage']='signed_headers';
             $data=''; $used=[];
             foreach ($signed as $name) {
                 if (!preg_match('/\A[a-z0-9-]+\z/',$name)) return $failure;
                 $index=count($headers[$name]??[])-1-($used[$name]??0); $used[$name]=($used[$name]??0)+1;
                 if ($index>=0) $data.=self::header($headers[$name][$index],$hMode)."\r\n";
             }
+            $failure['facts']['verification_stage']='signature_encoding';
             $emptySignature=preg_replace('/([;:]\s*b[ \t]*=)[^;]*/','$1',$signature,-1,$removed);
             if ($removed!==1) return $failure;
             $data.=self::header($emptySignature,$hMode);
             $dnsName=$selector.'._domainkey.cloudbeds.com';
             $records=$resolver ? $resolver($dnsName) : @dns_get_record($dnsName,DNS_TXT);
             if (!is_array($records) || count($records)!==1) return ['verified'=>false,'code'=>'dns_unavailable'];
+            $failure['facts']['verification_stage']='dns_key';
             $record=$records[0]; $key=self::tags(isset($record['entries'])?implode('',$record['entries']):(string)($record['txt']??''));
             if (($key['v']??'DKIM1')!=='DKIM1' || ($key['k']??'rsa')!=='rsa' || empty($key['p'])
                 || !array_intersect(explode(':',$key['s']??'*'),['*','email'])
                 || !in_array('sha256',explode(':',$key['h']??'sha256'),true)
                 || in_array('y',explode(':',$key['t']??''),true)) return $failure;
+            $failure['facts']['verification_stage']='public_key';
             $keyBytes=base64_decode(preg_replace('/\s+/','',$key['p']),true);
             if ($keyBytes===false) return $failure;
             $public=@openssl_pkey_get_public("-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($keyBytes),64,"\n")."-----END PUBLIC KEY-----\n");

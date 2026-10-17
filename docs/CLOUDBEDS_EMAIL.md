@@ -8,7 +8,7 @@ The initial discovery is complete. The email connector is implemented; productio
   `management-hub-production` environment, after the normal PR checks. No mailbox
   password, browser login, new token, or change to the paired Windows agent.
 - Inputs: only the fixed Welcome and City `info` mailboxes and their Cloudbeds
-  Maildir folders; examine up to 20 newest and 20 oldest messages in each, bounded to 4 MiB.
+  Maildir folders; examine up to 160 newest and 20 oldest messages in each, bounded to 4 MiB.
 - Failures: stop on invalid paths, symlinks, bounds or API failures. Emit only fixed
   error codes. Never change mail, flags, folders, filters, cron or credentials.
 - Acceptance: synthetic tests verify path confinement and that reports contain
@@ -96,3 +96,6 @@ separates deployment from verification of a complete real cycle.
 
 Airbnb remains excluded from TOConline, the TOConline test button remains, and
 Expedia and other email suppliers are outside this change.
+
+The read-only authentication diagnostic records only fixed verification-stage names.
+It does not relax signature checks or publish failed header values.

@@ -152,6 +152,10 @@ def shape(raw):
             facts = json.loads(result.stdout)
             for key in ("welcome_recipient", "city_recipient"):
                 if type(facts.get(key)) is bool: authentication[key] = facts[key]
+            if facts.get("verification_stage") in ("wire", "header_multiplicity", "signer_identity", "selector",
+                    "signature_time", "canonicalization", "from_format", "recipient_format", "signed_headers",
+                    "signature_encoding", "dns_key", "public_key"):
+                authentication["verification_stage"] = facts["verification_stage"]
             if facts.get("auth") in ("verified", "unsigned", "unsupported", "unaligned", "expired", "unsigned_fields",
                     "dns_unavailable", "body_mismatch", "signature_mismatch", "unverified", "parse_failed"):
                 authentication["auth"] = facts["auth"]
@@ -287,7 +291,7 @@ class MailAPI:
                         candidates.append((float(entry.get("mtime", 0)), directory, filename))
         reports = []
         ordered=sorted(candidates, reverse=True)
-        sample=list(dict.fromkeys(ordered[:20]+ordered[-20:]))
+        sample=list(dict.fromkeys(ordered[:160]+ordered[-20:]))
         for _, directory, filename in sample:
             self.stage = "message_read"
             self.allowed_files.add((directory, filename))
@@ -301,7 +305,7 @@ class MailAPI:
             reports.append(shape(raw))
             del raw, value
         return {"account": self.account, "folder_found": bool(folders),
-                "sample_count": len(reports), "samples": reports}
+                "sample_count": len(reports), "candidate_count": len(candidates), "samples": reports}
 
 
 def main():

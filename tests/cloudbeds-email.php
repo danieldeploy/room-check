@@ -50,6 +50,9 @@ $sign=static function(array $headers,string $body,string $extra='')use($private)
 };
 $signed=$sign($headers,$body);
 $packet=CloudbedsBridge::packet($signed,'welcome',$resolver);
+$invalidRecipient=CloudbedsMailAuthentication::verify($sign(array_map(static fn($h)=>str_starts_with($h,'To:')?'To: private@example.test':$h,$headers),$body),$resolver);
+cbCheck(!$invalidRecipient['verified'] && ($invalidRecipient['facts']['verification_stage']??'')==='recipient_format','Private failure values stay out of structural diagnostic');
+cbCheck(!str_contains(json_encode($invalidRecipient),'private@example.test'),'No recipient value in auth failure');
 try { CloudbedsBridge::packet($signed,'welcome',$resolver,time()+731*86400); throw new LogicException('Expected historical classification'); }
 catch (RuntimeException $e) { cbCheck($e->getMessage()==='mail_outside_window','Historical mail is retained separately from current retry failures'); }
 cbCheck(CloudbedsBridge::validate($packet,'welcome')===[hash('sha256',$pdf)=>$pdf],'Authenticated PDF packet');

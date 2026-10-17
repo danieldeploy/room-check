@@ -10,5 +10,6 @@ try {
     if (!in_array($code,['verified','unsigned','unsupported','unaligned','expired','unsigned_fields','dns_unavailable','body_mismatch','signature_mismatch','unverified'],true)) $code='unverified';
     echo json_encode(['auth'=>$code,'welcome_recipient'=>($auth['recipient']??null)===CloudbedsBridge::RECIPIENTS['welcome'],
         'city_recipient'=>($auth['recipient']??null)===CloudbedsBridge::RECIPIENTS['city'],
+        'verification_stage'=>$auth['facts']['verification_stage']??null,
         'pdf_count'=>count(CloudbedsMailMessage::attachments($raw))],JSON_THROW_ON_ERROR);
 } catch (Throwable) { echo '{"auth":"parse_failed"}'; }
