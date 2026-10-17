@@ -31,3 +31,13 @@ out-of-month cases, stale/configuration-changed approval rejection, exact-head
 validate/windows-agent CI, then independent verify/approve/collect runs for both
 accounts. Confirm verified Drive storage and the real TOConline reply separately.
 No production PDF or authentication material belongs in source or test fixtures.
+
+Account layout compatibility: accept a unique Invoice # heading table within the
+VAT region, whether its rows share that table or appear in a separate table.
+Show More and Show All may offer different cumulative page counts. Validate both
+links and advance exactly one page; never skip directly to the larger count.
+Existing manager/agent permissions and invoice selection are unchanged. Invalid
+headings, foreign links, skipped pages and ambiguous tables still fail closed.
+Local verification receipts may retain bounded table/header/row/navigation counts,
+never URLs, heading text or invoice values. Synthetic combined/split-layout and
+dual-navigation tests precede a real City verification and approval.

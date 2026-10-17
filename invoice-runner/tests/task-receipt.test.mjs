@@ -118,3 +118,14 @@ test('Hostelworld verification receipt contains only bounded readiness facts',as
   assert.deepEqual(JSON.parse(raw).hostelworld,{stage:'account_check',authenticated:false,waited:true,completed:false,expected_property:false,link_page:true,ready:true,property_count:0});
  } finally {await fs.rm(root,{recursive:true,force:true});}
 });
+test('Hostelworld table diagnostics contain bounded counts without page or invoice data',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'hw-table-receipt-'));
+ try {
+  await writeTaskReceipt(root,{id:58,input:{action:'verify',portal:'hostelworld'}},{code:'portal_changed',collection_trace:{stage:'table',table:{tables:1,headers:10,rows:20,next_links:2,max_next_links:2,url:'PRIVATE_URL',invoice:'PRIVATE_INVOICE'}}},{accepted:true,state:'failed'});
+  const raw=await fs.readFile(path.join(root,'task-58-receipt.json'),'utf8');
+  assert.equal(raw.includes('PRIVATE_'),false);
+  assert.deepEqual(JSON.parse(raw).table,{tables:1,headers:10,rows:20,next_links:2,max_next_links:2});
+  await writeTaskReceipt(root,{id:59,input:{action:'verify',portal:'hostelworld'}},{code:'portal_changed',collection_trace:{stage:'table',table:{tables:4,headers:-1,rows:402,next_links:'PRIVATE',max_next_links:Infinity}}},{accepted:true,state:'failed'});
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(root,'task-59-receipt.json'),'utf8')).table,{});
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});

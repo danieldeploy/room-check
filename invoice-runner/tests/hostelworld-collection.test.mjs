@@ -47,3 +47,16 @@ test('verification needs a PDF from the selected issue month; validated collecti
  const result=await collectHostelworldInvoices(f.page,input,hostelworldStructure(headers),f.dependencies);
  assert.deepEqual(result.documents,[]);
 });
+test('different Show More and Show All links advance one page without skipping PDFs',async()=>{
+ const f=fixture([table(['901'],[root+'/3#invoice-901',root+'/2#invoice-901']),table(['901','902'],[root+'/3#invoice-902']),table(['901','902','903'])],{'901':'2026-09-03','902':'2026-08-03','903':'2026-07-03'});
+ f.dependencies.trace={};
+ const result=await collectHostelworldInvoices(f.page,input,null,f.dependencies);
+ assert.deepEqual(result.documents.map(d=>d.number),['902']);
+ assert.deepEqual(f.downloaded,['901','902','903']);
+ assert.equal(result.verification.pages,3);
+ assert.equal(f.dependencies.trace.table.max_next_links,2);
+ for(const next of [[root+'/3'],[root+'/2','https://other.example/reports/vatinvoices/3'],[root+'/2',root+'/3?token=private']]){
+  const bad=fixture([table(['901'],next)],{'901':'2026-08-03'});
+  await assert.rejects(collectHostelworldInvoices(bad.page,input,null,bad.dependencies),/portal_changed/);
+ }
+});

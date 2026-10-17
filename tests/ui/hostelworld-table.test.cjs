@@ -8,9 +8,15 @@ test('Hostelworld reads the separate header and body tables in one VAT region',a
  const f=fixture(html);
  try {const table=await readHostelworldTable(f.page);assert.equal(table.tables,1);assert.equal(table.headers[0],'Invoice #');assert.equal(table.rows[0].number,'901');assert.deepEqual(table.rows[0].links,['https://inbox.hostelworld.com/reports/vatinvoices/pdf/901']);assert.deepEqual(table.next,['https://inbox.hostelworld.com/reports/vatinvoices/2#invoice-901']);assert.equal(hostelworldStructure(table.headers).date_source,'pdf-date-v1');}finally{f.dom.window.close();}
 });
-test('ambiguous or missing VAT header regions are rejected',async()=>{
+test('ambiguous or missing VAT invoice headings are rejected',async()=>{
  const {readHostelworldTable}=await import('../../invoice-runner/hostelworld-collection.mjs');
- for(const markup of [html+html,html.replace('table-header up','unrelated'),html.replace('</section>','<table class="table-block"><th>Duplicate</th></table></section>')]){
+ for(const markup of [html+html,html.replace('Invoice #','Unrelated'),html.replace('</section>','<table class="table-block"><th>Invoice #</th></table></section>')]){
   const f=fixture(markup);try{assert.equal((await readHostelworldTable(f.page)).tables,0);}finally{f.dom.window.close();}
  }
+});
+test('a combined VAT table and distinct Show All link retain the same invoice structure',async()=>{
+ const {readHostelworldTable,hostelworldStructure}=await import('../../invoice-runner/hostelworld-collection.mjs');
+ const combined=html.replace('</table></div></div></section><div class="row"><div class="small-12 columns"><table class="table-block">','').replace('href="/reports/vatinvoices/2#invoice-901">Show All','href="/reports/vatinvoices/7#invoice-901">Show All');
+ const f=fixture(combined);
+ try {const table=await readHostelworldTable(f.page);assert.equal(table.tables,1);assert.equal(table.rows.length,1);assert.equal(table.next.length,2);assert.equal(hostelworldStructure(table.headers).date_source,'pdf-date-v1');}finally{f.dom.window.close();}
 });
