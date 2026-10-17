@@ -29,17 +29,17 @@ export function hostelworldDateShape(value) {
 export function hostelworldIssueDates(text, trace = null) {
   const dates = new Set(); let labels = 0, reason = null, shape;
   const monthNumber = value => {
-    const v = value.toLowerCase();
+    const v = value.replace(/\s/g,'').toLowerCase();
     return v === 'sept' ? 9 : months.findIndex(m => m === v || m.slice(0,3) === v) + 1;
   };
   for (const label of text.matchAll(/\b(?:(due\s+date|payment\s+date|(?:original|previous|related)\s+invoice\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*/gi)) {
     if (label[1]) continue;
     labels++; const value = text.slice(label.index + label[0].length, label.index + label[0].length + 80);
     let day, month, year, match;
-    if ((match = /^(\d{1,2})(?:st|nd|rd|th)?[\s./-]*([A-Za-z]{3,9})[\s,./-]*(20\s*\d{2})\b/i.exec(value))) {
-      day=Number(match[1]); month=monthNumber(match[2]); year=Number(match[3].replace(/\s/g,''));
-    } else if ((match = /^([A-Za-z]{3,9})\s*(\d{1,2})(?:st|nd|rd|th)?[\s,./-]+(20\s*\d{2})\b/i.exec(value))) {
-      month=monthNumber(match[1]); day=Number(match[2]); year=Number(match[3].replace(/\s/g,''));
+    if ((match = /^(\d(?:\s*\d)?)(?:\s*(?:s\s*t|n\s*d|r\s*d|t\s*h))?[\s./-]*([A-Za-z](?:\s*[A-Za-z]){2,8})[\s,./-]*(2\s*0\s*\d\s*\d)\b/i.exec(value))) {
+      day=Number(match[1].replace(/\s/g,'')); month=monthNumber(match[2]); year=Number(match[3].replace(/\s/g,''));
+    } else if ((match = /^([A-Za-z](?:\s*[A-Za-z]){2,8})\s*(\d(?:\s*\d)?)(?:\s*(?:s\s*t|n\s*d|r\s*d|t\s*h))?[\s,./-]+(2\s*0\s*\d\s*\d)\b/i.exec(value))) {
+      month=monthNumber(match[1]); day=Number(match[2].replace(/\s/g,'')); year=Number(match[3].replace(/\s/g,''));
     } else if ((match = /^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/.exec(value))) {
       year=Number(match[1]); month=Number(match[2]); day=Number(match[3]);
     } else if ((match = /^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b/.exec(value))) {

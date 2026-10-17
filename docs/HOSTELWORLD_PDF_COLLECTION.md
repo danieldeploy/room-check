@@ -77,10 +77,12 @@ PDF content or URL is persisted. The receipt independently enforces its fixed
 vocabulary and bounds. This does not accept any new date format, change account
 permissions or bypass verification; failed dates still stop the collection.
 
-Fragmented PDF year: an observed unsupported date had a named month followed by
-two two-digit text fragments. For labelled English-month dates, Node and PHP may
-join whitespace between the literal `20` and exactly two final year digits.
-This handles PDF text-item spacing without inferring a century or numeric
-day/month order. Invalid calendars, unknown months, extra digits and conflicting
-issue dates still fail. Equivalent synthetic cases cover both independent readers;
-real account verification remains required before approval or monthly scheduling.
+Fragmented PDF dates: observed older PDFs split both the named month and the
+year across text items. Within labelled English-month dates, Node and PHP join
+whitespace inside a one/two-digit day, an exact known English month name, and a
+four-digit 20xx year. Bounds and full calendar validation remain mandatory.
+No words are dropped, no century is inferred, and ambiguous numeric day/month
+dates remain rejected. Unknown or interrupted month names, extra digits and
+conflicting dates still fail. Tests cover splits across every English month and
+both date orders in the two independent readers. Real account verification
+remains required before approval or monthly scheduling.
