@@ -8,7 +8,7 @@ The initial discovery is complete. The email connector is implemented; productio
   `management-hub-production` environment, after the normal PR checks. No mailbox
   password, browser login, new token, or change to the paired Windows agent.
 - Inputs: only the fixed Welcome and City `info` mailboxes and their Cloudbeds
-  Maildir folders; examine up to 20 newest messages in each, bounded to 4 MiB.
+  Maildir folders; examine up to 20 newest and 20 oldest messages in each, bounded to 4 MiB.
 - Failures: stop on invalid paths, symlinks, bounds or API failures. Emit only fixed
   error codes. Never change mail, flags, folders, filters, cron or credentials.
 - Acceptance: synthetic tests verify path confinement and that reports contain
@@ -63,6 +63,12 @@ interpretation headers and exact source recipient. Historical mail is bounded to
 two years; DKIM expiry is still enforced. Each source has a separate HMAC bridge
 key, with TLS and a five-minute timestamp window. Subjects and receipt wording
 cannot establish invoice identity. No download links are followed.
+
+Mail older than the two-year verification window is preserved and counted as
+historical review, not retried indefinitely or sent to the Hub. Collection requests
+for months outside that window fail explicitly. Current messages still require
+the unchanged DKIM, recipient and PDF checks. Source status retains fixed
+authentication/HTTP failure codes; no header values or message contents are logged.
 
 CloudbedsInbox encrypts incoming PDFs and provenance, validates their content and
 serves the shared collection queue without the Windows browser worker. The

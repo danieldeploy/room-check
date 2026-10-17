@@ -11,6 +11,8 @@ function cloudbedsStatus(array $facts): void {
     global $stateRoot;
     try {
         $path=$stateRoot.'/cloudbeds-mail-status.json'; if (is_link($path)) return;
+        $old=is_file($path) && filesize($path)<8192?json_decode(file_get_contents($path),true):[];
+        foreach (['auth_code','http_status'] as $key) if (isset($old[$key]) && !isset($facts[$key])) $facts[$key]=$old[$key];
         $tmp=$path.'.'.bin2hex(random_bytes(8));
         if (file_put_contents($tmp,json_encode(['at'=>time()]+$facts),LOCK_EX)!==false) { chmod($tmp,0600); rename($tmp,$path); }
     } catch (Throwable) {}
@@ -31,13 +33,20 @@ function cloudbedsSend(array $packet): bool {
     if (!$accepted) cloudbedsStatus(['stage'=>'delivery_retry','http_status'=>(int)$status]);
     return $accepted;
 }
-function cloudbedsConsume(string $raw): bool {
+function cloudbedsConsume(string $raw): bool|string {
     global $source;
     try {
         $packet=CloudbedsBridge::packet($raw,$source);
         return $packet===null || cloudbedsSend($packet);
     } catch (Throwable $e) {
-        cloudbedsStatus(['stage'=>in_array($e->getMessage(),['auth_invalid','invalid_document','document_limit'],true)?$e->getMessage():'parse_retry']);
+        if ($e->getMessage()==='mail_outside_window') return 'historical';
+        $facts=['stage'=>in_array($e->getMessage(),['auth_invalid','invalid_document','document_limit'],true)?$e->getMessage():'parse_retry'];
+        if ($e->getMessage()==='auth_invalid') {
+            $auth=CloudbedsMailAuthentication::verify(CloudbedsMailMessage::wire($raw));
+            $code=!empty($auth['verified'])?'recipient_mismatch':($auth['code']??'unverified');
+            if (in_array($code,['recipient_mismatch','unsigned','unsupported','unaligned','expired','unsigned_fields','dns_unavailable','body_mismatch','signature_mismatch','unverified'],true)) $facts['auth_code']=$code;
+        }
+        cloudbedsStatus($facts);
         return false;
     }
 }

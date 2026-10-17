@@ -99,6 +99,11 @@ class Tests(unittest.TestCase):
             body = urllib.parse.parse_qs(opened.call_args.args[0].data.decode())
             self.assertEqual(body["update_html_document_encoding"], ["0"])
 
+    def test_age_classification_is_bounded_and_content_free(self):
+        self.assertTrue(c.outside_window("Tue, 01 Jan 2019 00:00:00 +0000"))
+        self.assertFalse(c.outside_window("PRIVATE_INVALID_DATE"))
+        self.assertFalse(c.outside_window(None))
+
     def test_pdf_report_never_contains_invoice_values(self):
         result = c.pdf_text_shape("Cloudbeds Invoice A1234567\nInvoice Date: 09/15/2026\n"
                                   "Bill To: Active Lines PT123456789\nPRIVATE_NAME 999.99\n"

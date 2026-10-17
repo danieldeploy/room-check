@@ -14,7 +14,7 @@ try {
     $p=json_decode(file_get_contents($path),true,8,JSON_THROW_ON_ERROR); $key=$p['keys'][$source]??'';
     if (!CloudbedsBridge::verify($raw,(string)($_SERVER['HTTP_X_HUB_TIMESTAMP']??''),(string)($_SERVER['HTTP_X_HUB_SIGNATURE']??''),$key)) throw new RuntimeException('auth',403);
     require_once __DIR__.'/lib.php'; $config=require __DIR__.'/config.php'; $pdo=database();
-    if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('busy',503);
+    if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',5)")->fetchColumn()!==1) throw new RuntimeException('busy',503);
     $locked=true; $inbox=new CloudbedsInbox($pdo,new InvoiceVault($config['invoices']['private_dir']));
     if (count($m)===3 && ($m['version']??null)===1 && is_array($m['scan']??null)) $inbox->heartbeat($source,$m['scan']);
     else $inbox->receive($m,$source);

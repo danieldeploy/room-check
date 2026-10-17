@@ -14,6 +14,7 @@ import re
 import sys
 import subprocess
 import pathlib
+import time
 import urllib.parse
 import urllib.request
 
@@ -41,6 +42,13 @@ def family(host):
         if host == base or host.endswith("." + base):
             return base
     return "other"
+
+
+def outside_window(value):
+    try:
+        return email.utils.parsedate_to_datetime(str(value)).timestamp() < time.time()-730*86400
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def pdf_text_shape(text):
@@ -150,6 +158,7 @@ def shape(raw):
         except (OSError, ValueError, subprocess.SubprocessError):
             authentication = {"auth": "unavailable"}
     return {"sender_provider": sender_family, "mime": types,
+            "mail_older_than_verification_window": outside_window(message.get("Date")),
             "authentication": authentication,
             "pdf_shapes": pdf_shapes,
             "dkim_providers": sorted(set(family(m.group(1)) for value in message.get_all("DKIM-Signature", [])
@@ -277,7 +286,9 @@ class MailAPI:
                     if 0 < size <= MAX_MAIL:
                         candidates.append((float(entry.get("mtime", 0)), directory, filename))
         reports = []
-        for _, directory, filename in sorted(candidates, reverse=True)[:20]:
+        ordered=sorted(candidates, reverse=True)
+        sample=list(dict.fromkeys(ordered[:20]+ordered[-20:]))
+        for _, directory, filename in sample:
             self.stage = "message_read"
             self.allowed_files.add((directory, filename))
             value = self.call("get_file_content", dir=directory, file=filename,
