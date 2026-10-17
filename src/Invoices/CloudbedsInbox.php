@@ -30,7 +30,8 @@ final class CloudbedsInbox
         if (!isset($this->settings()['account_ids'][$source]) || ($scan['folder_found']??null)!==true
             || !is_int($scan['processed']??null) || !is_int($scan['retry']??null)
             || $scan['processed']<0 || $scan['processed']>40 || $scan['retry']<0 || $scan['retry']>5000) throw new RuntimeException('invalid_request');
-        $this->vault->save('cloudbeds-source-'.$source.'.enc',['at'=>time(),'folder_found'=>true,'processed'=>$scan['processed'],'retry'=>$scan['retry']]);
+        $this->vault->save('cloudbeds-source-'.$source.'.enc',['at'=>time(),'folder_found'=>true,'processed'=>$scan['processed'],'retry'=>$scan['retry'],
+            'historical'=>is_int($scan['historical']??null)?min(5000,max(0,$scan['historical'])):0]);
     }
     public function index(): void
     {
@@ -60,6 +61,7 @@ final class CloudbedsInbox
     {
         $settings=$this->settings(); $source=array_search((int)$job['account_id'],$settings['account_ids']??[],true);
         if (!is_string($source) || $job['property_id']!==$source || $job['kind']!=='collect') throw new RuntimeException('connector_unconfigured');
+        if ($job['period']<=gmdate('Y-m',time()-730*86400)) throw new RuntimeException('verification_failed');
         $scan=$this->vault->has('cloudbeds-source-'.$source.'.enc')?$this->vault->read('cloudbeds-source-'.$source.'.enc'):[];
         if ((int)($scan['at']??0)<time()-600 || ($scan['retry']??1)>0 || ($scan['processed']??40)>=40) throw new RuntimeException('network_error');
         $result=['imported'=>0,'duplicates'=>0]; $invalid=false;

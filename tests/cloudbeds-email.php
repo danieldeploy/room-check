@@ -50,6 +50,8 @@ $sign=static function(array $headers,string $body,string $extra='')use($private)
 };
 $signed=$sign($headers,$body);
 $packet=CloudbedsBridge::packet($signed,'welcome',$resolver);
+try { CloudbedsBridge::packet($signed,'welcome',$resolver,time()+731*86400); throw new LogicException('Expected historical classification'); }
+catch (RuntimeException $e) { cbCheck($e->getMessage()==='mail_outside_window','Historical mail is retained separately from current retry failures'); }
 cbCheck(CloudbedsBridge::validate($packet,'welcome')===[hash('sha256',$pdf)=>$pdf],'Authenticated PDF packet');
 cbCheck(!str_contains(json_encode($packet),'info@') && !str_contains(json_encode($packet),'Subject'),'No mail headers in bridge');
 cbReject(fn()=>CloudbedsBridge::packet($signed,'city',$resolver),'City cannot receive Welcome mail');
@@ -105,6 +107,13 @@ try {
     rename($dir.'/mail/.Cloudbeds/cur/original:2,S',$dir.'/mail/.Cloudbeds/cur/original:2,RS');
     CloudbedsFolderQueue::run($dir.'/mail',$dir,$consumer);
     cbCheck($called===1 && file_get_contents($dir.'/mail/.Cloudbeds/cur/original:2,RS')===$raw,'Mail retained, flags/name changes deduplicate by content');
+    $oldMail=$raw."\r\nhistorical-test-only"; file_put_contents($dir.'/mail/.Cloudbeds/cur/older',$oldMail);
+    $stateFile=$dir.'/cloudbeds-folder-state.json'; $state=json_decode(file_get_contents($stateFile),true);
+    $state[hash('sha256',$oldMail)]=['done'=>false,'retry_at'=>time()+10800,'attempts'=>4];
+    file_put_contents($stateFile,json_encode($state));
+    $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static fn($value)=>$value===$oldMail?'historical':false);
+    cbCheck($scan['historical']===1 && $scan['retry']===0,'Old pending entries are reclassified without waiting or blocking verified current mail');
+    cbCheck(file_get_contents($dir.'/mail/.Cloudbeds/cur/older')===$oldMail,'Historical original retained unchanged');
 } finally {
     $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
     foreach ($it as $f) $f->isDir()?rmdir($f->getPathname()):unlink($f->getPathname()); rmdir($dir);

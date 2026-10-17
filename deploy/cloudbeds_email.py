@@ -124,9 +124,10 @@ def report():
         directory="/home/city" if account == "city" else "/home/welcome/room-check-private"
         try:
             state=json.loads(content(api.call("Fileman", "get_file_content", dir=directory, file="cloudbeds-mail-status.json")))
-            safe={k:v for k,v in state.items() if (k in ("at","processed","retry","http_status") and type(v) is int)
+            safe={k:v for k,v in state.items() if (k in ("at","processed","retry","historical","http_status") and type(v) is int)
                   or (k == "folder_found" and type(v) is bool)
-                  or (k == "stage" and v in ("scan_complete","delivery_retry","auth_invalid","invalid_document","document_limit","parse_retry","configuration_retry"))}
+                  or (k == "stage" and v in ("scan_complete","delivery_retry","auth_invalid","invalid_document","document_limit","parse_retry","configuration_retry"))
+                  or (k == "auth_code" and v in ("recipient_mismatch","unsigned","unsupported","unaligned","expired","unsigned_fields","dns_unavailable","body_mismatch","signature_mismatch","unverified"))}
             print(json.dumps({"cloudbeds_mail": account, "status": safe}))
         except Exception:
             print(json.dumps({"cloudbeds_mail": account, "status": "not_available"}))

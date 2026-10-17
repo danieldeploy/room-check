@@ -13,6 +13,11 @@ final class CloudbedsBridge
         $raw=CloudbedsMailMessage::wire($raw);
         $pdfs=CloudbedsMailMessage::attachments($raw);
         if (!$pdfs) return null;
+        [$headers]=CloudbedsMailMessage::split($raw);
+        $date=count($headers['date']??[])===1?strtotime($headers['date'][0]):false;
+        // This is an intake limit, never proof of invoice identity. Preserve older
+        // originals for review instead of retrying mail outside the verifier's window.
+        if ($date!==false && $date<($now??time())-730*86400) throw new RuntimeException('mail_outside_window');
         $auth=CloudbedsMailAuthentication::verify($raw,$resolver,$now);
         if (empty($auth['verified']) || ($auth['recipient']??'')!==self::RECIPIENTS[$source]) throw new RuntimeException('auth_invalid');
         return ['version'=>1,'source'=>$source,'mail_sha256'=>hash('sha256',$raw),
