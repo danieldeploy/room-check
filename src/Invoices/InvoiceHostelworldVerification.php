@@ -33,7 +33,7 @@ final class InvoiceHostelworldVerification
         preg_match_all('/\b(?:(due\s+date|payment\s+date|(?:original|previous|related)\s+invoice\s+date)|invoice\s+date|date\s+of\s+issue|issue\s+date|date)\s*:\s*/iu',$text,$matches,PREG_SET_ORDER|PREG_OFFSET_CAPTURE);
         $months=['january','february','march','april','may','june','july','august','september','october','november','december'];
         $monthNumber=static function(string $value) use($months): int {
-            $v=strtolower($value); if($v==='sept')return 9;
+            $v=strtolower(preg_replace('/\s/u','',$value)); if($v==='sept')return 9;
             foreach($months as $i=>$month)if($v===$month || $v===substr($month,0,3))return $i+1;
             return 0;
         };
@@ -41,10 +41,10 @@ final class InvoiceHostelworldVerification
         foreach ($matches as $match) {
             if (($match[1][0]??'')!=='') continue;
             $value=substr($text,$match[0][1]+strlen($match[0][0]),80);
-            if(preg_match('/\A(\d{1,2})(?:st|nd|rd|th)?[\s.\/-]*([A-Za-z]{3,9})[\s,.\/-]*(20\s*\d{2})\b/i',$value,$m)) {
-                $day=(int)$m[1];$month=$monthNumber($m[2]);$year=(int)preg_replace('/\s/','',$m[3]);
-            } elseif(preg_match('/\A([A-Za-z]{3,9})\s*(\d{1,2})(?:st|nd|rd|th)?[\s,.\/-]+(20\s*\d{2})\b/i',$value,$m)) {
-                $month=$monthNumber($m[1]);$day=(int)$m[2];$year=(int)preg_replace('/\s/','',$m[3]);
+            if(preg_match('/\A(\d(?:\s*\d)?)(?:\s*(?:s\s*t|n\s*d|r\s*d|t\s*h))?[\s.\/-]*([A-Za-z](?:\s*[A-Za-z]){2,8})[\s,.\/-]*(2\s*0\s*\d\s*\d)\b/iu',$value,$m)) {
+                $day=(int)preg_replace('/\s/u','',$m[1]);$month=$monthNumber($m[2]);$year=(int)preg_replace('/\s/u','',$m[3]);
+            } elseif(preg_match('/\A([A-Za-z](?:\s*[A-Za-z]){2,8})\s*(\d(?:\s*\d)?)(?:\s*(?:s\s*t|n\s*d|r\s*d|t\s*h))?[\s,.\/-]+(2\s*0\s*\d\s*\d)\b/iu',$value,$m)) {
+                $month=$monthNumber($m[1]);$day=(int)preg_replace('/\s/u','',$m[2]);$year=(int)preg_replace('/\s/u','',$m[3]);
             } elseif(preg_match('/\A(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/',$value,$m)) {
                 $year=(int)$m[1];$month=(int)$m[2];$day=(int)$m[3];
             } elseif(preg_match('/\A(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/',$value,$m)) {

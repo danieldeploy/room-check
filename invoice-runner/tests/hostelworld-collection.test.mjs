@@ -36,11 +36,25 @@ test('legacy labelled dates accept unambiguous formats and never guess numeric o
  assert.deepEqual(trace.pdf_date,{reason:'ambiguous_numeric',labels:1,candidates:0});
 });
 test('PDF text may split a four-digit year into two fragments after a named month',()=>{
- for(const value of ['3 September 20 21','September 3, 20\n21'])
+ for(const value of ['3 September 20 21','September 3, 20\n21','3 September 20 2 1'])
   assert.deepEqual(hostelworldIssueDates('Date: '+value),['2021-09-03']);
- for(const value of ['3 September 20 2 1','3 September 20 211','31 February 20 21','3 Unknown 20 21'])
+ for(const value of ['3 September 20 211','31 February 20 21','3 Unknown 20 21'])
   assert.deepEqual(hostelworldIssueDates('Date: '+value),[]);
  assert.equal(hostelworldIssueDates('Date: 3 September 20 21\nInvoice date: 4 September 2021').length,2);
+});
+test('PDF fragmentation is handled consistently across named date components',()=>{
+ const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+ for(const [i,name] of monthNames.entries()) {
+  const expected=`2021-${String(i+1).padStart(2,'0')}-13`;
+  for(const word of [name,name.slice(0,3)]) for(let split=1;split<word.length;split++) {
+   const fragments=word.slice(0,split)+' '+word.slice(split);
+   assert.deepEqual(hostelworldIssueDates(`Date: 1 3 ${fragments} 2 0 2 1`),[expected]);
+   assert.deepEqual(hostelworldIssueDates(`Date: ${fragments} 1 3, 2 0 2 1`),[expected]);
+  }
+  assert.deepEqual(hostelworldIssueDates(`Date: 13 ${[...name].join(' ')} 2021`),[expected]);
+ }
+ for(const value of ['13 Aug other ust 2021','13 Unknown 2021','1 33 Aug ust 2021','31 Feb ruary 2021','13 Aug ust 2 0 2 11'])
+  assert.deepEqual(hostelworldIssueDates('Date: '+value),[]);
 });
 test('printed leading zeroes preserve the exact numeric property and reject conflicting labels',()=>{
  const trace={}; const padded=text.replace('H305209','H077759');
