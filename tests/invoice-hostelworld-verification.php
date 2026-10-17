@@ -44,6 +44,11 @@ if (realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
             $check(InvoiceHostelworldVerification::issueDates('Date: '.$date)===['2021-09-23'],'Unambiguous numeric date');
         $check(InvoiceHostelworldVerification::issueDates('Date: 03/09/2021')===[],'Do not guess numeric date order');
         $check(InvoiceHostelworldVerification::issueDates("Date: 3 September 2021\nOriginal invoice date: 3 August 2021")===['2021-09-03'],'Original invoice date is not current issue date');
+        foreach(['3 September 20 21',"September 3, 20\n21"] as $date)
+            $check(InvoiceHostelworldVerification::issueDates('Date: '.$date)===['2021-09-03'],'PDF year fragments');
+        foreach(['3 September 20 2 1','3 September 20 211','31 February 20 21','3 Unknown 20 21'] as $date)
+            $check(InvoiceHostelworldVerification::issueDates('Date: '.$date)===[],'Reject malformed fragmented date');
+        $check(count(InvoiceHostelworldVerification::issueDates("Date: 3 September 20 21\nInvoice date: 4 September 2021"))===2,'Fragmented dates retain conflict detection');
         $pdo=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
         $pdo->exec("CREATE TABLE invoice_accounts(id INTEGER PRIMARY KEY,portal TEXT,auth_method TEXT,period_basis TEXT,login_verified_at TEXT,status TEXT);
             INSERT INTO invoice_accounts VALUES(2,'hostelworld','email','issue_month',NULL,'configured');
