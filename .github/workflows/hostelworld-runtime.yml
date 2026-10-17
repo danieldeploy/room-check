@@ -1,0 +1,98 @@
+name: Hostelworld City generated filter comparison
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/hostelworld-runtime.yml]
+permissions:
+  contents: read
+concurrency:
+  group: hostelworld-city-runtime
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Compare generated filter structure without reading messages
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          python3 - <<'PYCODE'
+          import os,sys,json,re,time,shlex,pathlib,base64,html,urllib.request,urllib.parse
+          sys.path.insert(0,'deploy')
+          from cpanel_api import Config,CpanelAPI,WHM_ORIGIN
+          api=CpanelAPI(Config(token=os.environ['WHM_API_TOKEN'],transport='whm',origin=WHM_ORIGIN))
+          def call(module,function,**params):
+              q={'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,'cpanel_jsonapi_module':module,'cpanel_jsonapi_func':function,**params}
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/cpanel',data=urllib.parse.urlencode(q).encode(),headers={'Authorization':'whm fazenda:'+os.environ['WHM_API_TOKEN']})
+              with api.opener.open(req,timeout=20) as r: value=json.loads(r.read(262144))
+              result=value.get('cpanelresult',{})
+              if result.get('event',{}).get('result')!=1 or result.get('error'): raise RuntimeError('api_operation_failed')
+              return result.get('data',[])
+          def read_result(directory,filename="result.json"):
+              q={'api.version':1,'cpanel.user':'city','cpanel.module':'Fileman','cpanel.function':'get_file_content','dir':directory,'file':filename}
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel',data=urllib.parse.urlencode(q).encode(),headers={'Authorization':'whm fazenda:'+os.environ['WHM_API_TOKEN']})
+              with api.opener.open(req,timeout=20) as r: value=json.loads(r.read(65536))
+              result=value.get('data',{}).get('uapi',{})
+              if result.get('status')!=1: return None
+              data=result.get('data',{})
+              if isinstance(data,list): data=data[0]
+              try: return json.loads(data.get('content',''))
+              except (ValueError,TypeError): return None
+          run=os.environ['GITHUB_RUN_ID']
+          if not re.fullmatch('[0-9]{1,20}',run): raise RuntimeError('invalid_run')
+          directory='/home/city/.hostelworld-runtime-'+run
+          # Use only a confirmed recent Hostelworld delivery folder. No mailbox
+          # identifiers or header values leave the hosting account.
+          folders=set()
+          for row in call('EmailTrack','search',success=1,defer=0):
+              destination=str(row.get('deliveredto',''))
+              stamp=str(row.get('actionunixtime',''))
+              if stamp.isdigit() and int(stamp)>=int(time.time())-3600 and re.fullmatch(r'/home/city/mail/[a-zA-Z0-9.-]+/[a-zA-Z0-9_.+-]+/\.HOSTELWORLD/?',destination):
+                  folders.add(destination)
+          if len(folders)!=1: raise RuntimeError('ambiguous_recent_authentication_folder')
+          sample='From: diagnostic@hostelworld.com\nTo: diagnostic@example.invalid\nSubject: Login verification\n\nSynthetic message without authentication material.\n'
+          q={'api.version':1,'cpanel.user':'city','cpanel.module':'Email','cpanel.function':'trace_filter','msg':sample}
+          req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel',data=urllib.parse.urlencode(q).encode(),headers={'Authorization':'whm fazenda:'+os.environ['WHM_API_TOKEN']})
+          with api.opener.open(req,timeout=20) as r: trace=json.loads(r.read(262144)).get('data',{}).get('uapi',{})
+          rendered=html.unescape(json.dumps(trace.get('data',{}))).lower()
+          print(json.dumps({'city_synthetic_filter_actions':{'available':trace.get('status')==1,
+              'pipe_delivery':'pipe message to:' in rendered,
+              'folder_delivery':'save message to:' in rendered,
+              'finish':bool(re.search(r'\bfinish\b',rendered)),
+              'own_pipe':'hostelworld-city-auth-pipe.php' in rendered}}))
+          source=pathlib.Path('deploy/hostelworld-filter-source-probe.php').read_text().removeprefix('<?php\n')
+          # Fixed reviewed source encoded only to keep cron on one line.
+          php="eval(base64_decode('"+base64.b64encode(source.encode()).decode()+"'));"
+          body='umask 077; if mkdir '+shlex.quote(directory)+' 2>/dev/null; then cd /home/city; /usr/local/bin/php -r '+shlex.quote(php)+' -- '+shlex.quote(next(iter(folders)))+' > '+shlex.quote(directory+'/result.json')+' 2>/dev/null; fi'
+          command='/bin/sh -c '+shlex.quote(body)+' >/dev/null 2>&1'
+          def own_rows(): return [r for r in call('Cron','listcron') if r.get('command')==command]
+          if own_rows(): raise RuntimeError('prior_probe_requires_inspection')
+          try:
+              response=call('Cron','add_line',command=command,minute='*',hour='*',day='*',month='*',weekday='*')
+              if not any(r.get('status')==1 for r in response): raise RuntimeError('cron_not_added')
+              print('{"runtime_probe":"scheduled_once"}',flush=True)
+              result=None
+              for _ in range(18):
+                  time.sleep(5)
+                  result=read_result(directory)
+                  if isinstance(result,dict): break
+              values=(result or {}).get('compiled_filters',{})
+              allowed=['readable','own_rule','own_pipe','folder','has_pipe_action','has_finish']
+              facts={label:{k:v for k,v in row.items() if k in allowed and type(v) is bool}
+                  for label,row in values.items() if label in ['account','domain','mailbox'] and isinstance(row,dict)}
+              print(json.dumps({'city_compiled_filter_structure':facts}))
+          finally:
+              found=own_rows()
+              if len(found)>1: raise RuntimeError('ambiguous_probe_cleanup')
+              if found:
+                  line=found[0].get('count')
+                  if not str(line).isdigit(): raise RuntimeError('invalid_probe_line')
+                  call('Cron','remove_line',line=line)
+              if own_rows(): raise RuntimeError('probe_cleanup_failed')
+              print('{"runtime_probe_cron_removed":true}')
+          PYCODE

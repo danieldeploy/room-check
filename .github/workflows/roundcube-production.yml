@@ -1,0 +1,186 @@
+name: Roundcube production
+
+on:
+  pull_request:
+    paths:
+      - deploy/roundcube-live/**
+      - deploy/roundcube_live.py
+      - tests/test_roundcube_live.*
+      - .github/workflows/roundcube-production.yml
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - deploy/roundcube-live/**
+      - deploy/roundcube_live.py
+      - tests/test_roundcube_live.*
+      - .github/workflows/roundcube-production.yml
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Fixed production operation
+        type: choice
+        options: [verify, install, rollback]
+        default: verify
+
+permissions:
+  contents: read
+
+jobs:
+  production-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - run: python3 -m unittest discover -s tests -p 'test_roundcube_*.py' -v
+      - run: php tests/test_roundcube_pilot.php
+
+  activate-production:
+    needs: production-safety
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check' &&
+      (github.event_name == 'push' || inputs.operation == 'install')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Inspect without mutation
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py inspect
+      - name: Require current production head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api repos/danieldeploy/room-check/git/ref/heads/agent/room-item-assignments --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Back up, install and verify production registration
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py install
+      - name: Inspect after any failure before considering recovery
+        if: failure()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py inspect
+
+  retire-tests:
+    needs: activate-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Require current production head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api repos/danieldeploy/room-check/git/ref/heads/agent/room-item-assignments --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Move verified test plugins into private archive
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py retire
+      - name: Inspect after any failure
+        if: failure()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py inspect
+
+  verify-production:
+    needs: [production-safety, retire-tests]
+    if: >-
+      always() && needs.production-safety.result == 'success' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check' &&
+      (needs.retire-tests.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && inputs.operation == 'verify'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Independently verify installed files, backups and retirement
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py verify
+      - name: Check public Roundcube login availability
+        run: |
+          python3 - <<'PY'
+          import urllib.request
+          url = 'https://welcomehostel.pt/roundcube/'
+          with urllib.request.urlopen(url, timeout=30) as response:
+              assert response.status == 200
+              assert response.geturl().startswith(url)
+              page = response.read(1024 * 1024).decode('utf-8')
+          assert 'rcmloginuser' in page and 'rcmloginpwd' in page
+          print('Roundcube public login is healthy; authenticated sending requires user acceptance.')
+          PY
+
+  rollback-production:
+    needs: production-safety
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.operation == 'rollback' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Require current production head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api repos/danieldeploy/room-check/git/ref/heads/agent/room-item-assignments --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Restore verified test folders and pre-production configuration
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py rollback
+      - name: Inspect after any failure
+        if: failure()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_live.py inspect

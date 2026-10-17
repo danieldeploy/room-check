@@ -1,0 +1,20 @@
+{
+  "name": "management-hub-invoice-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "diagnose": "node diagnose-browser.mjs",
+    "install-chrome": "puppeteer browsers install chrome"
+  },
+  "dependencies": {
+    "imapflow": "2.0.5",
+    "mailparser": "3.9.28",
+    "pdfjs-dist": "6.4.299",
+    "puppeteer": "25.11.0"
+  }
+}

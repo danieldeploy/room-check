@@ -1,0 +1,14 @@
+.bilingual-textarea-field { position: relative; min-width: 0; width: 100%; }
+.bilingual-highlight-layer { position: absolute; inset: 0 auto auto 0; width: 100%; pointer-events: none; }
+.bilingual-highlight-layer .bilingual-wrong-segment { color: var(--wrong, #b42318); font-weight: inherit; }
+.bilingual-textarea-feedback { display: block; min-height: 18px; margin-top: 3px; font-size: .85rem; line-height: 18px; opacity: 0; transition: opacity .18s ease; }
+.bilingual-textarea-feedback.is-visible { opacity: 1; }
+.bilingual-textarea-feedback.is-error { color: var(--wrong, #b42318); }
+.bilingual-textarea-feedback.is-saved { color: var(--ok, #15803d); }
+textarea[data-bilingual-textarea][readonly], textarea[data-bilingual-textarea][readonly]:focus { outline: none !important; box-shadow: none !important; cursor: default; }
+.bilingual-decision-overlay { position: fixed; z-index: 10000; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .42); }
+.bilingual-decision-dialog { width: min(460px, 100%); padding: 22px; border-radius: 16px; background: #fff; box-shadow: 0 24px 70px rgba(15, 23, 42, .24); }
+.bilingual-decision-dialog p { margin: 0 0 18px; color: #17313a; line-height: 1.45; }
+.bilingual-decision-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.bilingual-decision-actions button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; color: #fff; background: #0f766e; font: inherit; font-weight: 800; cursor: pointer; }
+.bilingual-decision-actions button:last-child { background: #64748b; }

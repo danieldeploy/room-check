@@ -1,0 +1,142 @@
+name: Hostelworld deployment diagnosis
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/hostelworld-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Read bounded City pipe and filter status
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          python3 - <<'PYCODE'
+          import sys,json,os,re,urllib.parse,urllib.request
+          sys.path.insert(0,'deploy')
+          from cpanel_api import Config,CpanelAPI,WHM_ORIGIN
+          config=Config(token=os.environ['WHM_API_TOKEN'],transport='whm',origin=WHM_ORIGIN)
+          api=CpanelAPI(config)
+          def read(module,function,**params):
+              query=urllib.parse.urlencode({'api.version':1,'cpanel.user':'city','cpanel.module':module,
+                  'cpanel.function':function,**params})
+              req=urllib.request.Request(WHM_ORIGIN+'/json-api/uapi_cpanel?'+query,
+                  headers={'Authorization':'whm fazenda:'+config.token})
+              with api.opener.open(req,timeout=20) as r: data=json.loads(r.read(262144))
+              result=data.get('data',{}).get('uapi',{})
+              if result.get('status')!=1:
+                  errors=str(result.get('errors',[])).lower()
+                  print(json.dumps({'operation':module+'.'+function,'available':False,
+                      'missing':any(x in errors for x in ['does not exist','no such file','not found']),
+                      'permission':any(x in errors for x in ['permission','denied'])}))
+                  return None
+              return result.get('data')
+          value=read('Fileman','get_file_information',path='/home/city/hostelworld-city-auth-pipe.php')
+          rows=value if isinstance(value,list) else [value] if isinstance(value,dict) else []
+          for row in rows:
+              print(json.dumps({'city_pipe_file':{'exists':bool(row.get('exists')),
+                  'owner_matches':row.get('user')=='city','mode':str(row.get('nicemode')) if re.fullmatch('[0-7]{3,4}',str(row.get('nicemode'))) else None}}))
+          # API2 statfiles explicitly supplies the owner name, unlike UAPI builds
+          # that return only numeric uid/gid. Read metadata, never script/key contents.
+          query=urllib.parse.urlencode({'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,
+              'cpanel_jsonapi_module':'Fileman','cpanel_jsonapi_func':'statfiles','dir':'/home/city',
+              'files':'hostelworld-city-auth-pipe.php|hostelworld-city-auth-status.json'})
+          req=urllib.request.Request(WHM_ORIGIN+'/json-api/cpanel?'+query,
+              headers={'Authorization':'whm fazenda:'+config.token})
+          with api.opener.open(req,timeout=20) as r: metadata=json.loads(r.read(65536))
+          for row in metadata.get('cpanelresult',{}).get('data',[]):
+              if row.get('file') not in ['hostelworld-city-auth-pipe.php','hostelworld-city-auth-status.json']: continue
+              print(json.dumps({'city_file_owner':{'file':row['file'],'exists':bool(row.get('exists')),
+                  'owner_present':'user' in row,'owner':row.get('user') if row.get('user') in ['city','root','welcome'] else 'other',
+                  'mode':str(row.get('nicemode')) if re.fullmatch('[0-7]{3,4}',str(row.get('nicemode'))) else None}}))
+          value=read('Variables','get_server_information',name='php_system_default_version')
+          if isinstance(value,dict):
+              version=value.get('php_system_default_version')
+              print(json.dumps({'php_default':version if isinstance(version,str) and re.fullmatch('[a-zA-Z0-9_.-]{1,30}',version) else 'unavailable'}))
+          value=read('Email','list_filters')
+          rows=value if isinstance(value,list) else value.get('filters',[]) if isinstance(value,dict) else []
+          own=[i for i,row in enumerate(rows) if row.get('filtername')=='Room Check Hostelworld Auth v1']
+          print(json.dumps({'city_filters':{'count':len(rows),'own_indices':own,
+              'earlier_delivery_actions':sum(1 for row in rows[:own[0] if own else 0] for a in row.get('actions',[]) if a.get('action') in ['save','finish','fail','redirect','discard'])}}))
+          # Synthetic dry-run only: no actual email is sent and no login material is used.
+          sample = "From: diagnostic@hostelworld.com\nTo: diagnostic@example.invalid\nSubject: Login verification\n\nSynthetic filter test without authentication material.\n"
+          trace = read('Email','trace_filter',msg=sample)
+          if trace is not None:
+              rendered = json.dumps(trace).lower()
+              print(json.dumps({'city_filter_trace':{
+                  'available': True,
+                  'pipe_destination_present': 'hostelworld-city-auth-pipe.php' in rendered,
+                  'folder_destination_present': '.hostelworld' in rendered,
+                  'no_deliveries': 'no deliveries' in rendered,
+                  'errors': [label for label in ['syntax error','unrecognized','unknown command','permission denied','not found'] if label in rendered]
+              }}))
+          # Delivery metadata explains failures before PHP can write a status.
+          # No raw messages, addresses, transport errors, or authentication data
+          # are printed. The query is scoped to the City cPanel account.
+          query=urllib.parse.urlencode({'cpanel_jsonapi_user':'city','cpanel_jsonapi_apiversion':2,
+              'cpanel_jsonapi_module':'EmailTrack','cpanel_jsonapi_func':'search','success':1,'defer':1,'failure':1,'inprogress':1})
+          req=urllib.request.Request(WHM_ORIGIN+'/json-api/cpanel?'+query,
+              headers={'Authorization':'whm fazenda:'+config.token})
+          with api.opener.open(req,timeout=20) as r: delivery=json.loads(r.read(2097152))
+          result=delivery.get('cpanelresult',{})
+          clean=[]
+          mailboxes=set()
+          for row in result.get('data',[]):
+              if not isinstance(row,dict): continue
+              relevant=' '.join(str(row.get(k,'')) for k in ['sender','deliveredto','message']).lower()
+              stamp=str(row.get('actionunixtime',''))
+              if 'hostelworld' not in relevant or not stamp.isdigit() or int(stamp)<1792108800: continue
+              destination=str(row.get('deliveredto',''))
+              mailbox=re.fullmatch(r'/home/city/mail/([a-zA-Z0-9.-]+)/([a-zA-Z0-9_.+-]+)/\.HOSTELWORLD/?',destination)
+              if mailbox: mailboxes.add(mailbox[2]+'@'+mailbox[1])
+              message=str(row.get('message','')).lower()
+              clean.append({'at':int(stamp),'state':row.get('type') if row.get('type') in ['success','defer','failure','inprogress'] else 'unknown',
+                  'pipe':'hostelworld-city-auth-pipe.php' in relevant,
+                  'folder':'.hostelworld' in relevant,
+                  'route':{k:row[k] for k in ['router','transport'] if isinstance(row.get(k),str) and re.fullmatch('[a-z_]{1,60}',row[k])},
+                  'errors':[label for label in ['permission denied','bad interpreter','not found','parse error','syntax error',
+                      'undefined function','failed to open stream','cannot execute','command not found','not permitted','quota','timeout','unrouteable'] if label in message],
+                  'exit_codes':re.findall(r'(?:returned|exit code|status)\s+(\d{1,3})\b',message)[:3]})
+          print(json.dumps({'city_delivery':{'available':result.get('event',{}).get('result')==1,
+              'matched':len(clean),'records':sorted(clean,key=lambda v:v['at'])[-20:]}}))
+          # Inspect rule structure only for the mailbox actually receiving the
+          # Hostelworld deliveries. Never read messages or print its address.
+          print(json.dumps({'city_delivery_mailboxes':len(mailboxes)}))
+          if len(mailboxes)==1:
+              mailbox=next(iter(mailboxes))
+              value=read('Email','list_filters',account=mailbox)
+              filters=value if isinstance(value,list) else value.get('filters',[]) if isinstance(value,dict) else []
+              print(json.dumps({'city_mailbox_filters':[{'index':i,'disabled':bool(f.get('disabled')),
+                  'own':f.get('filtername')=='Room Check Hostelworld Auth v1',
+                  'hostelworld_rule':any('hostelworld' in str(r.get('val','')).lower() for r in f.get('rules',[])),
+                  'actions':[{'action':a.get('action') if a.get('action') in ['save','pipe','finish','fail','deliver'] else 'other',
+                      'hostelworld_folder':'.hostelworld' in str(a.get('dest','')).lower(),
+                      'own_pipe':'hostelworld-city-auth-pipe.php' in str(a.get('dest',''))} for a in f.get('actions',[])]}
+                  for i,f in enumerate(filters)]}))
+              trace=read('Email','trace_filter',account=mailbox,msg=sample)
+              rendered=json.dumps(trace).lower() if trace is not None else ''
+              print(json.dumps({'city_mailbox_trace':{'available':trace is not None,
+                  'pipe_delivery':'pipe message to:' in rendered,
+                  'folder_delivery':'save message to:' in rendered,
+                  'own_pipe':'hostelworld-city-auth-pipe.php' in rendered,
+                  'finish':'finish' in rendered}}))
+          value=read('Fileman','get_file_content',dir='/home/city',file='hostelworld-city-auth-status.json')
+          if value is None:
+              print(json.dumps({'city_auth_status':'not_available'})); sys.exit(0)
+          if isinstance(value,list): value=value[0]
+          try: facts=json.loads(value.get('content',''))
+          except Exception:
+              print(json.dumps({'city_auth_status':'invalid'})); sys.exit(0)
+          stages=['started','parse_error','message_not_matched','message_matched','transport_error','hub_response','configuration_error']
+          clean={'stage':facts.get('stage') if facts.get('stage') in stages else 'invalid'}
+          for key in ['at','http_status']:
+              if type(facts.get(key)) is int: clean[key]=facts[key]
+          if type(facts.get('accepted')) is bool: clean['accepted']=facts['accepted']
+          print(json.dumps({'city_auth_status':clean}))
+          PYCODE
