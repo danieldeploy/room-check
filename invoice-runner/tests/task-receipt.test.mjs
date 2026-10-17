@@ -150,3 +150,11 @@ test('Hostelworld table failure reports only a fixed reason and bounded row posi
   assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(path.join(root,'task-62-receipt.json'),'utf8')),'table_failure'),false);
  } finally {await fs.rm(root,{recursive:true,force:true});}
 });
+test('Hostelworld date diagnostics never retain date values or PDF text',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'hw-date-receipt-'));
+ try {
+  await writeTaskReceipt(root,{id:63,input:{action:'verify',portal:'hostelworld'}},{code:'invalid_document',collection_trace:{stage:'pdf_download',pdf_date:{reason:'unsupported_format',labels:1,candidates:0,value:'PRIVATE_DATE',text:'PRIVATE_PDF'}}},{accepted:true,state:'failed'});
+  const raw=await fs.readFile(path.join(root,'task-63-receipt.json'),'utf8');assert.equal(raw.includes('PRIVATE_'),false);
+  assert.deepEqual(JSON.parse(raw).pdf_date,{reason:'unsupported_format',labels:1,candidates:0});
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});

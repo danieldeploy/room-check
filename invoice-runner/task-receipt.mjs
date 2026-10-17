@@ -64,6 +64,13 @@ export async function writeTaskReceipt(root, job, result, reply, now = () => new
         if (typeof trace.pdf_identity[key] === 'boolean') safe[key] = trace.pdf_identity[key];
       receipt.pdf_identity = safe;
     }
+    if (job.input.portal === 'hostelworld' && ['verified','missing_date','unsupported_format',
+      'ambiguous_numeric','invalid_calendar','conflicting_dates'].includes(trace?.pdf_date?.reason)) {
+      receipt.pdf_date = {reason:trace.pdf_date.reason};
+      for (const key of ['labels','candidates'])
+        if (Number.isInteger(trace.pdf_date[key]) && trace.pdf_date[key] >= 0 && trace.pdf_date[key] <= 3)
+          receipt.pdf_date[key] = trace.pdf_date[key];
+    }
     if (job.input.portal === 'hostelworld'
         && ['table_shape','headers','headers_changed','repeated_page','row_shape','pdf_link'].includes(trace?.table_failure?.reason)) {
       receipt.table_failure = {reason:trace.table_failure.reason};

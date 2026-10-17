@@ -38,6 +38,12 @@ if (realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
         $check(InvoiceHostelworldVerification::issueDates($text."\nDue date: 9 September 2026")==['2026-08-03'],'Ignore due date');
         $check(count(InvoiceHostelworldVerification::issueDates($text."\nDate: 4 August 2026"))===2,'Conflicting date');
         $check(InvoiceHostelworldVerification::issueDates('Date: 31 February 2026')===[],'Invalid date');
+        foreach(['3rd September 2021','03-Sept-2021','September 3, 2021','3September2021','2021-09-03'] as $date)
+            $check(InvoiceHostelworldVerification::issueDates('Date: '.$date)===['2021-09-03'],'Unambiguous legacy date');
+        foreach(['23/09/2021','09/23/2021'] as $date)
+            $check(InvoiceHostelworldVerification::issueDates('Date: '.$date)===['2021-09-23'],'Unambiguous numeric date');
+        $check(InvoiceHostelworldVerification::issueDates('Date: 03/09/2021')===[],'Do not guess numeric date order');
+        $check(InvoiceHostelworldVerification::issueDates("Date: 3 September 2021\nOriginal invoice date: 3 August 2021")===['2021-09-03'],'Original invoice date is not current issue date');
         $pdo=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
         $pdo->exec("CREATE TABLE invoice_accounts(id INTEGER PRIMARY KEY,portal TEXT,auth_method TEXT,period_basis TEXT,login_verified_at TEXT,status TEXT);
             INSERT INTO invoice_accounts VALUES(2,'hostelworld','email','issue_month',NULL,'configured');
