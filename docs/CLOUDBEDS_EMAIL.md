@@ -1,5 +1,24 @@
 # Cloudbeds email discovery
 
+## Owner-provided PDF recovery
+
+- Expected behavior: a gerente can add a missing Cloudbeds PDF in Documents.
+  Validate company, NIF, property and issue date, then use the existing encrypted
+  inbox, collection history, Drive delivery and TOConline confirmation ledger.
+- Permissions: existing authenticated gerente session, CSRF, HTTPS and invoice
+  worker lock. This does not grant a new API credential or weaken email checks.
+- Inputs: one real multipart PDF upload, at most 2 MiB, and the selected source.
+  The document must identify exactly that guest house and the configured company.
+  The issue date determines the month; service and payment dates do not.
+- Failures: safe existing errors, no raw content in logs, no overwrite of prior
+  provenance, no reset of delivery or uncertain-send state. Temporary PHP uploads
+  are removed after processing. A repeated upload reuses its request key.
+- Acceptance: synthetic wrong-role, HTTPS, file provenance, wrong company/source,
+  ambiguous property, receipt, date and repeat-import tests. Real acceptance must
+  show the uploaded invoice in Hub, verified Drive storage and TOConline response.
+  The encrypted source is labelled manager_upload, never DKIM or SPF. The completed
+  annual audit remains a historical snapshot; the new collection has its own history.
+
 ## Authorized 2026 recovery
 
 - Expected behavior: perform the owner's one-time audit of Cloudbeds invoices
