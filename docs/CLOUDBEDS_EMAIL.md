@@ -148,14 +148,15 @@ authentication methods. Synthetic tests cover report availability and redaction.
   discarded after checking; encrypted provenance retains only the method.
 - Trust boundary: use the first receiving hop from the hosting provider's
   serverNN.romania-webhosting.com family, optionally preceded by one local Exim
-  delivery or `spam-scanned` reinjection on the same server. A local/scanner hop
-  must have no remote peer information; exact protocol tokens are required.
+  delivery or LMTP mailbox delivery on the same server. A local/LMTP hop must have
+  no remote peer information; LMTP must originate from the same receiver hostname.
+  Exact protocol tokens are required; unobserved scanner protocols stay rejected.
   Require a Cloudbeds envelope consistent with
   Return-Path and the correct source recipient. Never search later trace headers
   for a more favorable sender IP, and reject ambiguous hop syntax.
 - Failure handling: fail/softfail/neutral/none/permerror stay in review; temporary
   DNS failures retry. Earlier DKIM-review entries are reconsidered once by source
-  processor v5, while successfully delivered originals remain deduplicated.
+  processor v6, while successfully delivered originals remain deduplicated.
 - Acceptance: synthetic spoofed/ambiguous trace, wrong account, shared-provider
   SPF, include/IPv4/IPv6, DNS recursion, HMAC tampering and retry tests. A one-time
   real collection chooses the newest common issue month containing validated SPF

@@ -162,6 +162,7 @@ def reception_auth_shape(message):
                      'host_parentheses' if re.fullmatch(r'from [a-z0-9._-]+\s+\([^()]*\)', before_by, re.I) else 'other')
         received_shapes.append({"by_hosting": bool(by and host(by.group(1)) == hosting),
                                 "by_hosting_family": bool(by and re.fullmatch(r'server[0-9]+\.romania-webhosting\.com', host(by.group(1)))),
+                                "peer_is_receiver": bool(by and peer and host(by.group(1)) == host(peer.group(1))),
                                 "by_marker_count": len(re.findall(r'\bby\s+', value, re.I)),
                                 "with_marker_count": len(re.findall(r'\bwith\s+', value, re.I)),
                                 "peer_form": peer_form,
