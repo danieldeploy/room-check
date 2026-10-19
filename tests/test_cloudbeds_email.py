@@ -8,6 +8,14 @@ import cloudbeds_email as c
 
 
 class Tests(unittest.TestCase):
+    def test_spf_pipeline_status_only_exposes_fixed_counts_and_states(self):
+        result=c.safe_pipeline_rows({'welcome':{'spf_indexed':19,'spf_selected':1,'private':'SECRET',
+            'tasks':[{'state':'completed','result_code':'ok','invoice':'PRIVATE','duplicate_count':1}],
+            'delivery':[{'drive_state':'verified','toconline_state':'toc_existing','private':'SECRET'}]}})
+        self.assertEqual(result['welcome']['spf_indexed'],19)
+        self.assertNotIn('SECRET',str(result))
+        self.assertNotIn('PRIVATE',str(result))
+
     def test_separate_original_mail_and_delivery_paths(self):
         for account in c.ROOTS:
             p=c.expected(account,c.ROOTS[account]+"/.Cloudbeds/")

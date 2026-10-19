@@ -4,6 +4,7 @@ require_once __DIR__.'/../src/Invoices/CloudbedsInbox.php';
 require_once __DIR__.'/../src/Invoices/CloudbedsFolderQueue.php';
 require_once __DIR__.'/../src/Invoices/InvoiceToconline.php';
 require_once __DIR__.'/../src/Invoices/InvoiceTocPipe.php';
+require_once __DIR__.'/../src/Invoices/CloudbedsSpf.php';
 function cbCheck(bool $ok,string $label): void { if (!$ok) throw new RuntimeException($label); }
 function cbReject(callable $fn,string $label): void { try { $fn(); } catch (Throwable) { return; } throw new RuntimeException($label); }
 function cbPdf(string $text): string {
@@ -81,6 +82,48 @@ cbCheck(CloudbedsBridge::verify($json,$stamp,$sig,$key),'Bridge HMAC');
 cbCheck(!CloudbedsBridge::verify($json.' ',$stamp,$sig,$key),'Bridge tampering rejected');
 cbCheck(!CloudbedsBridge::verify($json,$stamp,$sig,$key,time()+301),'Stale replay rejected');
 cbReject(fn()=>CloudbedsBridge::validate($packet,'city'),'Packet binding cannot switch house');
+
+final class CbSpfDns implements \SPFLib\DNS\Resolver {
+    public array $txt=['bounce.cloudbeds.com'=>['v=spf1 include:sender.example.test -all'],
+        'sender.example.test'=>['v=spf1 ip4:192.0.2.0/24 ip6:2001:db8::/32 -all']];
+    public function getTXTRecords(string $domain):array { return $this->txt[$domain]??[]; }
+    public function getIPAddressesFromDomainName(string $domain):array { return []; }
+    public function getMXRecords(string $domain):array { return []; }
+    public function getPTRRecords(string $domain):array { return []; }
+    public function getDomainNameFromIPAddress(\IPLib\Address\AddressInterface $ip):string { return ''; }
+}
+$smtp=['ip'=>'192.0.2.19','mailfrom'=>'test@bounce.cloudbeds.com','helo'=>'sender.example.test'];
+$spfDns=new CbSpfDns();
+cbCheck(CloudbedsSpf::verify($smtp,$spfDns)==='pass','SPF library checks aligned MAIL FROM with include/IP4');
+cbCheck(CloudbedsSpf::verify(array_replace($smtp,['ip'=>'2001:db8::19']),$spfDns)==='pass','SPF IPv6');
+cbCheck(CloudbedsSpf::verify(array_replace($smtp,['ip'=>'198.51.100.19']),$spfDns)==='fail','Unauthorized client fails SPF');
+cbCheck(CloudbedsSpf::verify(array_replace($smtp,['mailfrom'=>'test@amazonses.com']),$spfDns)==='invalid','Shared-provider SPF cannot authenticate Cloudbeds');
+$badDns=new CbSpfDns();$badDns->txt['bounce.cloudbeds.com']=['v=spf1 +all','v=spf1 -all'];
+cbCheck(CloudbedsSpf::verify($smtp,$badDns)==='permerror','Multiple SPF records do not grant trust');
+$badDns->txt=['bounce.cloudbeds.com'=>['v=spf1 include:bounce.cloudbeds.com -all']];
+cbCheck(CloudbedsSpf::verify($smtp,$badDns)==='permerror','SPF DNS lookup recursion is bounded');
+$trace="Return-Path: <test@bounce.cloudbeds.com>\r\nReceived: from welcome by server50.romania-webhosting.com with local (Exim 4.98) (envelope-from <test@bounce.cloudbeds.com>) id local-test; ".gmdate('r')."\r\n".
+    "Return-Path: <test@bounce.cloudbeds.com>\r\nReceived: from sender.example.test ([192.0.2.19]:1234) by server50.romania-webhosting.com with esmtps (TLS1.3) (Exim 4.98) (envelope-from <test@bounce.cloudbeds.com>) id smtp-test for <info@welcomehostel.pt>; ".gmdate('r')."\r\n";
+cbCheck(CloudbedsSmtpTrace::extract($trace.$raw,'welcome')===$smtp,'Native local delivery and original SMTP observation');
+cbCheck(CloudbedsSmtpTrace::extract($trace.$raw,'city')===null,'SPF source cannot switch mailbox');
+cbCheck(CloudbedsSmtpTrace::extract(str_replace('cloudbeds.com','cloudbeds.com.evil.test',$trace.$raw),'welcome')===null,'Lookalike envelope rejected');
+$forged="Return-Path: <test@bounce.cloudbeds.com>\r\nReceived: from attacker.example.test ([198.51.100.19]) by server50.romania-webhosting.com with esmtp (envelope-from <test@bounce.cloudbeds.com>); ".gmdate('r')."\r\n".$trace.$raw;
+cbCheck(CloudbedsSmtpTrace::extract($forged,'welcome')===null,'Duplicate conflicting trace metadata cannot replace real SMTP ingress');
+$claimed=str_replace('from sender.example.test ([192.0.2.19]:1234)','from evil by server50.romania-webhosting.com with local ([198.51.100.19]:1234)',$trace.$raw);
+cbCheck(CloudbedsSmtpTrace::extract($claimed,'welcome')===null,'HELO cannot inject a local-hop marker');
+$spoof=str_replace('[192.0.2.19]','[198.51.100.19]',$trace).$raw;
+$spoofPacket=CloudbedsBridge::packet($spoof,'welcome');
+cbReject(fn()=>CloudbedsBridge::validate($spoofPacket,'welcome',fn($s)=>CloudbedsSpf::verify($s,$spfDns)),'Trusted ingress still rejects an unauthorized SMTP client');
+$spfPacket=CloudbedsBridge::packet($trace.$raw,'welcome');
+cbCheck($spfPacket['version']===2 && $spfPacket['smtp']===$smtp,'Unsigned mail requires native SMTP attestation');
+cbCheck(CloudbedsBridge::validate($spfPacket,'welcome',fn($s)=>CloudbedsSpf::verify($s,$spfDns))===[hash('sha256',$pdf)=>$pdf],'SPF alternative preserves attachment bytes');
+cbReject(fn()=>CloudbedsBridge::validate($spfPacket,'welcome',static fn()=> 'neutral'),'SPF neutral is not pass');
+try { CloudbedsBridge::validate($spfPacket,'welcome',static fn()=> 'temperror'); throw new LogicException('Expected retry'); }
+catch (RuntimeException $e) { cbCheck($e->getMessage()==='spf_retry','Temporary SPF errors retry'); }
+$spfJson=json_encode($spfPacket);$spfSig=CloudbedsBridge::signature($spfJson,$stamp,$key);
+cbCheck(CloudbedsBridge::verify($spfJson,$stamp,$spfSig,$key),'SMTP metadata is covered by source HMAC');
+cbCheck(!CloudbedsBridge::verify(str_replace('192.0.2.19','192.0.2.20',$spfJson),$stamp,$spfSig,$key),'SMTP metadata cannot be altered in transit');
+cbReject(fn()=>CloudbedsBridge::packet($trace.$signed.'tampered','welcome',$resolver),'A known DKIM body mismatch is retained for review');
 $dir=sys_get_temp_dir().'/cloudbeds-test-'.bin2hex(random_bytes(8)); mkdir($dir,0700);
 try {
     file_put_contents($dir.'/master.key',random_bytes(32)); chmod($dir.'/master.key',0600); $vault=new InvoiceVault($dir);
@@ -136,9 +179,13 @@ try {
     cbCheck(file_get_contents($dir.'/mail/.Cloudbeds/cur/review')===$reviewMail,'Review original retained unchanged');
     $called=0; CloudbedsFolderQueue::run($dir.'/mail',$dir,static function()use(&$called){$called++;return false;});
     cbCheck($called===0,'Review mail does not enter an endless retry loop');
+    $state=json_decode(file_get_contents($stateFile),true);$state[hash('sha256',$reviewMail)]['processor']=3;
+    file_put_contents($stateFile,json_encode($state));$called=0;
+    $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static function($value)use(&$called,$reviewMail){$called++;return $value===$reviewMail;});
+    cbCheck($called===1 && $scan['review']===0,'Only earlier review entries are reconsidered for the new SPF policy');
     file_put_contents($dir.'/mail/.Cloudbeds/cur/transient',$raw."\r\ntransient-test-only");
     $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static fn()=>false);
-    cbCheck($scan['review']===1 && $scan['retry']===1,'Transient delivery failures still block incomplete scans and retry');
+    cbCheck($scan['review']===0 && $scan['retry']===1,'Transient delivery failures still block incomplete scans and retry');
 
 } finally {
     $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);

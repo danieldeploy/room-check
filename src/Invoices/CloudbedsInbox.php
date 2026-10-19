@@ -21,7 +21,8 @@ final class CloudbedsInbox
             if ($this->vault->has($name)) continue;
             if (count($files)>=2000) throw new RuntimeException('document_limit');
             $this->vault->save($name,['version'=>1,'source'=>$source,'account_id'=>$id,'sha256'=>$hash,
-                'mail_sha256'=>$packet['mail_sha256'],'received_at'=>time(),'pdf'=>base64_encode($pdf)]);
+                'mail_sha256'=>$packet['mail_sha256'],'received_at'=>time(),
+                'authentication'=>($packet['version']??1)===2?'spf_current_dns':'dkim','pdf'=>base64_encode($pdf)]);
             $files[]=$name;
         }
     }
@@ -94,6 +95,7 @@ final class CloudbedsInbox
         if (!$this->settings()) return;
         $this->index();
         $this->bootstrap();
+        $this->bootstrapSpf();
         $service=new InvoiceService($this->pdo); $service->scheduleDue(new DateTimeImmutable('now'));
         $accounts=new InvoiceAccounts($this->pdo); $alerts=new InvoiceAlerts($this->pdo,$config['whatsapp']??[]);
         $s=$this->pdo->prepare("SELECT t.* FROM invoice_tasks t JOIN invoice_accounts a ON a.id=t.account_id WHERE a.portal='cloudbeds' AND t.state IN ('queued','retry','running') AND (t.next_attempt_at IS NULL OR t.next_attempt_at<=?) ORDER BY t.id LIMIT 10");
@@ -149,29 +151,76 @@ final class CloudbedsInbox
     {
         $settings=$this->settings(); if (!$settings) return;
         $facts=['version'=>1,'at'=>time(),'period'=>$settings['bootstrap_period']??null,'sources'=>[]];
-        foreach ($settings['account_ids'] as $source=>$id) {
-            $counts=['indexed'=>0,'invalid'=>0,'selected'=>0];
-            $errors=[];
-            foreach (glob($this->vault->root.'/cloudbeds-inbox-'.$source.'-*.enc')?:[] as $path) {
-                $item=$this->vault->read(basename($path));
-                if (isset($item['metadata'])) $counts['indexed']++;
-                if (isset($item['error'])) { $counts['invalid']++; $errors[$item['error']]=($errors[$item['error']]??0)+1; }
-                if (($item['metadata']['period']??null)===$facts['period']) $counts['selected']++;
-            }
-            $s=$this->pdo->prepare("SELECT t.state,t.result_code,t.imported_count,t.duplicate_count FROM invoice_tasks t WHERE t.account_id=? AND t.period=? AND t.kind='collect' ORDER BY t.id DESC LIMIT 2");
-            $s->execute([$id,$facts['period']]); $tasks=$s->fetchAll(PDO::FETCH_ASSOC);
-            $s=$this->pdo->prepare("SELECT x.drive_state,x.company_state,x.toconline_state,COUNT(*) AS total FROM invoice_documents d LEFT JOIN invoice_document_delivery x ON x.document_id=d.id WHERE d.account_id=? AND d.period=? GROUP BY x.drive_state,x.company_state,x.toconline_state");
-            $s->execute([$id,$facts['period']]); $delivery=$s->fetchAll(PDO::FETCH_ASSOC);
-            $scanFile='cloudbeds-source-'.$source.'.enc';
-            $scan=$this->vault->has($scanFile)?$this->vault->read($scanFile):[];
-            $facts['sources'][$source]=$counts+['errors'=>$errors,'scan'=>$scan,'tasks'=>$tasks,'delivery'=>$delivery];
-        }
+        $facts['sources']=$this->sourceReport((string)$facts['period']);
         if (empty($settings['validated_at']) && self::accepted($facts['sources'])) {
             foreach ($settings['account_ids'] as $id) $this->pdo->prepare("UPDATE invoice_accounts SET enabled=1,schedule_day=5,schedule_time='04:00' WHERE id=?")->execute([$id]);
             $settings['validated_at']=InvoiceService::utcNow(); $this->vault->save('cloudbeds-settings.enc',$settings);
         }
         $facts['validated']=!empty($settings['validated_at']);
+        $period=$settings['spf_probe_period']??'';
+        $facts['spf_sources']=InvoiceService::validPeriod($period)?$this->sourceReport($period):[];
+        $spfReady=count($facts['spf_sources'])===2 && self::accepted($facts['spf_sources']);
+        foreach ($facts['spf_sources'] as $row) if (($row['spf_selected']??0)<1) $spfReady=false;
+        if (empty($settings['spf_validated_at']) && ($settings['spf_probe_phase']??0)===2 && $spfReady) {
+            $settings['spf_validated_at']=InvoiceService::utcNow();$this->vault->save('cloudbeds-settings.enc',$settings);
+        }
+        $facts['spf_validated']=!empty($settings['spf_validated_at']);
         InvoiceVault::atomicWrite('/home/welcome/room-check-private/cloudbeds-status.json',json_encode($facts,JSON_THROW_ON_ERROR));
+    }
+    /** One real SPF-authenticated issue-month collection and one duplicate repeat. */
+    private function bootstrapSpf(): void
+    {
+        $settings=$this->settings();$phase=(int)($settings['spf_probe_phase']??0);
+        if ($phase>=2 || !empty($settings['spf_validated_at'])) return;
+        $periods=[];
+        foreach ($settings['account_ids'] as $source=>$id) {
+            $file='cloudbeds-source-'.$source.'.enc';$scan=$this->vault->has($file)?$this->vault->read($file):[];
+            if (($scan['at']??0)<time()-600 || ($scan['retry']??1)>0 || ($scan['processed']??40)>=40) return;
+            $periods[$source]=[];
+            foreach (glob($this->vault->root.'/cloudbeds-inbox-'.$source.'-*.enc')?:[] as $path) {
+                $item=$this->vault->read(basename($path));$period=$item['metadata']['period']??'';
+                if (($item['authentication']??'')==='spf_current_dns' && !isset($item['error'])
+                    && InvoiceService::validPeriod($period) && $period<gmdate('Y-m')) $periods[$source][]=$period;
+            }
+        }
+        if (array_keys($periods)!==['welcome','city']) return;
+        $common=array_values(array_intersect($periods['welcome'],$periods['city'])); rsort($common);
+        $period=$settings['spf_probe_period']??($common[0]??'');if (!in_array($period,$common,true)) return;
+        if ($phase===1) {
+            $q=$this->pdo->prepare('SELECT t.state FROM invoice_tasks t JOIN invoice_batch_tasks bt ON bt.task_id=t.id WHERE bt.batch_id=?');
+            $q->execute([$settings['spf_probe_batch']]);$states=$q->fetchAll(PDO::FETCH_COLUMN);
+            if (count($states)!==2 || array_filter($states,static fn($state)=>$state!=='completed')) return;
+        }
+        $targets=[];foreach ($settings['account_ids'] as $source=>$id) $targets[]=['account_id'=>$id,'property_id'=>$source];
+        $batch=(new InvoiceService($this->pdo))->collectBatch($targets,$period,null,hash('sha256','cloudbeds-spf-acceptance-v1:'.$period.':'.$phase));
+        $settings['spf_probe_period']=$period;$settings['spf_probe_phase']=$phase+1;$settings['spf_probe_batch']=$batch;
+        $this->vault->save('cloudbeds-settings.enc',$settings);
+    }
+    private function sourceReport(string $period): array
+    {
+        $settings=$this->settings();$sources=[];
+        foreach ($settings['account_ids'] as $source=>$id) {
+            $counts=['indexed'=>0,'invalid'=>0,'selected'=>0,'spf_indexed'=>0,'spf_selected'=>0];
+            $errors=[];
+            foreach (glob($this->vault->root.'/cloudbeds-inbox-'.$source.'-*.enc')?:[] as $path) {
+                $item=$this->vault->read(basename($path));
+                if (isset($item['metadata'])) $counts['indexed']++;
+                if (isset($item['metadata']) && ($item['authentication']??'')==='spf_current_dns') $counts['spf_indexed']++;
+                if (isset($item['error'])) { $counts['invalid']++; $errors[$item['error']]=($errors[$item['error']]??0)+1; }
+                if (($item['metadata']['period']??null)===$period) {
+                    $counts['selected']++;
+                    if (($item['authentication']??'')==='spf_current_dns') $counts['spf_selected']++;
+                }
+            }
+            $s=$this->pdo->prepare("SELECT t.state,t.result_code,t.imported_count,t.duplicate_count FROM invoice_tasks t WHERE t.account_id=? AND t.period=? AND t.kind='collect' ORDER BY t.id DESC LIMIT 2");
+            $s->execute([$id,$period]); $tasks=$s->fetchAll(PDO::FETCH_ASSOC);
+            $s=$this->pdo->prepare("SELECT x.drive_state,x.company_state,x.toconline_state,COUNT(*) AS total FROM invoice_documents d LEFT JOIN invoice_document_delivery x ON x.document_id=d.id WHERE d.account_id=? AND d.period=? GROUP BY x.drive_state,x.company_state,x.toconline_state");
+            $s->execute([$id,$period]); $delivery=$s->fetchAll(PDO::FETCH_ASSOC);
+            $scanFile='cloudbeds-source-'.$source.'.enc';
+            $scan=$this->vault->has($scanFile)?$this->vault->read($scanFile):[];
+            $sources[$source]=$counts+['errors'=>$errors,'scan'=>$scan,'tasks'=>$tasks,'delivery'=>$delivery];
+        }
+        return $sources;
     }
     public static function accepted(array $sources): bool
     {

@@ -17,7 +17,7 @@ function cloudbedsStatus(array $facts): void {
         if (file_put_contents($tmp,json_encode(['at'=>time()]+$facts),LOCK_EX)!==false) { chmod($tmp,0600); rename($tmp,$path); }
     } catch (Throwable) {}
 }
-function cloudbedsSend(array $packet): bool {
+function cloudbedsSend(array $packet): bool|string {
     global $stateRoot,$source;
     $path=$stateRoot.'/cloudbeds-'.$source.'.key';
     if (is_link($path) || !is_file($path) || (fileperms($path)&0077)!==0) return false;
@@ -29,6 +29,7 @@ function cloudbedsSend(array $packet): bool {
         CURLOPT_HTTPHEADER=>['Content-Type: application/json','X-Hub-Timestamp: '.$stamp,
             'X-Hub-Signature: '.CloudbedsBridge::signature($body,$stamp,$key)]]);
     $reply=curl_exec($curl); $status=curl_getinfo($curl,CURLINFO_RESPONSE_CODE); curl_close($curl);
+    if ($status===422 && is_string($reply) && (json_decode($reply,true)['review']??null)===true) return 'review';
     $accepted=$status===202 && is_string($reply) && (json_decode($reply,true)['accepted']??null)===true;
     if (!$accepted) cloudbedsStatus(['stage'=>'delivery_retry','http_status'=>(int)$status]);
     return $accepted;
@@ -37,7 +38,7 @@ function cloudbedsConsume(string $raw): bool|string {
     global $source;
     try {
         $packet=CloudbedsBridge::packet($raw,$source);
-        return $packet===null || cloudbedsSend($packet);
+        return $packet===null?true:cloudbedsSend($packet);
     } catch (Throwable $e) {
         if ($e->getMessage()==='mail_outside_window') return 'historical';
         if ($e->getMessage()==='mail_review') return 'review';

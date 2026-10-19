@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/CloudbedsMailMessage.php';
 require_once __DIR__.'/CloudbedsMailAuthentication.php';
+require_once __DIR__.'/CloudbedsSmtpTrace.php';
 
 /** Account-bound delivery of PDFs only. No City message is forwarded to Welcome. */
 final class CloudbedsBridge
@@ -19,6 +20,11 @@ final class CloudbedsBridge
         // originals for review instead of retrying mail outside the verifier's window.
         if ($date!==false && $date<($now??time())-730*86400) throw new RuntimeException('mail_outside_window');
         $auth=CloudbedsMailAuthentication::verify($raw,$resolver,$now);
+        if (empty($auth['verified']) && !in_array($auth['code']??'',['body_mismatch','signature_mismatch'],true)) {
+            $smtp=CloudbedsSmtpTrace::extract($raw,$source);
+            if ($smtp!==null) return ['version'=>2,'source'=>$source,'mail_sha256'=>hash('sha256',$raw),
+                'pdfs'=>array_map('base64_encode',array_values($pdfs)),'smtp'=>$smtp];
+        }
         if (in_array($auth['code']??'',['key_revoked','key_policy'],true)) throw new RuntimeException('mail_review');
         if (empty($auth['verified']) || ($auth['recipient']??'')!==self::RECIPIENTS[$source]) throw new RuntimeException('auth_invalid');
         return ['version'=>1,'source'=>$source,'mail_sha256'=>hash('sha256',$raw),
@@ -35,12 +41,19 @@ final class CloudbedsBridge
             && preg_match('/\A[a-f0-9]{64}\z/',$signature)===1
             && hash_equals(self::signature($body,$stamp,$key),$signature);
     }
-    public static function validate(array $packet,string $source): array
+    public static function validate(array $packet,string $source,?callable $spfVerifier=null): array
     {
-        if (count($packet)!==4 || ($packet['version']??null)!==1 || ($packet['source']??null)!==$source
+        $version=$packet['version']??null;
+        if (!in_array($version,[1,2],true) || count($packet)!==($version===2?5:4) || ($packet['source']??null)!==$source
             || !isset(self::RECIPIENTS[$source]) || !is_string($packet['mail_sha256']??null)
             || !preg_match('/\A[a-f0-9]{64}\z/',$packet['mail_sha256'])
             || !is_array($packet['pdfs']??null) || count($packet['pdfs'])<1 || count($packet['pdfs'])>5) throw new RuntimeException('invalid_document');
+        if ($version===2) {
+            if (!is_array($packet['smtp']??null)) throw new RuntimeException('invalid_document');
+            require_once __DIR__.'/CloudbedsSpf.php';
+            $result=$spfVerifier?$spfVerifier($packet['smtp']):CloudbedsSpf::verify($packet['smtp']);
+            if ($result!=='pass') throw new RuntimeException($result==='temperror'?'spf_retry':'spf_review');
+        }
         $pdfs=[]; $total=0;
         foreach ($packet['pdfs'] as $encoded) {
             if (!is_string($encoded) || strlen($encoded)>2800000) throw new RuntimeException('invalid_document');

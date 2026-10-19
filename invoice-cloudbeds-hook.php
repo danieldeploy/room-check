@@ -20,5 +20,6 @@ try {
     else $inbox->receive($m,$source);
     http_response_code(202); echo '{"accepted":true}';
 } catch (Throwable $e) {
-    http_response_code(in_array($e->getCode(),[400,403],true)?$e->getCode():503); echo '{"accepted":false}';
+    if ($e->getMessage()==='spf_review') { http_response_code(422); echo '{"accepted":false,"review":true}'; }
+    else { http_response_code(in_array($e->getCode(),[400,403],true)?$e->getCode():503); echo '{"accepted":false}'; }
 } finally { if ($pdo && $locked) $pdo->query("SELECT RELEASE_LOCK('room_check_invoices')"); }
