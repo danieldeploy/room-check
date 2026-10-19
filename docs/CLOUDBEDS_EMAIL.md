@@ -1,5 +1,29 @@
 # Cloudbeds email discovery
 
+## Authorized 2026 recovery
+
+- Expected behavior: perform the owner's one-time audit of Cloudbeds invoices
+  issued in 2026 through the current Lisbon month, for Welcome and City. Preserve
+  the initial counts, collect available issue months through the existing queue,
+  and deliver missing documents through the unchanged Drive/TOConline pipeline.
+- Permissions: this recovery and submission were explicitly requested by the
+  owner. It uses the existing protected release and worker; no new credentials,
+  generic command execution, portal login or cross-mailbox forwarding.
+- Inputs/data: validated encrypted inbox metadata, registered documents and the
+  existing delivery ledger. Both scans must be current before starting. Exclude
+  other issue years and suppliers. Never infer an invoice from a receipt.
+- Failures: retain existing retry, conflict, uncertainty and rejection behavior.
+  Never reset a TOConline send or confirmation. A duplicate of an uncertain
+  original is not a confirmed archive. Empty months are reported explicitly.
+- Acceptance: tests cover issue-year bounds, separate sources, stale scans,
+  repeat/crash idempotency, missing invoices, preserved uncertain sends and
+  duplicate confirmation. Production reads a fixed monthly count/status matrix;
+  private invoice identifiers and contents never enter CI logs. Completion
+  requires all collected documents verified on Drive and confirmed in TOConline,
+  with no unindexed, invalid or review messages. The completed snapshot is kept
+  immutable; later invoices use the normal monthly schedule. The previous SPF
+  acceptance issue month is also reported explicitly.
+
 The initial discovery is complete. The email connector is implemented; production acceptance remains a separate required check.
 
 - Expected behaviour: determine whether recent real Cloudbeds mail contains PDF

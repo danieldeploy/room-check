@@ -8,6 +8,16 @@ import cloudbeds_email as c
 
 
 class Tests(unittest.TestCase):
+    def test_year_audit_exposes_only_bounded_months_counts_and_states(self):
+        result=c.safe_year_audit({'started':True,'complete':False,'through':'2026-10','private':'SECRET',
+            'tasks':{'pending':2,'private':'SECRET'},'before':{'scans_ready':True,'months':{
+                '2026-01':{'welcome':{'found':1,'accepted':0,'private':'SECRET','missing':True}},
+                '2025-12':{'welcome':{'found':99}},'PRIVATE':{}}}})
+        self.assertEqual(result['before']['months'],{'2026-01':{'welcome':{'found':1,'accepted':0},'city':{}}})
+        self.assertNotIn('SECRET',str(result))
+        self.assertNotIn('PRIVATE',str(result))
+        self.assertFalse(result['complete'])
+
     def test_not_started_spf_probe_does_not_hide_the_main_report(self):
         expected={'welcome':{'tasks':[],'delivery':[]},'city':{'tasks':[],'delivery':[]}}
         self.assertEqual(c.safe_pipeline_rows([]),expected)

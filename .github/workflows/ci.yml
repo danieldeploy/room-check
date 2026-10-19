@@ -85,6 +85,7 @@ jobs:
           php tests/invoice-booking-verification.php
           php tests/invoice-hostelworld-verification.php
           php tests/cloudbeds-email.php
+          php tests/cloudbeds-year-audit.php
           php tests/release-backup.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoices.php
           php tests/invoice-hostelworld-account.php
@@ -138,6 +139,7 @@ jobs:
       - name: Test mail pipe on production PHP
         run: |
           php tests/cloudbeds-email.php
+          php tests/cloudbeds-year-audit.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
@@ -207,7 +209,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/agent/room-item-assignments' && vars.HUB_DEPLOY_ENABLED == 'true'
     needs: deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 15
     environment: management-hub-production
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
@@ -217,7 +219,7 @@ jobs:
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 deploy/cloudbeds_email.py --wait-status
+        run: python3 deploy/cloudbeds_email.py --wait-year-status
 
   windows-agent:
     runs-on: windows-latest

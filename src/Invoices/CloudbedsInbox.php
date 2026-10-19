@@ -4,6 +4,7 @@ require_once __DIR__.'/CloudbedsBridge.php';
 require_once __DIR__.'/CloudbedsInvoice.php';
 require_once __DIR__.'/InvoiceVault.php';
 require_once __DIR__.'/InvoiceTaskLifecycle.php';
+require_once __DIR__.'/CloudbedsYearAudit.php';
 
 /** Caller holds room_check_invoices. The inbox is encrypted and bounded. */
 final class CloudbedsInbox
@@ -96,6 +97,7 @@ final class CloudbedsInbox
         $this->index();
         $this->bootstrap();
         $this->bootstrapSpf();
+        (new CloudbedsYearAudit($this->pdo,$this->vault))->run($this->settings());
         $service=new InvoiceService($this->pdo); $service->scheduleDue(new DateTimeImmutable('now'));
         $accounts=new InvoiceAccounts($this->pdo); $alerts=new InvoiceAlerts($this->pdo,$config['whatsapp']??[]);
         $s=$this->pdo->prepare("SELECT t.* FROM invoice_tasks t JOIN invoice_accounts a ON a.id=t.account_id WHERE a.portal='cloudbeds' AND t.state IN ('queued','retry','running') AND (t.next_attempt_at IS NULL OR t.next_attempt_at<=?) ORDER BY t.id LIMIT 10");
@@ -158,6 +160,7 @@ final class CloudbedsInbox
         }
         $facts['validated']=!empty($settings['validated_at']);
         $period=$settings['spf_probe_period']??'';
+        $facts['spf_period']=InvoiceService::validPeriod($period)?$period:null;
         $facts['spf_sources']=InvoiceService::validPeriod($period)?$this->sourceReport($period):[];
         $spfReady=count($facts['spf_sources'])===2 && self::accepted($facts['spf_sources']);
         foreach ($facts['spf_sources'] as $row) if (($row['spf_selected']??0)<1) $spfReady=false;
@@ -165,6 +168,7 @@ final class CloudbedsInbox
             $settings['spf_validated_at']=InvoiceService::utcNow();$this->vault->save('cloudbeds-settings.enc',$settings);
         }
         $facts['spf_validated']=!empty($settings['spf_validated_at']);
+        $facts['audit_2026']=(new CloudbedsYearAudit($this->pdo,$this->vault))->report($settings);
         InvoiceVault::atomicWrite('/home/welcome/room-check-private/cloudbeds-status.json',json_encode($facts,JSON_THROW_ON_ERROR));
     }
     /** One real SPF-authenticated issue-month collection and one duplicate repeat. */
