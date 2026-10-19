@@ -129,6 +129,13 @@ or document integrity.
 
 ### SPF intake policy
 
+The protected inspection also reports fixed native-trace rejection stages and
+the PHP SPF verdict when the trace is usable. It never prints SMTP parameters or
+raw trace text. This separates parser rejection from SPF refusal without changing
+intake decisions. An unstarted SPF acceptance probe remains visible as empty
+counts instead of hiding the main pipeline report. Review notices cover both
+authentication methods. Synthetic tests cover report availability and redaction.
+
 - Expected behavior: a usable native Exim SMTP trace plus an aligned SPF pass
   permits invoice intake when original DKIM cannot be revalidated. SPF uses the
   current DNS policy; it is not represented as a historical reception verdict or

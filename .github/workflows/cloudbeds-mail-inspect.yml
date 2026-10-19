@@ -23,7 +23,7 @@ jobs:
       - name: Check restricted reads and content-free reporting
         run: python3 -m unittest discover -s tests -p test_cloudbeds_mail_inspect.py -v
       - name: Install bounded PDF reader and standard SPF diagnostic
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils php-cli python3-spf
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils php-cli php-mbstring python3-spf
       - name: Inspect Cloudbeds MIME structure with existing hosting access
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}

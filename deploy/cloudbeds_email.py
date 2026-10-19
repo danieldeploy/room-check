@@ -119,6 +119,7 @@ def install(api):
 
 
 def safe_pipeline_rows(source_rows):
+    if not isinstance(source_rows, dict): source_rows = {}
     safe={}
     for source in ROOTS:
         row=source_rows.get(source,{})

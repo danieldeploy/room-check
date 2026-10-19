@@ -8,6 +8,11 @@ import cloudbeds_email as c
 
 
 class Tests(unittest.TestCase):
+    def test_not_started_spf_probe_does_not_hide_the_main_report(self):
+        expected={'welcome':{'tasks':[],'delivery':[]},'city':{'tasks':[],'delivery':[]}}
+        self.assertEqual(c.safe_pipeline_rows([]),expected)
+        self.assertEqual(c.safe_pipeline_rows(None),expected)
+
     def test_spf_pipeline_status_only_exposes_fixed_counts_and_states(self):
         result=c.safe_pipeline_rows({'welcome':{'spf_indexed':19,'spf_selected':1,'private':'SECRET',
             'tasks':[{'state':'completed','result_code':'ok','invoice':'PRIVATE','duplicate_count':1}],

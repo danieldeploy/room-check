@@ -56,7 +56,7 @@ final class InvoiceAlerts
     public static function reason(string $code): string
     {
         return match ($code) {
-            'cloudbeds_mail_review' => 'Existem emails Cloudbeds cuja assinatura já não pode ser validada. Apenas as faturas autenticadas foram tratadas.',
+            'cloudbeds_mail_review' => 'Existem emails Cloudbeds cuja origem não foi confirmada por DKIM ou SPF. Apenas as faturas autenticadas foram tratadas.',
             'drive_auth' => 'A ligação ao Google Drive expirou.',
             'drive_quota' => 'O Google Drive está sem espaço.',
             'drive_not_configured', 'drive_invalid_id' => 'O destino Google Drive não está configurado.',

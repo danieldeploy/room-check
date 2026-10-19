@@ -156,7 +156,16 @@ def reception_auth_shape(message):
     for value in received[:5]:
         by = re.search(r'\bby\s+([^\s();]+)', value, re.I)
         peer = re.search(r'\bfrom\s+([^\s();]+)', value, re.I)
+        protocol = re.search(r'\bwith\s+([a-z]+)\b', value, re.I)
+        before_by = value[:by.start()].strip() if by else ''
+        peer_form = ('host_only' if re.fullmatch(r'from [a-z0-9._-]+', before_by, re.I) else
+                     'host_parentheses' if re.fullmatch(r'from [a-z0-9._-]+\s+\([^()]*\)', before_by, re.I) else 'other')
         received_shapes.append({"by_hosting": bool(by and host(by.group(1)) == hosting),
+                                "by_hosting_family": bool(by and re.fullmatch(r'server[0-9]+\.romania-webhosting\.com', host(by.group(1)))),
+                                "by_marker_count": len(re.findall(r'\bby\s+', value, re.I)),
+                                "with_marker_count": len(re.findall(r'\bwith\s+', value, re.I)),
+                                "peer_form": peer_form,
+                                "protocol": protocol.group(1).lower() if protocol and protocol.group(1).lower() in ('local','esmtp','esmtps') else 'other',
                                 "peer_provider": provider(peer.group(1)) if peer else "other",
                                 "tls_marker": bool(re.search(r'\b(?:ESMTPS[A-Z]*|TLSv?[0-9.]*)\b', value, re.I))})
     latest_received = received[0] if received else ""
@@ -300,6 +309,15 @@ def shape(raw):
             result = subprocess.run(["php", str(checker)], input=raw, stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL, timeout=30, check=True)
             facts = json.loads(result.stdout)
+            for source in ("welcome", "city"):
+                trace = facts.get("native_trace", {}).get(source, {})
+                safe_trace = {}
+                if trace.get("stage") in ("source", "headers", "sender", "recipient", "trace_count", "first_hop", "smtp_hop", "receiver_match", "protocol", "envelope", "alignment", "peer_ip", "return_path", "smtp_recipient", "usable"):
+                    safe_trace["stage"] = trace["stage"]
+                if type(trace.get("usable")) is bool: safe_trace["usable"] = trace["usable"]
+                if trace.get("spf") in ("pass", "fail", "softfail", "neutral", "none", "temperror", "permerror", "invalid"):
+                    safe_trace["spf"] = trace["spf"]
+                authentication["native_trace_" + source] = safe_trace
             for key in ("welcome_recipient", "city_recipient"):
                 if type(facts.get(key)) is bool: authentication[key] = facts[key]
             if facts.get("verification_stage") in ("wire", "header_multiplicity", "signer_identity", "selector",
