@@ -44,14 +44,14 @@ final class CloudbedsFolderQueue
                 $raw=file_get_contents($path,false,null,0,CloudbedsMailMessage::MAX_BYTES+1);
                 if (!is_string($raw) || strlen($raw)>CloudbedsMailMessage::MAX_BYTES) continue;
                 $hash=hash('sha256',$raw); $old=$state[$hash]??[];
-                $reconsider=($old['review']??false)===true && ($old['processor']??0)!==5;
-                if ((($old['done']??false)===true && !$reconsider) || (($old['processor']??0)===5 && (int)($old['retry_at']??0)>time())) continue;
+                $reconsider=($old['review']??false)===true && ($old['processor']??0)!==6;
+                if ((($old['done']??false)===true && !$reconsider) || (($old['processor']??0)===6 && (int)($old['retry_at']??0)>time())) continue;
                 if (++$attempts>40) break;
                 try { $outcome=$consume($raw); } catch (Throwable) { $outcome=false; }
                 $accepted=$outcome===true || in_array($outcome,['historical','review'],true);
                 unset($raw);
-                $tries=($old['processor']??0)===5?(int)($old['attempts']??0)+1:1;
-                $state[$hash]=['done'=>$accepted,'processor'=>5,'historical'=>$outcome==='historical','review'=>$outcome==='review','attempts'=>$tries,
+                $tries=($old['processor']??0)===6?(int)($old['attempts']??0)+1:1;
+                $state[$hash]=['done'=>$accepted,'processor'=>6,'historical'=>$outcome==='historical','review'=>$outcome==='review','attempts'=>$tries,
                     'retry_at'=>$accepted?0:time()+min(10800,60*(2**min(8,$tries-1)))];
                 $accepted?$done++:$failed++;
                 if (count($state)>5000) throw new RuntimeException('document_limit');
