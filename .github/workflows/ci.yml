@@ -132,11 +132,12 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
-          extensions: mbstring
+          extensions: mbstring, pdo_sqlite
           coverage: none
 
       - name: Test mail pipe on production PHP
         run: |
+          php tests/cloudbeds-email.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v

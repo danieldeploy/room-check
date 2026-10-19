@@ -14,7 +14,7 @@ from hostelworld_filters import content, rows, verify_filter
 
 NAME = "Room Check Cloudbeds Invoices v1"
 CITY_FILES = {"cloudbeds-mail-pipe.php", "CloudbedsBridge.php", "CloudbedsMailMessage.php",
-              "CloudbedsMailAuthentication.php", "CloudbedsFolderQueue.php", "cloudbeds-city.key"}
+              "CloudbedsMailAuthentication.php", "CloudbedsSmtpTrace.php", "CloudbedsFolderQueue.php", "cloudbeds-city.key"}
 CRONS = {
     "welcome": "cd /home/welcome && /opt/cpanel/ea-php81/root/usr/bin/php -q /home/welcome/room-check-private/cron/cloudbeds-mail-pipe.php --poll >/dev/null 2>&1",
     "city": "cd /home/city && /opt/cpanel/ea-php81/root/usr/bin/php -q /home/city/cloudbeds-mail-pipe.php --poll >/dev/null 2>&1",
@@ -118,6 +118,23 @@ def install(api):
     print(json.dumps({"cloudbeds_source": api.account, "filter": "verified", "folder_worker": "verified"}), flush=True)
 
 
+def safe_pipeline_rows(source_rows):
+    safe={}
+    for source in ROOTS:
+        row=source_rows.get(source,{})
+        safe[source]={k:v for k,v in row.items() if k in ("indexed","invalid","selected","spf_indexed","spf_selected") and type(v) is int}
+        safe[source]["tasks"]=[{k:v for k,v in task.items() if
+            (k in ("imported_count","duplicate_count") and str(v).isdigit()) or
+            (k == "state" and v in ("completed","failed","retry","running","queued")) or
+            (k == "result_code" and v in ("ok","no_invoices","invalid_document","account_mismatch","network_error","verification_failed","invoice_conflict","cloudbeds_mail_review"))}
+            for task in row.get("tasks",[])[:2]]
+        allowed=("verified","pending","retry","failed","validated","review","toc_submitted","toc_accepted","toc_existing","toc_duplicate","toc_rejected","toc_retry","toc_review","toc_no_confirmation","toc_uncertain","toc_sending")
+        safe[source]["delivery"]=[{k:v for k,v in item.items() if
+            (k == "total" and str(v).isdigit()) or (k in ("drive_state","company_state","toconline_state") and v in allowed)}
+            for item in row.get("delivery",[])[:20]]
+    return safe
+
+
 def report():
     for account in ROOTS:
         api=Hosting(account)
@@ -135,24 +152,14 @@ def report():
     try:
         state=json.loads(content(Hosting("welcome").call("Fileman", "get_file_content",
             dir="/home/welcome/room-check-private", file="cloudbeds-status.json")))
-        safe={"sources":{}}
-        for source in ROOTS:
-            row=state.get("sources",{}).get(source,{})
-            safe["sources"][source]={k:v for k,v in row.items() if k in ("indexed","invalid","selected") and type(v) is int}
-            safe["sources"][source]["tasks"]=[{k:v for k,v in task.items() if
-                (k in ("imported_count","duplicate_count") and str(v).isdigit()) or
-                (k == "state" and v in ("completed","failed","retry","running","queued")) or
-                (k == "result_code" and v in ("ok","no_invoices","invalid_document","account_mismatch","network_error","verification_failed","invoice_conflict","cloudbeds_mail_review"))}
-                for task in row.get("tasks",[])[:2]]
-            allowed=("verified","pending","retry","failed","validated","review","toc_submitted","toc_accepted","toc_existing","toc_duplicate","toc_rejected","toc_retry","toc_review","toc_no_confirmation","toc_uncertain","toc_sending")
-            safe["sources"][source]["delivery"]=[{k:v for k,v in item.items() if
-                (k == "total" and str(v).isdigit()) or (k in ("drive_state","company_state","toconline_state") and v in allowed)}
-                for item in row.get("delivery",[])[:20]]
+        safe={"sources":safe_pipeline_rows(state.get("sources",{})),
+              "spf_sources":safe_pipeline_rows(state.get("spf_sources",{}))}
         safe['validated']=state.get('validated') is True
+        safe['spf_validated']=state.get('spf_validated') is True
         fresh=type(state.get('at')) is int and time.time()-300<=state['at']<=time.time()+30
         safe['fresh']=fresh
         print(json.dumps({"cloudbeds_pipeline":safe}),flush=True)
-        return safe['validated'] and fresh
+        return safe['validated'] and safe['spf_validated'] and fresh
     except Exception:
         print('{"cloudbeds_pipeline":"not_available"}')
     return False
@@ -175,7 +182,8 @@ def main():
     require(re.fullmatch(r"[a-f0-9]{64}",key) is not None, "invalid_provision")
     print("::add-mask::"+key)
     root=pathlib.Path(__file__).resolve().parent.parent
-    for name in sorted(CITY_FILES):
+    # Install the trace parser before the bridge that requires it.
+    for name in sorted(CITY_FILES, key=lambda name: (name != 'CloudbedsSmtpTrace.php', name)):
         value=(key if name.endswith(".key") else
                (root/("cron" if name.endswith("-pipe.php") else "src/Invoices")/name).read_text())
         # Set private permissions before writing the bridge credential.

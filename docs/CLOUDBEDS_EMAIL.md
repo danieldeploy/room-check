@@ -42,9 +42,9 @@ Airbnb delivery remains excluded and the existing TOConline test button remains.
   No Cloudbeds login or new mailbox credential is required.
 - Inputs and data: the two fixed info mailboxes, MIME up to 4 MiB, PDF attachments
   up to 2 MiB, and the selected issue year/month. Mailbox originals and flags are
-  untouched. City sends only PDFs and a message digest to the Hub, never its email
-  body or authentication material to the Welcome mailbox.
-- Failures: unsupported signatures, malformed PDFs, wrong companies and ambiguous
+  untouched. City sends PDFs, a message digest and, for SPF, minimum SMTP metadata
+  to the Hub, never its email body or authentication material to the Welcome mailbox.
+- Failures: messages without usable DKIM or SPF, malformed PDFs, wrong companies and ambiguous
   dates remain private for review. Email delivery retries with bounded backoff;
   collection uses the existing task history and alerts. Drive and TOConline retain
   their existing retries, uncertainty handling and confirmation ledger.
@@ -58,16 +58,19 @@ payment confirmations without attachments. The PDFs use Invoice Number, Invoice
 Date with an English month name, VAT Number, Cloudbeds and Active Lines. No private
 invoice values or samples are committed.
 
-The receiver verifies the original Cloudbeds DKIM signature, full body, signed
-interpretation headers and exact source recipient. Historical mail is bounded to
-two years; DKIM expiry is still enforced. Each source has a separate HMAC bridge
+The source first verifies the original Cloudbeds DKIM signature. If DKIM cannot
+be used, the native mail source may attest its first SMTP ingress to the Hub,
+which independently requires a Cloudbeds-aligned MAIL FROM SPF pass using the
+pinned RFC 7208 library. No sender-supplied Authentication-Results or Received-SPF
+claim grants trust. Known DKIM body/signature mismatches remain blocked.
+Historical mail is bounded to two years. Each source has a separate HMAC bridge
 key, with TLS and a five-minute timestamp window. Subjects and receipt wording
 cannot establish invoice identity. No download links are followed.
 
 Mail older than the two-year verification window is preserved and counted as
 historical review, not retried indefinitely or sent to the Hub. Collection requests
 for months outside that window fail explicitly. Current messages still require
-the unchanged DKIM, recipient and PDF checks. Source status retains fixed
+the DKIM-or-SPF, recipient and PDF checks. Source status retains fixed
 authentication/HTTP failure codes; no header values or message contents are logged.
 
 CloudbedsInbox encrypts incoming PDFs and provenance, validates their content and
@@ -122,11 +125,35 @@ stored Return-Path values. Parameters stay in memory/stdin; only a fixed verdict
 is reported. Each probe has DNS and process deadlines plus a shared 90-second
 budget across both accounts. This is explicitly a
 current-DNS diagnostic, not proof of historical authentication, trace provenance
-or document integrity, and does not change invoice acceptance.
-It does not relax signature checks or publish failed header values.
+or document integrity.
 
-Permanent DNS key revocation or key-policy refusal preserves the original message
-for review and never delivers its PDF to the Hub. These messages are counted
+### SPF intake policy
+
+- Expected behavior: a usable native Exim SMTP trace plus an aligned SPF pass
+  permits invoice intake when original DKIM cannot be revalidated. SPF uses the
+  current DNS policy; it is not represented as a historical reception verdict or
+  a cryptographic signature of the document. All existing PDF/company/NIF/date
+  and duplicate checks still apply.
+- Permissions/data: only the bound native pipe/folder worker can attest the
+  client IP, envelope sender and HELO over its existing source HMAC/TLS bridge.
+  The original email remains in its own mailbox. Only the PDF and these minimum
+  SMTP parameters reach the Hub, never another mailbox. SMTP parameters are
+  discarded after checking; encrypted provenance retains only the method.
+- Trust boundary: use the first receiving hop from the hosting provider's
+  serverNN.romania-webhosting.com family, optionally preceded by one local Exim
+  delivery on the same server. Require a Cloudbeds envelope consistent with
+  Return-Path and the correct source recipient. Never search later trace headers
+  for a more favorable sender IP, and reject ambiguous hop syntax.
+- Failure handling: fail/softfail/neutral/none/permerror stay in review; temporary
+  DNS failures retry. Earlier DKIM-review entries are reconsidered once by source
+  processor v4, while successfully delivered originals remain deduplicated.
+- Acceptance: synthetic spoofed/ambiguous trace, wrong account, shared-provider
+  SPF, include/IPv4/IPv6, DNS recursion, HMAC tampering and retry tests. A one-time
+  real collection chooses the newest common issue month containing validated SPF
+  invoices for both accounts, then repeats it. SPF validation requires verified
+  Drive storage, TOConline archive confirmation and the duplicate repeat.
+Messages without either a usable DKIM signature or an aligned SPF pass preserve
+the original for review and do not import a PDF. These messages are counted
 separately from transient failures so authenticated invoices can continue.
 Collection history shows a bilingual review warning and uses the existing alert
 queue, deduplicated by account and selected month. A successful functional check
