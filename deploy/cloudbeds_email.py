@@ -136,7 +136,23 @@ def safe_pipeline_rows(source_rows):
     return safe
 
 
-def report():
+def safe_year_audit(value):
+    if not isinstance(value, dict): return {}
+    safe={k:value.get(k) is True for k in ('started','complete')}
+    if re.fullmatch(r'2026-(?:0[1-9]|1[0-2])',str(value.get('through',''))): safe['through']=value['through']
+    safe['tasks']={k:v for k,v in value.get('tasks',{}).items() if k in ('completed','pending','failed') and type(v) is int and 0<=v<=24}
+    counts=('found','missing','registered','drive_verified','company_validated','accepted','existing','duplicate_confirmed','submitted','uncertain','rejected','pending')
+    for stage in ('before','current'):
+        row=value.get(stage,{})
+        safe[stage]={k:v for k,v in row.items() if k in ('review','invalid','unindexed') and type(v) is int and 0<=v<=10000}
+        safe[stage]['scans_ready']=row.get('scans_ready') is True
+        safe[stage]['months']={period:{source:{k:v for k,v in sources.get(source,{}).items()
+            if k in counts and type(v) is int and 0<=v<=2000} for source in ROOTS}
+            for period,sources in row.get('months',{}).items() if re.fullmatch(r'2026-(?:0[1-9]|1[0-2])',period)}
+    return safe
+
+
+def report(require_year=False):
     for account in ROOTS:
         api=Hosting(account)
         directory="/home/city" if account == "city" else "/home/welcome/room-check-private"
@@ -157,19 +173,23 @@ def report():
               "spf_sources":safe_pipeline_rows(state.get("spf_sources",{}))}
         safe['validated']=state.get('validated') is True
         safe['spf_validated']=state.get('spf_validated') is True
+        for key in ('period','spf_period'):
+            if re.fullmatch(r'20\d{2}-(?:0[1-9]|1[0-2])',str(state.get(key,''))): safe[key]=state[key]
+        safe['audit_2026']=safe_year_audit(state.get('audit_2026'))
         fresh=type(state.get('at')) is int and time.time()-300<=state['at']<=time.time()+30
         safe['fresh']=fresh
         print(json.dumps({"cloudbeds_pipeline":safe}),flush=True)
-        return safe['validated'] and safe['spf_validated'] and fresh
+        return safe['validated'] and safe['spf_validated'] and fresh and (not require_year or safe['audit_2026'].get('complete') is True)
     except Exception:
         print('{"cloudbeds_pipeline":"not_available"}')
     return False
 
 
 def main():
-    if sys.argv[1:] == ["--wait-status"]:
-        for _ in range(12):
-            if report(): return
+    if sys.argv[1:] in (["--wait-status"],["--wait-year-status"]):
+        require_year=sys.argv[1:] == ["--wait-year-status"]
+        for _ in range(24 if require_year else 12):
+            if report(require_year): return
             time.sleep(30)
         raise DeploymentError("functional_verification_pending")
     if sys.argv[1:] == ["--status"]:
