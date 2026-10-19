@@ -5,6 +5,12 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'cloudbeds_upload_title' => ['Adicionar fatura Cloudbeds em PDF', 'Add a Cloudbeds PDF invoice'],
+        'cloudbeds_upload_note' => ['Selecione a casa indicada na fatura. O Hub valida a empresa e o mês de emissão, guarda no Drive e segue a configuração de envio ao TOConline. PDFs repetidos não são reenviados.', 'Select the property shown on the invoice. The Hub validates the company and issue month, saves to Drive and follows the TOConline delivery settings. Repeated PDFs are not sent again.'],
+        'cloudbeds_upload_choose' => ['Selecionar casa', 'Select property'],
+        'cloudbeds_upload_pdf' => ['Fatura PDF (até 2 MB)', 'PDF invoice (up to 2 MB)'],
+        'cloudbeds_upload_submit' => ['Validar e adicionar à recolha', 'Validate and add to collection'],
+        'cloudbeds_upload_queued' => ['PDF validado e recolha pedida para o mês de emissão. Consulte o histórico e o estado em Documentos.', 'PDF validated and collection requested for its issue month. Check the history and status in Documents.'],
         'toc_diagnostic_title' => ['Teste da resposta TOConline', 'TOConline reply test'],
         'toc_diagnostic_note' => ['Envia novamente esta fatura para testar a resposta, que pode indicar ficheiro já existente. Cada teste exige confirmação. Aguarde pelo menos 10 minutos entre testes e confira a receção nas definições. O botão permanece até conclusão dos testes e indicação do Gerente para o retirar.', 'Resends this invoice to test the reply, which may report an existing file. Each test requires confirmation. Wait at least 10 minutes between tests and check reception in Settings. The button remains until testing is complete and the Manager asks for its removal.'],
         'toc_diagnostic_confirm' => ['Confirmo este reenvio ao TOConline para testar a resposta.', 'I confirm this resend to TOConline to test the reply.'],

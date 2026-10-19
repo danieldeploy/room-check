@@ -11,6 +11,7 @@ require_once $root.'/src/Invoices/InvoiceDrive.php';
 require_once $root.'/src/Invoices/InvoiceToconline.php';
 require_once $root.'/src/Invoices/InvoiceTocMailbox.php';
 require_once $root.'/src/Invoices/InvoiceDriveSetup.php';
+require_once $root.'/src/Invoices/CloudbedsManualUpload.php';
 require_once $root.'/src/Invoices/InvoiceRemoteAgent.php';
 require_once $root.'/src/I18n/InvoiceText.php';
 $config=require $root.'/config.php';
@@ -121,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } else {
             InvoiceService::assertGerente($currentUser);
             // Match the worker lock for changes to access, account membership and private files.
-            if (in_array($action,['create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','approve_hostelworld_map','drive_client','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke','toc_settings','toc_pilot','toc_diagnostic_resend','toc_confirm','toc_mailbox','toc_mail_poll'],true)) {
+            if (in_array($action,['cloudbeds_upload','create_account','account_details','archive_account','restore_account','credentials','automation_options','sms_token','schedule','approve_booking_map','approve_hostelworld_map','drive_client','drive_settings','drive_test','drive_retry','agent_pair','agent_mode','agent_revoke','toc_settings','toc_pilot','toc_diagnostic_resend','toc_confirm','toc_mailbox','toc_mail_poll'],true)) {
                 if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
                 $locked=true;
                 if ($vault && $vault->has('windows-agent.enc')) {
@@ -130,7 +131,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     if ($action!=='agent_revoke') $remoteGuard->assertIdle();
                 }
             }
-            if (in_array($action,['agent_pair','agent_mode','agent_revoke'],true)) {
+            if ($action==='cloudbeds_upload') {
+                if (!$vault) throw new RuntimeException('private_storage_unavailable');
+                $uploaded=(new CloudbedsManualUpload($pdo,$vault))->installUpload($_FILES['cloudbeds_pdf']??[],
+                    (string)($_POST['cloudbeds_source']??''),$currentUser,!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
+                $id=$uploaded['account_id'];
+                $filters=array_replace($filters,['period'=>$uploaded['period'],'portal'=>'cloudbeds','account'=>$id,'property'=>$id.':'.$uploaded['source'],'state'=>'']);
+                $returnTab='activity';$returnEdit=0;$message='cloudbeds_upload_queued';
+            } elseif (in_array($action,['agent_pair','agent_mode','agent_revoke'],true)) {
                 if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');
                 if (!$vault) throw new RuntimeException('private_storage_unavailable');
                 $agent=new InvoiceRemoteAgent($pdo,$config['invoices']);

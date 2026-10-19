@@ -3,6 +3,13 @@
 <dl class="invoice-facts"><?php foreach ($tocStats as $state=>$count): ?><div><dt><a href="<?= ie(invoiceUrl('documents',['state'=>$state==='toc_pending'?'toconline_pending':$state])) ?>"><?= it($state) ?></a></dt><dd><?= (int)$count ?></dd></div><?php endforeach; ?></dl></section>
 
 <section class="card"><h2><?= it('tab_documents') ?></h2><?php require $viewRoot.'/filters.php'; ?></section>
+<?php if ($isGerente && $vault): ?>
+<section class="card"><details><summary><?= it('cloudbeds_upload_title') ?></summary><p><?= it('cloudbeds_upload_note') ?></p>
+<form method="post" enctype="multipart/form-data"><?php invoiceHidden('cloudbeds_upload'); ?>
+<label class="field"><span><?= it('property') ?></span><select name="cloudbeds_source" required><option value=""><?= it('cloudbeds_upload_choose') ?></option><option value="welcome">Welcome Guest House</option><option value="city">City Center Guest House</option></select></label>
+<label class="field"><span><?= it('cloudbeds_upload_pdf') ?></span><input type="file" name="cloudbeds_pdf" accept="application/pdf,.pdf" required></label>
+<button class="primary-button"><?= it('cloudbeds_upload_submit') ?></button></form></details></section>
+<?php endif; ?>
 <section id="invoice-results" class="card"><h2><?= it('invoices') ?></h2><?php if (!$documents): ?><p><?= it('empty') ?></p><?php endif; ?>
 <div class="invoice-record-grid"><?php foreach ($documents as $d): ?><article class="invoice-record"><div class="invoice-record-heading"><h3><?= ie($d['invoice_number']) ?></h3><?php invoiceStatus($d['pipeline_state']); ?></div><p><?= ie(InvoiceAccounts::PORTALS[$d['portal']].' — '.$d['account_label']) ?></p>
 <dl class="invoice-facts"><div><dt><?= it('property') ?></dt><dd><?= ie($d['property_label'] ?? $d['property_id']) ?></dd></div><div><dt><?= it('date') ?></dt><dd><?= ie($d['issued_on'] ?? '—') ?></dd></div><div><dt><?= it('period') ?></dt><dd><?= ie($d['period']) ?> · <?= it($d['period_basis']) ?></dd></div><div><dt><?= it('company') ?></dt><dd><?php invoiceStatus($d['company_state'] ?? 'review'); ?></dd></div><div><dt>Google Drive</dt><dd><?php invoiceStatus('drive_'.($d['drive_state'] ?? 'pending')); ?></dd></div><div><dt>TOConline</dt><dd><?php invoiceStatus($d['toconline_state']??'pending',($d['toconline_state']??'pending')==='pending'?'toc_pending':null); ?></dd></div></dl>
