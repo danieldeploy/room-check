@@ -8,7 +8,16 @@ try {
     $auth=CloudbedsMailAuthentication::verify($raw);
     $code=$auth['code']??'unverified';
     if (!in_array($code,['verified','unsigned','unsupported','unaligned','expired','unsigned_fields','dns_unavailable','body_mismatch','signature_mismatch','unverified'],true)) $code='unverified';
-    echo json_encode(['auth'=>$code,'welcome_recipient'=>($auth['recipient']??null)===CloudbedsBridge::RECIPIENTS['welcome'],
+    $traces=[];
+    foreach (['welcome','city'] as $source) {
+        $smtp=CloudbedsSmtpTrace::extract($raw,$source,$stage);
+        $traces[$source]=['stage'=>$stage,'usable'=>$smtp!==null];
+        if ($smtp!==null) {
+            require_once __DIR__.'/../src/Invoices/CloudbedsSpf.php';
+            $traces[$source]['spf']=CloudbedsSpf::verify($smtp);
+        }
+    }
+    echo json_encode(['native_trace'=>$traces,'auth'=>$code,'welcome_recipient'=>($auth['recipient']??null)===CloudbedsBridge::RECIPIENTS['welcome'],
         'city_recipient'=>($auth['recipient']??null)===CloudbedsBridge::RECIPIENTS['city'],
         'verification_stage'=>$auth['facts']['verification_stage']??null,
         'pdf_count'=>count(CloudbedsMailMessage::attachments($raw))],JSON_THROW_ON_ERROR);

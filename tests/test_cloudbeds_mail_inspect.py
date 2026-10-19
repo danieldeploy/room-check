@@ -12,6 +12,18 @@ import cloudbeds_mail_inspect as c
 
 
 class Tests(unittest.TestCase):
+    def test_native_trace_diagnostic_is_allowlisted_and_does_not_expose_smtp_metadata(self):
+        m=EmailMessage();m.set_content('Invoice attached')
+        m.add_attachment(b'%PDF-1.4 synthetic',maintype='application',subtype='pdf')
+        facts={'native_trace':{'welcome':{'stage':'first_hop','usable':False,'ip':'PRIVATE_IP','mailfrom':'SECRET'},
+                              'city':{'stage':'PRIVATE_STAGE','spf':'PRIVATE_RESULT','usable':False}}}
+        result=type('Result',(),{'stdout':json.dumps(facts).encode()})()
+        with patch.object(c.subprocess,'run',return_value=result):
+            report=c.shape(m.as_bytes())
+        self.assertEqual(report['authentication']['native_trace_welcome'],{'stage':'first_hop','usable':False})
+        self.assertEqual(report['authentication']['native_trace_city'],{'usable':False})
+        self.assertNotIn('PRIVATE',json.dumps(report));self.assertNotIn('SECRET',json.dumps(report))
+
     def test_receipt_shape_does_not_return_private_content(self):
         m = EmailMessage()
         m["From"] = "Private Name <billing@cloudbeds.com>"

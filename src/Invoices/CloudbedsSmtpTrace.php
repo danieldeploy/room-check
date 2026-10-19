@@ -8,43 +8,49 @@ require_once __DIR__.'/CloudbedsMailMessage.php';
  */
 final class CloudbedsSmtpTrace
 {
-    public static function extract(string $raw,string $source): ?array
+    public static function extract(string $raw,string $source,?string &$stage=null): ?array
     {
         try {
+            $stage='source';
             $expected=['welcome'=>'info@welcomehostel.pt','city'=>'info@citycenterhostel.pt'][$source]??null;
             if ($expected===null) return null;
-            [$headers]=CloudbedsMailMessage::split($raw);
+            $stage='headers';[$headers]=CloudbedsMailMessage::split($raw);
             foreach (['from','to','date','subject'] as $name) if (count($headers[$name]??[])!==1) return null;
+            $stage='sender';
             if (!preg_match('/\A(?:[^<>]*<([a-z0-9._+-]+@cloudbeds\.com)>|([a-z0-9._+-]+@cloudbeds\.com))\z/i',trim($headers['from'][0]))) return null;
+            $stage='recipient';
             if (!preg_match('/\A(?:[^<>]*<([^<>\s]+)>|([^<>\s]+))\z/',trim($headers['to'][0]),$to)
                 || strtolower(($to[1]??'')!==''?$to[1]:($to[2]??''))!==$expected) return null;
-            $received=$headers['received']??[];
+            $stage='trace_count';$received=$headers['received']??[];
             if (!$received || count($received)>10) return null;
-            $index=0; $first=self::hop($received[0]); if ($first===null) return null;
+            $stage='first_hop';$index=0; $first=self::hop($received[0]); if ($first===null) return null;
             if ($first['protocol']==='local') {
-                $index=1;
+                $stage='smtp_hop';$index=1;
                 if (!isset($received[1])) return null;
                 $ingress=self::hop($received[1]);
-                if ($ingress===null || $ingress['receiver']!==$first['receiver']) return null;
+                if ($ingress===null) return null;
+                $stage='receiver_match';if ($ingress['receiver']!==$first['receiver']) return null;
             } else $ingress=$first;
+            $stage='protocol';
             if (!in_array($ingress['protocol'],['esmtp','esmtps'],true)) return null;
             // A genuine local receipt is always prepended. Later trace claims cannot
             // replace the client observed by our native receiving MTA.
-            $line=$received[$index];
+            $stage='envelope';$line=$received[$index];
             if (!preg_match('/\A[a-z0-9.-]{1,253}\z/i',$ingress['peer'])
                 || preg_match_all('/\(envelope-from\s+<([^<>\s]{1,254})>\)/i',$line,$envelopes)!==1) return null;
             $envelope=[null,$envelopes[1][0]];
             $mailfrom=$envelope[1];
-            if (!preg_match('/\A[^<>\s@]+@(?:[a-z0-9-]+\.)*cloudbeds\.com\z/i',$mailfrom)) return null;
+            $stage='alignment';if (!preg_match('/\A[^<>\s@]+@(?:[a-z0-9-]+\.)*cloudbeds\.com\z/i',$mailfrom)) return null;
+            $stage='peer_ip';
             preg_match_all('/\[([a-f0-9:.]+)\]/i',$ingress['peer_info'],$ips);
             $ips=array_values(array_unique(array_filter($ips[1],static fn($ip)=>filter_var($ip,FILTER_VALIDATE_IP)!==false)));
             if (count($ips)!==1) return null;
-            $returns=$headers['return-path']??[];
+            $stage='return_path';$returns=$headers['return-path']??[];
             if (!$returns || count($returns)>2) return null;
             foreach ($returns as $return) if (trim($return)!=='<'.$mailfrom.'>') return null;
-            if (preg_match('/\bfor\s+<?([^<>\s;]+)>?\s*;/i',$line,$recipient)
+            $stage='smtp_recipient';if (preg_match('/\bfor\s+<?([^<>\s;]+)>?\s*;/i',$line,$recipient)
                 && strtolower($recipient[1])!==$expected) return null;
-            return ['ip'=>$ips[0],'mailfrom'=>$mailfrom,'helo'=>strtolower($ingress['peer'])];
+            $stage='usable';return ['ip'=>$ips[0],'mailfrom'=>$mailfrom,'helo'=>strtolower($ingress['peer'])];
         } catch (Throwable) { return null; }
     }
     private static function hop(string $line): ?array
