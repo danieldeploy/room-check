@@ -148,17 +148,24 @@ authentication methods. Synthetic tests cover report availability and redaction.
   discarded after checking; encrypted provenance retains only the method.
 - Trust boundary: use the first receiving hop from the hosting provider's
   serverNN.romania-webhosting.com family, optionally preceded by one local Exim
-  delivery on the same server. Require a Cloudbeds envelope consistent with
+  delivery or `spam-scanned` reinjection on the same server. A local/scanner hop
+  must have no remote peer information; exact protocol tokens are required.
+  Require a Cloudbeds envelope consistent with
   Return-Path and the correct source recipient. Never search later trace headers
   for a more favorable sender IP, and reject ambiguous hop syntax.
 - Failure handling: fail/softfail/neutral/none/permerror stay in review; temporary
   DNS failures retry. Earlier DKIM-review entries are reconsidered once by source
-  processor v4, while successfully delivered originals remain deduplicated.
+  processor v5, while successfully delivered originals remain deduplicated.
 - Acceptance: synthetic spoofed/ambiguous trace, wrong account, shared-provider
   SPF, include/IPv4/IPv6, DNS recursion, HMAC tampering and retry tests. A one-time
   real collection chooses the newest common issue month containing validated SPF
   invoices for both accounts, then repeats it. SPF validation requires verified
   Drive storage, TOConline archive confirmation and the duplicate repeat.
+
+The focused `--trace-sample` inspection stops after the first recent PDF with
+unavailable DKIM in each source, reducing read-only turnaround during diagnosis.
+Its report explicitly labels this limited sample; the full bounded-history mode
+remains available without that argument. Neither mode changes native intake.
 Messages without either a usable DKIM signature or an aligned SPF pass preserve
 the original for review and do not import a PDF. These messages are counted
 separately from transient failures so authenticated invoices can continue.

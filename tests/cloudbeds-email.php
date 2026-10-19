@@ -105,6 +105,11 @@ cbCheck(CloudbedsSpf::verify($smtp,$badDns)==='permerror','SPF DNS lookup recurs
 $trace="Return-Path: <test@bounce.cloudbeds.com>\r\nReceived: from welcome by server50.romania-webhosting.com with local (Exim 4.98) (envelope-from <test@bounce.cloudbeds.com>) id local-test; ".gmdate('r')."\r\n".
     "Return-Path: <test@bounce.cloudbeds.com>\r\nReceived: from sender.example.test ([192.0.2.19]:1234) by server50.romania-webhosting.com with esmtps (TLS1.3) (Exim 4.98) (envelope-from <test@bounce.cloudbeds.com>) id smtp-test for <info@welcomehostel.pt>; ".gmdate('r')."\r\n";
 cbCheck(CloudbedsSmtpTrace::extract($trace.$raw,'welcome')===$smtp,'Native local delivery and original SMTP observation');
+$spamTrace=str_replace('with local','with spam-scanned',$trace);
+cbCheck(CloudbedsSmtpTrace::extract($spamTrace.$raw,'welcome')===$smtp,'Native spam-scanner reinjection preserves the original SMTP peer');
+cbCheck(CloudbedsSmtpTrace::extract(str_replace('with spam-scanned','with spam-scanned-forged',$spamTrace).$raw,'welcome')===null,'Unsupported protocol suffix cannot impersonate the local scanner');
+cbCheck(CloudbedsSmtpTrace::extract(str_replace('from welcome by','from welcome ([198.51.100.19]) by',$spamTrace).$raw,'welcome')===null,'A remote peer cannot be skipped as a local scanner');
+cbCheck(CloudbedsSmtpTrace::extract(str_replace('by server50.romania-webhosting.com with esmtps','by server51.romania-webhosting.com with esmtps',$spamTrace).$raw,'welcome')===null,'Local scan and original SMTP must share the receiving server');
 cbCheck(CloudbedsSmtpTrace::extract($trace.$raw,'city')===null,'SPF source cannot switch mailbox');
 cbCheck(CloudbedsSmtpTrace::extract(str_replace('cloudbeds.com','cloudbeds.com.evil.test',$trace.$raw),'welcome')===null,'Lookalike envelope rejected');
 $forged="Return-Path: <test@bounce.cloudbeds.com>\r\nReceived: from attacker.example.test ([198.51.100.19]) by server50.romania-webhosting.com with esmtp (envelope-from <test@bounce.cloudbeds.com>); ".gmdate('r')."\r\n".$trace.$raw;
@@ -179,7 +184,7 @@ try {
     cbCheck(file_get_contents($dir.'/mail/.Cloudbeds/cur/review')===$reviewMail,'Review original retained unchanged');
     $called=0; CloudbedsFolderQueue::run($dir.'/mail',$dir,static function()use(&$called){$called++;return false;});
     cbCheck($called===0,'Review mail does not enter an endless retry loop');
-    $state=json_decode(file_get_contents($stateFile),true);$state[hash('sha256',$reviewMail)]['processor']=3;
+    $state=json_decode(file_get_contents($stateFile),true);$state[hash('sha256',$reviewMail)]['processor']=4;
     file_put_contents($stateFile,json_encode($state));$called=0;
     $scan=CloudbedsFolderQueue::run($dir.'/mail',$dir,static function($value)use(&$called,$reviewMail){$called++;return $value===$reviewMail;});
     cbCheck($called===1 && $scan['review']===0,'Only earlier review entries are reconsidered for the new SPF policy');

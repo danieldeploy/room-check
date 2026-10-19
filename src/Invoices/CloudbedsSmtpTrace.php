@@ -24,7 +24,10 @@ final class CloudbedsSmtpTrace
             $stage='trace_count';$received=$headers['received']??[];
             if (!$received || count($received)>10) return null;
             $stage='first_hop';$index=0; $first=self::hop($received[0]); if ($first===null) return null;
-            if ($first['protocol']==='local') {
+            if (in_array($first['protocol'],['local','spam-scanned'],true)) {
+                // Exim's trusted local spam scanner reinjects before delivery.
+                // It is not the SMTP sender whose IP must pass SPF.
+                if ($first['peer_info']!=='') return null;
                 $stage='smtp_hop';$index=1;
                 if (!isset($received[1])) return null;
                 $ingress=self::hop($received[1]);
@@ -57,7 +60,7 @@ final class CloudbedsSmtpTrace
     {
         $line=trim(preg_replace('/\s+/',' ',$line));
         if (preg_match_all('/\bby\s+/i',$line)!==1 || preg_match_all('/\bwith\s+/i',$line)!==1
-            || !preg_match('/\Afrom ([a-z0-9._-]{1,253})(?: \(([^()]{0,1024})\))? by (server[0-9]+\.romania-webhosting\.com) with (local|esmtp|esmtps)\b/i',$line,$m)) return null;
+            || !preg_match('/\Afrom ([a-z0-9._-]{1,253})(?: \(([^()]{0,1024})\))? by (server[0-9]+\.romania-webhosting\.com) with (local|spam-scanned|esmtp|esmtps)(?=\s|;|\z)/i',$line,$m)) return null;
         return ['peer'=>$m[1],'peer_info'=>$m[2]??'','receiver'=>strtolower($m[3]),'protocol'=>strtolower($m[4])];
     }
 }
