@@ -156,6 +156,51 @@ class Tests(unittest.TestCase):
         self.assertNotIn('PRIVATE', json.dumps(result))
         self.assertNotIn('private.example.test', json.dumps(result))
 
+    def test_current_spf_probe_uses_envelope_and_original_smtp_peer_without_leaking(self):
+        m = EmailMessage()
+        m['Return-Path'] = '<PRIVATE_TOKEN@bounce.cloudbeds.com>'
+        m['Received'] = 'from welcome by server50.romania-webhosting.com with local; PRIVATE_DATE'
+        m['Received'] = ('from smtp.example.test ([192.0.2.19]:1234) by server50.romania-webhosting.com '
+                         'with esmtps (envelope-from <PRIVATE_TOKEN@bounce.cloudbeds.com>); PRIVATE_DATE')
+        calls = []
+        def evaluate(*args):
+            calls.append(args)
+            return 'pass'
+        result = c.current_spf_shape(m, evaluate)
+        self.assertEqual(calls, [('192.0.2.19', 'PRIVATE_TOKEN@bounce.cloudbeds.com', 'smtp.example.test')])
+        self.assertEqual(result['result'], 'pass')
+        self.assertTrue(result['trace_matches_return_path'])
+        self.assertFalse(result['historical_authentication'])
+        for forbidden in ('PRIVATE', 'private_token', '192.0.2.19', 'smtp.example.test'):
+            self.assertNotIn(forbidden, json.dumps(result))
+
+    def test_current_spf_probe_does_not_query_unaligned_or_conflicting_envelopes(self):
+        for envelope, path in [('x@amazonses.com', 'x@amazonses.com'),
+                               ('x@cloudbeds.com.evil.test', 'x@cloudbeds.com.evil.test'),
+                               ('x@cloudbeds.com', 'y@cloudbeds.com')]:
+            m = EmailMessage()
+            m['Return-Path'] = '<' + path + '>'
+            m['Received'] = ('from smtp.example.test ([192.0.2.19]) by receiver.example.test '
+                             'with esmtps (envelope-from <' + envelope + '>); PRIVATE_DATE')
+            with self.subTest(envelope=envelope), patch.object(c.subprocess, 'run') as called:
+                self.assertEqual(c.current_spf_shape(m)['result'], 'not_aligned')
+                called.assert_not_called()
+
+    def test_current_spf_probe_bounds_subprocess_and_never_reports_explanations(self):
+        m = EmailMessage()
+        m['Return-Path'] = '<x@cloudbeds.com>'
+        m['Received'] = 'from peer.example.test ([2001:db8::1]) by receiver.example.test with esmtp (envelope-from <x@cloudbeds.com>); PRIVATE_DATE'
+        with patch.object(c.subprocess, 'run') as called:
+            called.return_value.stdout = b'PRIVATE_EXPLANATION'
+            result = c.current_spf_shape(m)
+            self.assertEqual(result['result'], 'unavailable')
+            self.assertEqual(called.call_args.kwargs['timeout'], 8)
+            self.assertNotIn('PRIVATE', json.dumps(result))
+
+        with patch.object(c, 'SPF_PROBE_SECONDS', 90), patch.object(c.subprocess, 'run') as called:
+            self.assertEqual(c.current_spf_shape(m)['result'], 'budget_exhausted')
+            called.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

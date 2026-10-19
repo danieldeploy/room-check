@@ -6,6 +6,7 @@ changes flags, downloads links, saves mail, or outputs addresses/subjects/URLs.
 """
 import email.policy
 import email.utils
+import ipaddress
 from email.parser import BytesParser
 from html import unescape
 import json
@@ -26,6 +27,7 @@ ROOTS = {
 }
 MAX_MAIL = 4 * 1024 * 1024
 MAX_RESPONSE = 28 * 1024 * 1024
+SPF_PROBE_SECONDS = 0.0
 WORDS = ("invoice", "receipt", "payment", "billing", "portal", "download", "login")
 ERRORS = {"message_size", "mime_parts", "part_size", "link_limit", "invalid_listing",
           "invalid_name", "response_size", "whm_read_failed", "mail_read_failed",
@@ -49,6 +51,70 @@ def outside_window(value):
         return email.utils.parsedate_to_datetime(str(value)).timestamp() < time.time()-730*86400
     except (TypeError, ValueError, OverflowError):
         return False
+
+
+def current_spf_shape(message, evaluator=None):
+    """Bounded diagnostic against CURRENT DNS, never proof of past reception.
+
+    SMTP parameters are untrusted observations from stored trace headers. No
+    acceptance decision consumes this result. Only Cloudbeds envelope domains
+    are queried; all parameters and explanations stay in memory.
+    """
+    global SPF_PROBE_SECONDS
+    result = {"result": "unavailable", "dns_time": "current", "envelope_aligned": False,
+              "trace_matches_return_path": False, "historical_authentication": False}
+    paths = email.utils.getaddresses(message.get_all('Return-Path', []))
+    def normalized(address):
+        parts = address.rsplit('@', 1)
+        return parts[0] + '@' + parts[1].lower() if len(parts) == 2 else address
+    path_values = {normalized(address) for _, address in paths if address}
+    for value in message.get_all('Received', [])[:5]:
+        value = str(value)
+        if not re.search(r'\bwith\s+esmtps?\b', value, re.I):
+            continue
+        envelope = re.search(r'\(envelope-from\s+<([^<>\s]+)>\)', value, re.I)
+        peer = re.search(r'\bfrom\s+([^\s();]+)', value, re.I)
+        by = re.search(r'\bby\s+([^\s();]+)', value, re.I)
+        before_by = value[:by.start()] if by else ''
+        addresses = []
+        for candidate in re.findall(r'\[([0-9a-fA-F:.]+)\]', before_by):
+            try:
+                addresses.append(str(ipaddress.ip_address(candidate)))
+            except ValueError:
+                pass
+        if not envelope or not peer or len(set(addresses)) != 1 or len(envelope.group(1)) > 254 or len(peer.group(1)) > 255:
+            result['result'] = 'trace_unavailable'
+            return result
+        address = normalized(envelope.group(1))
+        domain = address.rsplit('@', 1)[-1]
+        result['envelope_aligned'] = family(domain) == 'cloudbeds.com'
+        result['trace_matches_return_path'] = bool(path_values) and path_values == {address}
+        if not result['envelope_aligned'] or not result['trace_matches_return_path']:
+            result['result'] = 'not_aligned'
+            return result
+        if SPF_PROBE_SECONDS >= 90:
+            result['result'] = 'budget_exhausted'
+            return result
+        started = time.monotonic()
+        try:
+            if evaluator:
+                verdict = evaluator(addresses[0], address, peer.group(1))
+            else:
+                program = ('import json,sys,spf; p=json.load(sys.stdin); '
+                           'r=spf.check2(i=p["ip"],s=p["sender"],h=p["helo"],timeout=2,querytime=5)[0]; '
+                           'print(r if r in ("pass","fail","softfail","neutral","none","temperror","permerror") else "unavailable")')
+                completed = subprocess.run(['/usr/bin/python3', '-c', program],
+                    input=json.dumps({'ip': addresses[0], 'sender': address, 'helo': peer.group(1)}).encode(),
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=8, check=True)
+                verdict = completed.stdout.decode().strip()
+            result['result'] = verdict if verdict in {'pass', 'fail', 'softfail', 'neutral', 'none', 'temperror', 'permerror'} else 'unavailable'
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+        finally:
+            SPF_PROBE_SECONDS += time.monotonic() - started
+        return result
+    result['result'] = 'trace_unavailable'
+    return result
 
 
 def reception_auth_shape(message):
@@ -247,6 +313,7 @@ def shape(raw):
             authentication = {"auth": "unavailable"}
     return {"sender_provider": sender_family, "mime": types,
             "reception_authentication": reception_auth_shape(message) if types["pdf"] else {},
+            "current_spf_probe": current_spf_shape(message) if types["pdf"] else {},
             "mail_older_than_verification_window": outside_window(message.get("Date")),
             "authentication": authentication,
             "pdf_shapes": pdf_shapes,

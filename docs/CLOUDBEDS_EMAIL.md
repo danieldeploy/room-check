@@ -114,6 +114,15 @@ The read-only authentication diagnostic records only fixed verification-stage na
   receiver ownership and trustworthy insertion must be established separately.
 - Acceptance: synthetic aligned/shared-provider/lookalike-domain and redaction
   checks, followed by protected observation of real invoices in both accounts.
+
+When reception verdicts are absent, the inspector can probe current SPF with the
+distribution-packaged pyspf implementation. It uses the observed SMTP peer IP
+and envelope sender only when the envelope belongs to Cloudbeds and matches all
+stored Return-Path values. Parameters stay in memory/stdin; only a fixed verdict
+is reported. Each probe has DNS and process deadlines plus a shared 90-second
+budget across both accounts. This is explicitly a
+current-DNS diagnostic, not proof of historical authentication, trace provenance
+or document integrity, and does not change invoice acceptance.
 It does not relax signature checks or publish failed header values.
 
 Permanent DNS key revocation or key-policy refusal preserves the original message
