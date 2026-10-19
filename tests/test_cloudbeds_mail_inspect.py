@@ -12,6 +12,26 @@ import cloudbeds_mail_inspect as c
 
 
 class Tests(unittest.TestCase):
+    def test_trace_sample_stops_after_first_recent_invoice_with_unavailable_dkim(self):
+        with patch.dict(os.environ,{'WHM_API_TOKEN':'synthetic-test-only'}): api=c.MailAPI('welcome')
+        folder=api.root+'/.Cloudbeds';directory=folder+'/cur'
+        listings={api.root:[{'file':'.Cloudbeds','type':'dir'}],folder:[{'file':'cur','type':'dir'}],
+                  directory:[{'file':str(i),'type':'file','size':100,'mtime':10-i} for i in range(4)]}
+        reports=[{'mime':{'pdf':0}}, {'mime':{'pdf':1},'authentication':{'auth':'verified'},'mail_older_than_verification_window':False},
+                 {'mime':{'pdf':1},'authentication':{'auth':'unverified'},'mail_older_than_verification_window':False}]
+        with patch.object(api,'listing',side_effect=lambda p:listings[p]), patch.object(api,'call',return_value={'content':'synthetic'}) as call, patch.object(c,'shape',side_effect=reports):
+            result=api.inspect(trace_sample=True)
+        self.assertEqual(call.call_count,3)
+        self.assertEqual(result['sample_count'],3)
+        self.assertEqual(result['sample_scope'],'first_dkim_unavailable_invoice')
+
+    def test_scanner_protocol_is_classified_without_returning_unknown_values(self):
+        m=EmailMessage();m['Received']='from scanner by server50.romania-webhosting.com with spam-scanned; PRIVATE_DATE'
+        self.assertEqual(c.reception_auth_shape(m)['received'][0]['protocol'],'spam-scanned')
+        m.replace_header('Received','from scanner by server50.romania-webhosting.com with PRIVATE_PROTOCOL; PRIVATE_DATE')
+        self.assertEqual(c.reception_auth_shape(m)['received'][0]['protocol'],'other')
+        self.assertNotIn('PRIVATE',json.dumps(c.reception_auth_shape(m)))
+
     def test_native_trace_diagnostic_is_allowlisted_and_does_not_expose_smtp_metadata(self):
         m=EmailMessage();m.set_content('Invoice attached')
         m.add_attachment(b'%PDF-1.4 synthetic',maintype='application',subtype='pdf')

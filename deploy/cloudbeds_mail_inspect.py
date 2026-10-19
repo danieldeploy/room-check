@@ -156,7 +156,7 @@ def reception_auth_shape(message):
     for value in received[:5]:
         by = re.search(r'\bby\s+([^\s();]+)', value, re.I)
         peer = re.search(r'\bfrom\s+([^\s();]+)', value, re.I)
-        protocol = re.search(r'\bwith\s+([a-z]+)\b', value, re.I)
+        protocol = re.search(r'\bwith\s+([a-z][a-z0-9_-]*)(?=\s|;|$)', value, re.I)
         before_by = value[:by.start()].strip() if by else ''
         peer_form = ('host_only' if re.fullmatch(r'from [a-z0-9._-]+', before_by, re.I) else
                      'host_parentheses' if re.fullmatch(r'from [a-z0-9._-]+\s+\([^()]*\)', before_by, re.I) else 'other')
@@ -165,7 +165,7 @@ def reception_auth_shape(message):
                                 "by_marker_count": len(re.findall(r'\bby\s+', value, re.I)),
                                 "with_marker_count": len(re.findall(r'\bwith\s+', value, re.I)),
                                 "peer_form": peer_form,
-                                "protocol": protocol.group(1).lower() if protocol and protocol.group(1).lower() in ('local','esmtp','esmtps') else 'other',
+                                "protocol": protocol.group(1).lower() if protocol and protocol.group(1).lower() in ('local','local-smtp','local-bsmtp','spam-scanned','scanned-ok','lmtp','esmtp','esmtps','esmtpa','esmtpsa') else 'other',
                                 "peer_provider": provider(peer.group(1)) if peer else "other",
                                 "tls_marker": bool(re.search(r'\b(?:ESMTPS[A-Z]*|TLSv?[0-9.]*)\b', value, re.I))})
     latest_received = received[0] if received else ""
@@ -428,7 +428,7 @@ class MailAPI:
         require(len(result) <= 10000, "listing_size")
         return result
 
-    def inspect(self):
+    def inspect(self, trace_sample=False):
         folders = []
         for row in self.listing(self.root):
             if row.get("file") in (".", ".."):
@@ -474,17 +474,24 @@ class MailAPI:
             self.stage = "mime_shape"
             reports.append(shape(raw))
             del raw, value
+            last = reports[-1]
+            if (trace_sample and last.get('mime',{}).get('pdf',0)>0
+                    and not last.get('mail_older_than_verification_window',True)
+                    and last.get('authentication',{}).get('auth') not in (None,'verified','unavailable','parse_failed')):
+                break
         return {"account": self.account, "folder_found": bool(folders),
+                "sample_scope": "first_dkim_unavailable_invoice" if trace_sample else "bounded_history",
                 "sample_count": len(reports), "candidate_count": len(candidates), "samples": reports}
 
 
 def main():
+    if sys.argv[1:] not in ([], ['--trace-sample']): return 2
     failed = False
     for account in ROOTS:
         api = None
         try:
             api = MailAPI(account)
-            print(json.dumps({"cloudbeds_mail_shape": api.inspect()}), flush=True)
+            print(json.dumps({"cloudbeds_mail_shape": api.inspect(trace_sample=bool(sys.argv[1:]))}), flush=True)
         except Exception as failure:
             # No exception repr, server response, file name or original mail in CI logs.
             code = str(failure) if isinstance(failure, DeploymentError) and str(failure) in ERRORS else "inspection_unavailable"
