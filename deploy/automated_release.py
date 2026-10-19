@@ -104,7 +104,10 @@ class GitHub:
 
     def require_fast_forward(self, current, expected):
         current, expected = commit(current), commit(expected)
-        data = self.read("/compare/" + current + "..." + expected + "?per_page=1")
+        # GitHub puts every changed-file patch on page 1, even with per_page=1.
+        # Page 2 keeps the comparison-wide ancestry facts without those patches;
+        # it also returns them when the paginated commit list itself is empty.
+        data = self.read("/compare/" + current + "..." + expected + "?per_page=1&page=2")
         base = data.get("merge_base_commit")
         require(isinstance(base, dict) and base.get("sha") == current
                 and data.get("status") == "ahead"
