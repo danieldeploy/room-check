@@ -114,6 +114,48 @@ class Tests(unittest.TestCase):
         for forbidden in ("1234567", "123456789", "2026", "999.99", "PRIVATE_NAME"):
             self.assertNotIn(forbidden, json.dumps(result))
 
+    def test_spf_diagnostic_distinguishes_aligned_domain_from_shared_provider(self):
+        m = EmailMessage()
+        m['From'] = 'billing@cloudbeds.com'
+        m['Received'] = 'from sender.example.test ([192.0.2.15]) by server50.romania-webhosting.com with esmtps; PRIVATE_DATE'
+        m['Received-SPF'] = 'pass (PRIVATE_COMMENT); receiver=server50.romania-webhosting.com; client-ip=192.0.2.15; envelope-from="PRIVATE_TOKEN@bounce.cloudbeds.com";'
+        m['Authentication-Results'] = 'server50.romania-webhosting.com; spf=pass smtp.mailfrom=PRIVATE_TOKEN@amazonses.com; dmarc=fail header.from=cloudbeds.com'
+        result = c.reception_auth_shape(m)
+        self.assertTrue(result['received_spf'][0]['cloudbeds_aligned'])
+        self.assertTrue(result['received_spf'][0]['client_ip_in_latest_received'])
+        self.assertTrue(result['received'][0]['by_hosting'])
+        self.assertFalse(result['authentication_results'][0]['cloudbeds_aligned'])
+        self.assertEqual(result['authentication_results'][0]['envelope_provider'], 'amazonses.com')
+        self.assertEqual(result['authentication_results'][0]['dmarc'], 'fail')
+        for forbidden in ('PRIVATE', '192.0.2.15', 'billing@', 'sender.example.test', 'server50.romania-webhosting.com'):
+            self.assertNotIn(forbidden, json.dumps(result))
+
+    def test_spf_diagnostic_records_missing_and_untrusted_claims_without_authenticating(self):
+        m = EmailMessage()
+        m['From'] = 'billing@cloudbeds.com.evil.test'
+        m['Authentication-Results'] = 'forged.example.test; spf=pass smtp.mailfrom=x@cloudbeds.com; dmarc=pass'
+        m['Received-SPF'] = 'pass; envelope-from=x@cloudbeds.com.evil.test'
+        result = c.reception_auth_shape(m)
+        self.assertFalse(result['authentication_results'][0]['authserv_hosting'])
+        self.assertFalse(result['authentication_results'][0]['cloudbeds_aligned'])
+        self.assertFalse(result['received_spf'][0]['cloudbeds_aligned'])
+        self.assertFalse(result['received_spf'][0]['receiver_hosting'])
+        self.assertEqual(c.reception_auth_shape(EmailMessage())['authentication_results'], [])
+        self.assertNotIn('verified', result)
+
+    def test_spf_diagnostic_redacts_unknown_header_values_and_bounds_header_lists(self):
+        m = EmailMessage()
+        m['From'] = 'billing@cloudbeds.com'
+        for _ in range(8):
+            m['Received-SPF'] = 'PRIVATE_RESULT; receiver=PRIVATE_HOST; envelope-from=PRIVATE_TOKEN@private.example.test'
+            m['X-PRIVATE-HEADER'] = 'PRIVATE_BODY'
+        result = c.reception_auth_shape(m)
+        self.assertEqual(result['received_spf_count'], 8)
+        self.assertEqual(len(result['received_spf']), 5)
+        self.assertEqual(result['received_spf'][0]['result'], 'absent')
+        self.assertNotIn('PRIVATE', json.dumps(result))
+        self.assertNotIn('private.example.test', json.dumps(result))
+
 
 if __name__ == "__main__":
     unittest.main()

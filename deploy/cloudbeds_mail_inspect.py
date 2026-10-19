@@ -51,6 +51,90 @@ def outside_window(value):
         return False
 
 
+def reception_auth_shape(message):
+    """Observe header claims only; this diagnostic never authenticates a message.
+
+    All values returned are fixed enums/booleans/counts. In particular, a named
+    hosting authserv-id is not proof that our server added the header. A later
+    intake policy must establish that trust separately before accepting results.
+    """
+    results = {"pass", "fail", "softfail", "neutral", "none", "temperror", "permerror", "policy"}
+    hosting = "server50.romania-webhosting.com"
+
+    def host(value):
+        return str(value).strip().strip('<>"').lower().rstrip('.')
+
+    def domain(value):
+        return host(value).rsplit('@', 1)[-1]
+
+    def provider(value):
+        name = domain(value)
+        known = family(name)
+        if known != "other":
+            return known
+        for base in ("amazonses.com", "amazonaws.com", "sendgrid.net", "mailgun.org"):
+            if name == base or name.endswith('.' + base):
+                return base
+        return "other"
+
+    def parameter(value, name):
+        found = re.search(r'(?:^|[;\s])' + re.escape(name) + r'\s*=\s*(?:"([^"\r\n]*)"|([^;\s]+))', value, re.I)
+        return (found.group(1) if found.group(1) is not None else found.group(2)) if found else ""
+
+    def verdict(value, method):
+        result = parameter(value, method).lower()
+        return result if result in results else "absent"
+
+    received = [str(value) for value in message.get_all("Received", [])]
+    received_shapes = []
+    for value in received[:5]:
+        by = re.search(r'\bby\s+([^\s();]+)', value, re.I)
+        peer = re.search(r'\bfrom\s+([^\s();]+)', value, re.I)
+        received_shapes.append({"by_hosting": bool(by and host(by.group(1)) == hosting),
+                                "peer_provider": provider(peer.group(1)) if peer else "other",
+                                "tls_marker": bool(re.search(r'\b(?:ESMTPS[A-Z]*|TLSv?[0-9.]*)\b', value, re.I))})
+    latest_received = received[0] if received else ""
+    from_addresses = email.utils.getaddresses(message.get_all("From", []))
+    from_domain = domain(from_addresses[0][1]) if len(from_addresses) == 1 else ""
+
+    def aligned(value):
+        return (from_domain == "cloudbeds.com" or from_domain.endswith('.cloudbeds.com')) and provider(value) == "cloudbeds.com"
+
+    spf = []
+    for value in message.get_all("Received-SPF", [])[:5]:
+        value = str(value)
+        first = re.match(r'\s*([A-Za-z]+)', value)
+        result = first.group(1).lower() if first else "absent"
+        envelope = parameter(value, "envelope-from") or parameter(value, "smtp.mailfrom")
+        ip = parameter(value, "client-ip").strip('[]')
+        spf.append({"result": result if result in results else "absent",
+                    "receiver_hosting": host(parameter(value, "receiver")) == hosting,
+                    "envelope_present": bool(envelope), "envelope_provider": provider(envelope),
+                    "cloudbeds_aligned": aligned(envelope),
+                    "client_ip_in_latest_received": bool(ip and ('[' + ip + ']') in latest_received)})
+    auth = []
+    for value in message.get_all("Authentication-Results", [])[:5]:
+        value = str(value)
+        authserv = value.split(';', 1)[0].strip().split()
+        envelope = parameter(value, "smtp.mailfrom")
+        auth.append({"authserv_hosting": bool(authserv and host(authserv[0]) == hosting),
+                     "spf": verdict(value, "spf"), "dmarc": verdict(value, "dmarc"),
+                     "dkim": verdict(value, "dkim"),
+                     "envelope_present": bool(envelope), "envelope_provider": provider(envelope),
+                     "cloudbeds_aligned": aligned(envelope)})
+    known_headers = {"received", "received-spf", "authentication-results", "return-path", "dkim-signature",
+                     "from", "to", "subject", "date", "x-spam-status", "x-spam-report", "x-spam-checker-version"}
+    spam = ' '.join(str(value) for name in ("X-Spam-Status", "X-Spam-Report") for value in message.get_all(name, []))
+    return {"authentication_result_count": len(message.get_all("Authentication-Results", [])),
+            "received_spf_count": len(message.get_all("Received-SPF", [])),
+            "received_count": len(received), "authentication_results": auth, "received_spf": spf,
+            "received": received_shapes,
+            "return_path_providers": sorted({provider(value) for value in message.get_all("Return-Path", [])}),
+            "header_order": [name.lower() for name, _ in message.raw_items() if name.lower() in known_headers][:24],
+            "spam_spf_pass_marker": bool(re.search(r'\bSPF_PASS\b', spam)),
+            "spam_spf_fail_marker": bool(re.search(r'\bSPF_(?:FAIL|SOFTFAIL)\b', spam))}
+
+
 def pdf_text_shape(text):
     """Only fixed label/format facts, never extracted text or invoice values."""
     labels = {
@@ -162,6 +246,7 @@ def shape(raw):
         except (OSError, ValueError, subprocess.SubprocessError):
             authentication = {"auth": "unavailable"}
     return {"sender_provider": sender_family, "mime": types,
+            "reception_authentication": reception_auth_shape(message) if types["pdf"] else {},
             "mail_older_than_verification_window": outside_window(message.get("Date")),
             "authentication": authentication,
             "pdf_shapes": pdf_shapes,

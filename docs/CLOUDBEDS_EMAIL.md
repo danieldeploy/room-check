@@ -98,6 +98,22 @@ Airbnb remains excluded from TOConline, the TOConline test button remains, and
 Expedia and other email suppliers are outside this change.
 
 The read-only authentication diagnostic records only fixed verification-stage names.
+
+### SPF reception evidence inspection
+
+- Expected behavior: report whether original invoice emails carry SPF/DMARC
+  reception claims and whether the SPF envelope domain aligns with Cloudbeds.
+  This observation alone never authorizes an import or changes DKIM policy.
+- Permissions: reuse the protected hosting inspection job and its existing
+  source-specific, read-only Cloudbeds Maildir access.
+- Inputs/data: inspect existing headers in memory; emit only fixed provider,
+  verdict and header-name enums, counts and booleans. Never emit addresses,
+  IPs, server/header values, message IDs, document values or authentication tokens.
+- Failure handling: missing or unfamiliar claims remain absent/other. A familiar
+  authserv-id, SPF marker or header position is not proof of trusted provenance;
+  receiver ownership and trustworthy insertion must be established separately.
+- Acceptance: synthetic aligned/shared-provider/lookalike-domain and redaction
+  checks, followed by protected observation of real invoices in both accounts.
 It does not relax signature checks or publish failed header values.
 
 Permanent DNS key revocation or key-policy refusal preserves the original message
