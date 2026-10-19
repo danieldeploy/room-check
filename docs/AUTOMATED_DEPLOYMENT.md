@@ -69,6 +69,12 @@ autenticado e de uma publicação real verificada.
   exato de deployment.
 - A verificação final exige HTTPS válido e o formulário de login esperado. Não
   substitui testes funcionais autenticados dos módulos.
+- A comparação GitHub consulta a segunda página, que mantém os dados globais de
+  ancestralidade sem os patches de ficheiros enviados na primeira. Isto permite
+  publicar dependências maiores sem aumentar o limite de resposta de 512 KiB.
+  Mantém a mesma branch protegida, os SHAs exatos e a exigência de fast-forward;
+  erros ou dados incompletos bloqueiam a publicação. Os testes cobrem comparação
+  válida com lista de commits vazia, divergência e metadados inválidos.
 
 ## Backup e recuperação
 

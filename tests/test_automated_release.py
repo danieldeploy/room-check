@@ -184,6 +184,19 @@ class ReleaseTests(unittest.TestCase):
             'status': 'diverged', 'behind_by': 1, 'ahead_by': 2})
         with self.assertRaises(release.DeploymentError): github.require_fast_forward(OLD, NEW)
 
+    def test_github_fastforward_uses_bounded_comparison_metadata_without_patches(self):
+        github = release.GitHub('fake-test-token')
+        metadata = {'merge_base_commit': {'sha': OLD}, 'status': 'ahead',
+                    'behind_by': 0, 'ahead_by': 1, 'commits': []}
+        github.read = Mock(return_value=metadata)
+        github.require_fast_forward(OLD, NEW)
+        github.read.assert_called_once_with('/compare/' + OLD + '...' + NEW + '?per_page=1&page=2')
+        for change in [{'merge_base_commit': {'sha': NEW}}, {'behind_by': 1},
+                       {'ahead_by': 0}, {'ahead_by': True}, {'status': 'identical'}]:
+            github.read.return_value = {**metadata, **change}
+            with self.subTest(change=change), self.assertRaises(release.DeploymentError):
+                github.require_fast_forward(OLD, NEW)
+
     def test_diagnostic_never_releases_or_prints_private_details(self):
         runner = Mock()
         runner.doctor.return_value = {'private_metadata': 'should-not-be-printed'}
