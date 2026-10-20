@@ -1,0 +1,95 @@
+name: Roundcube limited live pilot
+
+on:
+  pull_request:
+    paths:
+      - deploy/roundcube_pilot.py
+      - deploy/roundcube-pilot/**
+      - tests/test_roundcube_pilot.py
+      - tests/test_roundcube_pilot.php
+      - .github/workflows/roundcube-pilot.yml
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - deploy/roundcube_pilot.py
+      - deploy/roundcube-pilot/**
+      - tests/test_roundcube_pilot.py
+      - tests/test_roundcube_pilot.php
+      - .github/workflows/roundcube-pilot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  pilot-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - run: python3 -m unittest discover -s tests -p 'test_roundcube_*.py' -v
+      - run: |
+          php -l deploy/roundcube-pilot/welcome_smtp2go_pilot.php
+          php -l deploy/roundcube-pilot/pilot_transport.php
+          php -l deploy/roundcube-pilot/config.inc.php
+          php tests/test_roundcube_pilot.php
+
+  install-pilot:
+    needs: pilot-safety
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Inspect exact Roundcube state before changes
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_pilot.py inspect
+      - name: Preserve private backup and install restricted pilot
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_pilot.py install
+
+  verify-pilot:
+    needs: install-pilot
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Read exact pilot state and safe result metadata only
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_pilot.py verify

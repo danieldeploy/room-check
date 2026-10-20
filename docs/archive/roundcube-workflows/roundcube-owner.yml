@@ -1,0 +1,93 @@
+name: Roundcube owner Microsoft test
+
+on:
+  pull_request:
+    paths:
+      - deploy/roundcube_owner.py
+      - tests/test_roundcube_owner.py
+      - tests/test_roundcube_owner.php
+      - .github/workflows/roundcube-owner.yml
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - deploy/roundcube_owner.py
+      - tests/test_roundcube_owner.py
+      - tests/test_roundcube_owner.php
+      - .github/workflows/roundcube-owner.yml
+
+permissions:
+  contents: read
+
+jobs:
+  owner-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - run: python3 -m unittest discover -s tests -p 'test_roundcube_*.py' -v
+      - run: php tests/test_roundcube_pilot.php
+
+  retarget-owner:
+    needs: owner-safety
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Inspect existing pilot and journals without mutation
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_owner.py inspect
+      - name: Require current production head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api repos/danieldeploy/room-check/git/ref/heads/agent/room-item-assignments --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Back up plugin files and retarget only the unused test
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_owner.py retarget
+
+  verify-owner:
+    needs: retarget-owner
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/room-item-assignments' &&
+      github.repository == 'danieldeploy/room-check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    concurrency:
+      group: management-hub-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: Verify exact package, private backups and safe attempt metadata
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/roundcube_owner.py verify
