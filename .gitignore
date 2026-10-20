@@ -1,3 +1,5 @@
 config.local.php
+my2n-secrets.json
+.env
 .DS_Store
 Thumbs.db

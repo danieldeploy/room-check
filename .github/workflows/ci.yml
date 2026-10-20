@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - agent/room-item-assignments
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+          coverage: none
+
+      - name: Validate PHP syntax
+        run: find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check assets/app.js
+          if [ -f admin/assets/my2n.js ]; then node --check admin/assets/my2n.js; fi
+
+      - name: Run PHP tests
+        run: php tests/run.php
