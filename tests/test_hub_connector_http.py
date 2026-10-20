@@ -101,8 +101,14 @@ def run():
                 login = Inputs(data).fields | {'username':'connector_fixture','password':'another-fixture-password','language':'en'}
                 status, hdr, _ = request('/login.php', urlencode(login), form_headers)
                 assert status == 302 and hdr['Location'] == 'oauth-authorize.php', 'Native login must preserve OAuth context'
-                status, _, data = request('/oauth-authorize.php')
+                status, hdr, data = request('/oauth-authorize.php')
                 assert status == 200 and 'Authorize connection' in data
+                # A successful HTTP 303 is insufficient when a browser's CSP blocks
+                # its destination. Check the actual page policy against the callback.
+                policy = dict((p.strip().split(' ', 1)+[''])[:2] for p in hdr['Content-Security-Policy'].split(';'))
+                destinations = policy['form-action'].split()
+                assert 'https://chatgpt.com' in destinations and "'self'" in destinations
+                assert '*' not in destinations and 'https:' not in destinations
                 consent = Inputs(data).fields | {'decision':'allow','scopes[]':['hub:read','invoices:read']}
                 invalid = consent | {'csrf_token':'incorrect'}
                 status, hdr, _ = request('/oauth-authorize.php', urlencode(invalid,doseq=True), form_headers)

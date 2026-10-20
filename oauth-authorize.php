@@ -7,7 +7,9 @@ function connectorEscape(string $s): string { return htmlspecialchars($s,ENT_QUO
 function connectorText(string $pt,string $en): string { return connectorEscape(SiteTranslations::text($pt,$en)); }
 try {
     HubConnectorHttp::secure();
-    header("Content-Security-Policy: default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+    // Browsers apply form-action to the 303 OAuth callback as well as the POST.
+    // The callback path is still checked exactly by HubOAuth before redirecting.
+    header("Content-Security-Policy: default-src 'none'; style-src 'self'; form-action 'self' https://chatgpt.com; base-uri 'none'; frame-ancestors 'none'");
     $method=$_SERVER['REQUEST_METHOD']??'GET';
     if (!in_array($method,['GET','POST'],true)) throw new RuntimeException('method_not_allowed',405);
     $incoming=null;
