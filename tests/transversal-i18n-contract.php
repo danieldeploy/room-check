@@ -19,6 +19,8 @@ $excludedPrefixes = [
     '.git/', 'tests/', 'vendor/', 'node_modules/', 'migrations/', 'deploy/', 'cron/',
 ];
 $machineJsonExceptions = [
+    // OAuth/MCP wire protocols: errors and metadata must remain canonical.
+    'src/Auth/HubConnectorHttp.php' => true,
     // Authenticated by a device bearer token and consumed only by the Android
     // SMS forwarder. Its response is a boolean protocol, not human UI text.
     'invoice-auth.php' => true,

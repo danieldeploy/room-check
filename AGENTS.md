@@ -40,6 +40,16 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 
 ## Management Hub session recovery
 
+- Owner instruction, 2026-10-20: use the direct Hub OAuth/MCP connection for its
+  supported operations once the owner has activated it in ChatGPT; do not require
+  installing ChatGPT on the Windows PC. See `docs/HUB_CONNECTOR.md`. Verify the
+  connected identity with `hub_get_profile` and respect its granted scopes. An
+  installed endpoint is not proof of an activated connection. The connector's
+  renewal/revocation belongs to the platform OAuth flow; never print, export or
+  manually copy its tokens. It does not create a browser session or replace a
+  visual UI acceptance check. Keep using the existing secure browser recovery
+  order below for browser-only tasks.
+
 - Owner instruction, 2026-10-05: an expired Management Hub session during an authorized task is recoverable. Retry sign-in through the project's existing secure access method and continue the task; do not stop or ask the owner to repeat routine login while approved reusable access is available.
 - Never request, expose, or commit passwords, one-time codes, or tokens. If the secure method is unavailable or invalid, try the other already-authorized project control path for the task, then report the specific blocker. For a visual UI acceptance check, restore the signed-in page and observe the live update without refreshing; an API task result alone is not proof of visual behavior.
 

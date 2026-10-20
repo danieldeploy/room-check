@@ -9,6 +9,10 @@ require_once __DIR__ . '/src/I18n/SiteTranslations.php';
 
 function loginDestination(array $user): string
 {
+    $pending = $_SESSION['hub_oauth_pending'] ?? null;
+    if (is_array($pending) && (int) ($pending['created_at'] ?? 0) >= time() - 600) {
+        return 'oauth-authorize.php';
+    }
     return ($user['role'] ?? '') === 'empregada_andares' ? 'tasks.php' : 'index.php';
 }
 

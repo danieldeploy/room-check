@@ -82,6 +82,7 @@ jobs:
 
       - name: Run PHP tests
         run: |
+          php tests/hub-connector.php
           php tests/invoice-booking-verification.php
           php tests/invoice-hostelworld-verification.php
           php tests/cloudbeds-email.php
@@ -128,7 +129,10 @@ jobs:
           INVOICES_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=hub_invoice_test
           INVOICES_TEST_USER: root
           INVOICES_TEST_PASSWORD: test-only-ci-password
-        run: php tests/invoices-mysql.php
+        run: |
+          php tests/invoices-mysql.php
+          php tests/hub-connector-mysql.php
+          python3 tests/test_hub_connector_http.py
 
       - name: Configure production mail-pipe PHP
         uses: shivammathur/setup-php@v2
