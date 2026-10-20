@@ -110,11 +110,11 @@ final class HubOAuth
         try {
             // Serialize grants per owner, including concurrent consent tabs.
             $s = $this->pdo->prepare('SELECT id FROM users WHERE id=?' . $this->lock()); $s->execute([$userId]);
-            $s = $this->pdo->prepare('SELECT COUNT(*) FROM hub_oauth_grants WHERE user_id=? AND revoked_at IS NULL AND expires_at>? AND idle_expires_at>?');
-            $s->execute([$userId, $now, $now]);
+            $s = $this->pdo->prepare('SELECT COUNT(*) FROM hub_oauth_grants WHERE user_id=? AND password_stamp=? AND revoked_at IS NULL AND expires_at>? AND idle_expires_at>?');
+            $s->execute([$userId, hash('sha256',$u['password_hash']), $now, $now]);
             if ((int)$s->fetchColumn() >= 20) throw new RuntimeException('connection_limit', 400);
             $this->pdo->prepare('INSERT INTO hub_oauth_grants (id,user_id,client_id,scope,password_stamp,created_at,expires_at,idle_expires_at) VALUES (?,?,?,?,?,?,?,?)')
-                ->execute([$id,$userId,$r['client_id'],implode(' ', $scopes),hash('sha256', $u['password_hash']),$now,$now+self::GRANT_TTL,$now+self::REFRESH_TTL]);
+                ->execute([$id,$userId,$r['client_id'],implode(' ', $scopes),hash('sha256', $u['password_hash']),$now,$now+self::GRANT_TTL,$now+300]);
             $this->pdo->prepare('INSERT INTO hub_oauth_codes (token_hash,grant_id,redirect_uri,challenge,expires_at) VALUES (?,?,?,?,?)')
                 ->execute([hash('sha256',$code),$id,$r['redirect_uri'],$r['code_challenge'],$now+300]);
             Auth::audit($this->pdo,$userId,'connector_authorized',['grant_id'=>$id,'scopes'=>$scopes]);
@@ -199,8 +199,8 @@ final class HubOAuth
     public function connections(int $userId): array
     {
         $u = $this->user($userId);
-        $s = $this->pdo->prepare('SELECT id,scope,password_stamp,created_at,expires_at,idle_expires_at,last_used_at,revoked_at FROM hub_oauth_grants WHERE user_id=? ORDER BY created_at DESC LIMIT 100');
-        $s->execute([$userId]); $rows = $s->fetchAll(PDO::FETCH_ASSOC);
+        $s = $this->pdo->prepare('SELECT id,scope,password_stamp,created_at,expires_at,idle_expires_at,last_used_at,revoked_at FROM hub_oauth_grants WHERE user_id=? ORDER BY (revoked_at IS NULL AND expires_at>? AND idle_expires_at>? AND password_stamp=?) DESC,created_at DESC LIMIT 100');
+        $s->execute([$userId,$this->now(),$this->now(),hash('sha256',$u['password_hash'])]); $rows = $s->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$row) {
             $row['active'] = $row['revoked_at'] === null && (int)$row['expires_at'] > $this->now()
                 && (int)$row['idle_expires_at'] > $this->now() && hash_equals($row['password_stamp'],hash('sha256',$u['password_hash']));

@@ -102,4 +102,13 @@ function runHubCases(PDO $pdo): void {
     hubReject(fn()=>HubConnectorHttp::form('resource=a&resource=b'),'invalid_request');
     hubReject(fn()=>HubConnectorHttp::form('scope%5B%5D=a'),'invalid_request');
     hubCheck(str_contains(HubOAuth::callback($request,['error'=>'access_denied']),'iss='),'Issuer on denial callback');
+    for ($i=0;$i<20;$i++) $oauth->approve($request,880001,['hub:read']);
+    hubReject(fn()=>$oauth->approve($request,880001,['hub:read']),'connection_limit');
+    // Resetting a password invalidates old delegations without locking enrollment.
+    $pdo->prepare('UPDATE users SET password_hash=? WHERE id=880001')->execute([password_hash('another-fixture-password',PASSWORD_DEFAULT)]);
+    $oauth->approve($request,880001,['hub:read']);
+    $connections=$oauth->connections(880001);
+    hubCheck($connections[0]['active'] && !isset($connections[0]['password_stamp']),'Usable connections are visible first without password stamp');
+    // Abandoned consent does not consume an active connection slot for 90 days.
+    (new HubOAuth($pdo,$now+301))->approve($request,880001,['hub:read']);
 }
