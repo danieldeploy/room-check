@@ -62,5 +62,24 @@ try {
     $upload->store($path,'welcome',$user,true);
     manualCheck(!isset($vault->read('cloudbeds-inbox-welcome-'.hash('sha256',$pdf).'.enc')['pdf']),'Repeat upload preserves existing provenance and cleanup');
     manualCheck((int)$pdo->query('SELECT COUNT(*) FROM invoice_documents')->fetchColumn()===1,'One document for repeated uploads');
+    // The delegated connector uses the same validated upload pipeline and lock.
+    require_once __DIR__.'/../src/Auth/HubMcp.php';
+    $pdo->exec('CREATE TABLE auth_audit_log(actor_user_id INTEGER,action TEXT,details_json TEXT,ip_key TEXT)');
+    $held=false; $releases=0;
+    $pdo->sqliteCreateFunction('GET_LOCK',function($name,$timeout) use (&$held) { if ($held) return 0; $held=true; return 1; });
+    $pdo->sqliteCreateFunction('RELEASE_LOCK',function($name) use (&$held,&$releases) { $held=false; $releases++; return 1; });
+    $connector=new HubMcp($pdo,['invoices'=>['private_dir'=>$root]]);
+    $identity=['grant_id'=>str_repeat('a',32),'scopes'=>['hub:read','cloudbeds:import'],'user'=>$user];
+    $args=['source'=>'welcome','pdf_base64'=>base64_encode($pdf)];
+    $queued=$connector->call('hub_import_cloudbeds_pdf',$args,$identity);
+    manualCheck($queued['batch_id']===$result['batch_id'] && $queued['state']==='queued' && !$queued['completion_verified'],'Delegated repeat preserves request and reports pending');
+    manualCheck(!$held && $releases===1 && !glob($root.'/connector-upload-*.pdf'),'Private staging removed and lock released');
+    manualReject(fn()=>$connector->call('hub_import_cloudbeds_pdf',['source'=>'city','pdf_base64'=>base64_encode($pdf)],$identity),'account_mismatch');
+    manualCheck(!$held && $releases===2 && !glob($root.'/connector-upload-*.pdf'),'Failure also cleans staging and lock');
+    $readOnly=$identity; $readOnly['scopes']=['hub:read'];
+    manualReject(fn()=>$connector->call('hub_import_cloudbeds_pdf',$args,$readOnly),'insufficient_scope');
+    manualCheck((int)$pdo->query('SELECT COUNT(*) FROM invoice_documents')->fetchColumn()===1,'Delegation cannot duplicate documents');
+    $log=json_encode($pdo->query('SELECT * FROM auth_audit_log')->fetchAll(PDO::FETCH_ASSOC));
+    manualCheck(!str_contains($log,base64_encode($pdf)) && !str_contains($log,'A1234567'),'Connector audit contains no PDF or invoice identifiers');
     echo "Cloudbeds manual upload tests passed.\n";
 } finally { foreach (glob($root.'/*')?:[] as $file) unlink($file);rmdir($root); }

@@ -18,6 +18,7 @@ export PRIVATEPATH="$HOME/room-check-private/"
 (umask 022; /bin/mkdir -p "$DEPLOYPATH")
 /bin/mkdir -p "$PRIVATEPATH"
 /usr/local/bin/php deploy/prepare_invoice_workspace.php "$DEPLOYPATH" "$HOME/room-check-backups"
+/usr/local/bin/php deploy/prepare_hub_connector.php "$DEPLOYPATH"
 (
     umask 022
     /bin/cp -R assets "$DEPLOYPATH"
@@ -32,6 +33,7 @@ export PRIVATEPATH="$HOME/room-check-private/"
 (
     umask 022
     /bin/cp invoice-cloudbeds-hook.php invoice-hostelworld-hook.php invoice-agent.php invoice-auth.php api.php config.php index.php rooms.php item-lists.php verification-categories.php tasks.php lib.php login.php logout.php setup.php database.sql config.local.example.php .htaccess "$DEPLOYPATH"
+    /bin/cp oauth.php oauth-authorize.php mcp.php "$DEPLOYPATH"
 )
 /bin/rm -f "$DEPLOYPATH/translation-validate.php" "$DEPLOYPATH/src/I18n/BilingualContentMaintenance.php" "$DEPLOYPATH/src/I18n/LanguageGuard.php" "$DEPLOYPATH/src/I18n/LexicalLanguageChecker.php"
 /bin/rm -rf "$DEPLOYPATH/resources/lexicon/full" "$DEPLOYPATH/src/ThirdParty/efficient-language-detector"

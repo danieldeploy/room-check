@@ -40,6 +40,7 @@ final class SessionBar
                     <?php if ($role === 'empregada_andares'): ?><a href="<?= self::escape($prefix . 'tasks.php') ?>">Minha agenda</a><?php endif; ?>
                     <?php if ($canManageUsers): ?><a href="<?= self::escape($prefix . 'admin/users.php') ?>">Utilizadores</a><?php endif; ?>
                     <?php if ($canManagePermissions): ?><a href="<?= self::escape($prefix . 'admin/permissions.php') ?>">Permissões</a><?php endif; ?>
+                    <?php if ($role === 'gerente'): ?><a href="<?= self::escape($prefix . 'admin/connections.php') ?>"><?= self::escape(SiteTranslations::text('Ligações autorizadas', 'Authorized connections')) ?></a><?php endif; ?>
                 </div>
             </div>
             <div class="session-account">

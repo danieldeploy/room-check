@@ -1,0 +1,6 @@
+.connector-card { max-width: 42rem; }
+.connector-card .connector-scope { display: flex; align-items: flex-start; gap: .75rem; }
+.connector-scope input[type="checkbox"] { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin-top: .15rem; }
+.connector-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+.connector-actions .connector-secondary { background: #e5e7eb; color: #172033; }
+.management-card code { overflow-wrap: anywhere; }
