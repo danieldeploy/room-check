@@ -16,6 +16,19 @@ under `docs/flows/`.
   reported separately.
 - Production secrets remain outside the repository and outside `public_html`.
 
+## Repository-backed project memory
+
+- Repository documentation is the durable technical memory for this project.
+- `docs/PROJECT_MEMORY.md` defines the read/update protocol.
+- `docs/flows/` contains end-to-end orientation maps; `docs/decisions/`
+  contains durable ADRs.
+- `docs/project-memory.json` maps architecture-sensitive runtime paths to the
+  documents that must change with them.
+- Pull-request CI runs `tools/project_memory_guard.py` so mapped runtime changes
+  cannot silently bypass their state/flow documentation.
+- Test-only and visual/static-only changes are intentionally exempt unless they
+  also alter mapped runtime behavior.
+
 ## Management Hub / Room Check
 
 - PHP/MySQL application hosted at `check.welcomehostel.pt`.
