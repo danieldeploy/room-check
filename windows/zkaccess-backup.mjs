@@ -195,15 +195,26 @@ async function restoreTest(file) {
 }
 
 async function main() {
-  const config = await readConfig();
   await fs.mkdir(FOLDER, { recursive: true, mode: 0o700 });
   let backups = await loadState();
+  if (process.argv.includes('--local-only')) {
+    if (backups.some(b => b.date === lisbonParts().date)) {
+      console.log('BACKUP_ALREADY_EXISTS_TODAY');
+      return;
+    }
+    const backup = await createBackup();
+    backups.push(backup);
+    await saveState(backups);
+    console.log('MYSQL_BACKUP_CREATED_LOCAL');
+    return;
+  }
   if (process.argv.includes('--restore-test')) {
     const candidate = backups.findLast(b => !b.local_removed);
     if (!candidate) throw Error('no_local_backup_for_restore');
     console.log(await restoreTest(path.join(FOLDER, candidate.filename)));
     return;
   }
+  const config = await readConfig();
   const remoteSettings = await request(config, { action: 'config' });
   const settings = remoteSettings.settings;
   if (!settings || settings.timezone !== 'Europe/Lisbon') throw Error('backup_invalid_schedule');
