@@ -38,6 +38,27 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   end-to-end automation has been verified and the owner explicitly asks for its
   withdrawal. Keep manual confirmation, repeat protection and private test history.
 
+## Project memory and orientation
+
+- Before changing a module, read `docs/PROJECT_MEMORY.md`, then
+  `docs/PROJECT_STATE.md`, the relevant document under `docs/flows/`, and any
+  applicable ADR under `docs/decisions/`. Then verify the current code/tests
+  and check open PRs for in-flight work not yet present on the production branch.
+- Treat the repository as the durable technical source of truth; chat history is
+  context, not authoritative project state.
+- In the same PR, update `docs/PROJECT_STATE.md` when a relevant change alters
+  feature state, external dependencies, production workflows, blockers or
+  acceptance status. Update the relevant flow when inputs, transitions,
+  retries, permissions, failure behavior or acceptance checks change.
+- Create or supersede an ADR only for a durable decision that future work must
+  preserve. Do not create ADRs for routine refactors or formatting.
+- Keep `docs/project-memory.json` aligned with new architecture-sensitive
+  modules. The CI project-memory guard intentionally ignores test-only and
+  visual/static-only changes, but mapped runtime domains must update their
+  required documentation.
+- Never place credentials, PINs, OTPs, guest personal data, private invoice
+  contents or other secrets in project-memory documentation.
+
 ## Management Hub session recovery
 
 - Owner instruction, 2026-10-20: use the direct Hub OAuth/MCP connection for its
