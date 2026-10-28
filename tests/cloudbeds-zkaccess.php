@@ -119,6 +119,17 @@ $row = $pdo->query("SELECT room_id,previous_room_id,sub_reservation_id FROM zk_a
 zkCheck($row['room_id'] === 'ROOM-2' && $row['previous_room_id'] === 'ROOM-1' && $row['sub_reservation_id'] === 'S-101',
     'Accommodation identifiers were not normalized');
 
+$removed = [
+    'event' => 'reservation/accommodation_removed',
+    'propertyId' => '1140306',
+    'reservationId' => 'R-102',
+    'subReservationId' => 'S-102',
+    'roomId' => 'ROOM-3',
+    'timestamp' => 1793224950,
+];
+zkCheck(CloudbedsAccessWebhook::ingest($pdo, $removed, $properties)['ignored'] === false,
+    'Removed accommodation should be actionable');
+
 $welcome = $created;
 $welcome['reservationID'] = 'R-200';
 $welcome['propertyID'] = 'welcome-id';
