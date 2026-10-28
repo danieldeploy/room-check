@@ -113,6 +113,136 @@ final class InvoiceDriveClient
         if (!$meta) throw new RuntimeException('drive_verify');
         return $meta;
     }
+    /**
+     * Stream a large encrypted backup into the existing Google Drive OAuth account.
+     * Original PDF/CSV invoice upload semantics stay unchanged.
+     */
+    public function uploadEncrypted(string $id, string $parent, string $name, string $path): array
+    {
+        self::assertId($id); self::assertId($parent);
+        if (!is_file($path) || is_link($path)) throw new RuntimeException('drive_local_missing');
+        $size = filesize($path);
+        if (!is_int($size) || $size < 100 || $size > 536870912) throw new RuntimeException('drive_upload');
+        $meta = $this->metadata($id);
+        if (!$meta) {
+            $headers = [];
+            $this->request('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+                json_encode(['id' => $id, 'name' => $name, 'parents' => [$parent],
+                    'mimeType' => 'application/octet-stream'], JSON_THROW_ON_ERROR),
+                ['Content-Type: application/json', 'X-Upload-Content-Type: application/octet-stream',
+                    'X-Upload-Content-Length: ' . $size], $headers);
+            $url = (string)($headers['location'] ?? '');
+            if (!str_starts_with($url, 'https://www.googleapis.com/upload/drive/v3/files?')) {
+                throw new RuntimeException('drive_upload');
+            }
+            $handle = fopen($path, 'rb');
+            if (!$handle) throw new RuntimeException('drive_local_missing');
+            $offset = 0;
+            try {
+                while ($offset < $size) {
+                    $length = min(8 * 1024 * 1024, $size - $offset);
+                    $bytes = '';
+                    while (strlen($bytes) < $length) {
+                        $part = fread($handle, $length - strlen($bytes));
+                        if ($part === false || $part === '') throw new RuntimeException('drive_local_missing');
+                        $bytes .= $part;
+                    }
+                    $responseHeaders = [];
+                    $h = curl_init($url);
+                    curl_setopt_array($h, [CURLOPT_CUSTOMREQUEST => 'PUT', CURLOPT_POSTFIELDS => $bytes,
+                        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false,
+                        CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_TIMEOUT => 150,
+                        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+                        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $this->token,
+                            'Content-Type: application/octet-stream',
+                            'Content-Length: ' . $length,
+                            'Content-Range: bytes ' . $offset . '-' . ($offset + $length - 1) . '/' . $size],
+                        CURLOPT_HEADERFUNCTION => static function ($h, string $line) use (&$responseHeaders): int {
+                            if (str_contains($line, ':')) {
+                                [$k, $v] = explode(':', $line, 2);
+                                $responseHeaders[strtolower(trim($k))] = trim($v);
+                            }
+                            return strlen($line);
+                        }]);
+                    $result = curl_exec($h);
+                    $status = (int)curl_getinfo($h, CURLINFO_HTTP_CODE);
+                    curl_close($h);
+                    if ($result === false || !in_array($status, [200, 201, 308], true)) {
+                        throw new RuntimeException('drive_network');
+                    }
+                    if ($status === 308) {
+                        $range = (string)($responseHeaders['range'] ?? '');
+                        if ($range !== 'bytes=0-' . ($offset + $length - 1)) {
+                            throw new RuntimeException('drive_upload');
+                        }
+                    } elseif ($offset + $length !== $size) {
+                        throw new RuntimeException('drive_upload');
+                    }
+                    $offset += $length;
+                }
+            } finally { fclose($handle); }
+            $meta = $this->metadata($id);
+        }
+        if (!$meta || ($meta['trashed'] ?? true)
+            || !in_array($parent, $meta['parents'] ?? [], true)
+            || (int)($meta['size'] ?? -1) !== $size
+            || !hash_equals((string)hash_file('md5', $path), (string)($meta['md5Checksum'] ?? ''))) {
+            throw new RuntimeException('drive_verify');
+        }
+        return $meta;
+    }
+
+    /**
+     * Read back an uploaded encrypted file to a private temporary path for
+     * end-to-end restore verification. The caller verifies the archive MAC.
+     */
+    public function downloadEncrypted(string $id, string $target, int $expectedBytes): void
+    {
+        self::assertId($id);
+        if ($expectedBytes < 100 || $expectedBytes > 536870912 || is_file($target) || is_link($target)) {
+            throw new RuntimeException('drive_verify');
+        }
+        $h = curl_init('https://www.googleapis.com/drive/v3/files/' . $id . '?alt=media');
+        $previousUmask = umask(0077);
+        $out = fopen($target, 'x+b');
+        umask($previousUmask);
+        if (!$out) throw new RuntimeException('drive_local_missing');
+        $received = 0;
+        try {
+            curl_setopt_array($h, [CURLOPT_CUSTOMREQUEST => 'GET', CURLOPT_RETURNTRANSFER => false,
+                CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_TIMEOUT => 300,
+                CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $this->token],
+                CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk) use ($out, &$received, $expectedBytes): int {
+                    $len = strlen($chunk);
+                    if ($received + $len > $expectedBytes) return 0;
+                    $written = fwrite($out, $chunk);
+                    if ($written !== $len) return 0;
+                    $received += $len;
+                    return $len;
+                }]);
+            $ok = curl_exec($h);
+            $status = (int)curl_getinfo($h, CURLINFO_HTTP_CODE);
+            if ($ok === false || $status !== 200 || $received !== $expectedBytes) {
+                throw new RuntimeException('drive_verify');
+            }
+        } catch (Throwable $e) {
+            fclose($out);
+            @unlink($target);
+            throw $e;
+        } finally {
+            curl_close($h);
+        }
+        fclose($out);
+    }
+
+    /** Delete only previously verified file IDs chosen by the backup retention worker. */
+    public function deleteEncrypted(string $id): void
+    {
+        self::assertId($id);
+        $this->request('DELETE', 'https://www.googleapis.com/drive/v3/files/' . $id, null, []);
+    }
+
     /** Retrieve only an already archived PDF; bounded response, no redirects, exact content hash. */
     public function verifiedPdf(array $d): string
     {

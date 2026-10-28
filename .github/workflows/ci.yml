@@ -31,6 +31,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # Pin the tested Python interpreter: ubuntu-latest switched its default to
+      # Python 3.14, which changed the legacy cPanel diagnostic test behavior.
+      - name: Configure tested Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+
       - name: Validate hosting deployment tools
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
@@ -74,6 +81,8 @@ jobs:
           node --check invoice-runner/booking.mjs
           node --check invoice-runner/windows-agent.mjs
           node --test invoice-runner/tests/*.test.mjs
+          node --check windows/zkaccess-backup.mjs
+          node --test windows/tests/*.test.mjs
 
       - name: Install PDF verification tool
         run: |
@@ -97,6 +106,7 @@ jobs:
           TEST_NODE_BINARY=$(command -v node) php tests/invoice-test-control.php
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
+          php tests/zkaccess-backup.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-hostelworld-pipe.php
@@ -260,6 +270,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           & tests/invoice-agent-windows.ps1 -Browser
           & tests/invoice-browser-supervisor-windows.ps1
+          foreach ($script in @('windows/Run-ZKBackup.ps1', 'windows/Install-ZKBackup.ps1')) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw ('PowerShell parse failed: ' + $script) }
+          }
 
 
 

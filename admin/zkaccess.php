@@ -184,6 +184,7 @@ header('Cache-Control: no-store');
             <div class="compact-page-heading">
                 <p class="eyebrow">Automação de códigos</p>
                 <h1 class="page-title">ZKAccess Control</h1>
+                <p><a href="zkaccess-backup.php">Backup automático da base de dados</a></p>
             </div>
         </header>
 

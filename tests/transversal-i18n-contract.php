@@ -30,6 +30,9 @@ $machineJsonExceptions = [
     'invoice-cloudbeds-hook.php' => true,
     // Windows agent: fixed machine protocol, no user-facing translated text.
     'invoice-agent.php' => true,
+    // ZKAccess backup agent uses the same authenticated machine protocol;
+    // its canonical errors must not be localized.
+    'zkaccess-backup-agent.php' => true,
 ];
 
 function emitsHtmlDocument(string $source): bool
