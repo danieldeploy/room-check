@@ -30,13 +30,37 @@ final class ZKAccessBackupStore
         $stored = $this->vault->has(self::SETTINGS_FILE) ? $this->vault->read(self::SETTINGS_FILE) : [];
         return ['enabled' => ($stored['enabled'] ?? true) === true,
             'time' => self::validateTime((string)($stored['time'] ?? '04:00')),
-            'timezone' => 'Europe/Lisbon', 'retention_days' => 30];
+            'timezone' => 'Europe/Lisbon', 'retention_days' => 30,
+            'manual_id' => (is_string($stored['manual_id'] ?? null)
+                && preg_match('/\\A[a-f0-9]{32}\\z/D', $stored['manual_id'])) ? $stored['manual_id'] : null];
     }
 
     public function saveSettings(bool $enabled, string $time): void
     {
+        $stored = $this->vault->has(self::SETTINGS_FILE) ? $this->vault->read(self::SETTINGS_FILE) : [];
         $this->vault->save(self::SETTINGS_FILE,
-            ['enabled' => $enabled, 'time' => self::validateTime($time)]);
+            ['enabled' => $enabled, 'time' => self::validateTime($time),
+                'manual_id' => $stored['manual_id'] ?? null]);
+    }
+
+    public function requestNow(): string
+    {
+        $settings = $this->settings();
+        $id = bin2hex(random_bytes(16));
+        $this->vault->save(self::SETTINGS_FILE, [
+            'enabled' => $settings['enabled'], 'time' => $settings['time'], 'manual_id' => $id
+        ]);
+        return $id;
+    }
+
+    public function acknowledgeNow(string $id): bool
+    {
+        self::assertId($id);
+        $settings = $this->settings();
+        if ($settings['manual_id'] !== $id) return false;
+        $this->vault->save(self::SETTINGS_FILE,
+            ['enabled' => $settings['enabled'], 'time' => $settings['time'], 'manual_id' => null]);
+        return true;
     }
 
     public function entries(): array
