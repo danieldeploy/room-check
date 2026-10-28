@@ -32,6 +32,13 @@ try {
     assertBackup($settings['time'] === '04:00' && $settings['enabled'] === true, 'default settings');
     $store->saveSettings(false, '02:35');
     assertBackup($store->settings()['enabled'] === false && $store->settings()['time'] === '02:35', 'pause and reschedule');
+    $manual = $store->requestNow();
+    assertBackup($store->settings()['manual_id'] === $manual, 'manual request persisted');
+    $store->saveSettings(true, '04:00');
+    assertBackup($store->settings()['manual_id'] === $manual, 'settings do not erase manual request');
+    assertBackup($store->acknowledgeNow(bin2hex(random_bytes(16))) === false, 'wrong ack refused');
+    assertBackup($store->acknowledgeNow($manual) === true, 'valid ack accepted');
+    assertBackup($store->settings()['manual_id'] === null, 'manual request cleared');
 
     $id = bin2hex(random_bytes(16));
     $sql = 'CREATE TABLE test (id int);' . base64_encode(random_bytes(280000));
