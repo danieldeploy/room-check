@@ -48,6 +48,19 @@ final class ZKAccessBackupDrive
             $name = 'zkeco_db_' . str_replace([' ', ':'], ['T', ''], $e['created_at'])
                 . '_' . $id . '.sql.gz.zkenc';
             $meta = $this->drive->uploadEncrypted($fileId, ZKAccessBackupDestination::BACKUP_FOLDER_ID, $name, $path);
+            // Recover the encrypted bytes *from Drive*, verify checksum and
+            // authenticated decryption before declaring a backup successful.
+            $roundtrip = $this->vault->path('zkverify-' . $id . '.tmp');
+            if (is_file($roundtrip) || is_link($roundtrip)) @unlink($roundtrip);
+            try {
+                $this->drive->downloadEncrypted($fileId, $roundtrip, (int)$meta['size']);
+                if (!hash_equals((string)$meta['md5Checksum'], (string)hash_file('md5', $roundtrip))) {
+                    throw new RuntimeException('backup_drive_roundtrip_failed');
+                }
+                $this->store->verify($e, $roundtrip);
+            } finally {
+                @unlink($roundtrip);
+            }
             $entries[$id]['status'] = 'uploaded';
             $entries[$id]['drive_size'] = (int)$meta['size'];
             $entries[$id]['drive_md5'] = (string)$meta['md5Checksum'];
