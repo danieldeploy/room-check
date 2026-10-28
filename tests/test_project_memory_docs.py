@@ -36,7 +36,7 @@ class ProjectMemoryDocsTests(unittest.TestCase):
             if flow.name == "README.md":
                 continue
             self.assertIn(f"]({flow.name})", index)
-            self.assertIn("\`\`\`mermaid", flow.read_text(encoding="utf-8"))
+            self.assertIn(chr(96) * 3 + "mermaid", flow.read_text(encoding="utf-8"))
 
     def test_adr_index_is_complete_and_numbers_are_unique(self):
         index = (ROOT / "docs/decisions/README.md").read_text(encoding="utf-8")
