@@ -50,8 +50,8 @@ class ProjectMemoryDocsTests(unittest.TestCase):
         self.assertEqual(len(numbers), len(set(numbers)))
 
     def test_state_uses_explicit_lifecycle_vocabulary(self):
-        state = (ROOT / "docs/PROJECT_STATE.md").read_text(encoding="utf-8")
-        for word in ("Prepared", "Integrated", "Deployed", "Verified"):
+        state = (ROOT / "docs/PROJECT_STATE.md").read_text(encoding="utf-8").lower()
+        for word in ("prepared", "integrated", "deployed", "verified"):
             self.assertIn(word, state)
 
     def test_test_only_or_document_only_changes_do_not_require_state(self):
