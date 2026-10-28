@@ -192,6 +192,50 @@ final class InvoiceDriveClient
         return $meta;
     }
 
+    /**
+     * Read back an uploaded encrypted file to a private temporary path for
+     * end-to-end restore verification. The caller verifies the archive MAC.
+     */
+    public function downloadEncrypted(string $id, string $target, int $expectedBytes): void
+    {
+        self::assertId($id);
+        if ($expectedBytes < 100 || $expectedBytes > 536870912 || is_file($target) || is_link($target)) {
+            throw new RuntimeException('drive_verify');
+        }
+        $h = curl_init('https://www.googleapis.com/drive/v3/files/' . $id . '?alt=media');
+        $previousUmask = umask(0077);
+        $out = fopen($target, 'x+b');
+        umask($previousUmask);
+        if (!$out) throw new RuntimeException('drive_local_missing');
+        $received = 0;
+        try {
+            curl_setopt_array($h, [CURLOPT_CUSTOMREQUEST => 'GET', CURLOPT_RETURNTRANSFER => false,
+                CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_TIMEOUT => 300,
+                CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $this->token],
+                CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk) use ($out, &$received, $expectedBytes): int {
+                    $len = strlen($chunk);
+                    if ($received + $len > $expectedBytes) return 0;
+                    $written = fwrite($out, $chunk);
+                    if ($written !== $len) return 0;
+                    $received += $len;
+                    return $len;
+                }]);
+            $ok = curl_exec($h);
+            $status = (int)curl_getinfo($h, CURLINFO_HTTP_CODE);
+            if ($ok === false || $status !== 200 || $received !== $expectedBytes) {
+                throw new RuntimeException('drive_verify');
+            }
+        } catch (Throwable $e) {
+            fclose($out);
+            @unlink($target);
+            throw $e;
+        } finally {
+            curl_close($h);
+        }
+        fclose($out);
+    }
+
     /** Delete only previously verified file IDs chosen by the backup retention worker. */
     public function deleteEncrypted(string $id): void
     {
