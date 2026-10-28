@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "state_document": "docs/PROJECT_STATE.md",
+  "ignore": [
+    "docs/**",
+    "tests/**",
+    "assets/**",
+    "admin/assets/**",
+    "**/*.md"
+  ],
+  "state_required_for": [
+    "*.php",
+    "admin/**/*.php",
+    "src/**/*.php",
+    "cron/**/*.php",
+    "deploy/**",
+    "invoice-runner/**",
+    "windows/**",
+    "migrations/**",
+    "database.sql",
+    "config.php",
+    ".cpanel.yml",
+    ".github/workflows/**"
+  ],
+  "domains": [
+    {
+      "name": "cloudbeds-zkaccess",
+      "paths": [
+        "cloudbeds-access-webhook.php",
+        "src/ZKAccess/**",
+        "migrations/031_cloudbeds_zkaccess.sql",
+        "windows/zkaccess-*.mjs",
+        "windows/*ZKAccess*.ps1"
+      ],
+      "required_docs": [
+        "docs/flows/cloudbeds-zkaccess.md"
+      ]
+    },
+    {
+      "name": "deployment",
+      "paths": [
+        "deploy/**",
+        ".cpanel.yml",
+        ".github/workflows/**"
+      ],
+      "required_docs": [
+        "docs/PROJECT_STATE.md"
+      ]
+    }
+  ]
+}
