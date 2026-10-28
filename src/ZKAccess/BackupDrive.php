@@ -73,8 +73,10 @@ final class ZKAccessBackupDrive
         // No old backups are removed unless at least two verified newer
         // copies survive, and the remote parent, checksum and size match.
         $uploaded = array_filter($entries, static fn(array $e): bool => $e['status'] === 'uploaded');
-        if (count($uploaded) >= 2) {
+        $survivingCopies = count($uploaded);
+        if ($survivingCopies > 2) {
             foreach ($expired as $id => $e) {
+                if ($survivingCopies <= 2) break;
                 if (($entries[$id]['status'] ?? '') !== 'uploaded') continue;
                 $remote = $this->drive->metadata((string)$e['drive_id']);
                 if (!$remote || ($remote['trashed'] ?? true)
@@ -89,6 +91,7 @@ final class ZKAccessBackupDrive
                 unset($entries[$id]);
                 $this->store->saveEntries($entries);
                 $result['expired']++;
+                $survivingCopies--;
             }
         }
 
