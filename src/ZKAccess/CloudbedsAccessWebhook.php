@@ -8,6 +8,7 @@ final class CloudbedsAccessWebhook
         'reservation/status_changed',
         'reservation/dates_changed',
         'reservation/accommodation_changed',
+        'reservation/accommodation_removed',
         'reservation/deleted',
     ];
 
