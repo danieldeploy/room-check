@@ -75,11 +75,11 @@ zkCheck(CityCenterAccessMap::rooms() === [1,2,3,4,5,6], 'Supported City Center r
 zkThrows(fn() => CityCenterAccessMap::forRoom(7), 'Unsupported room accepted');
 
 $pdo = zkPdo();
-$properties = ['1140306' => 'city_center', 'welcome-id' => 'welcome'];
+$properties = ['7541' => 'city_center', 'welcome-id' => 'welcome'];
 $created = [
     'event' => 'reservation/created',
     'version' => '1.0',
-    'propertyID' => '1140306',
+    'propertyID' => '7541',
     'reservationID' => 'R-100',
     'timestamp' => 1793224800.123456,
     'startDate' => '2026-11-02',
@@ -94,7 +94,7 @@ zkCheck($row['event_name'] === 'reservation/created' && $row['property_key'] ===
 $reordered = [
     'endDate' => '2026-11-04',
     'reservationID' => 'R-100',
-    'propertyID' => '1140306',
+    'propertyID' => '7541',
     'timestamp' => 1793224800.123456,
     'event' => 'reservation/created',
     'startDate' => '2026-11-02',
@@ -106,7 +106,7 @@ zkCheck($duplicate['duplicate'] === true && (int)$pdo->query('SELECT COUNT(*) FR
 
 $changed = [
     'event' => 'reservation/accommodation_changed',
-    'propertyId' => '1140306',
+    'propertyId' => '7541',
     'reservationId' => 'R-101',
     'subReservationId' => 'S-101',
     'roomId' => 'ROOM-2',
@@ -121,7 +121,7 @@ zkCheck($row['room_id'] === 'ROOM-2' && $row['previous_room_id'] === 'ROOM-1' &&
 
 $removed = [
     'event' => 'reservation/accommodation_removed',
-    'propertyId' => '1140306',
+    'propertyId' => '7541',
     'reservationId' => 'R-102',
     'subReservationId' => 'S-102',
     'roomId' => 'ROOM-3',
@@ -154,11 +154,11 @@ try {
         'enabled' => true,
         'webhook_token' => str_repeat('a', 64),
         'api_key' => 'fixture-api-key',
-        'properties' => ['1140306' => 'city_center'],
+        'properties' => ['7541' => 'city_center'],
     ], JSON_THROW_ON_ERROR));
     chmod($tmp, 0600);
     $config = CloudbedsAccessConfig::load($tmp);
-    zkCheck($config['enabled'] === true && $config['properties']['1140306'] === 'city_center',
+    zkCheck($config['enabled'] === true && $config['properties']['7541'] === 'city_center',
         'Private configuration not loaded');
 
     file_put_contents($tmp, json_encode(['enabled' => false], JSON_THROW_ON_ERROR));
@@ -169,7 +169,7 @@ try {
     file_put_contents($tmp, json_encode([
         'enabled' => true,
         'webhook_token' => 'weak',
-        'properties' => ['1140306' => 'city_center'],
+        'properties' => ['7541' => 'city_center'],
     ], JSON_THROW_ON_ERROR));
     chmod($tmp, 0600);
     zkThrows(fn() => CloudbedsAccessConfig::load($tmp), 'Weak webhook token accepted');
