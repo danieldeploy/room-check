@@ -53,6 +53,12 @@ class Runner:
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_production_allowlist_deploys_zkaccess_backup_endpoint(self):
+        script = Path(__file__).parents[1].joinpath('deploy/release.sh').read_text()
+        self.assertIn('zkaccess-backup-agent.php', script)
+        self.assertIn('invoice-agent.php', script)
+        self.assertIn('/bin/cp -R admin src', script)
+
     def test_hosting_inspection_is_readonly_and_reports_only_verified_state(self):
         runner = Runner()
         runner.doctor = Mock(return_value={'transport': 'whm', 'cpanel_user': 'welcome',
