@@ -28,7 +28,7 @@ final class ZKAccessBackupStore
     public function settings(): array
     {
         $stored = $this->vault->has(self::SETTINGS_FILE) ? $this->vault->read(self::SETTINGS_FILE) : [];
-        return ['enabled' => ($stored['enabled'] ?? false) === true,
+        return ['enabled' => ($stored['enabled'] ?? true) === true,
             'time' => self::validateTime((string)($stored['time'] ?? '04:00')),
             'timezone' => 'Europe/Lisbon', 'retention_days' => 30];
     }
