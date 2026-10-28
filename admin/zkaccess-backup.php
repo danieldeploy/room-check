@@ -28,12 +28,18 @@ try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         Csrf::validate($_POST['csrf_token'] ?? null);
         if (!$canConfigure) throw new RuntimeException('Sem permissão para configurar backups.', 403);
-        $time = ZKAccessBackupStore::validateTime((string)($_POST['time'] ?? ''));
-        $enabled = isset($_POST['enabled']) && $_POST['enabled'] === '1';
-        $store->saveSettings($enabled, $time);
-        Auth::audit($pdo, (int)$user['id'], 'zkaccess_backup_settings_updated',
-            ['enabled' => $enabled, 'time' => $time, 'timezone' => 'Europe/Lisbon']);
-        $message = 'Configuração do backup guardada.';
+        if (($_POST['action'] ?? '') === 'run') {
+            $store->requestNow();
+            Auth::audit($pdo, (int)$user['id'], 'zkaccess_backup_manual_requested', []);
+            $message = 'Backup manual solicitado. O executor Windows verificará o pedido.';
+        } else {
+            $time = ZKAccessBackupStore::validateTime((string)($_POST['time'] ?? ''));
+            $enabled = isset($_POST['enabled']) && $_POST['enabled'] === '1';
+            $store->saveSettings($enabled, $time);
+            Auth::audit($pdo, (int)$user['id'], 'zkaccess_backup_settings_updated',
+                ['enabled' => $enabled, 'time' => $time, 'timezone' => 'Europe/Lisbon']);
+            $message = 'Configuração do backup guardada.';
+        }
     }
     $settings = $store->settings();
     $backups = $store->status();
@@ -95,6 +101,17 @@ function backupEsc(string $text): string { return htmlspecialchars($text, ENT_QU
                 </label>
             </div>
             <div class="form-actions"><button class="primary-button" type="submit" <?= $canConfigure && !$error ? '' : 'disabled' ?>>Guardar configuração</button></div>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>Execução manual</h2>
+        <p>O pedido é enviado ao agente Windows emparelhado, sem abrir o ZKAccess.</p>
+        <?php if (!empty($settings['manual_id'])): ?><p>Existe um pedido manual pendente.</p><?php endif; ?>
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="<?= backupEsc(Csrf::token()) ?>">
+            <input type="hidden" name="action" value="run">
+            <div class="form-actions"><button class="primary-button" type="submit" <?= $canConfigure && !$error ? '' : 'disabled' ?>>Fazer backup agora</button></div>
         </form>
     </section>
 
