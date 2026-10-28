@@ -38,6 +38,7 @@ try {
     $response = match ($action) {
         'config' => ['settings' => $store->settings(), 'server_time' => time()],
         'status' => ['backups' => $store->status()],
+        'manual_ack' => ['accepted' => $store->acknowledgeNow((string)($request['id'] ?? ''))],
         'begin' => $store->begin($request),
         'chunk' => $store->chunk($request),
         'finish' => $store->finish($request),
