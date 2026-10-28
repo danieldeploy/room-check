@@ -99,6 +99,23 @@ class ProjectMemoryDocsTests(unittest.TestCase):
             ),
         )
 
+    def test_existing_critical_domains_require_orientation_docs(self):
+        cases = [
+            ("src/Invoices/InvoiceService.php", "docs/invoices-multiplatform.md"),
+            ("src/Auth/HubOAuth.php", "docs/HUB_CONNECTOR.md"),
+            ("src/I18n/Translator.php", "docs/I18N.md"),
+            ("rooms.php", "docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md"),
+        ]
+        for changed, required in cases:
+            errors = guard.evaluate([changed, "docs/PROJECT_STATE.md"], self.config)
+            self.assertTrue(any(required in error for error in errors), (changed, errors))
+            self.assertEqual(
+                [],
+                guard.evaluate(
+                    [changed, "docs/PROJECT_STATE.md", required], self.config
+                ),
+            )
+
     def test_dot_prefixed_workflow_path_requires_state(self):
         errors = guard.evaluate([".github/workflows/ci.yml"], self.config)
         self.assertTrue(any("PROJECT_STATE.md" in error for error in errors))
