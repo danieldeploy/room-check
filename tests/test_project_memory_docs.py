@@ -99,6 +99,16 @@ class ProjectMemoryDocsTests(unittest.TestCase):
             ),
         )
 
+    def test_dot_prefixed_workflow_path_requires_state(self):
+        errors = guard.evaluate([".github/workflows/ci.yml"], self.config)
+        self.assertTrue(any("PROJECT_STATE.md" in error for error in errors))
+        self.assertEqual(
+            [],
+            guard.evaluate(
+                [".github/workflows/ci.yml", "docs/PROJECT_STATE.md"], self.config
+            ),
+        )
+
     def test_config_is_valid_json_and_has_unique_domains(self):
         raw = json.loads((ROOT / "docs/project-memory.json").read_text(encoding="utf-8"))
         names = [domain["name"] for domain in raw["domains"]]
