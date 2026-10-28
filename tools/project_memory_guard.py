@@ -33,7 +33,13 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict:
 
 
 def evaluate(changed_files: Iterable[str], config: dict) -> list[str]:
-    changed = {str(path).replace("\\", "/").lstrip("./") for path in changed_files if str(path).strip()}
+    changed = set()
+    for path in changed_files:
+        value = str(path).replace("\\", "/").strip()
+        if value.startswith("./"):
+            value = value[2:]
+        if value:
+            changed.add(value)
     ignored = config["ignore"]
     runtime = {path for path in changed if not _matches(path, ignored)}
     errors: list[str] = []
