@@ -31,6 +31,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # Pin the tested Python interpreter: ubuntu-latest switched its default to
+      # Python 3.14, which changed the legacy cPanel diagnostic test behavior.
+      - name: Configure tested Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+
       - name: Validate hosting deployment tools
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_api.py -v
