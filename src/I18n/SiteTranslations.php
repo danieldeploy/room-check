@@ -243,7 +243,7 @@ final class SiteTranslations
             'Cifrado, aguarda envio ao Drive' => 'Encrypted, awaiting upload to Drive',
             'Transferência em curso' => 'Transfer in progress',
             'Pendente' => 'Pending',
-            'O estado «Verificado no Google Drive» confirma tamanho e checksum do ficheiro cifrado;' => 'The “Verified on Google Drive” status confirms the encrypted file size and checksum;',
+            'O estado Verificado no Google Drive confirma tamanho e checksum do ficheiro cifrado;' => 'The Verified on Google Drive status confirms the encrypted file size and checksum;',
             'uma recuperação integral requer ainda o teste de restauro independente.' => 'a complete recovery still requires an independent restore test.',
             'Sem permissão' => 'Permission denied',
             'Sem permissão para configurar backups.' => 'No permission to configure backups.',
