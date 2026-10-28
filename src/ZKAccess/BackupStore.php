@@ -175,12 +175,12 @@ final class ZKAccessBackupStore
     }
 
     /** Verify encryption integrity and plaintext gzip SHA256 without saving plaintext. */
-    public function verify(array $entry): void
+    public function verify(array $entry, ?string $alternateArchive = null): void
     {
         $key = base64_decode((string)$this->vault->read(self::keyName($entry['id']))['key'], true);
         $prefix = base64_decode((string)$entry['prefix'], true);
         if (!$key || strlen($key) !== 32 || !$prefix || strlen($prefix) !== 16) throw new RuntimeException('backup_unavailable');
-        $handle = fopen($this->vault->path(self::dataName($entry['id'])), 'rb');
+        $handle = fopen($alternateArchive ?? $this->vault->path(self::dataName($entry['id'])), 'rb');
         if (!$handle) throw new RuntimeException('backup_missing');
         $hash = hash_init('sha256');
         $readBytes = 0;
