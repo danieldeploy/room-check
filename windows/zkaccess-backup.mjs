@@ -221,11 +221,15 @@ async function main() {
   const remoteStatus = await request(config, { action: 'status' });
   await cleanup(backups, remoteStatus);
   await saveState(backups);
-  if (!settings.enabled) { console.log('BACKUP_DISABLED'); return; }
+  const manual = typeof settings.manual_id === 'string' && /^[a-f0-9]{32}$/.test(settings.manual_id)
+    ? settings.manual_id : null;
+  if (!settings.enabled && !manual) { console.log('BACKUP_DISABLED'); return; }
   const now = lisbonParts();
   const alreadyToday = backups.some(b => b.date === now.date);
-  if (!alreadyToday && dueAt(settings.time, now)) {
+  const requestedNow = manual && !backups.some(b => b.manual_id === manual);
+  if (requestedNow || (settings.enabled && !alreadyToday && dueAt(settings.time, now))) {
     const current = await createBackup();
+    if (requestedNow) current.manual_id = manual;
     backups.push(current);
     await saveState(backups);
     console.log('MYSQL_BACKUP_CREATED');
@@ -233,6 +237,9 @@ async function main() {
   for (const record of backups.filter(b => b.status !== 'uploaded' && !b.local_removed)) {
     await uploadOne(config, record);
     await saveState(backups);
+  }
+  if (manual && backups.some(b => b.manual_id === manual && b.status === 'uploaded')) {
+    await request(config, { action: 'manual_ack', id: manual });
   }
   console.log('BACKUP_AGENT_OK');
 }
