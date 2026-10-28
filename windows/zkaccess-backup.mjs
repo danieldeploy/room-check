@@ -8,6 +8,7 @@ import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { createGzip, createGunzip } from 'node:zlib';
+import { pathToFileURL } from 'node:url';
 
 const DATABASE = 'zkeco_db';
 const PORT = '83306';
@@ -172,8 +173,7 @@ async function restoreTest(file) {
       '--user=root', '-e', 'CREATE DATABASE ' + temporary]);
     await runProcess(MYSQL, ['--no-defaults', '--host=127.0.0.1', '--port=' + PORT,
       '--user=root', '--database=' + temporary], createReadStream(sql));
-    const countFile = path.join(FOLDER, 'restore-test-count-' + id + '.txt');
-    // Save read-only count to private data; never dump row contents.
+    // Check restored schema without printing private row contents.
     await new Promise((resolve, reject) => {
       const p = spawn(MYSQL, ['--no-defaults', '--host=127.0.0.1', '--port=' + PORT,
         '--user=root', '-N', '-e', `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${temporary}'`],
@@ -226,4 +226,6 @@ async function main() {
   console.log('BACKUP_AGENT_OK');
 }
 
-main().catch(() => { console.error('BACKUP_AGENT_FAILED'); process.exitCode = 1; });
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch(() => { console.error('BACKUP_AGENT_FAILED'); process.exitCode = 1; });
+}
