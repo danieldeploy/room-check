@@ -132,7 +132,7 @@ function backupEsc(string $text): string { return htmlspecialchars($text, ENT_QU
             <?php endforeach; ?>
             </tbody></table>
         <?php endif; ?>
-        <p>O estado «Verificado no Google Drive» confirma tamanho e checksum do ficheiro cifrado;
+        <p>O estado Verificado no Google Drive confirma tamanho e checksum do ficheiro cifrado;
             uma recuperação integral requer ainda o teste de restauro independente.</p>
     </section>
 </main>
