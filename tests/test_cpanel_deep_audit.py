@@ -23,6 +23,15 @@ class DiskAuditTests(unittest.TestCase):
         self.assertEqual(result["retention_scenarios_keep_newest_3"]["7"]["directories"], 0)
         self.assertFalse(result["deletion_authorized"])
 
+    def test_gzip_sql_backup_counts_as_shape_complete(self):
+        release = "release-20261020-110000-" + "a" * 12 + "-" + "b" * 12
+        base = audit.BACKUP + release + "/"
+        rows = [(base + "database.sql.gz", "file", 900),
+                (base + "application.tar.gz", "file", 1200),
+                (base + "complete.json", "file", 400)]
+        result = audit.backups(rows, dt.datetime(2026,10,29,tzinfo=dt.timezone.utc))
+        self.assertEqual(result["complete_shape_only"], 1)
+
     def test_browser_grouping_without_paths(self):
         result = audit.browsers([
             (audit.BROWSER + "chrome/linux-153.0.8010.36/chrome-linux64/chrome", "file", 2000000),
