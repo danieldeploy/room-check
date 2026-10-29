@@ -114,6 +114,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Puppeteer installer archives can be reclaimed only after age and exact metadata checks and confirming a matching extracted browser directory; installed browser versions remain protected.
 
+- Puppeteer archive inventory walks only parent directories and skips extracted browser trees; this prevents the guarded scanner from rejecting ordinary installed-browser files.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
