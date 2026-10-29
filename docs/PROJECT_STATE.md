@@ -132,6 +132,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 - It verifies the original SHA-256 hashes and gzip roundtrip against original SQL, atomically updates manifest format 2, and only then removes redundant plaintext. Failures preserve the original.
 - Legacy format 1 remains readable. Full MySQL restoration remains a separate acceptance check, and actual quota improvement must be measured in production.
 
+- Scoped daily audit counts recursive log volumes and old rotated compressed archives, and estimates same-day redundant backup cohorts; neither diagnostic deletes private logs or backup directories.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
