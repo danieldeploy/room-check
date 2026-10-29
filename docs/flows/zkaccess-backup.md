@@ -62,6 +62,8 @@ token, password, PIN, resposta de OAuth ou conteúdo SQL é registado.
   falhas na autenticação OAuth antes do upload (UTC).
 - `last_error_code`, `last_error_at`: apenas códigos explícitos permitidos;
   erros inesperados tornam-se `archive_failed`. O backup continua `ready`.
+  A última falha fica guardada para diagnóstico, mesmo depois de uma tentativa
+  posterior ser bem-sucedida.
 - `uploaded_at`: momento em que a leitura de volta do Drive e a verificação
   foram concluídas; estado `uploaded` (UTC).
 
