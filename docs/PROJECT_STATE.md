@@ -104,7 +104,7 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Owner request 2026-10-29: automatically recover quota so email delivery is not interrupted, without deleting mail or necessary recoverable backups.
 - Protected WHM credentials already exist in GitHub environment `management-hub-production`.
-- In-flight PR introduces quota-triggered cleanup only for disposable `.npm/_cacache/` files older than 14 days; never mail, backups or application data. See `docs/CPANEL_DISK_MAINTENANCE.md`.
+- In-flight PR introduces quota-triggered cleanup only for disposable `.npm/_cacache/`, `.cache/pip/` and `.cache/uv/` files older than 14 days; backup retention is audit-only pending verified recovery; never mail, backups or application data. See `docs/CPANEL_DISK_MAINTENANCE.md`.
 - The GitHub scheduled bridge is maintained separately on `main`; **both workflows need integration**. This mechanism has not yet been verified against the live WHM UAPI or via a received test email.
 - Recorded cPanel usage on 2026-10-29: 6000.04 MB / 6000 MB. Actual disk recovery remains unconfirmed.
 
