@@ -218,8 +218,6 @@ final class ZKAccessBackupStore
         }
         $entries[$id]['upload_attempts'] = (int)($entries[$id]['upload_attempts'] ?? 0) + 1;
         $entries[$id]['last_attempt_at'] = gmdate('Y-m-d H:i:s', $at);
-        $entries[$id]['last_error_code'] = null;
-        $entries[$id]['last_error_at'] = null;
         $this->saveEntries($entries);
     }
 
@@ -258,8 +256,6 @@ final class ZKAccessBackupStore
         $entries[$id]['drive_size'] = (int)$metadata['size'];
         $entries[$id]['drive_md5'] = (string)$metadata['md5Checksum'];
         $entries[$id]['uploaded_at'] = gmdate('Y-m-d H:i:s', $at);
-        $entries[$id]['last_error_code'] = null;
-        $entries[$id]['last_error_at'] = null;
         $this->saveEntries($entries);
     }
 
