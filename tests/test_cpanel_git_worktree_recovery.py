@@ -71,6 +71,7 @@ class CloneRecoveryTests(unittest.TestCase):
         with patch.object(mod, "Config") as config, patch.object(mod, "CpanelAPI"), \
              patch.object(mod, "Deployment") as deployment, patch.object(mod, "GitHub") as github, \
              patch.object(mod, "plan", return_value=nine), \
+             patch.object(mod, "quarantine_status", return_value="existing_empty"), \
              patch.object(mod, "request_api") as api, \
              patch.dict(mod.os.environ, {"GITHUB_SHA": "b" * 40}):
             config.return_value.repository = mod.DEFAULT_REPOSITORY
@@ -101,6 +102,49 @@ class CloneRecoveryTests(unittest.TestCase):
             self.assertEqual(result["moved"], 9)
             self.assertEqual(mover.call_count, 9)
             self.assertEqual(mk.call_count, 5)
+
+    def test_existing_empty_private_quarantine_is_verified_before_resuming(self):
+        allowed = {"root", "deploy", "docs", "tests"}
+        home = {mod.posixpath.basename(mod.QUARANTINE): {"type": "dir"}}
+        root = {name: {"type": "dir"} for name in allowed}
+        responses = {mod.HOME: home, mod.QUARANTINE: root}
+        responses.update({mod.QUARANTINE + "/" + x: {} for x in allowed})
+        with patch.object(mod, "files_in", side_effect=lambda directory: responses[directory]):
+            self.assertEqual(mod.quarantine_status(), "existing_empty")
+        responses[mod.QUARANTINE + "/root"] = {"unverified": {"type": "file"}}
+        with patch.object(mod, "files_in", side_effect=lambda directory: responses[directory]):
+            with self.assertRaises(mod.Rejected):
+                mod.quarantine_status()
+
+    def test_move_uses_exact_uapi_target_then_verifies_source_and_destination(self):
+        item = {"subdir": "docs", "name": "safe.txt",
+                "source": mod.ROOT + "/docs/safe.txt",
+                "metadata": {"size": 100, "mtime": 123}}
+        dest_dir = mod.QUARANTINE + "/docs"
+        source_dir = mod.ROOT + "/docs"
+        results = [
+            {},  # destination is empty before move
+            {},  # source disappears only after successful operation
+            {"safe.txt": {"type": "file"}},  # destination contains intact file
+        ]
+        with patch.object(mod, "files_in", side_effect=results), \
+             patch.object(mod, "file_info", return_value=item["metadata"]), \
+             patch.object(mod, "request_api", return_value={}) as api:
+            mod.move_verified(item)
+            api.assert_called_once_with("Fileman", "move_file", {
+                "source": "home/welcome/repositories/room-check/docs/safe.txt",
+                "destination": "room-check-repo-quarantine-20261029/docs/safe.txt",
+            })
+
+    def test_move_fails_when_source_remains_after_uapi_response(self):
+        item = {"subdir": "docs", "name": "safe.txt",
+                "source": mod.ROOT + "/docs/safe.txt",
+                "metadata": {"size": 100, "mtime": 123}}
+        with patch.object(mod, "files_in", side_effect=[{}, {"safe.txt": {"type": "file"}}]), \
+             patch.object(mod, "file_info", return_value=item["metadata"]), \
+             patch.object(mod, "request_api", return_value={}):
+            with self.assertRaises(mod.Rejected):
+                mod.move_verified(item)
 
     def test_path_cannot_escape_welcome_and_quarantine_names_fixed(self):
         for path in ("/home/city/repositories/file", "/home/welcome/../mail", "/etc/passwd"):
