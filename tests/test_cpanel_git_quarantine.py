@@ -24,6 +24,10 @@ class QuarantinePlanningTests(unittest.TestCase):
         rows[""] = [
             {"file": ".git", "type": "dir"},
             {"file": ".cpanel.yml", "type": "file"},
+            {"file": "deploy", "type": "dir"},
+            {"file": "docs", "type": "dir"},
+            {"file": "tests", "type": "dir"},
+            {"file": "cron", "type": "dir"},
             {"file": "local-note.tmp", "type": "file"},
         ]
         rows["deploy"] = [{"file": "release.sh", "type": "file"}] + [
