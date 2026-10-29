@@ -63,6 +63,10 @@ def releases():
     result = listing(ROOT)
     names = []
     for name, item in result.items():
+        if name == "release-backup.lock":
+            if item.get("type") != "file":
+                raise Rejected("invalid_backup_lock")
+            continue
         if name.startswith("release-"):
             release_time(name)
             if item.get("type") != "dir":
@@ -152,6 +156,9 @@ def verified_manifest(name):
         if not (0 < size <= 1024 * 1024 * 1024):
             raise Rejected("invalid_artifact_size")
         bytes_total += size
+    # Never recursively remove a directory containing any unlisted data.
+    if set(entries) != set(digests) | {"complete.json"}:
+        raise Rejected("unexpected_backup_contents")
     if entries.get("complete.json", {}).get("type") != "file":
         raise Rejected("manifest_not_regular")
     return data, bytes_total
