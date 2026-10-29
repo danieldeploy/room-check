@@ -71,6 +71,7 @@ def search(root):
 def backups(rows, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     groups = collections.defaultdict(lambda: {"bytes": 0, "files": 0, "manifest": 0, "database": 0, "archive": 0})
+    artifact_bytes = collections.Counter()
     for path, typ, size in rows:
         if not path.startswith(BACKUP):
             continue
@@ -82,6 +83,8 @@ def backups(rows, now=None):
             continue
         groups[release]["files"] += 1
         groups[release]["bytes"] += size
+        category = "database_sql" if name == "database.sql" else "archives_tar_gz" if name.endswith(".tar.gz") else "manifest" if name == "complete.json" else "other"
+        artifact_bytes[category] += size
         groups[release]["manifest"] += int(name == "complete.json")
         groups[release]["database"] += int(name == "database.sql")
         groups[release]["archive"] += int(name.endswith(".tar.gz") and "/" not in name)
@@ -97,9 +100,21 @@ def backups(rows, now=None):
                 candidates.append(release)
         policy[str(days)] = {"directories": len(candidates),
                              "potential_mb": round(sum(groups[r]["bytes"] for r in candidates) / MB, 1)}
+    newest_by_day = set()
+    keep_daily = set(ordered[:3])
+    for release in ordered:
+        day = release[8:16]
+        if day not in newest_by_day:
+            keep_daily.add(release)
+            newest_by_day.add(day)
+    redundant = [name for name in ordered if name not in keep_daily]
     complete = sum(1 for g in groups.values()
                    if g["manifest"] == 1 and g["database"] == 1 and g["archive"] >= 1)
-    return {"directories_with_files": len(groups), "complete_shape_only": complete,
+    return {"directories_with_files": len(groups), "same_day_redundant_candidates": {
+                "directories": len(redundant), "potential_mb": round(sum(groups[r]["bytes"] for r in redundant) / MB, 1),
+                "policy": "keep_last_three_and_latest_per_day_last_45_days; analysis_only"},
+            "artifact_categories_mb": {k: round(v / MB, 1) for k, v in sorted(artifact_bytes.items())},
+            "complete_shape_only": complete,
             "incomplete_shape": len(groups) - complete,
             "approximation": "file sizes only; does not validate checksums or restorability",
             "total_file_mb": round(sum(g["bytes"] for g in groups.values()) / MB, 1),
