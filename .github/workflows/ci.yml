@@ -130,6 +130,7 @@ jobs:
           python3 tests/test_toconline_diagnostic.py -v
           python3 tests/test_zkaccess_backup_cron.py -v
           python3 tests/test_cpanel_repo_readiness.py -v
+          python3 tests/test_cpanel_git_quarantine.py -v
           php tests/run.php
           php tests/i18n.php
           php tests/transversal-i18n-contract.php
@@ -198,6 +199,22 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      - name: Confirm exact inspected Git clone recovery candidate
+        if: vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cpanel_git_quarantine.py inspect
+
+      - name: Preserve unexpected Git clone files in private recovery directory
+        if: vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cpanel_git_quarantine.py quarantine
 
       - name: Inspect hosting state without changes
         if: vars.HUB_DEPLOY_ENABLED == 'true'
