@@ -24,6 +24,19 @@ class AutomaticCleanupTests(unittest.TestCase):
             auto.main()
             deleting.assert_called_once_with(".npm/_cacache/a", 100, 50)
 
+    def test_installed_puppeteer_dirs_not_traversed(self):
+        def listing(path):
+            if path == ".cache/puppeteer/chrome-headless-shell":
+                return [
+                    {"file": "linux-148.0.7778.97", "type": "dir"},
+                    {"file": "148.0.7778.97-chrome-headless-shell-linux64.zip", "type": "file", "size": 100, "mtime": 10},
+                ]
+            return []
+        with mock.patch.object(auto, "list_files", side_effect=listing):
+            found = list(auto.candidates(2000000))
+        self.assertEqual([x[0] for x in found],
+            [".cache/puppeteer/chrome-headless-shell/148.0.7778.97-chrome-headless-shell-linux64.zip"])
+
     def test_quota_invalid_fails_closed(self):
         with mock.patch.object(auto, "request_api", return_value={"diskused": 6000}):
             with self.assertRaises(auto.Rejected):
