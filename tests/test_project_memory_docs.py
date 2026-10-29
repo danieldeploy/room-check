@@ -64,12 +64,12 @@ class ProjectMemoryDocsTests(unittest.TestCase):
             self.assertEqual([], guard.evaluate(files, self.config))
 
     def test_generic_runtime_change_requires_project_state(self):
-        errors = guard.evaluate(["src/Invoices/Foo.php"], self.config)
+        errors = guard.evaluate(["src/Auth/Auth.php"], self.config)
         self.assertTrue(any("PROJECT_STATE.md" in error for error in errors))
         self.assertEqual(
             [],
             guard.evaluate(
-                ["src/Invoices/Foo.php", "docs/PROJECT_STATE.md"], self.config
+                ["src/Auth/Auth.php", "docs/PROJECT_STATE.md"], self.config
             ),
         )
 
