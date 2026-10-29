@@ -61,7 +61,7 @@ def files_in(directory):
 
 
 def file_info(path):
-    result = request_api("Fileman", "get_file_information", {"path": path})
+    result = request_api("Fileman", "get_file_information", {"path": relative(path)})
     if isinstance(result, list) and len(result) == 1:
         result = result[0]
     if not isinstance(result, dict) or result.get("type") != "file" or result.get("is_symlink"):
