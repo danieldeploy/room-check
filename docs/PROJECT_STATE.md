@@ -87,7 +87,17 @@ reversible private quarantine guarded by exact inventory, expected old SHA,
 file type and path validation is prepared to clean the staging clone before
 ordinary deployment; it must not touch live application, secrets or existing
 backups. Deployment and independent cron remain unverified until the WHM
-operation succeeds. This recovery does **not** reclaim cPanel disk quota.
+operation succeeds.
+
+The 2026-10-29 guarded recovery reached the cPanel Fileman move but failed with
+`quarantine_move_unconfirmed`. The subsequent read-only diagnostic still found
+all nine untracked objects in the staging clone; no successful publication was
+recorded. The follow-up recovery first inspects the existing private recovery
+folder, refuses any unknown/nonempty entries, then uses UAPI
+`Fileman::move_file` with an exact target filename and verifies source absence,
+destination presence and identical size/mtime before progressing. It never
+blindly repeats a partial move, deletes files or bypasses the protected deploy
+gate. Independent cron and 10-day ZKTeco retention remain unverified on server. This recovery does **not** reclaim cPanel disk quota.
 The protected read-only repository diagnostic now compares the cPanel clone
 with its actual installed SHA, avoiding false reports of missing files when
 GitHub contains newer commits. Recovery may proceed only after this independent

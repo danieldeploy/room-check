@@ -129,19 +129,42 @@ def move_verified(item):
         raise Rejected("repository_file_changed_before_move")
     if item["name"] in files_in(posixpath.dirname(target)):
         raise Rejected("quarantine_collision")
-    response = request_api("Fileman", "fileop", {
-        "op": "move", "sourcefiles": relative(source),
-        "destfiles": relative(posixpath.dirname(target)), "doubledecode": 0,
-    }, legacy=True)
-    rows = response.get("data")
-    if not isinstance(rows, list) or len(rows) != 1 or rows[0].get("result") not in (1, "1", True):
-        raise Rejected("quarantine_move_unconfirmed")
+    # The deprecated API2 fileop returned an ambiguous result during the
+    # first protected attempt; no change in the clone could be confirmed.
+    # UAPI Fileman::move_file accepts an explicit full destination filename.
+    # Verify the actual filesystem afterwards, never assume an API response
+    # alone proves the move was applied.
+    request_api("Fileman", "move_file", {
+        "source": relative(source),
+        "destination": relative(target),
+    })
     if item["name"] in files_in(posixpath.dirname(source)):
         raise Rejected("quarantine_source_not_removed")
     if item["name"] not in files_in(posixpath.dirname(target)):
         raise Rejected("quarantine_destination_not_found")
     if file_info(target) != item["metadata"]:
         raise Rejected("quarantine_metadata_changed")
+
+
+def quarantine_status():
+    """Read-only reconciliation of the previous incomplete recovery attempt.
+
+    Never reuse a quarantine if it contains a file or an unexpected entry:
+    that requires a separate manual inventory before any additional moves.
+    """
+    name = posixpath.basename(QUARANTINE)
+    home_items = files_in(HOME)
+    if name not in home_items:
+        return "absent"
+    if home_items[name].get("type") != "dir":
+        raise Rejected("quarantine_not_directory")
+    allowed = {"root", "deploy", "docs", "tests"}
+    folders = files_in(QUARANTINE)
+    if set(folders) != allowed or any(folders[d].get("type") != "dir" for d in allowed):
+        raise Rejected("quarantine_unexpected_structure")
+    if any(files_in(QUARANTINE + "/" + d) for d in sorted(allowed)):
+        raise Rejected("quarantine_has_unverified_prior_moves")
+    return "existing_empty"
 
 
 def recover(apply):
@@ -164,19 +187,22 @@ def recover(apply):
     github.require_fast_forward(OLD_SHA, expected)
     tree = github.read("/git/trees/" + OLD_SHA + "?recursive=1")
     entries = plan(tree)
+    existing = quarantine_status()
 
-    # Allow use without mutation for diagnosis. Unknown files are never logged.
+    # First inspect the previously attempted quarantine in read-only mode.
+    # A partial move or unexpected content must never be replayed blindly.
     if not apply:
         return {"state": "planned", "moved": 0, "write_operations": False,
-                "regular_untracked": len(entries),
+                "regular_untracked": len(entries), "quarantine": existing,
                 "sections": {d or "root": n for d, n in EXPECTED_EXTRA.items()}}
 
-    if QUARANTINE.rsplit("/", 1)[1] in files_in(HOME):
-        raise Rejected("quarantine_already_exists_inspect_server")
-    # The parent is outside the deployment clone and web root; mode 0700.
-    create_private_directory(HOME, posixpath.basename(QUARANTINE))
-    for subdir in ("root", "deploy", "docs", "tests"):
-        create_private_directory(QUARANTINE, subdir)
+    if existing == "absent":
+        # The parent is outside the deployment clone and web root; mode 0700.
+        create_private_directory(HOME, posixpath.basename(QUARANTINE))
+        for subdir in ("root", "deploy", "docs", "tests"):
+            create_private_directory(QUARANTINE, subdir)
+    elif existing != "existing_empty":
+        raise Rejected("quarantine_requires_inspection")
     moved = 0
     for item in entries:
         move_verified(item)

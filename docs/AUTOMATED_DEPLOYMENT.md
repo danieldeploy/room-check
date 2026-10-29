@@ -158,3 +158,13 @@ inspection before retry. Once the repository is clean, this one-off recovery
 is a no-op; the original backup gate, SHA checks and deploy verification remain
 mandatory. No mail, database, original backup, `.git` contents or live PHP is
 modified by this operation.
+
+The first guarded attempt on 2026-10-29 did **not** confirm the API2 Fileman
+`fileop` move (`quarantine_move_unconfirmed`). A subsequent protected read-only
+scan still reported the original nine untracked entries, so no Git release was
+attempted. The follow-up starts with an explicit read-only inspection of the
+pre-existing private quarantine: only exactly the four known, empty subfolders
+are reusable. A nonempty or unknown quarantine aborts for investigation. It
+then uses documented UAPI `Fileman::move_file` with explicit `source` and
+`destination`; each move is followed by readback of source/destination and
+metadata. No automatic retry is allowed after an uncertain response.
