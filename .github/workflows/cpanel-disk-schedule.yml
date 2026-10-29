@@ -27,3 +27,4 @@ jobs:
         run: |
           gh api -X POST "repos/$GH_REPO/actions/workflows/cpanel-auto-cleanup.yml/dispatches" -f ref='agent/room-item-assignments'
 # One-time diagnostic trigger after PR #263 integration.
+# Read-only inventory retry after size parsing fix.
