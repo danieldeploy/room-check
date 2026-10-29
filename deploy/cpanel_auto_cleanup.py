@@ -2,11 +2,13 @@
 """Scheduled bounded cleanup of known disposable cache files only."""
 import json
 import time
+from itertools import islice
 from cpanel_disk_cleanup import request_api, safe_file, inspect, delete_exact, Rejected
 
 THRESHOLD = 0.90
 MIN_AGE = 14 * 86400
 MAX_FILES = 40
+MAX_SCAN = 400
 MAX_DEPTH = 5
 MAX_BYTES = 200 * 1024 * 1024
 
@@ -82,9 +84,15 @@ def main():
                           "utilization_percent": round(100 * used / limit, 1)}))
         return
     count = freed = 0
-    for path, size, mtime in candidates(time.time()):
-        if count >= MAX_FILES or freed + size > MAX_BYTES:
+    # Prefer sizeable cache entries: the original traversal spent minutes
+    # deleting 40 tiny files and recovered only tens of kilobytes.
+    scanned = list(islice(candidates(time.time()), MAX_SCAN))
+    scanned.sort(key=lambda item: (-item[1], item[0]))
+    for path, size, mtime in scanned:
+        if count >= MAX_FILES:
             break
+        if size == 0 or freed + size > MAX_BYTES:
+            continue
         if path.startswith(".cache/puppeteer/"):
             version = path.rsplit("/", 1)[1].split("-chrome-headless-shell-linux64.zip")[0]
             if not version or not any((x.get("file") or x.get("name")) == "linux-" + version and x.get("type") == "dir" for x in list_files(".cache/puppeteer/chrome-headless-shell")):
@@ -95,6 +103,7 @@ def main():
     new_used, new_limit = quota()
     print(json.dumps({"ok": True, "status": "cleaned" if count else "no_safe_candidates",
                       "files_deleted": count, "bytes_deleted": freed,
+                      "candidates_examined": len(scanned),
                       "quota_before_percent": round(100 * used / limit, 1),
                       "quota_after_percent": round(100 * new_used / new_limit, 1)}))
 
