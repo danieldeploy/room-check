@@ -17,9 +17,9 @@ import urllib.request
 HOST = "https://server50.romania-webhosting.com:2087"
 RESELLER = "fazenda"
 ACCOUNT = "welcome"
-# First iteration: only disposable npm cache files, never mail, backups, logs,
-# site code or other hidden cache roots without a verified inventory.
-SAFE_PREFIX = ".npm/_cacache/"
+# Only explicitly identified regenerable caches. Backups are audited separately.
+# Never delete mail, deployment data or broad hidden cache roots.
+SAFE_PREFIXES = (".npm/_cacache/", ".cache/pip/", ".cache/uv/")
 NAME = re.compile(r"[A-Za-z0-9_./-]{1,300}\Z")
 MAX_BODY = 1048576
 
@@ -31,7 +31,7 @@ class Rejected(Exception):
 def safe_file(path):
     if not isinstance(path, str) or not NAME.fullmatch(path):
         raise Rejected("invalid_path")
-    if path.startswith("/") or ".." in path.split("/") or not path.startswith(SAFE_PREFIX):
+    if path.startswith("/") or ".." in path.split("/") or not path.startswith(SAFE_PREFIXES):
         raise Rejected("path_not_allowlisted")
     if path.endswith("/"):
         raise Rejected("directories_not_allowed")
