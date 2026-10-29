@@ -108,14 +108,13 @@ def delete_exact(path, expected_size, expected_mtime):
         raise Rejected("file_changed")
     # API 2's 'trash' does not release quota immediately; requires separate
     # safe empty-trash procedure. No command here deletes backups or mail.
-    request_api("Fileman", "fileop", {"op": "trash", "sourcefiles": path,
-               "doubledecode": 0}, legacy=True)
-    return {"state": "moved_to_trash", "bytes": current["size"]}
+    result = request_api("Fileman", "delete_file", {"path": path, "skip_trash": 1})
+    return {"state": "permanently_deleted", "bytes": current["size"]}
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("action", choices=["inspect", "trash"])
+    p.add_argument("action", choices=["inspect", "delete"])
     p.add_argument("--path", required=True)
     p.add_argument("--expected-size", type=int)
     p.add_argument("--expected-mtime", type=int)
