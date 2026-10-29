@@ -111,7 +111,8 @@ def create_private_directory(parent, name):
     result = request_api("Fileman", "mkdir",
                          {"path": parent, "name": name, "permissions": "0700"}, legacy=True)
     data = result.get("data")
-    if not isinstance(data, list) or len(data) != 1 or data[0].get("name") != name:
+    if (not isinstance(data, list) or len(data) != 1 or data[0].get("name") != name
+            or str(data[0].get("permissions", "")).lstrip("0") != "700"):
         raise Rejected("quarantine_creation_failed")
 
 
