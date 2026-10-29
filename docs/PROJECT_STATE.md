@@ -1,6 +1,6 @@
 # Management Hub — current project state
 
-Last reviewed: 2026-10-28 (Europe/Lisbon)
+Last reviewed: 2026-10-29 (Europe/Lisbon)
 
 This file records the current project state, not an immutable history. Durable
 behavioral decisions live under `docs/decisions/`; detailed workflows live
@@ -28,6 +28,18 @@ under `docs/flows/`.
   cannot silently bypass their state/flow documentation.
 - Test-only and visual/static-only changes are intentionally exempt unless they
   also alter mapped runtime behavior.
+
+## Development workflow tooling
+
+- `AGENTS.md` now defines selective use of developer-side Superpowers,
+  Ponytail review and Grill Me light. These tools are not application runtime
+  dependencies and do not override repository/project decisions.
+- Routine authorized work remains direct; full brainstorming, full Ponytail and
+  full Grill Me are not automatic gates.
+- Independent second-opinion/reviewer calls are not a standing project rule.
+- A codebase-memory/code-graph MCP may be used as an optional developer index if
+  already available, but Management Hub does not depend on one for build,
+  deployment or production operation.
 
 ## Management Hub / Room Check
 
