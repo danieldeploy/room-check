@@ -129,6 +129,7 @@ jobs:
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
           python3 tests/test_zkaccess_backup_cron.py -v
+          python3 tests/test_cpanel_repo_readiness.py -v
           php tests/run.php
           php tests/i18n.php
           php tests/transversal-i18n-contract.php
@@ -243,6 +244,13 @@ jobs:
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: python3 deploy/hostelworld_status.py
+
+      - name: Diagnose blocked Git repository without modification
+        if: failure() && vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cpanel_repo_readiness.py
 
   cloudbeds-acceptance:
     if: github.event_name == 'push' && github.ref == 'refs/heads/agent/room-item-assignments' && vars.HUB_DEPLOY_ENABLED == 'true'
