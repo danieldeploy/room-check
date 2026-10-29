@@ -57,7 +57,9 @@ under `docs/flows/`.
 
 ## ZKTeco MySQL backups — independent Drive archiving
 
-Status: **Prepared on feature branch / not yet verified in production**.
+Status: **Independent worker integrated in GitHub; deployment blocked on cPanel Git readiness**.
+The ZKTeco-only retention has been changed from 30 to **10 days** in the current feature branch; still awaiting publication.
+The two newest verified Drive backups are protected if fewer fresh copies exist.
 The existing 04:00 Europe/Lisbon AccesControl MySQL dump, encrypted Hub intake,
 Google Drive destination remains unchanged; retention is 10 days for ZKTeco backups only (preserve at least two verified copies).
 
