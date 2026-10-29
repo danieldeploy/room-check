@@ -106,6 +106,12 @@ verificação específicas. Um manifesto confirma os ficheiros criados, não um 
 de restauração; testar a recuperação num ambiente descartável antes de confiar no
 processo para alterações destrutivas.
 
+## Compactação dos dumps privados
+
+Após a publicação, o auxiliar `deploy/compress_release_dumps.php` compacta até 50 backups históricos com mais de 48 horas, sem eliminar diretórios ou pontos de recuperação. Verifica os hashes SHA-256 existentes, comprime cada `database.sql`, confirma que a descompressão reproduz exatamente os bytes originais e atualiza atomicamente `complete.json` para formato 2 (`database.sql.gz`). Só depois retira o SQL redundante.
+
+Falhas na compactação deixam o backup original intacto e não bloqueiam a publicação. A restauração do formato 2 requer descompressão antes da importação MySQL; o teste real de restauro de base de dados continua a ser obrigatório para futuras eliminações de backups inteiros.
+
 ## Migrações e manutenção
 
 O fluxo mantém apenas a migração específica já integrada pelo projeto. Não executa
