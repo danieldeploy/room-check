@@ -49,7 +49,7 @@ def cache_summary(rows):
         if not isinstance(name,str):
             raise Rejected("invalid_inventory")
         groups[name]={"type":str(entry.get("type","unknown"))[:12],
-                      "reported_size_bytes":int(entry.get("size",0))}
+                      "reported_size_bytes":int(entry.get("size") or 0)}
     return groups
 
 def main():
