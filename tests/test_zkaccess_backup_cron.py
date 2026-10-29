@@ -31,7 +31,8 @@ class IndependentZKAccessCronTests(unittest.TestCase):
     def test_existing_exact_cron_is_idempotent(self):
         with patch.object(backup, "cron_call", return_value=[entry(), {"count": 2}]) as call:
             self.assertTrue(backup.install())
-            call.assert_called_once_with("listcron")
+            self.assertEqual([item.args[0] for item in call.call_args_list],
+                             ["listcron", "listcron"])
 
     def test_install_and_verify_once(self):
         jobs = []
