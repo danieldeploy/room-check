@@ -63,6 +63,10 @@ def releases():
     result = listing(ROOT)
     names = []
     for name, item in result.items():
+        if name == "release-backup.lock":
+            if item.get("type") != "file":
+                raise Rejected("invalid_backup_lock")
+            continue
         if name.startswith("release-"):
             release_time(name)
             if item.get("type") != "dir":
