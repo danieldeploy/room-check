@@ -19,7 +19,7 @@ def release(day, hour, marker):
 
 class RetentionTests(unittest.TestCase):
     def test_keep_daily_and_three_latest_and_oldest(self):
-        now = dt.datetime(2026, 10, 29, 22, tzinfo=dt.timezone.utc)
+        now = dt.datetime(2026, 11, 2, 22, tzinfo=dt.timezone.utc)
         names = sorted([
             release("20261028", "100000", "a"),
             release("20261028", "110000", "b"),
