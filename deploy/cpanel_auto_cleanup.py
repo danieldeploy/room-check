@@ -57,10 +57,14 @@ def candidates(now):
             path = directory + "/" + name
             typ = entry.get("type")
             if typ == "dir":
+                if path.startswith(".cache/puppeteer/"):
+                    continue  # Installed browser trees are never traversed.
                 if depth < MAX_DEPTH:
                     stack.append((path, depth + 1))
                 continue
             if typ != "file":
+                continue
+            if path.startswith(".cache/puppeteer/") and not path.endswith("-chrome-headless-shell-linux64.zip"):
                 continue
             safe_file(path)
             try:
