@@ -23,6 +23,16 @@ class DiskAuditTests(unittest.TestCase):
         self.assertEqual(result["retention_scenarios_keep_newest_3"]["7"]["directories"], 0)
         self.assertFalse(result["deletion_authorized"])
 
+    def test_same_day_backup_duplication_is_not_deleted(self):
+        base = audit.BACKUP
+        rows = []
+        for hour in ("100000", "110000", "120000", "130000", "140000"):
+            release = "release-20261028-" + hour + "-" + "a" * 12 + "-" + "b" * 12
+            rows.append((base + release + "/database.sql", "file", 2_000_000))
+        result = audit.backups(rows, dt.datetime(2026,10,29,tzinfo=dt.timezone.utc))
+        self.assertEqual(result["same_day_redundant_candidates"]["directories"], 2)
+        self.assertFalse(result["deletion_authorized"])
+
     def test_browser_grouping_without_paths(self):
         result = audit.browsers([
             (audit.BROWSER + "chrome/linux-153.0.8010.36/chrome-linux64/chrome", "file", 2000000),
