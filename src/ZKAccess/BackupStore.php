@@ -32,7 +32,7 @@ final class ZKAccessBackupStore
             'time' => self::validateTime((string)($stored['time'] ?? '04:00')),
             'timezone' => 'Europe/Lisbon', 'retention_days' => 30,
             'manual_id' => (is_string($stored['manual_id'] ?? null)
-                && preg_match('/\\A[a-f0-9]{32}\\z/D', $stored['manual_id'])) ? $stored['manual_id'] : null];
+                && preg_match('/\A[a-f0-9]{32}\z/D', $stored['manual_id'])) ? $stored['manual_id'] : null];
     }
 
     public function saveSettings(bool $enabled, string $time): void
