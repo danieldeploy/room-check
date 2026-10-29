@@ -125,6 +125,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Daily maintenance prioritizes the largest explicitly allowlisted disposable cache files (bounded scan of 400 and at most 40 deletions), avoiding runs that previously reclaimed only ~30 KB.
 
+- Protected disk audit also invokes the existing WHM deployment `status` read-only command to diagnose `repository_not_deployable`; status failure never broadens or changes cleanup permissions.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
