@@ -41,14 +41,15 @@ class DiskAuditTests(unittest.TestCase):
                 list(audit.search(audit.BACKUP.rstrip("/")))
 
     def test_log_candidates_only_rotated_old_archives(self):
+        root = audit.HOME + "/logs/"
         data = [
-            {"file": "access.log.gz", "type": "file", "size": 2000, "mtime": 1},
-            {"file": "live.log", "type": "file", "size": 5000, "mtime": 1},
-            {"file": "recent.gz", "type": "file", "size": 9000, "mtime": 1793000000},
+            {"file": root + "nested/access.log.gz", "type": "file", "size": 2000, "mtime": 1},
+            {"file": root + "live.log", "type": "file", "size": 5000, "mtime": 1},
+            {"file": root + "recent.gz", "type": "file", "size": 9000, "mtime": 1793000000},
         ]
-        with mock.patch.object(audit, "request_api", return_value=data):
+        with mock.patch.object(audit, "request_api", return_value={"data": data}):
             found = audit.logs(dt.datetime(2026,10,29,tzinfo=dt.timezone.utc))
-        self.assertEqual(found["rotated_archives_older_30_days"], 1)
+        self.assertEqual(found["compressed_archive_candidates"]["30"]["files"], 1)
         self.assertFalse(found["deletion_authorized"])
 
     def test_disk_usage_aggregates_only_named_categories(self):
