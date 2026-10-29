@@ -93,13 +93,13 @@ try {
     $store->recordUploadSuccess($id, ['size' => 1234, 'md5Checksum' => str_repeat('a', 32)], $at + 610);
     assertBackup($store->status()[0]['upload_attempts'] === 3
         && $store->status()[0]['uploaded_at'] === '2026-10-29 06:10:10'
-        && $store->status()[0]['last_error_code'] === null
+        && $store->status()[0]['last_error_code'] === 'drive_quota'
         && $store->status()[0]['status'] === 'uploaded',
-        'successful verified Drive delivery is timestamped and clears errors');
+        'successful delivery preserves the previous failure diagnostic');
     $store->recordUploadFailure($id, 'drive_auth', $at + 620);
     assertBackup($store->status()[0]['status'] === 'uploaded'
-        && $store->status()[0]['last_error_code'] === null,
-        'late error cannot downgrade a verified backup');
+        && $store->status()[0]['last_error_code'] === 'drive_quota',
+        'late error cannot downgrade a verified backup or overwrite its history');
     expectBackupFailure(static fn() => $store->recordUploadAttempt($id, $at + 700),
         'uploaded backup cannot be re-queued');
     $encrypted = file_get_contents($vault->path(ZKAccessBackupStore::dataName($id)));
