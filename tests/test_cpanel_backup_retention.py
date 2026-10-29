@@ -61,6 +61,20 @@ class RetentionTests(unittest.TestCase):
             with self.assertRaises(m.Rejected):
                 m.verified_manifest(name)
 
+    def test_unlisted_files_block_recursive_backup_delete(self):
+        name = release("20261025", "100000", "a")
+        digest = "a" * 64
+        rows = [{"file": "complete.json", "type": "file", "size": 500},
+                {"file": "database.sql", "type": "file", "size": 200},
+                {"file": "application.tar.gz", "type": "file", "size": 1000},
+                {"file": "unlisted-guest-data.txt", "type": "file", "size": 200}]
+        data = {"format": 1, "sha256": {
+            "database.sql": digest, "application.tar.gz": digest}}
+        with mock.patch.object(m, "listing", return_value={x["file"]: x for x in rows}), \
+             mock.patch.object(m, "content", return_value=__import__("json").dumps(data).encode()):
+            with self.assertRaisesRegex(m.Rejected, "unexpected_backup_contents"):
+                m.verified_manifest(name)
+
     def test_restore_checksum_precedes_database_import(self):
         name = release("20261025", "100000", "a")
         sql = b"CREATE TABLE t (id INT);"
