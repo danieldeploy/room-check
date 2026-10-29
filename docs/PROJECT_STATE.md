@@ -141,6 +141,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 - Deletion is implemented behind an explicit `--apply` mode **not yet enabled**, limited to 25 snapshot directories and 200 MiB per run, only after a successful temporary MySQL import. Files are permanently removed only via the existing fixed-target WHM API, and roster changes abort.
 - **Open acceptance:** first live dry run must pass and the selected application archives have not yet had a complete restore test. Do not claim backups were deleted or production deployment recovered until actually verified.
 
+- After 2026-10-29 retention validation, daily cache deletion has an explicit 95-second limit; timeout is surfaced as incomplete without automatic retries, while protected backup restore diagnostics continue independently.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
