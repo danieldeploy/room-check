@@ -71,7 +71,7 @@ try {
     assertBackup($store->finish(['id' => $id])['verified'] === true, 'repeat finalization');
     assertBackup($store->status()[0]['status'] === 'ready', 'status visible');
     $receipt = $store->status()[0]['received_at'];
-    assertBackup(is_string($receipt) && preg_match('/\\A20[0-9]{2}-/', $receipt) === 1,
+    assertBackup(is_string($receipt) && preg_match('/\A20[0-9]{2}-/', $receipt) === 1,
         'complete receipt recorded after integrity verification');
     $at = (int)strtotime('2026-10-29T06:00:00Z');
     $store->recordUploadAttempt($id, $at);
