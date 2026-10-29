@@ -123,6 +123,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 - Existing automatic deletion remains limited to explicitly allowlisted caches; backup deletion and installed-browser deletion are **not** enabled without recovery/in-use evidence.
 - Acceptance remains quota and real incoming email verification after any future cleanup.
 
+- Daily maintenance prioritizes the largest explicitly allowlisted disposable cache files (bounded scan of 400 and at most 40 deletions), avoiding runs that previously reclaimed only ~30 KB.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
