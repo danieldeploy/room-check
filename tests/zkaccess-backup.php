@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/ZKAccess/BackupStore.php';
 require_once __DIR__ . '/../src/ZKAccess/BackupSchedule.php';
 require_once __DIR__ . '/../src/ZKAccess/BackupDestination.php';
+require_once __DIR__ . '/../src/ZKAccess/BackupDrive.php';
 
 function assertBackup(bool $condition, string $message): void
 {
@@ -25,6 +26,28 @@ try {
     expectBackupFailure(static fn() => ZKAccessBackupStore::validateTime('24:00'), 'invalid time');
     expectBackupFailure(static fn() => ZKAccessBackupStore::validateTime('4:00'), 'invalid time format');
     assertBackup(ZKAccessBackupDestination::BACKUP_FOLDER_NAME === 'ZKTeco Backup', 'folder');
+
+    // Strict UTC cut-off: ten complete days, no early deletion, always
+    // preserve the two newest verified copies even if they are older.
+    $clock = strtotime('2026-11-12 12:00:00 UTC');
+    $tenDays = 10 * 86400;
+    $stamp = static fn(int $seconds): string => gmdate('Y-m-d H:i:s', $seconds);
+    $records = [
+        'oldest' => ['status' => 'uploaded', 'created_at' => $stamp($clock - 13 * 86400)],
+        'old' => ['status' => 'uploaded', 'created_at' => $stamp($clock - 11 * 86400)],
+        'boundary' => ['status' => 'uploaded', 'created_at' => $stamp($clock - $tenDays)],
+        'recent' => ['status' => 'uploaded', 'created_at' => $stamp($clock - 86400)],
+        'pending' => ['status' => 'ready', 'created_at' => $stamp($clock - 15 * 86400)],
+    ];
+    assertBackup(array_keys(ZKAccessBackupDrive::retentionCandidates($records, $clock))
+        === ['old', 'oldest'], 'only overdue verified archives are eligible, newest first');
+    assertBackup(ZKAccessBackupDrive::retentionCandidates(array_slice($records, 0, 2, true), $clock)
+        === [], 'two verified backups survive extended delivery outage');
+    $records['old']['created_at'] = 'not-a-date';
+    assertBackup(!array_key_exists('old', ZKAccessBackupDrive::retentionCandidates($records, $clock)),
+        'invalid backup date cannot authorize deletion');
+    assertBackup(ZKAccessBackupDestination::RETENTION_DAYS === 10,
+        'destination retention matches ten-day policy');
 
     $vault = new InvoiceVault($root);
     $store = new ZKAccessBackupStore($vault);
