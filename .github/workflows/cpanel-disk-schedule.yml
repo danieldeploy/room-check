@@ -30,3 +30,4 @@ jobs:
 # Read-only inventory retry after size parsing fix.
 # Trigger read-only Puppeteer cache inventory.
 # Immediate guarded Puppeteer installer-cache recovery requested on 2026-10-29.
+# Retry after scanner fix: archive only.
