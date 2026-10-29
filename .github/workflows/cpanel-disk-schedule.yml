@@ -1,0 +1,25 @@
+name: Schedule protected cPanel disk recovery
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: dispatch-protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Invoke protected production-branch workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api -X POST "repos/$GH_REPO/actions/workflows/cpanel-auto-cleanup.yml/dispatches" -f ref='agent/room-item-assignments'
