@@ -1,22 +1,22 @@
-# Manutenção de disco por WHM — acesso existente
+# Limpeza automática de quota no cPanel/WHM
 
-O segredo `WHM_API_TOKEN` já pertence ao ambiente protegido `management-hub-production`, não deve ser exportado para ChatGPT nem colocado no servidor Windows.
+Acesso existente: segredo `WHM_API_TOKEN` no environment GitHub `management-hub-production`; não exportar o segredo. Branch protegida de produção: `agent/room-item-assignments`.
 
-## Utilização
+## Agendamento independente de pedidos ao ChatGPT
 
-Workflow manual: **Protected cPanel disk maintenance**, no branch de produção `agent/room-item-assignments`. Ele reutiliza o segredo e seleciona a conta `welcome`.
+O GitHub Actions só agenda workflows que estejam na branch por defeito (`main`). A scheduler em `main` (workflow `cpanel-disk-schedule.yml`) executa de duas em duas horas e despacha o workflow `cpanel-auto-cleanup.yml` para a branch de produção. A cópia placeholder do workflow na `main` não usa segredos nem limpa ficheiros; a implementação ativa fica exclusivamente na branch de produção e obtém o segredo pelo ambiente protegido. **São necessárias ambas as integrações** para o agendamento funcionar.
 
-- `inspect` consulta metadados do ficheiro.
-- `trash` exige caminho exato, tamanho e mtime devolvidos pela inspeção; revalida imediatamente antes de mover.
-- Primeira versão deliberadamente limitada a **ficheiros individuais em `.npm/_cacache/`**; não permite diretórios, `mail/`, backups, `.cache/` genérico, logs ou código da aplicação.
-- Não é uma solução automática para quota cheia: `trash` move para `.trash`, que pode continuar a contabilizar espaço. A remoção definitiva requer um mecanismo próprio validado e com proteções de eliminação separadas.
-- A execução do workflow não está disponível como ação diretamente exposta pelo conector GitHub desta conversa. Um agente com acesso autorizado a GitHub Actions pode iniciar o workflow no separador **Actions** da branch de produção. Não é necessário novo token ou login cPanel.
+## Limites de segurança
 
-## Próximos passos para resolver quota cheia
+- Consultar a quota por `Quota/get_quota_info` e parar sem alterações abaixo de 90%. Se o formato da resposta não puder ser validado, falhar sem eliminar nada.
+- Acima de 90%, listar apenas `.npm/_cacache` e subpastas regulares até 5 níveis; exclusivamente ficheiros normais com pelo menos 14 dias.
+- Antes de cada exclusão, voltar a consultar metadata do ficheiro e exigir tamanho e mtime idênticos aos observados.
+- Eliminação definitiva via `Fileman/delete_file` com `skip_trash=1`, sem mover para `.trash`. Limite de 40 ficheiros e 200 MiB por execução.
+- Nunca apagar `mail/`, `public_html/`, `room-check-backups/`, `room-check-private/`, `.cache/` genérico, logs ou diretórios; não remover backups automaticamente.
+- O diagnóstico UAPI precisa de prova de autenticação real, não apenas status HTTP 200.
+- A automação apenas pode recuperar a quota dentro do limite dos ficheiros descartáveis encontrados; **não garante 1 GB** nem substitui revisão da retenção dos backups.
+- Depois de ativar, confirmar na primeira execução os valores quota antes/depois e testar a receção real de email. Sem essas verificações, não declarar limpeza efetiva nem correio recuperado.
 
-1. Fazer inventário de `.cache/`, `.npm/`, `logs/` e `room-check-backups/` sem escrita.
-2. Priorizar ficheiros comprovadamente regeneráveis; preservar backup recuperável e todos os emails.
-3. Implementar e testar remoção definitiva apenas dos itens identificados, com quotas antes/depois.
-4. Confirmar entrega de um email de teste real, além de acesso ao webmail.
+## Recuperação em caso de falha
 
-Não interpretar o primeiro HTTP 200 de uma página de login como autenticação WHM.
+Rever a execução protegida, identificar o código de erro sem imprimir respostas do servidor ou tokens, corrigir no PR e voltar a testar. Não repetir indiscriminadamente uma operação destrutiva. O job protegido usa `concurrency` para não sobrepor execuções.
