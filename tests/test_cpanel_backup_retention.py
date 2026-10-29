@@ -43,6 +43,17 @@ class RetentionTests(unittest.TestCase):
         _, candidates = m.plan(names, now)
         self.assertEqual(candidates, [])
 
+    def test_release_lock_is_not_a_backup_directory(self):
+        name = release("20261025", "100000", "a")
+        rows = {"release-backup.lock": {"type": "file"},
+                name: {"type": "dir"}}
+        with mock.patch.object(m, "listing", return_value=rows):
+            self.assertEqual(m.releases(), [name])
+        rows["release-backup.lock"]["type"] = "dir"
+        with mock.patch.object(m, "listing", return_value=rows):
+            with self.assertRaises(m.Rejected):
+                m.releases()
+
     def test_invalid_names_fail_closed(self):
         for name in ("mail/foo", "../release-20261001-100000-aa",
                      "release-20261031-990000-" + "a"*12 + "-" + "a"*12):
