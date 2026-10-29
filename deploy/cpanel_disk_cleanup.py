@@ -20,7 +20,7 @@ ACCOUNT = "welcome"
 # First iteration: only disposable npm cache files, never mail, backups, logs,
 # site code or other hidden cache roots without a verified inventory.
 SAFE_PREFIX = ".npm/_cacache/"
-NAME = re.compile(r"[A-Za-z0-9_./-]{1,300}\\Z")
+NAME = re.compile(r"[A-Za-z0-9_./-]{1,300}\Z")
 MAX_BODY = 1048576
 
 
