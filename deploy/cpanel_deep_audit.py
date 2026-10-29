@@ -83,7 +83,7 @@ def backups(rows, now=None):
         groups[release]["files"] += 1
         groups[release]["bytes"] += size
         groups[release]["manifest"] += int(name == "complete.json")
-        groups[release]["database"] += int(name == "database.sql")
+        groups[release]["database"] += int(name in ("database.sql", "database.sql.gz"))
         groups[release]["archive"] += int(name.endswith(".tar.gz") and "/" not in name)
     ordered = sorted(groups, reverse=True)
     policy = {}
