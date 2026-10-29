@@ -35,3 +35,5 @@ jobs:
 # One-time validated storage cohorts and deployment-readiness observation.
 
 # One-time restore validation of retained cPanel backup, without deletion.
+
+# Retry SQL restore preflight after release-backup.lock handling fix.
