@@ -33,3 +33,9 @@ Antes da limpeza, `deploy/cpanel_deep_audit.py` consulta a utilização do armaz
 A API antiga `DiskUsage::fetchdiskusagewithextras` permite obter os totais reais por pasta; `Fileman::search` permite estimar os ficheiros dos diretórios explicitamente autorizados. O diagnóstico é de leitura e falha sem apagar nada se houver resposta inválida.
 
 Este diagnóstico não é por si só autorização para eliminar backups antigos ou browsers instalados. Continuam a ser obrigatórias cópias recuperáveis e provas de utilização antes de reduzir a retenção ou remover versões de browsers.
+
+## Conservação sem perda de backups
+
+O auxiliar privado de pós-publicação `deploy/compress_release_dumps.php` comprime até 50 dumps SQL com mais de 48 horas. Confirma o SHA-256 do manifesto dos artefactos, verifica a descompressão byte a byte, atualiza o manifesto atomicamente para formato 2 (com `database.sql.gz`) e só então elimina o SQL original redundante. Preserva todas as datas e os diretórios dos backups. Se falhar, mantém os dados originais e a publicação não é bloqueada.
+
+O formato 1 continua a conter `database.sql`. Para recuperar o formato 2, descomprimir `database.sql.gz` antes da importação MySQL, com os mesmos controlos de recuperação privada. A compactação não prova por si só um restauro funcional da base de dados.

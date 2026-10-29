@@ -46,3 +46,9 @@ export PRIVATEPATH="$HOME/room-check-private/"
 /usr/local/bin/php deploy/provision_hostelworld_filters.php "$DEPLOYPATH"
 
 /usr/local/bin/php deploy/provision_cloudbeds_email.php "$DEPLOYPATH"
+
+# Private post-release compaction preserves all backup dates and manifest hashes.
+# Errors never mask the release result; the backup data remains unchanged on failure.
+if ! /usr/local/bin/php deploy/compress_release_dumps.php; then
+    printf '%s\n' 'Optional backup compaction skipped; inspect private audit' >&2
+fi
