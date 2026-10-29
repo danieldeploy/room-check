@@ -177,3 +177,21 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 Every relevant PR that changes one of the states above must update this file in
 the same PR. Do not place passwords, tokens, OTPs, private invoice contents or
 guest personal data here.
+
+## cPanel Git repository readiness incident (2026-10-29)
+
+The ZKTeco independent backup archival PR #290 was reviewed, passed the
+required `validate` and `windows-agent` checks, and merged as
+`3a416b54a56cd8c5dbfdaa19c8ac7ebf7dbcf6da`. The guarded WHM preflight
+stopped **before** publishing the new endpoint or provisioning its cron:
+`repository_not_deployable`. The immediately previous production commit had
+already failed the same preflight. WHM's protected status showed
+`deployable=false`, `repository_busy=false`, with the existing installed
+commit still `ee8c516cb8393aa8b292005d842dca984c03aac0` at 22:24Z.
+
+A dedicated protected **read-only** diagnostic now checks the cPanel Git clone's
+root and known source directories through WHM Fileman metadata, comparing
+bounded names against the public checkout. It does not print unknown filenames,
+file contents, or credentials, and cannot modify the clone. Its results must
+be reviewed before any repair or deployment retry. The ZKTeco replacement cron
+is **not** yet confirmed installed; old functioning backups remain untouched.
