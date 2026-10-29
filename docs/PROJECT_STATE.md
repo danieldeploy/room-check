@@ -87,7 +87,14 @@ reversible private quarantine guarded by exact inventory, expected old SHA,
 file type and path validation is prepared to clean the staging clone before
 ordinary deployment; it must not touch live application, secrets or existing
 backups. Deployment and independent cron remain unverified until the WHM
-operation succeeds. This recovery does **not** reclaim cPanel disk quota.
+operation succeeds.
+
+The first protected quarantine move on 2026-10-29 returned
+`quarantine_move_unconfirmed`; the immediate read-only cPanel scan still
+reported nine untracked clone entries, zero missing tracked and the old installed
+commit. Before any retry, the new protected read-only quarantine audit must
+confirm whether anything was moved to the private recovery directory. The prior
+workflow was stopped before application deploy. This recovery does **not** reclaim cPanel disk quota.
 The protected read-only repository diagnostic now compares the cPanel clone
 with its actual installed SHA, avoiding false reports of missing files when
 GitHub contains newer commits. Recovery may proceed only after this independent
