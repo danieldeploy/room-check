@@ -152,7 +152,7 @@ def verified_manifest(name):
         if not (0 < size <= 1024 * 1024 * 1024):
             raise Rejected("invalid_artifact_size")
         bytes_total += size
-    if entries.get("complete.json", {}).get("type") != "file":
+    # Never recursively remove a directory containing any unlisted data.\n    if set(entries) != set(digests) | {"complete.json"}:\n        raise Rejected("unexpected_backup_contents")\n    if entries.get("complete.json", {}).get("type") != "file":
         raise Rejected("manifest_not_regular")
     return data, bytes_total
 
