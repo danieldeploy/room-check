@@ -1,0 +1,10 @@
+.check-row textarea[readonly] {
+    cursor: default;
+}
+
+.check-row textarea[readonly]:focus {
+    outline: none;
+    outline-offset: 0;
+    border-color: #cbd9d7;
+    box-shadow: none;
+}

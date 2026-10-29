@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "validated": false,
+  "login": {
+    "url": "",
+    "identifier": "",
+    "next": "",
+    "password": "",
+    "submit": "",
+    "challenge": "",
+    "authenticated": ""
+  },
+  "properties": {
+    "1140306": { "url": "", "rows": "", "number": "", "date": "", "dateFormat": "YYYY-MM-DD", "pdf": "", "empty": "", "propertyMarker": "", "nextPage": "" },
+    "539828": { "url": "", "rows": "", "number": "", "date": "", "dateFormat": "YYYY-MM-DD", "pdf": "", "empty": "", "propertyMarker": "", "nextPage": "" }
+  }
+}

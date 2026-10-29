@@ -1,0 +1,508 @@
+#!/usr/bin/env python3
+"""Read Cloudbeds mail in memory; emit only a fixed, content-free shape report.
+
+Uses the existing protected hosting credential. Never signs in to a mailbox,
+changes flags, downloads links, saves mail, or outputs addresses/subjects/URLs.
+"""
+import email.policy
+import email.utils
+import ipaddress
+from email.parser import BytesParser
+from html import unescape
+import json
+import os
+import re
+import sys
+import subprocess
+import pathlib
+import time
+import urllib.parse
+import urllib.request
+
+from cpanel_api import Config, CpanelAPI, DeploymentError, WHM_ORIGIN, require
+
+ROOTS = {
+    "welcome": "/home/welcome/mail/welcomehostel.pt/info",
+    "city": "/home/city/mail/citycenterhostel.pt/info",
+}
+MAX_MAIL = 4 * 1024 * 1024
+MAX_RESPONSE = 28 * 1024 * 1024
+SPF_PROBE_SECONDS = 0.0
+WORDS = ("invoice", "receipt", "payment", "billing", "portal", "download", "login")
+ERRORS = {"message_size", "mime_parts", "part_size", "link_limit", "invalid_listing",
+          "invalid_name", "response_size", "whm_read_failed", "mail_read_failed",
+          "directory_required", "listing_size", "ambiguous_folder", "invalid_content"}
+
+
+def markers(text):
+    return [word for word in WORDS if re.search(r"\b" + word + r"s?\b", text, re.I)]
+
+
+def family(host):
+    host = host.lower().rstrip(".")
+    for base in ("cloudbeds.com", "zuora.com", "stripe.com", "chargebee.com"):
+        if host == base or host.endswith("." + base):
+            return base
+    return "other"
+
+
+def outside_window(value):
+    try:
+        return email.utils.parsedate_to_datetime(str(value)).timestamp() < time.time()-730*86400
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def current_spf_shape(message, evaluator=None):
+    """Bounded diagnostic against CURRENT DNS, never proof of past reception.
+
+    SMTP parameters are untrusted observations from stored trace headers. No
+    acceptance decision consumes this result. Only Cloudbeds envelope domains
+    are queried; all parameters and explanations stay in memory.
+    """
+    global SPF_PROBE_SECONDS
+    result = {"result": "unavailable", "dns_time": "current", "envelope_aligned": False,
+              "trace_matches_return_path": False, "historical_authentication": False}
+    paths = email.utils.getaddresses(message.get_all('Return-Path', []))
+    def normalized(address):
+        parts = address.rsplit('@', 1)
+        return parts[0] + '@' + parts[1].lower() if len(parts) == 2 else address
+    path_values = {normalized(address) for _, address in paths if address}
+    for value in message.get_all('Received', [])[:5]:
+        value = str(value)
+        if not re.search(r'\bwith\s+esmtps?\b', value, re.I):
+            continue
+        envelope = re.search(r'\(envelope-from\s+<([^<>\s]+)>\)', value, re.I)
+        peer = re.search(r'\bfrom\s+([^\s();]+)', value, re.I)
+        by = re.search(r'\bby\s+([^\s();]+)', value, re.I)
+        before_by = value[:by.start()] if by else ''
+        addresses = []
+        for candidate in re.findall(r'\[([0-9a-fA-F:.]+)\]', before_by):
+            try:
+                addresses.append(str(ipaddress.ip_address(candidate)))
+            except ValueError:
+                pass
+        if not envelope or not peer or len(set(addresses)) != 1 or len(envelope.group(1)) > 254 or len(peer.group(1)) > 255:
+            result['result'] = 'trace_unavailable'
+            return result
+        address = normalized(envelope.group(1))
+        domain = address.rsplit('@', 1)[-1]
+        result['envelope_aligned'] = family(domain) == 'cloudbeds.com'
+        result['trace_matches_return_path'] = bool(path_values) and path_values == {address}
+        if not result['envelope_aligned'] or not result['trace_matches_return_path']:
+            result['result'] = 'not_aligned'
+            return result
+        if SPF_PROBE_SECONDS >= 90:
+            result['result'] = 'budget_exhausted'
+            return result
+        started = time.monotonic()
+        try:
+            if evaluator:
+                verdict = evaluator(addresses[0], address, peer.group(1))
+            else:
+                program = ('import json,sys,spf; p=json.load(sys.stdin); '
+                           'r=spf.check2(i=p["ip"],s=p["sender"],h=p["helo"],timeout=2,querytime=5)[0]; '
+                           'print(r if r in ("pass","fail","softfail","neutral","none","temperror","permerror") else "unavailable")')
+                completed = subprocess.run(['/usr/bin/python3', '-c', program],
+                    input=json.dumps({'ip': addresses[0], 'sender': address, 'helo': peer.group(1)}).encode(),
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=8, check=True)
+                verdict = completed.stdout.decode().strip()
+            result['result'] = verdict if verdict in {'pass', 'fail', 'softfail', 'neutral', 'none', 'temperror', 'permerror'} else 'unavailable'
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+        finally:
+            SPF_PROBE_SECONDS += time.monotonic() - started
+        return result
+    result['result'] = 'trace_unavailable'
+    return result
+
+
+def reception_auth_shape(message):
+    """Observe header claims only; this diagnostic never authenticates a message.
+
+    All values returned are fixed enums/booleans/counts. In particular, a named
+    hosting authserv-id is not proof that our server added the header. A later
+    intake policy must establish that trust separately before accepting results.
+    """
+    results = {"pass", "fail", "softfail", "neutral", "none", "temperror", "permerror", "policy"}
+    hosting = "server50.romania-webhosting.com"
+
+    def host(value):
+        return str(value).strip().strip('<>"').lower().rstrip('.')
+
+    def domain(value):
+        return host(value).rsplit('@', 1)[-1]
+
+    def provider(value):
+        name = domain(value)
+        known = family(name)
+        if known != "other":
+            return known
+        for base in ("amazonses.com", "amazonaws.com", "sendgrid.net", "mailgun.org"):
+            if name == base or name.endswith('.' + base):
+                return base
+        return "other"
+
+    def parameter(value, name):
+        found = re.search(r'(?:^|[;\s])' + re.escape(name) + r'\s*=\s*(?:"([^"\r\n]*)"|([^;\s]+))', value, re.I)
+        return (found.group(1) if found.group(1) is not None else found.group(2)) if found else ""
+
+    def verdict(value, method):
+        result = parameter(value, method).lower()
+        return result if result in results else "absent"
+
+    received = [str(value) for value in message.get_all("Received", [])]
+    received_shapes = []
+    for value in received[:5]:
+        by = re.search(r'\bby\s+([^\s();]+)', value, re.I)
+        peer = re.search(r'\bfrom\s+([^\s();]+)', value, re.I)
+        protocol = re.search(r'\bwith\s+([a-z][a-z0-9_-]*)(?=\s|;|$)', value, re.I)
+        before_by = value[:by.start()].strip() if by else ''
+        peer_form = ('host_only' if re.fullmatch(r'from [a-z0-9._-]+', before_by, re.I) else
+                     'host_parentheses' if re.fullmatch(r'from [a-z0-9._-]+\s+\([^()]*\)', before_by, re.I) else 'other')
+        received_shapes.append({"by_hosting": bool(by and host(by.group(1)) == hosting),
+                                "by_hosting_family": bool(by and re.fullmatch(r'server[0-9]+\.romania-webhosting\.com', host(by.group(1)))),
+                                "peer_is_receiver": bool(by and peer and host(by.group(1)) == host(peer.group(1))),
+                                "by_marker_count": len(re.findall(r'\bby\s+', value, re.I)),
+                                "with_marker_count": len(re.findall(r'\bwith\s+', value, re.I)),
+                                "peer_form": peer_form,
+                                "protocol": protocol.group(1).lower() if protocol and protocol.group(1).lower() in ('local','local-smtp','local-bsmtp','spam-scanned','scanned-ok','lmtp','esmtp','esmtps','esmtpa','esmtpsa') else 'other',
+                                "peer_provider": provider(peer.group(1)) if peer else "other",
+                                "tls_marker": bool(re.search(r'\b(?:ESMTPS[A-Z]*|TLSv?[0-9.]*)\b', value, re.I))})
+    latest_received = received[0] if received else ""
+    from_addresses = email.utils.getaddresses(message.get_all("From", []))
+    from_domain = domain(from_addresses[0][1]) if len(from_addresses) == 1 else ""
+
+    def aligned(value):
+        return (from_domain == "cloudbeds.com" or from_domain.endswith('.cloudbeds.com')) and provider(value) == "cloudbeds.com"
+
+    spf = []
+    for value in message.get_all("Received-SPF", [])[:5]:
+        value = str(value)
+        first = re.match(r'\s*([A-Za-z]+)', value)
+        result = first.group(1).lower() if first else "absent"
+        envelope = parameter(value, "envelope-from") or parameter(value, "smtp.mailfrom")
+        ip = parameter(value, "client-ip").strip('[]')
+        spf.append({"result": result if result in results else "absent",
+                    "receiver_hosting": host(parameter(value, "receiver")) == hosting,
+                    "envelope_present": bool(envelope), "envelope_provider": provider(envelope),
+                    "cloudbeds_aligned": aligned(envelope),
+                    "client_ip_in_latest_received": bool(ip and ('[' + ip + ']') in latest_received)})
+    auth = []
+    for value in message.get_all("Authentication-Results", [])[:5]:
+        value = str(value)
+        authserv = value.split(';', 1)[0].strip().split()
+        envelope = parameter(value, "smtp.mailfrom")
+        auth.append({"authserv_hosting": bool(authserv and host(authserv[0]) == hosting),
+                     "spf": verdict(value, "spf"), "dmarc": verdict(value, "dmarc"),
+                     "dkim": verdict(value, "dkim"),
+                     "envelope_present": bool(envelope), "envelope_provider": provider(envelope),
+                     "cloudbeds_aligned": aligned(envelope)})
+    known_headers = {"received", "received-spf", "authentication-results", "return-path", "dkim-signature",
+                     "from", "to", "subject", "date", "x-spam-status", "x-spam-report", "x-spam-checker-version"}
+    spam = ' '.join(str(value) for name in ("X-Spam-Status", "X-Spam-Report") for value in message.get_all(name, []))
+    return {"authentication_result_count": len(message.get_all("Authentication-Results", [])),
+            "received_spf_count": len(message.get_all("Received-SPF", [])),
+            "received_count": len(received), "authentication_results": auth, "received_spf": spf,
+            "received": received_shapes,
+            "return_path_providers": sorted({provider(value) for value in message.get_all("Return-Path", [])}),
+            "header_order": [name.lower() for name, _ in message.raw_items() if name.lower() in known_headers][:24],
+            "spam_spf_pass_marker": bool(re.search(r'\bSPF_PASS\b', spam)),
+            "spam_spf_fail_marker": bool(re.search(r'\bSPF_(?:FAIL|SOFTFAIL)\b', spam))}
+
+
+def pdf_text_shape(text):
+    """Only fixed label/format facts, never extracted text or invoice values."""
+    labels = {
+        "invoice_date": r"\binvoice\s+date\b", "issue_date": r"\b(?:issue\s+date|date\s+of\s+issue)\b",
+        "invoice_number": r"\binvoice\s*(?:number|no\.?|#)\b", "invoice": r"\binvoice\b",
+        "due_date": r"\bdue\s+date\b", "bill_to": r"\bbill(?:ed)?\s+to\b",
+        "vat_number": r"\b(?:vat|tax)\s*(?:number|id|no\.?)\b", "nif": r"\bnif\b",
+        "receipt": r"\breceipt\b", "payment_confirmation": r"\bpayment\s+confirmation\b",
+    }
+    formats = {"iso": r"20\d{2}-\d{2}-\d{2}",
+               "numeric_slash": r"\d{1,2}/\d{1,2}/20\d{2}",
+               "numeric_dash": r"\d{1,2}-\d{1,2}-20\d{2}",
+               "month_first": r"[A-Za-z]{3,9}\s+\d{1,2},?\s+20\d{2}",
+               "day_first": r"\d{1,2}\s+[A-Za-z]{3,9}\s+20\d{2}"}
+    dates = {}
+    for label in ("invoice_date", "issue_date", "due_date"):
+        matches = list(re.finditer(labels[label], text, re.I))
+        values = [text[m.end():m.end()+60].lstrip(" \t\r\n:") for m in matches]
+        dates[label] = {"count": len(matches), "following_formats": sorted({
+            name for value in values for name, pattern in formats.items() if re.match(pattern, value)})}
+    return {"text_extracted": bool(text.strip()),
+            "labels": [name for name, pattern in labels.items() if re.search(pattern, text, re.I)],
+            "dates": dates,
+            "cloudbeds": bool(re.search(r"\bcloudbeds\b", text, re.I)),
+            "active_lines": bool(re.search(r"\bactive\s+lines\b", text, re.I)),
+            "welcome": bool(re.search(r"\bwelcome\s+(?:hostel|guest)", text, re.I)),
+            "city": bool(re.search(r"\bcity\s+(?:center|centre)\s+hostel", text, re.I)),
+            "portuguese_tax_format": bool(re.search(r"\bPT\s*\d{9}\b", text, re.I)),
+            "invoice_a_number": bool(re.search(r"\bA\d{6,12}\b", text)),
+            "invoice_number_after_label": bool(re.search(r"\binvoice\s*(?:number|no\.?|#)?\s*:?\s*A\d{6,12}\b", text, re.I))}
+
+
+def pdf_shape(content):
+    if not content.startswith(b"%PDF-") or len(content) > 2*1024*1024:
+        return {"error": "invalid_pdf"}
+    try:
+        result = subprocess.run(["pdftotext", "-f", "1", "-l", "10", "-layout", "-enc", "UTF-8", "-", "-"],
+                                input=content, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=10, check=True)
+        if len(result.stdout) > 2*1024*1024:
+            return {"error": "text_limit"}
+        return pdf_text_shape(result.stdout.decode("utf-8", errors="replace"))
+    except (OSError, subprocess.SubprocessError):
+        return {"error": "text_unavailable"}
+
+
+def shape(raw):
+    require(0 < len(raw) <= MAX_MAIL, "message_size")
+    message = BytesParser(policy=email.policy.default).parsebytes(raw)
+    senders = email.utils.getaddresses(message.get_all("From", []))
+    sender_family = family(senders[0][1].rsplit("@", 1)[-1]) if len(senders) == 1 else "other"
+    texts = []
+    types = {"plain": 0, "html": 0, "pdf": 0, "other_attachment": 0}
+    pdf_headers = 0
+    pdf_shapes = []
+    parts = list(message.walk())
+    require(len(parts) <= 64, "mime_parts")
+    for part in parts:
+        if part.is_multipart():
+            continue
+        mime = part.get_content_type()
+        content = part.get_payload(decode=True) or b""
+        require(len(content) <= MAX_MAIL, "part_size")
+        if mime == "application/pdf" or (part.get_filename() or "").lower().endswith(".pdf"):
+            types["pdf"] += 1
+            pdf_headers += int(content.startswith(b"%PDF-"))
+            pdf_shapes.append(pdf_shape(content))
+        elif part.get_content_disposition() == "attachment":
+            types["other_attachment"] += 1
+        elif mime in ("text/plain", "text/html"):
+            types[mime.split("/")[1]] += 1
+            try:
+                texts.append(content.decode(part.get_content_charset() or "utf-8", errors="replace"))
+            except LookupError:
+                texts.append(content.decode("utf-8", errors="replace"))
+    body = unescape("\n".join(texts))
+    links = set(re.findall(r'https://[^\s<>"\x27]+', body, re.I))
+    require(len(links) <= 200, "link_limit")
+    link_shapes = []
+    for link in links:
+        try:
+            url = urllib.parse.urlsplit(link.rstrip(".,)"))
+            # Never retain a host, path segment, parameter name/value or fragment.
+            item = {"provider": family(url.hostname or ""),
+                    "path_markers": markers(urllib.parse.unquote(url.path)),
+                    "pdf_path": url.path.lower().endswith(".pdf"),
+                    "has_query": bool(url.query), "has_fragment": bool(url.fragment)}
+            if item not in link_shapes:
+                link_shapes.append(item)
+        except ValueError:
+            continue
+    plain = re.sub(r"<[^>]*>", " ", body)
+    authentication = {}
+    checker = pathlib.Path(__file__).with_name("cloudbeds_mail_check.php")
+    if types["pdf"] and checker.is_file():
+        try:
+            result = subprocess.run(["php", str(checker)], input=raw, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, timeout=30, check=True)
+            facts = json.loads(result.stdout)
+            for source in ("welcome", "city"):
+                trace = facts.get("native_trace", {}).get(source, {})
+                safe_trace = {}
+                if trace.get("stage") in ("source", "headers", "sender", "recipient", "trace_count", "first_hop", "smtp_hop", "receiver_match", "protocol", "envelope", "alignment", "peer_ip", "return_path", "smtp_recipient", "usable"):
+                    safe_trace["stage"] = trace["stage"]
+                if type(trace.get("usable")) is bool: safe_trace["usable"] = trace["usable"]
+                if trace.get("spf") in ("pass", "fail", "softfail", "neutral", "none", "temperror", "permerror", "invalid"):
+                    safe_trace["spf"] = trace["spf"]
+                authentication["native_trace_" + source] = safe_trace
+            for key in ("welcome_recipient", "city_recipient"):
+                if type(facts.get(key)) is bool: authentication[key] = facts[key]
+            if facts.get("verification_stage") in ("wire", "header_multiplicity", "signer_identity", "selector",
+                    "signature_time", "canonicalization", "from_format", "recipient_format", "signed_headers",
+                    "signature_encoding", "dns_key", "public_key"):
+                authentication["verification_stage"] = facts["verification_stage"]
+            if facts.get("auth") in ("verified", "unsigned", "unsupported", "unaligned", "expired", "unsigned_fields",
+                    "dns_unavailable", "body_mismatch", "signature_mismatch", "unverified", "parse_failed"):
+                authentication["auth"] = facts["auth"]
+        except (OSError, ValueError, subprocess.SubprocessError):
+            authentication = {"auth": "unavailable"}
+    return {"sender_provider": sender_family, "mime": types,
+            "reception_authentication": reception_auth_shape(message) if types["pdf"] else {},
+            "current_spf_probe": current_spf_shape(message) if types["pdf"] else {},
+            "mail_older_than_verification_window": outside_window(message.get("Date")),
+            "authentication": authentication,
+            "pdf_shapes": pdf_shapes,
+            "dkim_providers": sorted(set(family(m.group(1)) for value in message.get_all("DKIM-Signature", [])
+                for m in re.finditer(r"(?:^|;)\s*d=([^;\s]+)", str(value), re.I))),
+            "pdf_signature_count": pdf_headers,
+            "subject_markers": markers(str(message.get("Subject", ""))),
+            "body_markers": markers(plain),
+            "company_mentioned": bool(re.search(r"\bActive\s+Lines\b", plain, re.I)),
+            "payment_confirmation": bool(re.search(r"payment\s+(?:was\s+)?(?:received|processed|successful)|thank\s+you\s+for\s+your\s+payment", plain, re.I)),
+            "invoice_attached_wording": bool(re.search(r"(?:attached.{0,60}invoice|invoice.{0,60}attached)", plain, re.I | re.S)),
+            "links": sorted(link_shapes, key=lambda x: json.dumps(x, sort_keys=True))}
+
+
+def rows(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict) and isinstance(value.get("files"), list):
+        return value["files"]
+    raise DeploymentError("invalid_listing")
+
+
+def child_name(row):
+    name = row.get("file", "")
+    require(isinstance(name, str) and 0 < len(name) <= 512
+            and name not in (".", "..") and not re.search(r"[/\\\x00-\x1f]", name), "invalid_name")
+    return name
+
+
+def error_facts(errors):
+    """Classify failures without printing even a fragment of the server response."""
+    text = json.dumps(errors).lower()
+    return {key: any(word in text for word in words) for key, words in {
+        "missing_path": ("does not exist", "no such file", "not found", "could not find"),
+        "permission": ("permission", "denied", "not permitted"),
+        "parameter": ("parameter", "argument", "must specify", "must provide"),
+        "function": ("function", "module", "disabled", "not implemented"),
+        "encoding": ("charset", "encoding", "utf-8"),
+        "mentions_dir": ("dir",), "mentions_path": ("path",),
+        "mentions_types": ("types",), "mentions_file": ("file",),
+    }.items()}
+
+
+class MailAPI:
+    def __init__(self, account):
+        require(account in ROOTS, "account_not_allowed")
+        self.account = account
+        self.root = ROOTS[account]
+        self.allowed_dirs = {self.root}
+        self.allowed_files = set()
+        self.stage = "mailbox_metadata"
+        self.last_operation = "none"
+        self.failure_facts = {}
+        self.config = Config(token=os.environ.get("WHM_API_TOKEN", ""), transport="whm",
+                             origin=WHM_ORIGIN, whm_target_account=account)
+        self.opener = CpanelAPI(self.config).opener
+
+    def call(self, function, **params):
+        require(function in ("list_files", "get_file_content", "get_file_information"), "read_not_allowed")
+        if function == "list_files":
+            require(set(params) == {"dir", "show_hidden", "types"}
+                    and params["dir"] in self.allowed_dirs
+                    and params["show_hidden"] == 1 and params["types"] == "file|dir", "listing_not_allowed")
+        elif function == "get_file_information":
+            require(set(params) == {"path", "show_hidden"} and params["path"] in self.allowed_dirs
+                    and params["show_hidden"] == 1, "metadata_not_allowed")
+        else:
+            require(set(params) == {"dir", "file", "from_charset", "to_charset", "update_html_document_encoding"}
+                    and (params["dir"], params["file"]) in self.allowed_files
+                    and params["from_charset"] == "ISO-8859-1"
+                    and params["to_charset"] == "UTF-8" and params["update_html_document_encoding"] == 0, "content_not_allowed")
+        self.last_operation = function
+        query = {"api.version": 1, "cpanel.user": self.account, "cpanel.module": "Fileman",
+                 "cpanel.function": function, **params}
+        request = urllib.request.Request(WHM_ORIGIN + "/json-api/uapi_cpanel",
+            data=urllib.parse.urlencode(query).encode(),
+            headers={"Authorization": "whm fazenda:" + self.config.token})
+        with self.opener.open(request, timeout=20) as response:
+            raw = response.read(MAX_RESPONSE + 1)
+        require(len(raw) <= MAX_RESPONSE, "response_size")
+        payload = json.loads(raw)
+        require(payload.get("metadata", {}).get("result") == 1, "whm_read_failed")
+        result = payload.get("data", {}).get("uapi", {})
+        if result.get("status") != 1 or result.get("errors"):
+            self.failure_facts = error_facts(result.get("errors"))
+        require(result.get("status") == 1 and not result.get("errors"), "mail_read_failed")
+        return result.get("data")
+
+    def listing(self, directory):
+        meta = self.call("get_file_information", path=directory, show_hidden=1)
+        meta_rows = meta if isinstance(meta, list) else [meta]
+        require(len(meta_rows) == 1 and meta_rows[0].get("type") == "dir", "directory_required")
+        result = rows(self.call("list_files", dir=directory, show_hidden=1, types="file|dir"))
+        require(len(result) <= 10000, "listing_size")
+        return result
+
+    def inspect(self, trace_sample=False):
+        folders = []
+        for row in self.listing(self.root):
+            if row.get("file") in (".", ".."):
+                continue
+            name = child_name(row)
+            if row.get("type") == "dir" and re.fullmatch(r"\.(?:INBOX\.)?CLOUDBEDS", name, re.I):
+                folders.append(self.root + "/" + name)
+        require(len(folders) <= 2, "ambiguous_folder")
+        candidates = []
+        for folder in folders:
+            self.stage = "cloudbeds_folder"
+            self.allowed_dirs.add(folder)
+            for row in self.listing(folder):
+                if row.get("file") in (".", ".."):
+                    continue
+                name = child_name(row)
+                if row.get("type") != "dir" or name not in ("cur", "new"):
+                    continue
+                directory = folder + "/" + name
+                self.allowed_dirs.add(directory)
+                self.stage = "maildir_listing"
+                for entry in self.listing(directory):
+                    if entry.get("file") in (".", ".."):
+                        continue
+                    filename = child_name(entry)
+                    if entry.get("type") != "file":
+                        continue
+                    size = int(entry.get("size", 0))
+                    if 0 < size <= MAX_MAIL:
+                        candidates.append((float(entry.get("mtime", 0)), directory, filename))
+        reports = []
+        ordered=sorted(candidates, reverse=True)
+        sample=list(dict.fromkeys(ordered[:160]+ordered[-20:]))
+        for _, directory, filename in sample:
+            self.stage = "message_read"
+            self.allowed_files.add((directory, filename))
+            value = self.call("get_file_content", dir=directory, file=filename,
+                              from_charset="ISO-8859-1", to_charset="UTF-8", update_html_document_encoding=0)
+            if isinstance(value, list) and len(value) == 1:
+                value = value[0]
+            require(isinstance(value, dict) and isinstance(value.get("content"), str), "invalid_content")
+            raw = value["content"].encode("latin-1")
+            self.stage = "mime_shape"
+            reports.append(shape(raw))
+            del raw, value
+            last = reports[-1]
+            if (trace_sample and last.get('mime',{}).get('pdf',0)>0
+                    and not last.get('mail_older_than_verification_window',True)
+                    and last.get('authentication',{}).get('auth') not in (None,'verified','unavailable','parse_failed')):
+                break
+        return {"account": self.account, "folder_found": bool(folders),
+                "sample_scope": "first_dkim_unavailable_invoice" if trace_sample else "bounded_history",
+                "sample_count": len(reports), "candidate_count": len(candidates), "samples": reports}
+
+
+def main():
+    if sys.argv[1:] not in ([], ['--trace-sample']): return 2
+    failed = False
+    for account in ROOTS:
+        api = None
+        try:
+            api = MailAPI(account)
+            print(json.dumps({"cloudbeds_mail_shape": api.inspect(trace_sample=bool(sys.argv[1:]))}), flush=True)
+        except Exception as failure:
+            # No exception repr, server response, file name or original mail in CI logs.
+            code = str(failure) if isinstance(failure, DeploymentError) and str(failure) in ERRORS else "inspection_unavailable"
+            facts = {"account": account, "error": code}
+            if api is not None:
+                facts.update(stage=api.stage, operation=api.last_operation, error_facts=api.failure_facts)
+            print(json.dumps({"cloudbeds_mail_shape": facts}), flush=True)
+            failed = True
+    return int(failed)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

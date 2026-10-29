@@ -1,0 +1,23 @@
+name: Private Hostelworld hosting status
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/hostelworld-private-status.yml]
+permissions:
+  contents: read
+concurrency:
+  group: management-hub-production
+  cancel-in-progress: false
+jobs:
+  private-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Store comparisons only in private manager storage
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: python3 deploy/hostelworld_private_status.py
