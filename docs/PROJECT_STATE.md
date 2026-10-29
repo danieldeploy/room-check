@@ -1,0 +1,94 @@
+# Management Hub — current project state
+
+Last reviewed: 2026-10-28 (Europe/Lisbon)
+
+This file records the current project state, not an immutable history. Durable
+behavioral decisions live under `docs/decisions/`; detailed workflows live
+under `docs/flows/`.
+
+## Production and release
+
+- Production branch: `agent/room-item-assignments`.
+- Required PR checks: `validate` and `windows-agent`.
+- Production deployment is guarded and automatic after an authorized merge, as
+  documented in `docs/AUTOMATED_DEPLOYMENT.md`.
+- “Integrated”, “deployed”, and “verified” are separate states and must be
+  reported separately.
+- Production secrets remain outside the repository and outside `public_html`.
+
+## Repository-backed project memory
+
+- Repository documentation is the durable technical memory for this project.
+- `docs/PROJECT_MEMORY.md` defines the read/update protocol.
+- `docs/flows/` contains end-to-end orientation maps; `docs/decisions/`
+  contains durable ADRs.
+- `docs/project-memory.json` maps architecture-sensitive runtime paths to the
+  documents that must change with them.
+- Pull-request CI runs `tools/project_memory_guard.py` so mapped runtime changes
+  cannot silently bypass their state/flow documentation.
+- Test-only and visual/static-only changes are intentionally exempt unless they
+  also alter mapped runtime behavior.
+
+## Management Hub / Room Check
+
+- PHP/MySQL application hosted at `check.welcomehostel.pt`.
+- Existing room management, role permissions, bilingual behavior, invoice
+  automation, Hub OAuth/MCP connector and paired Windows automation remain in use.
+- Application operations use `Europe/Lisbon`.
+
+## Cloudbeds invoices
+
+- Cloudbeds invoice collection by email is an existing production workflow.
+- Invoice month classification follows invoice issue date.
+- The Airbnb CSV/export-month behavior remains the documented exception until
+  explicitly changed.
+
+## Cloudbeds → ZKAccess guest PIN automation
+
+Status: **Prepared / not integrated**.
+
+- Owner priority: City Center Guest House.
+- Cloudbeds Property ID for City Center has been verified as `7541`.
+- Cloudbeds property API access has been requested and is still pending activation.
+- Draft PR #256 prepares the first Cloudbeds webhook/ZKAccess foundation but is
+  not part of the production branch at the time of this review.
+- City Center ZKAccess levels and controller/door mappings for Rooms 1–6 were
+  verified against the live ZKAccess 5.3 database.
+- Direct read-only Pull SDK communication with a C3-400 was successfully tested.
+- No production guest PIN has been written by the new automation.
+- No Cloudbeds webhook or API key is currently enabled for this new flow.
+
+Target flow:
+
+`Cloudbeds webhook → authoritative reservation validation → generate PIN →
+program ZKAccess → read/confirm write → write PIN note to Cloudbeds →
+send guest message`
+
+Important current decisions:
+
+- Revoking guest access means rotating/replacing the PIN on the old room rather
+  than relying on a separate “revoke” operation.
+- On a room change, rotate the PIN on the old room and reuse the guest's existing
+  PIN on the new room.
+- The Cloudbeds reservation note is written only after ZKAccess confirms the
+  PIN programming.
+- Webhook retries and duplicate events must not create duplicate PIN operations
+  or duplicate guest messages.
+- Multi-room reservations must reconcile the affected accommodation, not blindly
+  cancel the entire reservation.
+
+See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
+
+## External blockers / pending work
+
+- Cloudbeds property API/webhook access approval.
+- Final Cloudbeds room/accommodation identifiers and scopes must be verified
+  against the activated API before enabling the ZKAccess workflow.
+- ZKAccess write/reconciliation and final guest-message delivery remain to be
+  completed and acceptance-tested before this workflow can be called verified.
+
+## Maintenance rule
+
+Every relevant PR that changes one of the states above must update this file in
+the same PR. Do not place passwords, tokens, OTPs, private invoice contents or
+guest personal data here.
