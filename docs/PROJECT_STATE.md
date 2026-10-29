@@ -79,6 +79,10 @@ See `docs/flows/zkaccess-backup.md`.
 Acceptance remains: required CI, production commit confirmed, one exact cron
 entry verified in WHM, and a successful archive cycle executed by that cron.
 This change does not fix the separate cPanel disk-quota pressure.
+The protected read-only repository diagnostic now compares the cPanel clone
+with its actual installed SHA, avoiding false reports of missing files when
+GitHub contains newer commits. Recovery may proceed only after this independent
+check proves the specific dirty-tree cause; no forced pull, reset or deletion.
 
 ## Cloudbeds → ZKAccess guest PIN automation
 
