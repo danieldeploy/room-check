@@ -200,6 +200,15 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Inspect prior private recovery folder without modification
+        if: vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.sha }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cpanel_git_worktree_recovery.py inspect
+
       - name: Preserve unexpected staging-clone files before guarded publication
         if: vars.HUB_DEPLOY_ENABLED == 'true'
         env:
