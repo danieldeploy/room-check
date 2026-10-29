@@ -102,6 +102,30 @@ class CloneRecoveryTests(unittest.TestCase):
             self.assertEqual(mover.call_count, 9)
             self.assertEqual(mk.call_count, 5)
 
+    def test_private_quarantine_read_only_inventory(self):
+        data = {
+            mod.HOME: {"room-check-repo-quarantine-20261029": {"type": "dir"}},
+            mod.QUARANTINE: {sub: {"type": "dir"} for sub in ("root", "deploy", "docs", "tests")},
+            mod.QUARANTINE + "/root": {"original.txt": {"type": "file"}},
+            mod.QUARANTINE + "/deploy": {},
+            mod.QUARANTINE + "/docs": {},
+            mod.QUARANTINE + "/tests": {},
+        }
+        with patch.object(mod, "files_in", side_effect=lambda path: data[path]):
+            observed = mod.inspect_quarantine()
+        self.assertEqual(observed["total_files"], 1)
+        self.assertEqual(observed["sections"]["root"], 1)
+        self.assertNotIn("original.txt", str(observed))
+
+    def test_quarantine_invalid_entries_fail_closed(self):
+        data = {
+            mod.HOME: {"room-check-repo-quarantine-20261029": {"type": "dir"}},
+            mod.QUARANTINE: {"root": {"type": "dir"}},
+        }
+        with patch.object(mod, "files_in", side_effect=lambda path: data[path]):
+            with self.assertRaises(mod.Rejected):
+                mod.inspect_quarantine()
+
     def test_path_cannot_escape_welcome_and_quarantine_names_fixed(self):
         for path in ("/home/city/repositories/file", "/home/welcome/../mail", "/etc/passwd"):
             with self.assertRaises(mod.Rejected):
