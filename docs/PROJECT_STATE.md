@@ -108,7 +108,7 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 - The GitHub scheduled bridge is maintained separately on `main`; **both workflows need integration**. This mechanism has not yet been verified against the live WHM UAPI or via a received test email.
 - Recorded cPanel usage on 2026-10-29: 6000.04 MB / 6000 MB. Actual disk recovery remains unconfirmed.
 
-- Storage inventory read-only diagnostic added to scheduled cleanup; it reports backup age counts and first-level cache entries; no automatic deletion of backup directories.
+- Storage inventory read-only diagnostic handles cPanel Fileman empty size fields and is added to scheduled cleanup; it reports backup age counts and first-level cache entries; no automatic deletion of backup directories.
 
 ## Maintenance rule
 
