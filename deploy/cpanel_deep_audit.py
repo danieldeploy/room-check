@@ -112,7 +112,7 @@ def backups(rows, now=None):
                    if g["manifest"] == 1 and g["database"] == 1 and g["archive"] >= 1)
     return {"directories_with_files": len(groups), "same_day_redundant_candidates": {
                 "directories": len(redundant), "potential_mb": round(sum(groups[r]["bytes"] for r in redundant) / MB, 1),
-                "policy": "keep_last_three_and_latest_per_day_last_45_days; analysis_only"},
+                "policy": "keep_last_three_and_latest_per_day; analysis_only"},
             "artifact_categories_mb": {k: round(v / MB, 1) for k, v in sorted(artifact_bytes.items())},
             "complete_shape_only": complete,
             "incomplete_shape": len(groups) - complete,
