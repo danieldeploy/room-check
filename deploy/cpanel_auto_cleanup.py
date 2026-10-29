@@ -16,7 +16,7 @@ def quota():
     if not isinstance(data, dict):
         raise Rejected("invalid_quota")
     # Fail closed on undocumented data formats.
-    used, limit = data.get("diskused"), data.get("diskquota")
+    used, limit = data.get("megabytes_used"), data.get("megabyte_limit")
     try:
         used, limit = float(used), float(limit)
     except (ValueError, TypeError):
