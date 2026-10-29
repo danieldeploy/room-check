@@ -20,7 +20,7 @@ file_put_contents($root . '/master.key', random_bytes(32));
 chmod($root . '/master.key', 0600);
 try {
     assertBackup(ZKAccessBackupSchedule::DEFAULT_TIME === '04:00', 'schedule');
-    assertBackup(ZKAccessBackupSchedule::RETENTION_DAYS === 30, 'retention');
+    assertBackup(ZKAccessBackupSchedule::RETENTION_DAYS === 10, 'retention');
     assertBackup(ZKAccessBackupStore::validateTime('04:00') === '04:00', 'valid time');
     expectBackupFailure(static fn() => ZKAccessBackupStore::validateTime('24:00'), 'invalid time');
     expectBackupFailure(static fn() => ZKAccessBackupStore::validateTime('4:00'), 'invalid time format');
