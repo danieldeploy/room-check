@@ -128,7 +128,21 @@ function backupEsc(string $text): string { return htmlspecialchars($text, ENT_QU
                         'ready' => 'Cifrado, aguarda envio ao Drive',
                         'receiving' => 'Transferência em curso',
                         default => 'Pendente'
-                    }) ?></td></tr>
+                    }) ?>
+                    <?php if (!empty($backup['received_at'])): ?>
+                        <div><small><strong>Receção completa (UTC):</strong> <?= backupEsc($backup['received_at']) ?></small></div>
+                    <?php endif; ?>
+                    <?php if (!empty($backup['last_attempt_at'])): ?>
+                        <div><small><strong>Última tentativa (UTC):</strong> <?= backupEsc($backup['last_attempt_at']) ?>
+                            (<?= (int)$backup['upload_attempts'] ?>)</small></div>
+                    <?php endif; ?>
+                    <?php if (!empty($backup['uploaded_at'])): ?>
+                        <div><small><strong>Confirmado no Drive (UTC):</strong> <?= backupEsc($backup['uploaded_at']) ?></small></div>
+                    <?php endif; ?>
+                    <?php if (!empty($backup['last_error_code'])): ?>
+                        <div><small><strong>Última falha:</strong> <?= backupEsc($backup['last_error_code']) ?></small></div>
+                    <?php endif; ?>
+                    </td></tr>
             <?php endforeach; ?>
             </tbody></table>
         <?php endif; ?>
