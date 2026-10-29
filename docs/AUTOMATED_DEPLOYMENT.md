@@ -126,3 +126,14 @@ ambiente GitHub, sem alterar o código nem pedir login cPanel a cada atualizaç�
 Referências: [ambientes de deployment](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments),
 [segredos](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets),
 [eventos de workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+
+## Read-only diagnosis when cPanel repository is not deployable
+
+When the protected deploy preflight fails, the production-only CI job may
+execute `deploy/cpanel_repo_readiness.py`. It consults only the fixed welcome
+Git clone via existing WHM credentials in the protected environment, reads
+allowlisted Fileman directory metadata, and prints only counts and safe
+classifications of untracked items. It makes **no changes** to Git files or
+server settings. This diagnostic does not authorize forcing updates, deleting
+untracked files or bypassing `repository_not_deployable`. A confirmed cause
+must be corrected through a separate reviewed and guarded operation.
