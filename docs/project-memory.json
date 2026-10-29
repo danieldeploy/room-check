@@ -107,6 +107,19 @@
       "required_docs": [
         "docs/PROJECT_STATE.md"
       ]
+    },
+    {
+      "name": "zkaccess-backup-delivery",
+      "paths": [
+        "src/ZKAccess/BackupStore.php",
+        "src/ZKAccess/BackupDrive.php",
+        "admin/zkaccess-backup.php",
+        "cron/zkaccess-backups.php",
+        "deploy/zkaccess_backup_cron.py"
+      ],
+      "required_docs": [
+        "docs/flows/zkaccess-backup.md"
+      ]
     }
   ]
 }

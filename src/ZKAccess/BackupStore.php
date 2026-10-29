@@ -32,7 +32,7 @@ final class ZKAccessBackupStore
             'time' => self::validateTime((string)($stored['time'] ?? '04:00')),
             'timezone' => 'Europe/Lisbon', 'retention_days' => 30,
             'manual_id' => (is_string($stored['manual_id'] ?? null)
-                && preg_match('/\\A[a-f0-9]{32}\\z/D', $stored['manual_id'])) ? $stored['manual_id'] : null];
+                && preg_match('/\A[a-f0-9]{32}\z/D', $stored['manual_id'])) ? $stored['manual_id'] : null];
     }
 
     public function saveSettings(bool $enabled, string $time): void
@@ -81,7 +81,12 @@ final class ZKAccessBackupStore
             $list[] = ['id' => $entry['id'], 'created_at' => $entry['created_at'],
                 'status' => $entry['status'], 'size' => $entry['size'],
                 'received' => $entry['received'], 'drive_id' => $entry['drive_id'] ?? null,
-                'uploaded_at' => $entry['uploaded_at'] ?? null];
+                'uploaded_at' => $entry['uploaded_at'] ?? null,
+                'received_at' => $entry['received_at'] ?? $entry['verified_at'] ?? null,
+                'last_attempt_at' => $entry['last_attempt_at'] ?? null,
+                'upload_attempts' => (int)($entry['upload_attempts'] ?? 0),
+                'last_error_at' => $entry['last_error_at'] ?? null,
+                'last_error_code' => $entry['last_error_code'] ?? null];
         }
         usort($list, static fn(array $a, array $b): int => strcmp($b['created_at'], $a['created_at']));
         return array_slice($list, 0, 40);
@@ -193,9 +198,65 @@ final class ZKAccessBackupStore
         $this->verify($e);
         $e['status'] = 'ready';
         $e['verified_at'] = gmdate('Y-m-d H:i:s');
+        $e['received_at'] = $e['verified_at'];
         $entries[$id] = $e;
         $this->saveEntries($entries);
         return ['verified' => true, 'id' => $id];
+    }
+
+    /**
+     * Only delivery telemetry belongs here. This never changes an archive's
+     * integrity state or overwrites the previous verified Drive identifier.
+     * All callers hold the independent MySQL backup advisory lock.
+     */
+    public function recordUploadAttempt(string $id, int $at): void
+    {
+        self::assertId($id);
+        $entries = $this->entries();
+        if (($entries[$id]['status'] ?? null) !== 'ready') {
+            throw new RuntimeException('backup_not_ready');
+        }
+        $entries[$id]['upload_attempts'] = (int)($entries[$id]['upload_attempts'] ?? 0) + 1;
+        $entries[$id]['last_attempt_at'] = gmdate('Y-m-d H:i:s', $at);
+        $this->saveEntries($entries);
+    }
+
+    public function recordUploadFailure(string $id, string $cause, int $at): void
+    {
+        self::assertId($id);
+        $entries = $this->entries();
+        if (($entries[$id]['status'] ?? null) !== 'ready') {
+            return; // A successful read-back cannot be demoted by a later failure.
+        }
+        $allowed = [
+            'drive_network', 'drive_auth', 'drive_permission', 'drive_quota',
+            'drive_verify', 'drive_upload', 'drive_local_missing', 'drive_transport',
+            'drive_not_configured', 'drive_account_mismatch',
+            'backup_drive_folder_unavailable', 'backup_drive_roundtrip_failed',
+            'backup_corrupt', 'backup_missing', 'backup_unavailable',
+        ];
+        $entries[$id]['last_error_code'] = in_array($cause, $allowed, true) ? $cause : 'archive_failed';
+        $entries[$id]['last_error_at'] = gmdate('Y-m-d H:i:s', $at);
+        $this->saveEntries($entries);
+    }
+
+    public function recordUploadSuccess(string $id, array $metadata, int $at): void
+    {
+        self::assertId($id);
+        $entries = $this->entries();
+        if (($entries[$id]['status'] ?? null) !== 'ready'
+            || !is_string($entries[$id]['drive_id'] ?? null)
+            || $entries[$id]['drive_id'] === ''
+            || !isset($entries[$id]['last_attempt_at'])
+            || !preg_match('/\\A[a-f0-9]{32}\\z/D', (string)($metadata['md5Checksum'] ?? ''))
+            || (int)($metadata['size'] ?? 0) < 100) {
+            throw new RuntimeException('backup_upload_confirmation_invalid');
+        }
+        $entries[$id]['status'] = 'uploaded';
+        $entries[$id]['drive_size'] = (int)$metadata['size'];
+        $entries[$id]['drive_md5'] = (string)$metadata['md5Checksum'];
+        $entries[$id]['uploaded_at'] = gmdate('Y-m-d H:i:s', $at);
+        $this->saveEntries($entries);
     }
 
     /** Verify encryption integrity and plaintext gzip SHA256 without saving plaintext. */

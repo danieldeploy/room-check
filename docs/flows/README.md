@@ -6,6 +6,7 @@ machines or external services.
 ## Index
 
 - [Cloudbeds → ZKAccess guest PIN automation](cloudbeds-zkaccess.md)
+- [Backup ZKTeco — arquivo independente no Drive](zkaccess-backup.md)
 
 ## Required sections for new flows
 

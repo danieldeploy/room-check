@@ -70,6 +70,38 @@ try {
     assertBackup($done['verified'] === true, 'end-to-end authenticated archive');
     assertBackup($store->finish(['id' => $id])['verified'] === true, 'repeat finalization');
     assertBackup($store->status()[0]['status'] === 'ready', 'status visible');
+    $receipt = $store->status()[0]['received_at'];
+    assertBackup(is_string($receipt) && preg_match('/\A20[0-9]{2}-/', $receipt) === 1,
+        'complete receipt recorded after integrity verification');
+    $at = (int)strtotime('2026-10-29T06:00:00Z');
+    $store->recordUploadAttempt($id, $at);
+    assertBackup($store->status()[0]['upload_attempts'] === 1
+        && $store->status()[0]['last_attempt_at'] === '2026-10-29 06:00:00',
+        'first delivery attempt is timestamped');
+    $store->recordUploadFailure($id, 'PRIVATE_MESSAGE_COULD_EXPOSE_TOKENS', $at + 10);
+    assertBackup($store->status()[0]['last_error_code'] === 'archive_failed'
+        && $store->status()[0]['status'] === 'ready', 'untrusted error is redacted; archive stays retriable');
+    $store->recordUploadAttempt($id, $at + 300);
+    $store->recordUploadFailure($id, 'drive_quota', $at + 310);
+    assertBackup($store->status()[0]['upload_attempts'] === 2
+        && $store->status()[0]['last_error_code'] === 'drive_quota',
+        'allowed failure reason and second attempt recorded');
+    $store->recordUploadAttempt($id, $at + 600);
+    $entries = $store->entries();
+    $entries[$id]['drive_id'] = 'fixture-drive-id';
+    $store->saveEntries($entries);
+    $store->recordUploadSuccess($id, ['size' => 1234, 'md5Checksum' => str_repeat('a', 32)], $at + 610);
+    assertBackup($store->status()[0]['upload_attempts'] === 3
+        && $store->status()[0]['uploaded_at'] === '2026-10-29 06:10:10'
+        && $store->status()[0]['last_error_code'] === 'drive_quota'
+        && $store->status()[0]['status'] === 'uploaded',
+        'successful delivery preserves the previous failure diagnostic');
+    $store->recordUploadFailure($id, 'drive_auth', $at + 620);
+    assertBackup($store->status()[0]['status'] === 'uploaded'
+        && $store->status()[0]['last_error_code'] === 'drive_quota',
+        'late error cannot downgrade a verified backup or overwrite its history');
+    expectBackupFailure(static fn() => $store->recordUploadAttempt($id, $at + 700),
+        'uploaded backup cannot be re-queued');
     $encrypted = file_get_contents($vault->path(ZKAccessBackupStore::dataName($id)));
     assertBackup(is_string($encrypted) && !str_contains($encrypted, 'CREATE TABLE test'), 'plaintext not stored');
     assertBackup(strlen($encrypted) > 7 && substr($encrypted, 0, 7) === "ZKBAK1\n", 'archive format');
@@ -81,6 +113,16 @@ try {
     fwrite($handle, "\0");
     fclose($handle);
     expectBackupFailure(static fn() => $store->verify($store->entries()[$id]), 'modified ciphertext refused');
+
+    $invoiceWorker = (string)file_get_contents(__DIR__ . '/../cron/invoices.php');
+    $backupWorker = (string)file_get_contents(__DIR__ . '/../cron/zkaccess-backups.php');
+    assertBackup(!str_contains($invoiceWorker, 'ZKAccessBackupDrive')
+        && !str_contains($invoiceWorker, 'room_check_zk_backups'),
+        'invoice worker does not own ZKTeco delivery');
+    assertBackup(str_contains($backupWorker, 'room_check_zk_backups')
+        && !str_contains($backupWorker, 'room_check_invoices')
+        && str_contains($backupWorker, 'ZKAccessBackupDrive'),
+        'separate ZKTeco worker uses only its own advisory lock');
 
     echo "ZKAccess encrypted backup tests: OK\n";
 } finally {

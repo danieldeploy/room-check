@@ -55,6 +55,29 @@ under `docs/flows/`.
 - The Airbnb CSV/export-month behavior remains the documented exception until
   explicitly changed.
 
+## ZKTeco MySQL backups — independent Drive archiving
+
+Status: **Prepared on feature branch / not yet verified in production**.
+The existing 04:00 Europe/Lisbon AccesControl MySQL dump, encrypted Hub intake,
+Google Drive destination and 30-day retention remain unchanged.
+
+The current production design chains ZKTeco Drive delivery after
+`cron/invoices.php`. This can delay archiving when the invoice worker is busy.
+The scoped correction adds an independent five-minute cPanel cron, with
+idempotent WHM provisioning after guarded deploy, and removes backup handling
+from invoice cron. The existing dedicated MySQL advisory lock still serializes
+the paired Windows intake and the Drive upload.
+
+The private ZKTeco manifest now records verified complete receipt, upload attempt
+times/counts, sanitized failure codes/times and Drive read-back confirmation.
+Old entries retain their existing evidence; missing historical timestamps are
+not fabricated. The manager page shows the new timeline.
+See `docs/flows/zkaccess-backup.md`.
+
+Acceptance remains: required CI, production commit confirmed, one exact cron
+entry verified in WHM, and a successful archive cycle executed by that cron.
+This change does not fix the separate cPanel disk-quota pressure.
+
 ## Cloudbeds → ZKAccess guest PIN automation
 
 Status: **Prepared / not integrated**.

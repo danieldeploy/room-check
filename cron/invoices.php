@@ -24,20 +24,5 @@ try {
     $pdo->query("SELECT RELEASE_LOCK('room_check_invoices')");
 }
 
-// Keep backup delivery independent from invoice scheduling, locks and failures.
-$backupLocked = false;
-try {
-    if ((int)$pdo->query("SELECT GET_LOCK('room_check_zk_backups',0)")->fetchColumn() === 1) {
-        $backupLocked = true;
-        require_once $appRoot . '/src/ZKAccess/BackupDrive.php';
-        $vault = new InvoiceVault((string)$config['invoices']['private_dir']);
-        (new ZKAccessBackupDrive(new ZKAccessBackupStore($vault), $vault,
-            new InvoiceDriveClient($vault)))->run();
-    }
-} catch (Throwable) {
-    // The private manifest retains pending uploads for subsequent cron runs.
-    fwrite(STDERR, "ZKAccess backup delivery pending. Check private backup status.\n");
-} finally {
-    if ($backupLocked) $pdo->query("SELECT RELEASE_LOCK('room_check_zk_backups')");
-}
+// Invoice scheduling and locking are independent of ZKAccess archive delivery.
 if ($invoiceFailed) exit(1);
