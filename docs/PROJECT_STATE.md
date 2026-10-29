@@ -123,7 +123,7 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 - Existing automatic deletion remains limited to explicitly allowlisted caches; backup deletion and installed-browser deletion are **not** enabled without recovery/in-use evidence.
 - Acceptance remains quota and real incoming email verification after any future cleanup.
 
-- Daily read-only audit also measures nested log files and potential old compressed archives without revealing filenames; no logs are automatically deleted without retention evidence.
+- Daily read-only audit also measures same-day backup duplicates and archive versus SQL dump sizes, plus nested log files and potential old compressed archives without revealing filenames; no logs are automatically deleted without retention evidence.
 
 ## Maintenance rule
 
