@@ -13,9 +13,9 @@ class CleanupTests(unittest.TestCase):
     def test_only_explicit_npm_cache_file(self):
         self.assertEqual(cleanup.safe_file(".npm/_cacache/content-v2/sha512/abc"),
                          ".npm/_cacache/content-v2/sha512/abc")
-        for accepted in (".cache/pip/http-v2/a", ".cache/uv/archive/a"):
+        for accepted in (".cache/pip/http-v2/a", ".cache/uv/archive/a", ".cache/puppeteer/chrome-headless-shell/148.0.7778.97-chrome-headless-shell-linux64.zip"):
             self.assertEqual(cleanup.safe_file(accepted), accepted)
-        for value in ("mail/a", "room-check-backups/a", ".cache/a", "public_html/index.php",
+        for value in (".cache/puppeteer/chrome-headless-shell/linux-148.0.7778.97/chrome", "mail/a", "room-check-backups/a", ".cache/a", "public_html/index.php",
                       ".npm/_cacache/", ".npm/_cacache/../../mail/a",
                       "/home/welcome/.npm/_cacache/x", ".npm/_cacache/a,b"):
             with self.subTest(value=value), self.assertRaises(cleanup.Rejected):
