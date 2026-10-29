@@ -17,6 +17,29 @@ behavior, architecture, deployment state, or persistent product decisions.
 If documentation and code disagree, do not silently choose one. Verify the live
 code/configuration and correct the documentation in the same scoped change.
 
+## Skill and code-discovery layer
+
+The repository remains the durable memory. Developer-side Skills and code-index
+tools may improve how work is performed, but they do not override repository
+decisions or become application dependencies.
+
+For non-trivial work:
+
+- use Superpowers selectively for root-cause debugging, meaningful test-first
+  changes, multi-step planning, and fresh verification when those workflows fit
+  the actual risk;
+- use Ponytail in one-shot review mode when a proposed change adds new surface
+  area and should first be checked for reuse/simplification;
+- use Grill Me light only for up to three unresolved high-impact decisions after
+  factual investigation; full grilling is explicit-owner-only;
+- do not make independent second-opinion/reviewer calls a standing default;
+- use a code graph/codebase-memory MCP, when already available, only as a
+  structural index for symbols/callers/dependencies/impact. Confirm its findings
+  in current code/tests. Fall back to repository search without blocking work.
+
+These tools help recover and apply context; they do not replace
+`AGENTS.md`, `PROJECT_STATE.md`, flows, ADRs, tests or live verification.
+
 ## What must be documented
 
 Update `docs/PROJECT_STATE.md` when a relevant change alters any of these:
