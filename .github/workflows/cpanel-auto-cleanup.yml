@@ -15,6 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     environment: management-hub-production
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: temporary_backup_restore_only
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -ptemporary_backup_restore_only"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
@@ -29,6 +39,13 @@ jobs:
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
+      - name: Verify a kept snapshot with disposable MySQL restore (no deletion)
+        continue-on-error: true
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          MYSQL_EPHEMERAL: "1"
+          RESTORE_MYSQL_PASSWORD: temporary_backup_restore_only
+        run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_backup_retention.py
       - name: Recover disposable cache if disk quota above threshold
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
