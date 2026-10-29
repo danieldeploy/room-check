@@ -116,6 +116,13 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Puppeteer archive inventory walks only parent directories and skips extracted browser trees; this prevents the guarded scanner from rejecting ordinary installed-browser files.
 
+## Storage growth investigation (2026-10-29)
+
+- The deployment gate creates a new complete backup on each production release. There is currently no retention/deletion phase. The latest WHM inventory showed 172 release directories, creating an ongoing quota-growth risk.
+- Daily protected GitHub Actions maintenance now includes a separate **read-only** report of account directory usage, backup age cohorts and extracted browser-version sizes through scoped WHM API queries. It does not read mail or backup contents.
+- Existing automatic deletion remains limited to explicitly allowlisted caches; backup deletion and installed-browser deletion are **not** enabled without recovery/in-use evidence.
+- Acceptance remains quota and real incoming email verification after any future cleanup.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
