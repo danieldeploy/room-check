@@ -37,3 +37,5 @@ jobs:
 # One-time restore validation of retained cPanel backup, without deletion.
 
 # Retry SQL restore preflight after release-backup.lock handling fix.
+
+# One-time bounded verified backup pruning, 2026-10-29.
