@@ -19,7 +19,7 @@ RESELLER = "fazenda"
 ACCOUNT = "welcome"
 # Only explicitly identified regenerable caches. Backups are audited separately.
 # Never delete mail, deployment data or broad hidden cache roots.
-SAFE_PREFIXES = (".npm/_cacache/", ".cache/pip/", ".cache/uv/")
+SAFE_PREFIXES = (".npm/_cacache/", ".cache/pip/", ".cache/uv/", ".cache/puppeteer/chrome-headless-shell/")
 NAME = re.compile(r"[A-Za-z0-9_./-]{1,300}\Z")
 MAX_BODY = 1048576
 
@@ -35,6 +35,8 @@ def safe_file(path):
         raise Rejected("path_not_allowlisted")
     if path.endswith("/"):
         raise Rejected("directories_not_allowed")
+    if path.startswith(".cache/puppeteer/") and not re.fullmatch(r"\.cache/puppeteer/chrome-headless-shell/[0-9.]+-chrome-headless-shell-linux64\.zip", path):
+        raise Rejected("puppeteer_installed_versions_protected")
     return path
 
 
