@@ -59,7 +59,7 @@ under `docs/flows/`.
 
 Status: **Prepared on feature branch / not yet verified in production**.
 The existing 04:00 Europe/Lisbon AccesControl MySQL dump, encrypted Hub intake,
-Google Drive destination and 30-day retention remain unchanged.
+Google Drive destination remains unchanged; retention is 10 days for ZKTeco backups only (preserve at least two verified copies).
 
 The current production design chains ZKTeco Drive delivery after
 `cron/invoices.php`. This can delay archiving when the invoice worker is busy.
