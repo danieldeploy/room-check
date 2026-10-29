@@ -84,6 +84,17 @@ with its actual installed SHA, avoiding false reports of missing files when
 GitHub contains newer commits. Recovery may proceed only after this independent
 check proves the specific dirty-tree cause; no forced pull, reset or deletion.
 
+The 2026-10-29 inspected cPanel clone at commit `ee8c516` has zero missing
+tracked entries and exactly nine untracked top-level entries (root 1, deploy 4,
+docs 1, tests 3). A guarded one-time recovery is prepared: for that specific
+installed commit and exact inventory, preserve verified regular files in a
+private 0700 directory under `room-check-backups/` and then recheck cPanel
+`deployable` before any normal release. Unknown entries, directories, symlinks,
+changed metadata or any tracked-file difference stop the release. No file is
+deleted or overwritten; the recovery is an explicit part of the protected job.
+The new ZKTeco ten-day retention and independent Drive cron are integrated but
+not considered deployed until this normal release and authenticated checks pass.
+
 ## Cloudbeds → ZKAccess guest PIN automation
 
 Status: **Prepared / not integrated**.
