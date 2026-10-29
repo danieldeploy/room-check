@@ -144,6 +144,29 @@ def move_verified(item):
         raise Rejected("quarantine_metadata_changed")
 
 
+def inspect_quarantine():
+    """Read-only post-failure audit; never prints file names or contents."""
+    home = files_in(HOME)
+    folder = posixpath.basename(QUARANTINE)
+    if folder not in home:
+        return {"quarantine_exists": False, "total_files": 0, "sections": {}}
+    if home[folder].get("type") != "dir":
+        raise Rejected("quarantine_not_a_directory")
+    dirs = files_in(QUARANTINE)
+    if set(dirs) != {"root", "deploy", "docs", "tests"}:
+        raise Rejected("quarantine_directory_inventory_changed")
+    sizes = {}
+    for name in ("root", "deploy", "docs", "tests"):
+        if dirs[name].get("type") != "dir":
+            raise Rejected("quarantine_not_a_directory")
+        children = files_in(QUARANTINE + "/" + name)
+        if not all(row.get("type") == "file" for row in children.values()):
+            raise Rejected("quarantine_contains_nonregular_entry")
+        sizes[name] = len(children)
+    return {"quarantine_exists": True,
+            "total_files": sum(sizes.values()), "sections": sizes}
+
+
 def recover(apply):
     config = Config(token=os.environ.get("WHM_API_TOKEN", ""), transport="whm",
                     origin=WHM_ORIGIN, wait_timeout=600)
@@ -190,10 +213,10 @@ def recover(apply):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("inspect", "apply"))
+    parser.add_argument("action", choices=("inspect", "apply", "quarantine"))
     args = parser.parse_args(argv)
     try:
-        outcome = recover(args.action == "apply")
+        outcome = inspect_quarantine() if args.action == "quarantine" else recover(args.action == "apply")
         print(json.dumps({"ok": True, **outcome}, sort_keys=True))
         return 0
     except Rejected as error:
