@@ -71,6 +71,7 @@ def search(root):
 def backups(rows, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     groups = collections.defaultdict(lambda: {"bytes": 0, "files": 0, "manifest": 0, "database": 0, "archive": 0})
+    artifact_bytes = collections.Counter()
     for path, typ, size in rows:
         if not path.startswith(BACKUP):
             continue
@@ -82,6 +83,8 @@ def backups(rows, now=None):
             continue
         groups[release]["files"] += 1
         groups[release]["bytes"] += size
+        category = "database_sql" if name == "database.sql" else "database_sql_gz" if name == "database.sql.gz" else "archives_tar_gz" if name.endswith(".tar.gz") else "manifest" if name == "complete.json" else "other"
+        artifact_bytes[category] += size
         groups[release]["manifest"] += int(name == "complete.json")
         groups[release]["database"] += int(name in ("database.sql", "database.sql.gz"))
         groups[release]["archive"] += int(name.endswith(".tar.gz") and "/" not in name)
@@ -97,9 +100,21 @@ def backups(rows, now=None):
                 candidates.append(release)
         policy[str(days)] = {"directories": len(candidates),
                              "potential_mb": round(sum(groups[r]["bytes"] for r in candidates) / MB, 1)}
+    newest_by_day = set()
+    keep_daily = set(ordered[:3])
+    for release in ordered:
+        day = release[8:16]
+        if day not in newest_by_day:
+            keep_daily.add(release)
+            newest_by_day.add(day)
+    redundant = [name for name in ordered if name not in keep_daily]
     complete = sum(1 for g in groups.values()
                    if g["manifest"] == 1 and g["database"] == 1 and g["archive"] >= 1)
-    return {"directories_with_files": len(groups), "complete_shape_only": complete,
+    return {"directories_with_files": len(groups), "same_day_redundant_candidates": {
+                "directories": len(redundant), "potential_mb": round(sum(groups[r]["bytes"] for r in redundant) / MB, 1),
+                "policy": "keep_last_three_and_latest_per_day; analysis_only"},
+            "artifact_categories_mb": {k: round(v / MB, 1) for k, v in sorted(artifact_bytes.items())},
+            "complete_shape_only": complete,
             "incomplete_shape": len(groups) - complete,
             "approximation": "file sizes only; does not validate checksums or restorability",
             "total_file_mb": round(sum(g["bytes"] for g in groups.values()) / MB, 1),
@@ -132,35 +147,44 @@ def browsers(rows):
 
 def logs(now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
-    data = request_api("Fileman", "list_files", {"dir": "logs", "show_hidden": 1})
-    if not isinstance(data, list) or len(data) > 2000:
+    root = HOME + "/logs"
+    response = request_api("Fileman", "search", {
+        "dir": root, "recursive": 1, "mimeinfo": 0,
+        "attributes": "size|type|mtime"
+    }, legacy=True)
+    rows = response.get("data")
+    if not isinstance(rows, list) or len(rows) > LIMIT:
         raise Rejected("invalid_log_listing")
-    files = 0
     total = 0
-    rotated = 0
-    rotated_bytes = 0
-    for item in data:
+    counts = 0
+    compressed = collections.Counter()
+    compressed_bytes = collections.Counter()
+    top = []
+    for item in rows:
         if not isinstance(item, dict):
             raise Rejected("invalid_log_listing")
-        name = item.get("file") or item.get("name")
-        if not isinstance(name, str) or "/" in name:
-            raise Rejected("invalid_log_listing")
+        path = item.get("file")
+        if not isinstance(path, str) or not (path == root or path.startswith(root + "/")):
+            raise Rejected("unexpected_log_path")
         if item.get("type") != "file":
             continue
         size = as_int(item.get("size") or 0)
-        files += 1
+        counts += 1
         total += size
-        if re.search(r"\.(?:gz|bz2|xz|zip)\Z", name):
+        top.append(size)
+        if re.search(r"\.(?:gz|bz2|xz|zip)\Z", path):
             try:
                 age = (now - dt.datetime.fromtimestamp(as_int(item.get("mtime")), dt.timezone.utc)).days
             except (OverflowError, OSError, ValueError, Rejected):
                 continue
-            if age >= 30:
-                rotated += 1
-                rotated_bytes += size
-    return {"files": files, "current_file_mb": round(total / MB, 1),
-            "rotated_archives_older_30_days": rotated,
-            "rotated_archives_older_30_days_mb": round(rotated_bytes / MB, 1),
+            for days in (14, 30):
+                if age >= days:
+                    compressed[days] += 1
+                    compressed_bytes[days] += size
+    return {"files_recursive": counts, "bytes_recursive_mb": round(total / MB, 1),
+            "largest_file_sizes_mb": [round(x / MB, 1) for x in sorted(top, reverse=True)[:5]],
+            "compressed_archive_candidates": {str(days): {"files": compressed[days],
+             "mb": round(compressed_bytes[days] / MB, 1)} for days in (14, 30)},
             "deletion_authorized": False}
 
 
