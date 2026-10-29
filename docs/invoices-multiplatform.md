@@ -127,3 +127,4 @@ are not enabled by this release: CSV originals are preserved and marked awaiting
 The Airbnb transformation must be defined with real CSV samples before activating delivery.
 
 Google API reference: https://developers.google.com/workspace/drive/api/guides/manage-uploads
+\n## Separação do arquivo ZKTeco\n\nO cron de faturas conserva exclusivamente as tarefas de faturas, Drive e TOConline.\nA entrega dos backups da base MySQL do ZKTeco foi retirada de\n`cron/invoices.php` e passa para `cron/zkaccess-backups.php`, com um agendamento\ncPanel próprio e bloqueio MySQL separado. Ver `docs/flows/zkaccess-backup.md`.\n
