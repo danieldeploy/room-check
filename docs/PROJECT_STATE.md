@@ -110,6 +110,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Storage inventory read-only diagnostic handles cPanel Fileman empty size fields and is added to scheduled cleanup; it reports backup age counts and first-level cache entries; no automatic deletion of backup directories.
 
+- Puppeteer cache inventory read-only added for identifying browser versions without touching browser downloads or automation sessions.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
