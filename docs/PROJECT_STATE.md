@@ -112,6 +112,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Puppeteer cache inventory read-only added for identifying browser versions without touching browser downloads or automation sessions.
 
+- Puppeteer installer archives can be reclaimed only after age and exact metadata checks and confirming a matching extracted browser directory; installed browser versions remain protected.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
