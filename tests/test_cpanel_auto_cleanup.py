@@ -24,6 +24,15 @@ class AutomaticCleanupTests(unittest.TestCase):
             auto.main()
             deleting.assert_called_once_with(".npm/_cacache/a", 100, 50)
 
+    def test_largest_cache_file_first(self):
+        items = iter([(".npm/_cacache/small", 1024, 20),
+                      (".npm/_cacache/large", 2_000_000, 20)])
+        with mock.patch.object(auto, "quota", side_effect=[(5900, 6000), (5400, 6000)]), \
+                mock.patch.object(auto, "candidates", return_value=items), \
+                mock.patch.object(auto, "delete_exact", side_effect=lambda p,s,m: {"bytes":s}) as deleting:
+            auto.main()
+        self.assertEqual(deleting.call_args_list[0].args[0], ".npm/_cacache/large")
+
     def test_installed_puppeteer_dirs_not_traversed(self):
         def listing(path):
             if path == ".cache/puppeteer/chrome-headless-shell":
