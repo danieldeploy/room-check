@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       # Pin the tested Python interpreter: ubuntu-latest switched its default to
       # Python 3.14, which changed the legacy cPanel diagnostic test behavior.
@@ -47,6 +48,14 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_recovery.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hosting_connectivity.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_project_memory_docs.py -v
+
+
+      - name: Enforce project memory updates
+        if: github.event_name == 'pull_request'
+        env:
+          PROJECT_MEMORY_BASE: ${{ github.event.pull_request.base.sha }}
+        run: python3 tools/project_memory_guard.py --base "$PROJECT_MEMORY_BASE" --head "$GITHUB_SHA"
 
       - name: Configure PHP
         uses: shivammathur/setup-php@v2

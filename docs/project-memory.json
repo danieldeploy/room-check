@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "state_document": "docs/PROJECT_STATE.md",
+  "ignore": [
+    "docs/**",
+    "tests/**",
+    "assets/**",
+    "admin/assets/**",
+    "**/*.md"
+  ],
+  "state_required_for": [
+    "*.php",
+    "admin/**/*.php",
+    "src/**/*.php",
+    "cron/**/*.php",
+    "deploy/**",
+    "invoice-runner/**",
+    "windows/**",
+    "migrations/**",
+    "database.sql",
+    "config.php",
+    ".cpanel.yml",
+    ".github/workflows/**"
+  ],
+  "domains": [
+    {
+      "name": "cloudbeds-zkaccess",
+      "paths": [
+        "cloudbeds-access-webhook.php",
+        "src/ZKAccess/**",
+        "migrations/031_cloudbeds_zkaccess.sql",
+        "windows/zkaccess-*.mjs",
+        "windows/*ZKAccess*.ps1"
+      ],
+      "required_docs": [
+        "docs/flows/cloudbeds-zkaccess.md"
+      ]
+    },
+    {
+      "name": "invoice-automation",
+      "paths": [
+        "src/Invoices/**",
+        "invoice-*.php",
+        "invoice-runner/**",
+        "cron/toconline-reply.php",
+        "cron/cloudbeds-mail-pipe.php",
+        "cron/hostelworld-auth-pipe.php",
+        "migrations/026_*.sql",
+        "migrations/027_*.sql",
+        "migrations/028_*.sql",
+        "migrations/029_*.sql"
+      ],
+      "required_docs": [
+        "docs/invoices-multiplatform.md"
+      ]
+    },
+    {
+      "name": "hub-connector",
+      "paths": [
+        "mcp.php",
+        "oauth.php",
+        "oauth-authorize.php",
+        "src/Auth/HubOAuth.php",
+        "src/Auth/HubConnectorHttp.php",
+        "migrations/030_hub_connector.sql"
+      ],
+      "required_docs": [
+        "docs/HUB_CONNECTOR.md"
+      ]
+    },
+    {
+      "name": "translations",
+      "paths": [
+        "src/I18n/**",
+        "migrations/017_*.sql",
+        "migrations/019_*.sql",
+        "migrations/020_*.sql",
+        "migrations/023_*.sql",
+        "migrations/024_*.sql",
+        "migrations/025_*.sql"
+      ],
+      "required_docs": [
+        "docs/I18N.md"
+      ]
+    },
+    {
+      "name": "room-assignments",
+      "paths": [
+        "rooms.php",
+        "tasks.php",
+        "migrations/006_room_item_assignments.sql",
+        "migrations/007_room_item_assignment_dates.sql",
+        "migrations/008_room_verification_intervals.sql",
+        "src/**/Room*.php"
+      ],
+      "required_docs": [
+        "docs/ROOM_ASSIGNMENTS_DEPLOYMENT.md"
+      ]
+    },
+    {
+      "name": "deployment",
+      "paths": [
+        "deploy/**",
+        ".cpanel.yml",
+        ".github/workflows/**"
+      ],
+      "required_docs": [
+        "docs/PROJECT_STATE.md"
+      ]
+    }
+  ]
+}
