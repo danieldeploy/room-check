@@ -134,6 +134,13 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - The WHM daily audit now reads deployment readiness and recursive log sizes, and estimates same-day backup redundancy; only aggregated metadata is printed, no private files or credentials are read.
 
+## Protected backup recovery verification (2026-10-29)
+
+- A new WHM retention planner preserves the latest 3 snapshots, one per calendar day (Europe/Lisbon) for 45 days, one per week to 180 days, one per month to 365 days, then one per quarter, plus the oldest recovery point.
+- The protected daily GitHub maintenance workflow performs a **read-only first pass**: checks retained manifest file structure and imports the latest uncompressed SQL backup into an ephemeral MySQL 8 container, without touching the live database or outputting SQL content.
+- Deletion is implemented behind an explicit `--apply` mode **not yet enabled**, limited to 25 snapshot directories and 200 MiB per run, only after a successful temporary MySQL import. Files are permanently removed only via the existing fixed-target WHM API, and roster changes abort.
+- **Open acceptance:** first live dry run must pass and the selected application archives have not yet had a complete restore test. Do not claim backups were deleted or production deployment recovered until actually verified.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
