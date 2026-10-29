@@ -31,9 +31,8 @@ class CleanupTests(unittest.TestCase):
                          "size": 10, "mtime": 20}), mock.patch.object(cleanup, "request_api") as api:
             self.assertEqual(cleanup.delete_exact(".npm/_cacache/x", 10, 20)["state"],
                              "permanently_deleted")
-            api.assert_called_once_with("Fileman", "fileop",
-                {"op": "delete", "sourcefiles": ".npm/_cacache/x", "doubledecode": 0},
-                legacy=True)
+            api.assert_called_once_with("Fileman", "delete_file",
+                {"path": ".npm/_cacache/x", "skip_trash": 1})
 
 
 if __name__ == "__main__":
