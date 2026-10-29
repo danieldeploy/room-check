@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../Invoices/InvoiceVault.php';
+require_once __DIR__ . '/BackupDestination.php';
 
 /**
  * Receives compressed MySQL dumps from the paired Windows agent.
@@ -30,7 +31,7 @@ final class ZKAccessBackupStore
         $stored = $this->vault->has(self::SETTINGS_FILE) ? $this->vault->read(self::SETTINGS_FILE) : [];
         return ['enabled' => ($stored['enabled'] ?? true) === true,
             'time' => self::validateTime((string)($stored['time'] ?? '04:00')),
-            'timezone' => 'Europe/Lisbon', 'retention_days' => 30,
+            'timezone' => 'Europe/Lisbon', 'retention_days' => ZKAccessBackupDestination::RETENTION_DAYS,
             'manual_id' => (is_string($stored['manual_id'] ?? null)
                 && preg_match('/\A[a-f0-9]{32}\z/D', $stored['manual_id'])) ? $stored['manual_id'] : null];
     }
