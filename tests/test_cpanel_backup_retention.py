@@ -137,6 +137,7 @@ class RetentionTests(unittest.TestCase):
         with mock.patch.object(m, "releases", side_effect=lambda: list(actual)), \
              mock.patch.object(m, "verified_manifest", return_value=({"format":1},1024)), \
              mock.patch.object(m, "restore_latest_backup"), \
+             mock.patch.object(m, "quota", return_value=(5900, 6000)), \
              mock.patch.object(m, "request_api", side_effect=api):
             m.process(True, now)
         self.assertEqual(deleted, remove)
@@ -151,6 +152,7 @@ class RetentionTests(unittest.TestCase):
         with mock.patch.object(m, "releases", side_effect=changes), \
              mock.patch.object(m, "verified_manifest", return_value=({"format":1},100)), \
              mock.patch.object(m, "restore_latest_backup"), \
+             mock.patch.object(m, "quota", return_value=(5900, 6000)), \
              mock.patch.object(m, "request_api") as api:
             with self.assertRaises(m.Rejected):
                 m.process(True, now)

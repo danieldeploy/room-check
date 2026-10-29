@@ -166,6 +166,12 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - After 2026-10-29 retention validation, daily cache deletion has an explicit 95-second limit; timeout is surfaced as incomplete without automatic retries, while protected backup restore diagnostics continue independently.
 
+## Daily WHM backup retention — activation after restore acceptance (2026-10-29)
+
+- Protected first dry run `40964594901` returned `ok=true`, SQL restore `passed`, 172 snapshots / 23 retained, 148 candidates, 0 removed. This establishes SQL recovery on disposable MySQL, not full application archive restore.
+- WHM-only protected daily maintenance now requests `--apply` after fresh manifest checks and SQL import. A run deletes at most 25 redundant release directories / 200 MiB; retains three latest, daily 45d, weekly 180d, monthly 365d, quarterly older, and oldest. Any unexpected file in a directory blocks deletion. Operations fail closed on unexpected roster changes.
+- Deletion is irreversible. Actual quota decrease and remaining snapshots must be verified from the live job log before claiming recovery; avoid replaying uncertain deletions.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in

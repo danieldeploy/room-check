@@ -16,6 +16,7 @@ import sys
 from zoneinfo import ZoneInfo
 
 from cpanel_disk_cleanup import Rejected, request_api
+from cpanel_auto_cleanup import quota
 
 ROOT = "/home/welcome/room-check-backups"
 RELEASE = re.compile(r"release-(\d{8})-(\d{6})-[0-9a-f]{12}-[0-9a-f]{12}\Z")
@@ -231,6 +232,7 @@ def process(apply=False, now=None):
                           "candidates": len(remove), "sql_restore": "passed",
                           "deleted": 0}))
         return
+    before_used, before_limit = quota()
     # Apply only after SQL restore passed. Each deletion is path-scoped and
     # preceded by a fresh root listing and verified manifest. Never delete
     # the only snapshot of any retention bucket.
@@ -253,7 +255,10 @@ def process(apply=False, now=None):
         bytes_removed += size
         # Continuously update the expected snapshot without retrying deletes.
         names.remove(name)
+    after_used, after_limit = quota()
     print(json.dumps({"ok": True, "mode": "apply",
+                      "quota_before_percent": round(100 * before_used / before_limit, 1),
+                      "quota_after_percent": round(100 * after_used / after_limit, 1),
                       "total_remaining": len(names), "retained": len(keep),
                       "deleted": count, "estimated_bytes_deleted": bytes_removed,
                       "mysql_restore": "passed"}))
