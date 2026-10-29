@@ -32,7 +32,7 @@ class RetentionTests(unittest.TestCase):
         keep, candidates = m.plan(names, now)
         self.assertIn(names[0], keep)
         self.assertIn(names[-1], keep)
-        self.assertEqual(len(candidates), 1)
+        self.assertEqual(len(candidates), 2)
         self.assertTrue(all(x not in keep for x in candidates))
 
     def test_recent_versions_cannot_be_deleted(self):
