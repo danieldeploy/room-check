@@ -32,3 +32,4 @@ jobs:
 # Immediate guarded Puppeteer installer-cache recovery requested on 2026-10-29.
 # Retry after scanner fix: archive only.
 # One-off deep storage diagnostic following validated PR #273.
+# One-time validated storage cohorts and deployment-readiness observation.
