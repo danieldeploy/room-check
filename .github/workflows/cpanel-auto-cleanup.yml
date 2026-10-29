@@ -39,13 +39,12 @@ jobs:
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
-      - name: Verify a kept snapshot with disposable MySQL restore (no deletion)
-        continue-on-error: true
+      - name: Validate recovery and prune redundant backups with fixed limits
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           MYSQL_EPHEMERAL: "1"
           RESTORE_MYSQL_PASSWORD: temporary_backup_restore_only
-        run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_backup_retention.py
+        run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_backup_retention.py --apply
       - name: Recover disposable cache if disk quota above threshold
         continue-on-error: true
         env:
