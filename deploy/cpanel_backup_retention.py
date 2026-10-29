@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+from zoneinfo import ZoneInfo
 
 from cpanel_disk_cleanup import Rejected, request_api
 
@@ -26,6 +27,7 @@ MAX_DELETE_BYTES = 200 * 1024 * 1024
 MAX_MANIFEST_BYTES = 32768
 MAX_SQL_BYTES = 950000
 UTC = dt.timezone.utc
+LISBON = ZoneInfo('Europe/Lisbon')
 
 
 def release_time(name):
@@ -83,15 +85,16 @@ def plan(names, now):
         age = (now - created).total_seconds() / 86400
         if age < -1:
             raise Rejected("future_release_date")
+        local = created.astimezone(LISBON)
         if age < 45:
-            key = ("daily", created.date().isoformat())
+            key = ("daily", local.date().isoformat())
         elif age < 180:
-            iso = created.isocalendar()
+            iso = local.isocalendar()
             key = ("weekly", iso.year, iso.week)
         elif age < 365:
-            key = ("monthly", created.year, created.month)
+            key = ("monthly", local.year, local.month)
         else:
-            key = ("quarterly", created.year, (created.month - 1)//3)
+            key = ("quarterly", local.year, (local.month - 1)//3)
         if key not in buckets:
             keep.add(name)
             buckets.add(key)
@@ -229,16 +232,14 @@ def process(apply=False, now=None):
     for name in remove:
         if count >= MAX_DELETIONS:
             break
-        if releases() != [x for x in names if x not in remove[:count]]:
+        if releases() != names:
             raise Rejected("backup_roster_changed")
         _, size = verified_manifest(name)
         if bytes_removed + size > MAX_DELETE_BYTES:
             continue
         directory = ROOT + "/" + name
-        result = request_api("Fileman", "delete_file",
-                             {"path": directory, "skip_trash": 1})
-        if result is None:
-            raise Rejected("delete_response_invalid")
+        request_api("Fileman", "delete_file",
+                    {"path": directory, "skip_trash": 1})
         if name in releases():
             raise Rejected("deletion_not_confirmed")
         count += 1
