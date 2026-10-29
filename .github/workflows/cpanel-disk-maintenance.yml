@@ -1,0 +1,67 @@
+name: Protected cPanel disk maintenance
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        required: true
+        options: [inspect, trash]
+        description: "Inspect is read-only; trash moves one confirmed npm cache file"
+      path:
+        type: string
+        required: true
+        description: "Exact file below .npm/_cacache only"
+      expected_size:
+        type: string
+        required: false
+        description: "Required for trash: value returned by inspect"
+      expected_mtime:
+        type: string
+        required: false
+        description: "Required for trash: value returned by inspect"
+
+permissions:
+  contents: read
+
+jobs:
+  disk-maintenance:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    environment: management-hub-production
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate allowed operation
+        env:
+          ACTION: ${{ inputs.action }}
+          FILE_PATH: ${{ inputs.path }}
+          EXPECTED_SIZE: ${{ inputs.expected_size }}
+          EXPECTED_MTIME: ${{ inputs.expected_mtime }}
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          sys.path.insert(0, "deploy")
+          from cpanel_disk_cleanup import safe_file, Rejected
+          try:
+              safe_file(os.environ["FILE_PATH"])
+              if os.environ["ACTION"] == "trash":
+                  if not (os.environ["EXPECTED_SIZE"].isdigit() and os.environ["EXPECTED_MTIME"].isdigit()):
+                      raise Rejected("confirmation_metadata_required")
+          except Rejected:
+              sys.exit("Rejected invalid maintenance request")
+          PY
+      - name: Run scoped inspection or trash
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          FILE_PATH: ${{ inputs.path }}
+          EXPECTED_SIZE: ${{ inputs.expected_size }}
+          EXPECTED_MTIME: ${{ inputs.expected_mtime }}
+        run: |
+          if [[ "$ACTION" == "inspect" ]]; then
+            python3 deploy/cpanel_disk_cleanup.py inspect --path "$FILE_PATH"
+          else
+            python3 deploy/cpanel_disk_cleanup.py trash --path "$FILE_PATH" --expected-size "$EXPECTED_SIZE" --expected-mtime "$EXPECTED_MTIME"
+          fi
