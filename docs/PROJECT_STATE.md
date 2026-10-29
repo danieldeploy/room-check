@@ -79,6 +79,15 @@ See `docs/flows/zkaccess-backup.md`.
 Acceptance remains: required CI, production commit confirmed, one exact cron
 entry verified in WHM, and a successful archive cycle executed by that cron.
 This change does not fix the separate cPanel disk-quota pressure.
+
+The 2026-10-29 protected read-only inspection of the installed clone
+`ee8c516c` confirmed nine *untracked* entries (root 1, deploy 4, docs 1,
+tests 3), zero missing tracked entries and no active deployment. A one-off,
+reversible private quarantine guarded by exact inventory, expected old SHA,
+file type and path validation is prepared to clean the staging clone before
+ordinary deployment; it must not touch live application, secrets or existing
+backups. Deployment and independent cron remain unverified until the WHM
+operation succeeds. This recovery does **not** reclaim cPanel disk quota.
 The protected read-only repository diagnostic now compares the cPanel clone
 with its actual installed SHA, avoiding false reports of missing files when
 GitHub contains newer commits. Recovery may proceed only after this independent
