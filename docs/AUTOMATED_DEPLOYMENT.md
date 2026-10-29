@@ -138,3 +138,25 @@ classifications of untracked items. It makes **no changes** to Git files or
 server settings. This diagnostic does not authorize forcing updates, deleting
 untracked files or bypassing `repository_not_deployable`. A confirmed cause
 must be corrected through a separate reviewed and guarded operation.
+
+## One-time recovery of the inspected cPanel Git clone (29 October 2026)
+
+The protected deploy job has a narrowly scoped preflight before its normal
+`--inspect-state` step: `deploy/cpanel_git_quarantine.py inspect` and
+`quarantine`. It is limited to the already inspected, still-installed commit
+`ee8c516` and the exact observed nine unexpected regular-file entries (one
+at the repository root, four under `deploy/`, one under `docs/`, three under
+`tests/`). It compares against the **installed Git tree**, and refuses any
+tracked file missing, added unexpected item, directory, symlink, oversized
+file, changed metadata, active deployment or unexpected commit. The regular
+untracked files are **moved, not deleted**, into a private 0700 recovery folder
+under `/home/welcome/room-check-backups/`; nothing in `public_html`, mail,
+private invoice data or ZKTeco databases is touched. Names and contents are
+never printed in workflow logs.
+
+After relocation, the cPanel `deployable` check must become true before the
+standard backup-gated, exact-SHA release can begin. A partial or uncertain
+move stops the job for read-only inspection, rather than retrying blindly.
+When the clone is already clean the helper does nothing. The fixed SHA and
+inventory guard prevent this recovery from applying to future unrelated
+repository changes.
