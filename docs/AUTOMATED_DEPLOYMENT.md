@@ -154,7 +154,11 @@ Instead of deleting or overwriting files, it moves them into a private
 `0700` quarantine **outside both the staging clone and web root**, preserving
 names and metadata. It then requires cPanel to report a clean deployable Git
 working tree. Failure stops the normal release and requires fresh read-only
-inspection before retry. Once the repository is clean, this one-off recovery
+inspection before retry. If `Fileman::fileop` returns an unconfirmed move,
+`deploy/cpanel_git_worktree_recovery.py quarantine` uses only read-only WHM
+Fileman listings to report the private quarantine's directory and file
+counts (never file names or contents). No second move is authorized until the
+source and destination inventories are reconciled. Once the repository is clean, this one-off recovery
 is a no-op; the original backup gate, SHA checks and deploy verification remain
 mandatory. No mail, database, original backup, `.git` contents or live PHP is
 modified by this operation.
