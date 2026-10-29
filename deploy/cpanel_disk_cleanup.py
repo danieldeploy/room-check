@@ -89,6 +89,8 @@ def inspect(path):
     path = safe_file(path)
     # Fileman::get_file_information is read-only and returns file metadata.
     info = request_api("Fileman", "get_file_information", {"path": path})
+    if isinstance(info, list) and len(info) == 1:
+        info = info[0]
     if not isinstance(info, dict):
         raise Rejected("invalid_file_information")
     if info.get("type") != "file":
