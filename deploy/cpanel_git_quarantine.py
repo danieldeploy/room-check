@@ -74,6 +74,9 @@ def verified_state():
     if (state.get("current_commit") != INSTALLED_SHA
         or state.get("last_deployed_commit") != INSTALLED_SHA):
         raise Rejected("inspected_clone_version_changed")
+    # Reuse the existing allowlisted origin + exact-branch validation, but do
+    # not waive the separate clean-tree gate needed for normal release.
+    runner.inspect(runner.repository(), INSTALLED_SHA, idle=False)
     tree = GitHub(os.environ.get("GITHUB_TOKEN", "")).read(
         "/git/trees/" + INSTALLED_SHA + "?recursive=1")
     if not isinstance(tree, dict) or tree.get("truncated") is not False:
