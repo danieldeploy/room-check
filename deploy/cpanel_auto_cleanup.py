@@ -34,7 +34,8 @@ def list_files(directory):
 
 
 def candidates(now):
-    stack = [(".npm/_cacache", 0), (".cache/pip", 0), (".cache/uv", 0)]
+    stack = [(".npm/_cacache", 0), (".cache/pip", 0), (".cache/uv", 0),
+             (".cache/puppeteer/chrome-headless-shell", 0)]
     visited = set()
     while stack:
         directory, depth = stack.pop()
@@ -80,6 +81,10 @@ def main():
     for path, size, mtime in candidates(time.time()):
         if count >= MAX_FILES or freed + size > MAX_BYTES:
             break
+        if path.startswith(".cache/puppeteer/"):
+            version = path.rsplit("/", 1)[1].split("-chrome-headless-shell-linux64.zip")[0]
+            if not version or not any((x.get("file") or x.get("name")) == "linux-" + version and x.get("type") == "dir" for x in list_files(".cache/puppeteer/chrome-headless-shell")):
+                continue
         result = delete_exact(path, size, mtime)
         count += 1
         freed += result["bytes"]
