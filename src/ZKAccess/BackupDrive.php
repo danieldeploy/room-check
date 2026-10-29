@@ -141,7 +141,7 @@ final class ZKAccessBackupDrive
         }
 
         // Keep one week of encrypted on-host copies for diagnostics,
-        // without extending the 30-day Drive retention.
+        // without extending the 10-day ZKTeco Drive retention.
         foreach ($entries as $id => $e) {
             if ($e['status'] === 'uploaded' && strtotime($e['uploaded_at'] . ' UTC') < $now - 7 * 86400) {
                 @unlink($this->vault->path(ZKAccessBackupStore::dataName($id)));
