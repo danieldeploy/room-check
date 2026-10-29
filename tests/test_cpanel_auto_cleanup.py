@@ -24,6 +24,17 @@ class AutomaticCleanupTests(unittest.TestCase):
             auto.main()
             deleting.assert_called_once_with(".npm/_cacache/a", 100, 50)
 
+    def test_scan_deadline_stops_before_large_tree(self):
+        with mock.patch.object(auto, "quota", side_effect=[(5950, 6000), (5800, 6000)]), \
+                mock.patch.object(auto, "candidates", return_value=iter([
+                    (".npm/_cacache/a", 1000, 20),
+                    (".npm/_cacache/b", 1000, 20),
+                    (".npm/_cacache/c", 1000, 20)])), \
+                mock.patch.object(auto.time, "monotonic", side_effect=[0, 91]), \
+                mock.patch.object(auto, "delete_exact", return_value={"bytes": 1000}) as deleter:
+            auto.main()
+        deleter.assert_called_once_with(".npm/_cacache/a", 1000, 20)
+
     def test_largest_cache_file_first(self):
         items = iter([(".npm/_cacache/small", 1024, 20),
                       (".npm/_cacache/large", 2_000_000, 20)])

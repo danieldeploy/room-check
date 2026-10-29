@@ -134,6 +134,8 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - The WHM daily audit now reads deployment readiness and recursive log sizes, and estimates same-day backup redundancy; only aggregated metadata is printed, no private files or credentials are read.
 
+- The daily WHM cache candidate scan is capped at 90 seconds and 400 candidates, preventing job timeouts on large npm cache trees while keeping the 40-file/200 MiB deletion limits.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in

@@ -9,6 +9,7 @@ THRESHOLD = 0.90
 MIN_AGE = 14 * 86400
 MAX_FILES = 40
 MAX_SCAN = 400
+MAX_SCAN_SECONDS = 90
 MAX_DEPTH = 5
 MAX_BYTES = 200 * 1024 * 1024
 
@@ -86,7 +87,12 @@ def main():
     count = freed = 0
     # Prefer sizeable cache entries: the original traversal spent minutes
     # deleting 40 tiny files and recovered only tens of kilobytes.
-    scanned = list(islice(candidates(time.time()), MAX_SCAN))
+    scan_deadline = time.monotonic() + MAX_SCAN_SECONDS
+    scanned = []
+    for candidate in islice(candidates(time.time()), MAX_SCAN):
+        scanned.append(candidate)
+        if time.monotonic() >= scan_deadline:
+            break
     scanned.sort(key=lambda item: (-item[1], item[0]))
     for path, size, mtime in scanned:
         if count >= MAX_FILES:
