@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scheduled bounded cleanup of disposable npm cache files only."""
+"""Scheduled bounded cleanup of known disposable cache files only."""
 import json
 import time
 from cpanel_disk_cleanup import request_api, safe_file, inspect, delete_exact, Rejected
@@ -34,14 +34,20 @@ def list_files(directory):
 
 
 def candidates(now):
-    stack = [(".npm/_cacache", 0)]
+    stack = [(".npm/_cacache", 0), (".cache/pip", 0), (".cache/uv", 0)]
     visited = set()
     while stack:
         directory, depth = stack.pop()
         if directory in visited or depth > MAX_DEPTH:
             continue
         visited.add(directory)
-        for entry in list_files(directory):
+        try:
+            entries = list_files(directory)
+        except Rejected:
+            if directory in (".cache/pip", ".cache/uv"):
+                continue  # Optional cache absent or inaccessible.
+            raise
+        for entry in entries:
             if not isinstance(entry, dict):
                 raise Rejected("invalid_file_listing")
             name = entry.get("file") or entry.get("name")
