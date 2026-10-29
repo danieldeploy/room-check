@@ -61,7 +61,7 @@ def tracked_tree_names(payload, directory):
             raise Rejected("invalid_tracked_tree")
         path = item.get("path")
         kind = item.get("type")
-        if not isinstance(path, str) or path.startswith("/") or ".." in path.split("/") or "\\x00" in path:
+        if not isinstance(path, str) or path.startswith("/") or ".." in path.split("/") or "\x00" in path:
             raise Rejected("invalid_tracked_tree")
         if kind != "blob" or not path.startswith(prefix):
             continue
