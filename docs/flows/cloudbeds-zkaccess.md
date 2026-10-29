@@ -116,6 +116,9 @@ state.
 ## Separate MySQL backup infrastructure
 
 The existing ZKAccess 5.3 database backup does not generate or write guest PINs.
+The ZKTeco Drive archives now follow the separate ten-day retention policy
+(with at least two verified recovery points), rather than the 30-day policy;
+this has no effect on PIN programming, Cloudbeds messages or guest data.
 Its independent Windows/MySQL and Hub/Drive delivery is specified in
 [`zkaccess-backup.md`](zkaccess-backup.md); the separate cron and its
 telemetry have no effect on Cloudbeds webhook or controller permission logic.

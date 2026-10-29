@@ -57,9 +57,11 @@ under `docs/flows/`.
 
 ## ZKTeco MySQL backups — independent Drive archiving
 
-Status: **Prepared on feature branch / not yet verified in production**.
+Status: **Independent worker integrated in GitHub; deployment blocked on cPanel Git readiness**.
+The ZKTeco-only retention has been changed from 30 to **10 days** in the current feature branch; still awaiting publication.
+The two newest verified Drive backups are protected if fewer fresh copies exist.
 The existing 04:00 Europe/Lisbon AccesControl MySQL dump, encrypted Hub intake,
-Google Drive destination and 30-day retention remain unchanged.
+Google Drive destination remains unchanged; retention is 10 days for ZKTeco backups only (preserve at least two verified copies).
 
 The current production design chains ZKTeco Drive delivery after
 `cron/invoices.php`. This can delay archiving when the invoice worker is busy.
@@ -77,6 +79,10 @@ See `docs/flows/zkaccess-backup.md`.
 Acceptance remains: required CI, production commit confirmed, one exact cron
 entry verified in WHM, and a successful archive cycle executed by that cron.
 This change does not fix the separate cPanel disk-quota pressure.
+The protected read-only repository diagnostic now compares the cPanel clone
+with its actual installed SHA, avoiding false reports of missing files when
+GitHub contains newer commits. Recovery may proceed only after this independent
+check proves the specific dirty-tree cause; no forced pull, reset or deletion.
 
 ## Cloudbeds → ZKAccess guest PIN automation
 

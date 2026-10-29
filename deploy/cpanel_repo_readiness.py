@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 from cpanel_api import CpanelAPI, Config, Deployment, WHM_ORIGIN
+from automated_release import GitHub
 from cpanel_disk_cleanup import Rejected, request_api
 
 CPANEL_REPOSITORY = "/home/welcome//home/welcome/repositories/room-check"
@@ -42,6 +43,35 @@ def validate_rows(raw):
     return result
 
 
+def tracked_tree_names(payload, directory):
+    """Compare the WHM clone against its *own installed SHA*, not GitHub HEAD.
+
+    The protected deployment may be weeks behind. Differences against HEAD
+    would falsely classify newly added files as missing/dirty.
+    """
+    if not isinstance(payload, dict) or payload.get("truncated") is not False:
+        raise Rejected("invalid_tracked_tree")
+    tree = payload.get("tree")
+    if not isinstance(tree, list) or len(tree) > 3000:
+        raise Rejected("invalid_tracked_tree")
+    prefix = directory + "/" if directory else ""
+    names = set()
+    for item in tree:
+        if not isinstance(item, dict):
+            raise Rejected("invalid_tracked_tree")
+        path = item.get("path")
+        kind = item.get("type")
+        if not isinstance(path, str) or path.startswith("/") or ".." in path.split("/") or "\x00" in path:
+            raise Rejected("invalid_tracked_tree")
+        if kind != "blob" or not path.startswith(prefix):
+            continue
+        component = path[len(prefix):].split("/", 1)[0]
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", component):
+            raise Rejected("invalid_tracked_tree")
+        names.add(component)
+    return names
+
+
 def tracked_names(directory):
     # The local checkout is the approved public GitHub source. This comparison
     # is a diagnostic hint, not permission to remove any server file.
@@ -53,9 +83,10 @@ def tracked_names(directory):
             if path.startswith(prefix) and path != prefix}
 
 
-def compare(directory, rows):
+def compare(directory, rows, expected=None):
     items = validate_rows(rows)
-    expected = tracked_names(directory)
+    if expected is None:
+        expected = tracked_names(directory)
     extra = sorted(set(items) - expected - ({".git"} if not directory else set()))
     missing = sorted(expected - set(items))
     # Only report category, count and hashed path indicators. An untracked name
@@ -85,21 +116,26 @@ def run():
         raise Rejected("repository_binding_mismatch")
     if state.get("branch") != "agent/room-item-assignments":
         raise Rejected("repository_branch_mismatch")
+    current = state["current_commit"]
+    if not isinstance(current, str) or not re.fullmatch(r"[0-9a-f]{40}", current):
+        raise Rejected("invalid_installed_commit")
+    tree = GitHub(os.environ.get("GITHUB_TOKEN", "")).read("/git/trees/" + current + "?recursive=1")
     scans = []
     for subdir in ("",) + SUBDIRECTORIES:
         location = root + ("/" + subdir if subdir else "")
         try:
             rows = request_api("Fileman", "list_files",
                                {"dir": location, "show_hidden": 1})
-            scans.append(compare(subdir, rows))
+            scans.append(compare(subdir, rows, tracked_tree_names(tree, subdir)))
         except Rejected as failure:
             scans.append({"directory": subdir or "repository_root",
                           "error": str(failure)})
     output = {"ok": True, "read_only": True,
-              "current_commit": state["current_commit"],
+              "current_commit": current,
               "last_deployed_commit": state["last_deployed_commit"],
               "deployable": state["deployable"],
               "repository_busy": state["repository_busy"],
+              "compared_against": "installed_commit",
               "repository_scans": scans}
     print(json.dumps(output, sort_keys=True))
 

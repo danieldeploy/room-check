@@ -132,7 +132,8 @@ Referências: [ambientes de deployment](https://docs.github.com/en/actions/how-t
 When the protected deploy preflight fails, the production-only CI job may
 execute `deploy/cpanel_repo_readiness.py`. It consults only the fixed welcome
 Git clone via existing WHM credentials in the protected environment, reads
-allowlisted Fileman directory metadata, and prints only counts and safe
+allowlisted Fileman directory metadata, compares names against the GitHub
+**installed commit** (not the latest HEAD), and prints only counts and safe
 classifications of untracked items. It makes **no changes** to Git files or
 server settings. This diagnostic does not authorize forcing updates, deleting
 untracked files or bypassing `repository_not_deployable`. A confirmed cause

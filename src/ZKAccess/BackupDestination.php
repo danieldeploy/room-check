@@ -11,5 +11,5 @@ final class ZKAccessBackupDestination
     public const ROOT_FOLDER_NAME = 'Management Hub';
     public const BACKUP_FOLDER_ID = '1dAMy6v2WdgcBgho0BiXi0-_tE-KVt9jG';
     public const BACKUP_FOLDER_NAME = 'ZKTeco Backup';
-    public const RETENTION_DAYS = 30;
+    public const RETENTION_DAYS = 10;
 }

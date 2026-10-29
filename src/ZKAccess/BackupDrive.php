@@ -14,15 +14,38 @@ final class ZKAccessBackupDrive
         private readonly InvoiceDriveClient $drive
     ) {}
 
+    /**
+     * Delete only verified ZKTeco archives older than the configured retention.
+     * Protect the two newest verified uploads even after a prolonged outage.
+     * Bad or missing timestamps fail closed; they never authorize deletion.
+     */
+    public static function retentionCandidates(array $entries, int $now): array
+    {
+        $uploaded = array_filter($entries, static fn(array $e): bool => ($e['status'] ?? null) === 'uploaded');
+        uasort($uploaded, static fn(array $a, array $b): int =>
+            strcmp((string)($b['created_at'] ?? ''), (string)($a['created_at'] ?? '')));
+        $keep = array_fill_keys(array_slice(array_keys($uploaded), 0, 2), true);
+        $expired = [];
+        foreach ($uploaded as $id => $entry) {
+            if (isset($keep[$id]) || !is_string($entry['created_at'] ?? null)
+                || !preg_match('/\\A20[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\z/D', $entry['created_at'])) {
+                continue;
+            }
+            $timestamp = strtotime($entry['created_at'] . ' UTC');
+            if ($timestamp !== false
+                && $timestamp < $now - ZKAccessBackupDestination::RETENTION_DAYS * 86400) {
+                $expired[$id] = $entry;
+            }
+        }
+        return $expired;
+    }
+
     public function run(int $now = 0): array
     {
         $now = $now ?: time();
         $entries = $this->store->entries();
         $pending = array_filter($entries, static fn(array $e): bool => $e['status'] === 'ready');
-        $expired = array_filter($entries, static function (array $e) use ($now): bool {
-            return $e['status'] === 'uploaded'
-                && strtotime($e['created_at'] . ' UTC') < $now - (30 * 86400);
-        });
+        $expired = self::retentionCandidates($entries, $now);
         $result = ['uploaded' => 0, 'expired' => 0];
         if (!$pending && !$expired) return $result;
 
@@ -118,7 +141,7 @@ final class ZKAccessBackupDrive
         }
 
         // Keep one week of encrypted on-host copies for diagnostics,
-        // without extending the 30-day Drive retention.
+        // without extending the 10-day ZKTeco Drive retention.
         foreach ($entries as $id => $e) {
             if ($e['status'] === 'uploaded' && strtotime($e['uploaded_at'] . ' UTC') < $now - 7 * 86400) {
                 @unlink($this->vault->path(ZKAccessBackupStore::dataName($id)));

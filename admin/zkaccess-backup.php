@@ -80,7 +80,7 @@ function backupEsc(string $text): string { return htmlspecialchars($text, ENT_QU
         <p><a href="https://drive.google.com/drive/folders/1dAMy6v2WdgcBgho0BiXi0-_tE-KVt9jG" rel="noopener noreferrer">Google Drive / Management Hub / ZKTeco Backup</a></p>
         <div class="status-grid">
             <div class="status-item"><span>Agendamento</span><strong><?= backupEsc($settings['time']) ?> (Lisboa)</strong></div>
-            <div class="status-item"><span>Retenção no Drive</span><strong>30 dias</strong></div>
+            <div class="status-item"><span>Retenção no Drive</span><strong><?= ZKAccessBackupDestination::RETENTION_DAYS ?> dias</strong></div>
             <div class="status-item"><span>Regra de execução</span><strong><?= $settings['enabled'] ? 'Ativada no Hub' : 'Pausada' ?></strong></div>
             <div class="status-item"><span>Backups confirmados no Drive</span><strong><?= count(array_filter($backups, static fn(array $b): bool => $b['status'] === 'uploaded')) ?></strong></div>
         </div>

@@ -18,8 +18,9 @@ verificado no Drive.
   cifrado para `My Drive / Management Hub / ZKTeco Backup`.
 - A entrega apenas é considerada concluída depois de voltar a ler o ficheiro do
   Drive e validar tamanho, checksum e decifragem autenticada.
-- A retenção existente é de 30 dias, conservando pelo menos duas cópias remotas
-  verificadas. Não mudar a política de retenção nesta correção.
+- A retenção do ZKTeco no Drive é de 10 dias, conservando pelo menos duas cópias remotas
+  verificadas. Esta redução de 30 para 10 dias é exclusiva dos backups ZKTeco;
+  backups gerais do Management Hub e documentos de faturas mantêm as suas políticas.
 
 ```mermaid
 flowchart TD
