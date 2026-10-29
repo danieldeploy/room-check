@@ -113,6 +113,13 @@ A failed note write must not cause the physical PIN operation to be repeated
 blindly. Retry the note/message stage independently from the confirmed controller
 state.
 
+## Separate MySQL backup infrastructure
+
+The existing ZKAccess 5.3 database backup does not generate or write guest PINs.
+Its independent Windows/MySQL and Hub/Drive delivery is specified in
+[`zkaccess-backup.md`](zkaccess-backup.md); the separate cron and its
+telemetry have no effect on Cloudbeds webhook or controller permission logic.
+
 ## Security boundaries
 
 - Cloudbeds API credentials are private configuration outside the repository and
