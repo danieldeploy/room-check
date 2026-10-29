@@ -59,6 +59,41 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 - Never place credentials, PINs, OTPs, guest personal data, private invoice
   contents or other secrets in project-memory documentation.
 
+## Engineering skill orchestration
+
+- Repository rules, durable project decisions, owner instructions, and current
+  code/tests override any global or personal ChatGPT skill. Skills guide the
+  development process; they are not a second source of product truth.
+- For routine changes with clear requirements, do not invoke a full
+  brainstorming/design-approval workflow merely because Superpowers is
+  available. Establish the requested rule and scope from the repository and
+  continue under the standing authorization.
+- For bugs, failing tests, unexpected behavior, performance regressions or
+  integration failures, use systematic root-cause debugging before proposing a
+  fix. For meaningful logic changes, use the existing practical test seam and
+  regression/TDD discipline when appropriate. Do not introduce a new test
+  framework solely for a trivial visual, static or configuration-only change.
+  Use fresh verification evidence before claiming a change is complete.
+- Use Ponytail only as a one-shot **review** when a medium/large change proposes
+  a new dependency, wrapper, service, abstraction, access path, duplicated
+  integration or substantially more code than the requested behavior appears
+  to require. Its purpose is to find reusable existing code and unnecessary
+  surface area. Do not activate full Ponytail automatically.
+- Use Grill Me **light** only after repository/code/tool investigation leaves a
+  genuinely unresolved decision that changes architecture, persistent data,
+  permissions/security, an external contract, irreversible behavior or scope.
+  Ask at most three material questions and then resume the already-authorized
+  work. Full Grill Me is only for an explicit owner request.
+- Do not automatically request a Codex second opinion, independent reviewer or
+  extra approval checkpoint merely because such a mechanism exists. Use one
+  only when the owner explicitly requests it or a repository policy requires it.
+- If a code graph/codebase-memory MCP is already available, it may supplement
+  symbol, caller, dependency and impact discovery. Verify findings against the
+  current code/tests and repository documents. It is not a release dependency.
+  Do not install a new indexing daemon on production or the resource-constrained
+  AccesControl Windows host as part of an ordinary coding task; that requires a
+  separate infrastructure decision.
+
 ## Management Hub session recovery
 
 - Owner instruction, 2026-10-20: use the direct Hub OAuth/MCP connection for its
