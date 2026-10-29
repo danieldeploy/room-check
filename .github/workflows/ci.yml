@@ -106,6 +106,8 @@ jobs:
       - name: Run PHP tests
         run: |
           php tests/hub-connector.php
+          php tests/cloudbeds-zkaccess.php
+          php tests/cloudbeds-zkaccess-api.php
           php tests/invoice-booking-verification.php
           php tests/invoice-hostelworld-verification.php
           php tests/cloudbeds-email.php

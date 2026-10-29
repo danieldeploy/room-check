@@ -8,6 +8,7 @@ DirectoryIndex index.php
 RewriteEngine On
 RewriteRule ^\.well-known/oauth-authorization-server$ oauth.php?action=metadata [END]
 RewriteRule ^\.well-known/oauth-protected-resource(?:/mcp\.php)?$ oauth.php?action=resource [END]
+RewriteRule ^cloudbeds-access-webhook/([a-f0-9]{64})$ cloudbeds-access-webhook.php?key=$1 [END]
 # Preserve device authentication when PHP runs through CGI/FastCGI.
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 RewriteRule ^(?:src|tests|migrations|invoice-runner|deploy|cron|windows)/ - [F,L,NC]

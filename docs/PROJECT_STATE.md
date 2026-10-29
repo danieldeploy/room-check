@@ -64,6 +64,8 @@ Status: **Prepared / not integrated**.
 - Cloudbeds property API access has been requested and is still pending activation.
 - Draft PR #256 prepares the first Cloudbeds webhook/ZKAccess foundation but is
   not part of the production branch at the time of this review.
+- PR #256 is synchronized with the repository project-memory/CI protocol and
+  remains disabled by private configuration while API access is pending.
 - City Center ZKAccess levels and controller/door mappings for Rooms 1–6 were
   verified against the live ZKAccess 5.3 database.
 - Direct read-only Pull SDK communication with a C3-400 was successfully tested.
