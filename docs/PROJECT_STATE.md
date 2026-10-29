@@ -125,6 +125,13 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 
 - Daily maintenance prioritizes the largest explicitly allowlisted disposable cache files (bounded scan of 400 and at most 40 deletions), avoiding runs that previously reclaimed only ~30 KB.
 
+
+## Backup compaction without deleting recovery points
+
+- Historical snapshots contain uncompressed database.sql dumps. A private post-release compactor converts up to 50 completed dumps older than 48 hours to database.sql.gz per deployment, preserving all snapshot directories and other archives.
+- It verifies the original SHA-256 hashes and gzip roundtrip against original SQL, atomically updates manifest format 2, and only then removes redundant plaintext. Failures preserve the original.
+- Legacy format 1 remains readable. Full MySQL restoration remains a separate acceptance check, and actual quota improvement must be measured in production.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
