@@ -6,7 +6,7 @@ on:
         type: choice
         required: true
         options: [inspect, trash]
-        description: "Inspect is read-only; trash moves one confirmed npm cache file"
+        description: "Inspect is read-only; delete permanently removes one confirmed npm cache file"
       path:
         type: string
         required: true
@@ -14,11 +14,11 @@ on:
       expected_size:
         type: string
         required: false
-        description: "Required for trash: value returned by inspect"
+        description: "Required for delete: value returned by inspect"
       expected_mtime:
         type: string
         required: false
-        description: "Required for trash: value returned by inspect"
+        description: "Required for delete: value returned by inspect"
 
 permissions:
   contents: read
@@ -46,7 +46,7 @@ jobs:
           from cpanel_disk_cleanup import safe_file, Rejected
           try:
               safe_file(os.environ["FILE_PATH"])
-              if os.environ["ACTION"] == "trash":
+              if os.environ["ACTION"] == "delete":
                   if not (os.environ["EXPECTED_SIZE"].isdigit() and os.environ["EXPECTED_MTIME"].isdigit()):
                       raise Rejected("confirmation_metadata_required")
           except Rejected:
