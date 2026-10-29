@@ -39,3 +39,8 @@ Este diagnóstico não é por si só autorização para eliminar backups antigos
 O auxiliar privado de pós-publicação `deploy/compress_release_dumps.php` comprime até 50 dumps SQL com mais de 48 horas. Confirma o SHA-256 do manifesto dos artefactos, verifica a descompressão byte a byte, atualiza o manifesto atomicamente para formato 2 (com `database.sql.gz`) e só então elimina o SQL original redundante. Preserva todas as datas e os diretórios dos backups. Se falhar, mantém os dados originais e a publicação não é bloqueada.
 
 O formato 1 continua a conter `database.sql`. Para recuperar o formato 2, descomprimir `database.sql.gz` antes da importação MySQL, com os mesmos controlos de recuperação privada. A compactação não prova por si só um restauro funcional da base de dados.
+
+
+## Plano de retenção de backups e teste de restauração
+
+O utilitário `deploy/cpanel_backup_retention.py` executa primeiro somente um **diagnóstico sem eliminação** pelo workflow WHM protegido. Preserva as últimas 3 cópias, um backup diário durante 45 dias (Europe/Lisbon), um por semana até 180 dias, um por mês até 365 dias, um por trimestre para histórico mais antigo, e o backup mais antigo. Só marca duplicados com mais de 48 horas como candidatos. Verifica em leitura o manifesto de todas as cópias que ficariam e restaura o SQL mais recente num MySQL 8 descartável do GitHub Actions, sem imprimir dados privados. A fase `--apply`, ainda desativada, está limitada a 25 diretórios e 200 MiB por execução, com revalidação de listagem antes de cada exclusão. A restauração integral dos arquivos da aplicação continua por confirmar; não eliminar backups sem os testes necessários.
