@@ -1,0 +1,13 @@
+name: Automatic cPanel cache recovery
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-only:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Production branch is the only permitted recovery runner.'
