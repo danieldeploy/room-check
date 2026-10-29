@@ -20,3 +20,7 @@ O GitHub Actions só agenda workflows que estejam na branch por defeito (`main`)
 ## Recuperação em caso de falha
 
 Rever a execução protegida, identificar o código de erro sem imprimir respostas do servidor ou tokens, corrigir no PR e voltar a testar. Não repetir indiscriminadamente uma operação destrutiva. O job protegido usa `concurrency` para não sobrepor execuções.
+
+## Política de backups
+
+Preservar sempre pelo menos os 3 backups completos mais recentes e todos os backups com menos de 45 dias. Não apagar backups sem primeiro validar os manifests e checksums dos artefactos, confirmar um restauro recuperável e confirmar que não há deploy/recovery em curso. A rotina atual apenas faz inventário de backups, sem os apagar, porque a leitura WHM Fileman não permite por si só comprovar a recuperação. A extensão da remoção definitiva de backups antigos fica bloqueada até existir essa prova técnica.
