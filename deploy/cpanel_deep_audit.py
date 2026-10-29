@@ -132,35 +132,44 @@ def browsers(rows):
 
 def logs(now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
-    data = request_api("Fileman", "list_files", {"dir": "logs", "show_hidden": 1})
-    if not isinstance(data, list) or len(data) > 2000:
+    root = HOME + "/logs"
+    response = request_api("Fileman", "search", {
+        "dir": root, "recursive": 1, "mimeinfo": 0,
+        "attributes": "size|type|mtime"
+    }, legacy=True)
+    rows = response.get("data")
+    if not isinstance(rows, list) or len(rows) > LIMIT:
         raise Rejected("invalid_log_listing")
-    files = 0
     total = 0
-    rotated = 0
-    rotated_bytes = 0
-    for item in data:
+    counts = 0
+    compressed = collections.Counter()
+    compressed_bytes = collections.Counter()
+    top = []
+    for item in rows:
         if not isinstance(item, dict):
             raise Rejected("invalid_log_listing")
-        name = item.get("file") or item.get("name")
-        if not isinstance(name, str) or "/" in name:
-            raise Rejected("invalid_log_listing")
+        path = item.get("file")
+        if not isinstance(path, str) or not (path == root or path.startswith(root + "/")):
+            raise Rejected("unexpected_log_path")
         if item.get("type") != "file":
             continue
         size = as_int(item.get("size") or 0)
-        files += 1
+        counts += 1
         total += size
-        if re.search(r"\.(?:gz|bz2|xz|zip)\Z", name):
+        top.append(size)
+        if re.search(r"\.(?:gz|bz2|xz|zip)\Z", path):
             try:
                 age = (now - dt.datetime.fromtimestamp(as_int(item.get("mtime")), dt.timezone.utc)).days
             except (OverflowError, OSError, ValueError, Rejected):
                 continue
-            if age >= 30:
-                rotated += 1
-                rotated_bytes += size
-    return {"files": files, "current_file_mb": round(total / MB, 1),
-            "rotated_archives_older_30_days": rotated,
-            "rotated_archives_older_30_days_mb": round(rotated_bytes / MB, 1),
+            for days in (14, 30):
+                if age >= days:
+                    compressed[days] += 1
+                    compressed_bytes[days] += size
+    return {"files_recursive": counts, "bytes_recursive_mb": round(total / MB, 1),
+            "largest_file_sizes_mb": [round(x / MB, 1) for x in sorted(top, reverse=True)[:5]],
+            "compressed_archive_candidates": {str(days): {"files": compressed[days],
+             "mb": round(compressed_bytes[days] / MB, 1)} for days in (14, 30)},
             "deletion_authorized": False}
 
 
