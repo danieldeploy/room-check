@@ -78,7 +78,9 @@ insuficiente pode ainda impedir a receção ou o arquivo e exige correção de q
 
 ## Critérios de aceitação
 
-1. CI obrigatório `validate` e `windows-agent` passam; deploy da revisão
+1. CI obrigatório `validate` e `windows-agent` passam; a reparação
+   reversível do clone do cPanel (quando necessária) preserva os ficheiros
+   não controlados e permite o deploy da revisão
    integrada confirmado.
 2. WHM devolve exatamente uma linha ZKTeco no cron, intervalo cinco minutos,
    sem alterações aos cron de faturas/Cloudbeds/WhatsApp/traduções.
