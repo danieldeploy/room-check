@@ -138,3 +138,23 @@ classifications of untracked items. It makes **no changes** to Git files or
 server settings. This diagnostic does not authorize forcing updates, deleting
 untracked files or bypassing `repository_not_deployable`. A confirmed cause
 must be corrected through a separate reviewed and guarded operation.
+
+### Guarded one-time recovery of the current dirty staging clone
+
+The reviewed `deploy/cpanel_git_worktree_recovery.py` runs only in the
+protected production GitHub environment, before the ordinary inspect/update/
+deploy gate. It is bound to the **previously inspected** welcome clone at
+commit `ee8c516c` and checks a fixed inventory of exactly nine untracked,
+regular files (one at repository root, four under deploy, one under docs,
+three under tests); it rejects any missing tracked file, directory, symlink,
+protected name, concurrent deployment or changed SHA. The old SHA must be a
+verified fast-forward ancestor of the current reviewed production HEAD.
+
+Instead of deleting or overwriting files, it moves them into a private
+`0700` quarantine **outside both the staging clone and web root**, preserving
+names and metadata. It then requires cPanel to report a clean deployable Git
+working tree. Failure stops the normal release and requires fresh read-only
+inspection before retry. Once the repository is clean, this one-off recovery
+is a no-op; the original backup gate, SHA checks and deploy verification remain
+mandatory. No mail, database, original backup, `.git` contents or live PHP is
+modified by this operation.
