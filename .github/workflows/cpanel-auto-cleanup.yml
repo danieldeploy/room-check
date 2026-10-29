@@ -47,10 +47,14 @@ jobs:
           RESTORE_MYSQL_PASSWORD: temporary_backup_restore_only
         run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_backup_retention.py
       - name: Recover disposable cache if disk quota above threshold
+        continue-on-error: true
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_puppeteer_inventory.py
           PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_storage_inventory.py
           PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_backup_audit.py
-          PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_auto_cleanup.py
+          if ! timeout --signal=TERM --kill-after=10s 95s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_auto_cleanup.py; then
+            echo "cache_cleanup_incomplete_or_timed_out; review log, do not retry blindly"
+            exit 1
+          fi
