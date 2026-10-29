@@ -8,7 +8,7 @@ declare(strict_types=1);
 final class ZKAccessBackupSchedule
 {
     public const DEFAULT_TIME = '04:00';
-    public const RETENTION_DAYS = 30;
+    public const RETENTION_DAYS = 10;
     public const TIMEZONE = 'Europe/Lisbon';
 
     public static function normalizeTime(string $time): string
