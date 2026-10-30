@@ -206,6 +206,12 @@ See `docs/flows/cloudbeds-zkaccess.md` and ADRs 002–003.
 - WHM-only protected daily maintenance now requests `--apply` after fresh manifest checks and SQL import. A run deletes at most 25 redundant release directories / 200 MiB; retains three latest, daily 45d, weekly 180d, monthly 365d, quarterly older, and oldest. Any unexpected file in a directory blocks deletion. Operations fail closed on unexpected roster changes.
 - Deletion is irreversible. Actual quota decrease and remaining snapshots must be verified from the live job log before claiming recovery; avoid replaying uncertain deletions.
 
+## Read-only hosting recovery diagnostics (2026-10-30)
+
+- A scoped diagnosis verifies remaining modified tracked metadata and unexpected .github entries in the cPanel staging clone against the installed SHA before any further repair. Unknown server filenames and contents are never printed.
+- A separate metadata-only helper can check recent mailbox file timestamps without opening emails. It has no deletion capability and requires live delivery verification.
+- The existing private quarantine containing previous recovered clone files must be preserved. Deployment remains blocked until the dirty working tree is reconciled.
+
 ## Maintenance rule
 
 Every relevant PR that changes one of the states above must update this file in
