@@ -39,3 +39,5 @@ jobs:
 # Retry SQL restore preflight after release-backup.lock handling fix.
 
 # One-time bounded verified backup pruning, 2026-10-29.
+
+# Owner-requested one-time protected backup retention dispatch on 2026-10-30.
