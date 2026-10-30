@@ -131,6 +131,7 @@ jobs:
           python3 tests/test_zkaccess_backup_cron.py -v
           python3 tests/test_cpanel_repo_readiness.py -v
           python3 tests/test_cpanel_git_worktree_recovery.py -v
+          python3 tests/test_cpanel_tracked_integrity_probe.py -v
           php tests/run.php
           php tests/i18n.php
           php tests/transversal-i18n-contract.php
@@ -262,6 +263,14 @@ jobs:
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: python3 deploy/hostelworld_status.py
+
+      - name: Audit tracked file sizes and Git lock flags after blocked deployment
+        if: failure() && vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cpanel_tracked_integrity_probe.py
 
       - name: Diagnose blocked Git repository without modification
         if: failure() && vars.HUB_DEPLOY_ENABLED == 'true'
