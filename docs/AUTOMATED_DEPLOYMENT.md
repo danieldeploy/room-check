@@ -168,3 +168,18 @@ are reusable. A nonempty or unknown quarantine aborts for investigation. It
 then uses documented UAPI `Fileman::move_file` with explicit `source` and
 `destination`; each move is followed by readback of source/destination and
 metadata. No automatic retry is allowed after an uncertain response.
+
+### Follow-up after nine files were quarantined but deployability remained false
+
+The protected run on 2026-10-30 successfully moved the nine previously
+inspected untracked regular files into private quarantine, and the following
+inventory found zero remaining top-level unexpected entries. The cPanel Git
+`deployable` flag nevertheless stayed false, so the normal release did not
+begin. Do **not** repeat the quarantine. The separate read-only
+`deploy/cpanel_git_deep_diagnostic.py` checks the recursive file inventory
+of selected tracked repository sections against the **actual installed SHA**,
+comparing path, type and byte size. The report shows only counts for nested
+untracked files, missing tracked files, and changed file sizes, and never
+prints raw path names or file contents. This inventory is diagnostic only;
+it cannot detect same-size changes or prove Git index cleanliness. Do not
+force-reset or deploy based solely on this report.
