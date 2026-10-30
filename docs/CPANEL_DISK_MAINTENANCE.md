@@ -12,7 +12,7 @@ O GitHub Actions só agenda workflows que estejam na branch por defeito (`main`)
 - Acima de 90%, listar apenas caches explicitamente permitidas (`.npm/_cacache`, `.cache/pip`, `.cache/uv`, ZIPs de instalação Puppeteer extraídos) e subpastas regulares até 5 níveis; exclusivamente ficheiros normais com pelo menos 14 dias.
 - Antes de cada exclusão, voltar a consultar metadata do ficheiro e exigir tamanho e mtime idênticos aos observados.
 - Eliminação definitiva via `Fileman/delete_file` com `skip_trash=1`, sem mover para `.trash`. Limite de 40 ficheiros e 200 MiB por execução.
-- Nunca apagar `mail/`, `public_html/`, `room-check-backups/`, `room-check-private/`, `.cache/` genérico, logs ou diretórios automaticamente; não remover backups automaticamente.
+- A **rotina de cache** nunca apaga `mail/`, `public_html/`, `room-check-backups/`, `room-check-private/`, `.cache/` genérico, logs ou diretórios; a rotina **separada** de retenção de backups verificados pode eliminar duplicados segundo a política aprovada, como descrito abaixo.
 - O diagnóstico UAPI precisa de prova de autenticação real, não apenas status HTTP 200.
 - A automação apenas pode recuperar a quota dentro do limite dos ficheiros descartáveis encontrados; **não garante 1 GB** nem substitui revisão da retenção dos backups.
 - Depois de ativar, confirmar na primeira execução os valores quota antes/depois e testar a receção real de email. Sem essas verificações, não declarar limpeza efetiva nem correio recuperado.
@@ -23,7 +23,7 @@ Rever a execução protegida, identificar o código de erro sem imprimir respost
 
 ## Política de backups
 
-Preservar sempre pelo menos os 3 backups completos mais recentes e todos os backups com menos de 45 dias. Não apagar backups sem primeiro validar os manifests e checksums dos artefactos, confirmar um restauro recuperável e confirmar que não há deploy/recovery em curso. A rotina atual apenas faz inventário de backups, sem os apagar, porque a leitura WHM Fileman não permite por si só comprovar a recuperação. A extensão da remoção definitiva de backups antigos fica bloqueada até existir essa prova técnica.
+A política ativa preserva sempre os 3 backups mais recentes, a cópia mais antiga, uma cópia por dia até 45 dias, uma por semana até 180 dias, uma por mês até 365 dias e uma por trimestre depois disso. Só elimina duplicados com pelo menos 48 horas, após validação de manifests/formato e teste de restauro da base SQL mais recente num MySQL 8 descartável. O controlo é limitado a 25 diretórios/200 MiB por execução. Não foi comprovado o restauro integral dos arquivos da aplicação; preservar os pontos de recuperação definidos.
 
 
 ## Auditoria diária de crescimento
@@ -43,9 +43,18 @@ O formato 1 continua a conter `database.sql`. Para recuperar o formato 2, descom
 
 ## Plano de retenção de backups e teste de restauração
 
-O utilitário `deploy/cpanel_backup_retention.py` executa primeiro somente um **diagnóstico sem eliminação** pelo workflow WHM protegido. Preserva as últimas 3 cópias, um backup diário durante 45 dias (Europe/Lisbon), um por semana até 180 dias, um por mês até 365 dias, um por trimestre para histórico mais antigo, e o backup mais antigo. Só marca duplicados com mais de 48 horas como candidatos. Verifica em leitura o manifesto de todas as cópias que ficariam e restaura o SQL mais recente num MySQL 8 descartável do GitHub Actions, sem imprimir dados privados. A fase `--apply`, ainda desativada, está limitada a 25 diretórios e 200 MiB por execução, com revalidação de listagem antes de cada exclusão. A restauração integral dos arquivos da aplicação continua por confirmar; não eliminar backups sem os testes necessários.
+O utilitário `deploy/cpanel_backup_retention.py` executa um **diagnóstico e um teste SQL de restauro** pelo workflow WHM protegido antes de qualquer eliminação. Preserva as últimas 3 cópias, um backup diário durante 45 dias (Europe/Lisbon), um por semana até 180 dias, um por mês até 365 dias, um por trimestre para histórico mais antigo, e o backup mais antigo. Só marca duplicados com mais de 48 horas como candidatos. Verifica em leitura o manifesto de todas as cópias que ficariam e restaura o SQL mais recente num MySQL 8 descartável do GitHub Actions, sem imprimir dados privados. A fase `--apply`, ativada em 29/10/2026, está limitada a 25 diretórios e 200 MiB por execução, com revalidação de listagem antes de cada exclusão. A restauração integral dos arquivos da aplicação continua por confirmar; não eliminar backups sem os testes necessários.
 
 
 ## Ativação segura da retenção (29/10/2026)
 
 A execução protegida [40964594901](https://github.com/danieldeploy/room-check/actions/runs/40964594901) confirmou em teste sem eliminação: 172 backups, 23 preservados segundo a política diária e histórica, 148 candidatos com mais de 48h; a base SQL mais recente foi recuperada num MySQL temporário (sem aceder à base de produção). Após este resultado, o job protegido foi preparado para utilizar `--apply`, limitado a 25 backups e 200 MiB por dia, com validação de manifestos, lista de ficheiros permitidos, verificação da listagem antes de cada remoção e medição da quota antes e depois. Preserva os três mais recentes, uma cópia por dia durante 45 dias, uma por semana até 180 dias, uma por mês até 365 dias, uma por trimestre para os mais antigos, e sempre a cópia mais antiga. Mantém `mail/`, `public_html/` e automações intactos. Isto não valida um restauro completo dos arquivos da aplicação.
+
+
+## Conclusão da cache NPM e auditoria de logs/Puppeteer (30/10/2026)
+
+- O workflow protegido [41129358547](https://github.com/danieldeploy/room-check/actions/runs/41129358547) terminou oito lotes de limpeza NPM com sucesso, removendo 290 ficheiros >14 dias da cache específica `.npm/_cacache` (~4.826 MiB). O último inventário confirmou **zero ficheiros** nessa cache; a pasta `.npm` permanece com ~3.8 MiB de outros elementos não abrangidos.
+- A quota verificada no fim era ~82.06%; os valores exatos variam com a atividade do alojamento.
+- Os 11 logs totalizam ~150.68 MiB: 3 erros (~144.78 MiB), com 110.67 MiB num ficheiro recentemente modificado e 33.94 MiB num ficheiro com 372 dias sem alteração; 4 arquivos comprimidos (~5.27 MiB), 4 outros (~0.63 MiB). Apenas **metadados** foram inspecionados; nenhum log foi eliminado. A eliminação de históricos requer análise de retenção, não uma exclusão indiscriminada.
+- As instalações Chrome/Puppeteer continuam com ~704.8 MiB, incluindo duas versões Headless Shell (~311.7 MiB). Ainda não foi verificada a dependência real de todas as versões; não as remover automaticamente.
+- A intervenção não tocou nos emails nem testou entrega/receção, deixados para a próxima fase por instrução expressa.
