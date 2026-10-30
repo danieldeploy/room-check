@@ -40,10 +40,12 @@ def safe_file(path):
     return path
 
 
-def request_api(module, function, params, *, legacy=False):
+def request_api(module, function, params, *, legacy=False, form=False):
     token = os.environ.get("WHM_API_TOKEN", "")
     if not token or any(ord(c) < 33 or ord(c) > 126 for c in token):
         raise Rejected("missing_whm_token")
+    if form and (legacy or module != "Fileman" or function != "save_file_content"):
+        raise Rejected("form_operation_not_permitted")
     if legacy:
         query = {"cpanel_jsonapi_user": ACCOUNT, "cpanel_jsonapi_apiversion": 2,
                  "cpanel_jsonapi_module": module, "cpanel_jsonapi_func": function, **params}
@@ -52,10 +54,23 @@ def request_api(module, function, params, *, legacy=False):
         query = {"api.version": 1, "cpanel.user": ACCOUNT,
                  "cpanel.module": module, "cpanel.function": function, **params}
         path = "/json-api/uapi_cpanel"
-    url = HOST + path + "?" + urllib.parse.urlencode(query)
-    req = urllib.request.Request(url, headers={
-        "Authorization": "whm " + RESELLER + ":" + token,
-        "Accept": "application/json", "Cache-Control": "no-store"})
+    if form:
+        # Keep file contents out of the URL and access logs. Only the exact
+        # scoped save_file_content call may send a POST body.
+        base = {"api.version": 1, "cpanel.user": ACCOUNT,
+                "cpanel.module": module, "cpanel.function": function}
+        url = HOST + path + "?" + urllib.parse.urlencode(base)
+        body = urllib.parse.urlencode(params).encode("utf-8")
+        if len(body) > 120000:
+            raise Rejected("form_body_too_large")
+    else:
+        url = HOST + path + "?" + urllib.parse.urlencode(query)
+        body = None
+    headers = {"Authorization": "whm " + RESELLER + ":" + token,
+               "Accept": "application/json", "Cache-Control": "no-store"}
+    if form:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                                         urllib.request.HTTPSHandler(context=ssl.create_default_context()),
                                         NoRedirects())

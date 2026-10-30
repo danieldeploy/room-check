@@ -177,3 +177,8 @@ the installed SHA and checks known Git lock filenames. It reads no contents
 or credentials and prints only counts and short hashed tracked-path indicators.
 Any evidence of changed tracked files requires a separate reviewed recovery
 before another release; never `git reset --hard` merely from size metadata.
+
+## Reparação controlada da cópia Git de preparação (30/10/2026)
+
+O diagnóstico protegido apontou dois ficheiros versionados alterados e dois ficheiros extra na pasta `.github` do clone de *staging*, mesmo depois de preservar os nove extras anteriores em quarentena privada. A correção guardada pelo workflow usa um novo diretório privado (0700), separadamente do anterior; valida novamente o SHA instalado, ausência de tarefas ativas, divergências exatas e fast-forward, conserva os originais e extras, e só então repõe `ci.yml` e `PROJECT_STATE.md` a partir dos blobs de GitHub correspondentes ao SHA **instalado**, com comparação do hash Git e releitura no servidor. O conteúdo enviado ao WHM segue num corpo POST, não na URL. Se falhar qualquer etapa, não repete operações incertas e não autoriza o deploy. O fluxo habitual mantém os testes, backup pré-publicação e verificações do commit e da versão instalados.
+

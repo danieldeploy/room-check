@@ -235,3 +235,10 @@ bounded names against the public checkout. It does not print unknown filenames,
 file contents, or credentials, and cannot modify the clone. Its results must
 be reviewed before any repair or deployment retry. The ZKTeco replacement cron
 is **not** yet confirmed installed; old functioning backups remain untouched.
+
+## cPanel staging-clone tracked repair (2026-10-30)
+
+- Protected CI diagnostic from commit 116280d identified 578 tracked files present, two changed-size tracked files (`.github/workflows/ci.yml`, `docs/PROJECT_STATE.md`), two extra regular files in the `.github` area, and no known Git lockfiles. The nine earlier untracked files were already preserved in a separate private quarantine; do not replay that recovery.
+- Prepared a one-time exact repair in `deploy/cpanel_git_tracked_repair.py` (before regular WHM deployment). Only if the installed commit is still ee8c516, the worktree inventory remains exactly as previously diagnosed, and the protected GitHub HEAD is fast-forward: preserve the two changed tracked files and two extras in a new private 0700 quarantine, restore the two tracked files byte-for-byte from GitHub's blob at the **installed** commit and verify Git deployable=true. No changes to `.git`, `public_html`, mail, backups, credentials or databases.
+- A partial repair or uncertain WHM response blocks repeated writes until read-only inspection. Restoration is not yet confirmed on the server, and the normal deploy continues to require its original backup, exact commit and health gates.
+
