@@ -31,7 +31,7 @@ def index_tree(tree):
         if not isinstance(obj, dict) or obj.get("type") not in ("blob", "tree"):
             raise Rejected("invalid_installed_git_tree")
         name = obj.get("path")
-        if not isinstance(name, str) or name.startswith("/") or "\\x00" in name or any(s in (".", "..") for s in name.split("/")):
+        if not isinstance(name, str) or name.startswith("/") or "\x00" in name or any(s in (".", "..") for s in name.split("/")):
             raise Rejected("invalid_installed_git_tree")
         if name.startswith(".git/") or name == ".git":
             raise Rejected("unexpected_git_internal_tree")
