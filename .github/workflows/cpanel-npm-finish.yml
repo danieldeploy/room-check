@@ -1,0 +1,46 @@
+name: One-off safe npm cache finish and read-only log inspection
+
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/cpanel-npm-finish.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  npm-finish:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment: management-hub-production
+    steps:
+      - name: Checkout reviewed production commit
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Validate exact-file safety and metadata-only log tests
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_cpanel_disk_cleanup.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_cpanel_npm_finisher.py' -v
+      - name: Preflight read-only cache and log inventory
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_npm_finisher.py
+      - name: Reclaim only eligible individual npm cache files
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          timeout --signal=TERM --kill-after=10s 740s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_npm_finisher.py --apply
+      - name: Read-only final npm, logs and installed browser sizes
+        if: always()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_npm_finisher.py
+          PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
