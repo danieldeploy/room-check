@@ -131,6 +131,7 @@ jobs:
           python3 tests/test_zkaccess_backup_cron.py -v
           python3 tests/test_cpanel_repo_readiness.py -v
           python3 tests/test_cpanel_git_worktree_recovery.py -v
+          python3 tests/test_cpanel_git_tracked_repair.py -v
           python3 tests/test_cpanel_final_diagnostics.py -v
           python3 tests/test_cpanel_tracked_integrity_probe.py -v
           php tests/run.php
@@ -202,22 +203,23 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Inspect prior private recovery folder without modification
+      - name: Confirm changed tracked staging files and protected quarantine
         if: vars.HUB_DEPLOY_ENABLED == 'true'
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_SHA: ${{ github.sha }}
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 deploy/cpanel_git_worktree_recovery.py inspect
+        run: python3 deploy/cpanel_git_tracked_repair.py inspect
 
-      - name: Preserve unexpected staging-clone files before guarded publication
+      - name: Preserve and restore only the inspected cPanel staging files
         if: vars.HUB_DEPLOY_ENABLED == 'true'
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.sha }}
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 deploy/cpanel_git_worktree_recovery.py apply
+        run: python3 deploy/cpanel_git_tracked_repair.py apply
 
       - name: Inspect hosting state without changes
         if: vars.HUB_DEPLOY_ENABLED == 'true'
