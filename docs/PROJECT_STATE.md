@@ -235,3 +235,10 @@ bounded names against the public checkout. It does not print unknown filenames,
 file contents, or credentials, and cannot modify the clone. Its results must
 be reviewed before any repair or deployment retry. The ZKTeco replacement cron
 is **not** yet confirmed installed; old functioning backups remain untouched.
+
+## ZKTeco backup cron emergency bootstrap (2026-10-30)
+
+- The independent ZKTeco archive cron was merged in #290 but the production cPanel Git clone is not deployable; CI skipped the normal publication and cron provisioning.
+- The Windows 04:00 snapshot continues to run, while Drive archive upload depended on invoice-cron work and was delayed by 13h46 on 2026-10-29. The encrypted Drive copy for that date was confirmed at 17:47 UTC.
+- An isolated protected workflow (`zkaccess-archive-bootstrap.yml`) can provision only the existing private CLI worker and the dedicated five-minute cron, without modifying the Git clone, live app, invoices, database or PINs. It refuses existing mismatched worker content and requires a readback before cron installation.
+- **Production still requires explicit workflow execution and real readback confirmation**. Do not report this as installed or the latency resolved before seeing a successful protected workflow and the next backup cycle.
