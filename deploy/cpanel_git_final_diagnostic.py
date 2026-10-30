@@ -45,9 +45,10 @@ def check(tree, area, rows):
     other_extra = 0
     for name in extra:
         obj = rows[name]
-        if obj.get("type") == "file" and not obj.get("is_symlink") and
-                (name.endswith(".yml") or name.endswith(".yaml")) and
-                not name.startswith(".") and int(obj.get("size") or -1) in range(1, 500001):
+        if (obj.get("type") == "file" and not obj.get("is_symlink")
+                and name.endswith((".yml", ".yaml"))
+                and not name.startswith(".")
+                and 0 < int(obj.get("size") or -1) <= 500000):
             safe_extra += 1
         else:
             other_extra += 1
