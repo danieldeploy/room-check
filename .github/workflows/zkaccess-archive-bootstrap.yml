@@ -20,6 +20,7 @@ jobs:
         run: |
           python3 -m py_compile deploy/zkaccess_archive_bootstrap.py
           python3 -m unittest discover -s tests -p test_zkaccess_backup_cron.py -v
+          python3 -m unittest discover -s tests -p test_zkaccess_archive_bootstrap.py -v
       - name: Install worker and dedicated cron without public deployment
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
