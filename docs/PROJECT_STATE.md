@@ -89,6 +89,15 @@ ordinary deployment; it must not touch live application, secrets or existing
 backups. Deployment and independent cron remain unverified until the WHM
 operation succeeds.
 
+On 2026-10-30, the protected UAPI Fileman operation moved and verified all
+nine previously untracked regular files into the private quarantine. A
+subsequent read-only clone scan found **zero untracked and zero missing**
+entries, yet cPanel still reported `deployable=false`. The next diagnosis
+checks only tracked Git **file-size metadata** against the installed SHA
+and the presence of Git lock filenames; it never reads file contents or
+changes the clone. Do not retry moves or force a Git update while the
+additional dirty-tree condition remains unidentified.
+
 The 2026-10-29 guarded recovery reached the cPanel Fileman move but failed with
 `quarantine_move_unconfirmed`. The subsequent read-only diagnostic still found
 all nine untracked objects in the staging clone; no successful publication was
