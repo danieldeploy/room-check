@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   bootstrap:
-    if: github.ref == 'refs/heads/agent/zkaccess-archive-independent-fix-20261030'
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
     runs-on: ubuntu-latest
     environment: management-hub-production
     timeout-minutes: 5
