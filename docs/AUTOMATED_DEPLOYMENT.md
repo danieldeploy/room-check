@@ -168,3 +168,12 @@ are reusable. A nonempty or unknown quarantine aborts for investigation. It
 then uses documented UAPI `Fileman::move_file` with explicit `source` and
 `destination`; each move is followed by readback of source/destination and
 metadata. No automatic retry is allowed after an uncertain response.
+
+The 2026-10-30 UAPI recovery confirmed all nine file moves and reported zero
+untracked and zero missing tracked entries, but the cPanel clone remained
+`deployable=false`. An additional protected **read-only** diagnostic,
+`deploy/cpanel_tracked_integrity_probe.py`, compares tracked file sizes against
+the installed SHA and checks known Git lock filenames. It reads no contents
+or credentials and prints only counts and short hashed tracked-path indicators.
+Any evidence of changed tracked files requires a separate reviewed recovery
+before another release; never `git reset --hard` merely from size metadata.
