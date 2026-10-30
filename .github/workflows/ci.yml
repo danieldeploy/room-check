@@ -130,6 +130,7 @@ jobs:
           python3 tests/test_toconline_diagnostic.py -v
           python3 tests/test_zkaccess_backup_cron.py -v
           python3 tests/test_cpanel_repo_readiness.py -v
+          python3 tests/test_cpanel_git_deep_diagnostic.py -v
           python3 tests/test_cpanel_git_worktree_recovery.py -v
           php tests/run.php
           php tests/i18n.php
@@ -270,6 +271,14 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: python3 deploy/cpanel_repo_readiness.py
+
+      - name: Inspect nested files in blocked Git clone without modification
+        if: failure() && vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/cpanel_git_deep_diagnostic.py
 
   cloudbeds-acceptance:
     if: github.event_name == 'push' && github.ref == 'refs/heads/agent/room-item-assignments' && vars.HUB_DEPLOY_ENABLED == 'true'
