@@ -98,6 +98,8 @@ folder, refuses any unknown/nonempty entries, then uses UAPI
 destination presence and identical size/mtime before progressing. It never
 blindly repeats a partial move, deletes files or bypasses the protected deploy
 gate. Independent cron and 10-day ZKTeco retention remain unverified on server. This recovery does **not** reclaim cPanel disk quota.
+After 2026-10-30 partial recovery, all nine unexpected top-level entries were successfully preserved in private quarantine (zero remain in the inspected top-level folders), but cPanel still reports `deployable=false` at installed SHA `ee8c516`. The guarded deploy has not run. A bounded **read-only** deep worktree diagnostic has been prepared: compare recursive file paths and byte sizes with blobs in that exact installed Git tree, report only aggregate missing/untracked/size-changed counts per known section, never names, contents or credentials. This cannot prove identical-content file hashes or detect a dirty Git index, and it does not authorize deleting or overwriting tracked files. The independent ZKTeco cron and 10-day retention remain integrated but not deployed.
+
 The protected read-only repository diagnostic now compares the cPanel clone
 with its actual installed SHA, avoiding false reports of missing files when
 GitHub contains newer commits. Recovery may proceed only after this independent
