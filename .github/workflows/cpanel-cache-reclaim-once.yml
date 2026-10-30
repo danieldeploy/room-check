@@ -1,0 +1,45 @@
+name: One-off protected cPanel disposable-cache recovery
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/cpanel-cache-reclaim-once.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  reclaim:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment: management-hub-production
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Verify existing allowlist and size/mtime safety tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_cpanel_auto_cleanup.py' -v
+      - name: Measure account usage without modifications
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
+      - name: Reclaim only age-verified disposable cache files, one bounded batch
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          # Owner-authorized one-off: ignore the quota threshold only in this
+          # workflow. Reuse the tested 14-day age, allowlisted paths, exact
+          # size/mtime recheck, maximum 40 files and 200 MiB safeguards.
+          # Never touch mail, backups, application files, logs, or installed
+          # Puppeteer browser directories.
+          timeout --signal=TERM --kill-after=10s 780s env PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; sys.path.insert(0, "deploy"); import cpanel_auto_cleanup as cache; cache.THRESHOLD = 0.0; cache.main()'
+      - name: Verify final quota and remaining cache in read-only mode
+        if: always()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
