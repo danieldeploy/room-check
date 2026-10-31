@@ -1,0 +1,44 @@
+name: One-off remove abandoned Linux Puppeteer browsers and verified package cache
+
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - .github/workflows/cpanel-linux-puppeteer-cleanup-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    environment: management-hub-production
+    steps:
+      - name: Checkout authorized production code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Verify exact paths, fail-closed inventory and no unrelated deletion
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_linux_puppeteer_cleanup_once.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_headless_dependency_audit.py -v
+      - name: One-off dry run against actual cPanel account
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: timeout --signal=TERM --kill-after=10s 220s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_linux_puppeteer_cleanup_once.py
+      - name: Remove only exact obsolete Linux Puppeteer installations, rechecking everything
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: timeout --signal=TERM --kill-after=10s 500s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_linux_puppeteer_cleanup_once.py --apply
+      - name: Read-only final disk/Chrome inventory
+        if: always()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: timeout --signal=TERM --kill-after=10s 200s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
