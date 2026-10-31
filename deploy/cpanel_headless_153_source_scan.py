@@ -18,10 +18,10 @@ from cpanel_whm_runtime_capabilities import script_paths_from_crons, safe_read_s
 
 HOME = "/home/welcome"
 ROOTS = (HOME + "/room-check-private", HOME + "/public_html")
-MAX_DIRS = 180
-MAX_FILES = 500
-MAX_BYTES = 9 * 1024 * 1024
-MAX_ONE = 160 * 1024
+MAX_DIRS = 260
+MAX_FILES = 850
+MAX_BYTES = 32 * 1024 * 1024
+MAX_ONE = 2 * 1024 * 1024
 MAX_DEPTH = 5
 IGNORED_DIRS = frozenset({
     ".git", "node_modules", "vendor", "backups", "backup", "mail", "cache",
