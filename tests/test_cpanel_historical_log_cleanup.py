@@ -74,7 +74,7 @@ class HistoricalLogSafetyTests(unittest.TestCase):
 
     def test_changed_metadata_prevents_delete(self):
         rows = [record(OLD, 34, 400)]
-        with mock.patch.object(old, "scoped_search", return_value=iter(rows)), \
+        with mock.patch.object(old, "scoped_search", side_effect=lambda root: iter(rows)), \
              mock.patch.object(old, "quota", return_value=(4900, 6000)), \
              mock.patch.object(old, "request_api", return_value={
                  "type": "file", "size": 1, "mtime": rows[0]["mtime"]}) as api, \
