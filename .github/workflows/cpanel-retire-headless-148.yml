@@ -1,0 +1,46 @@
+name: Protected one-off retirement of obsolete Puppeteer Headless Shell 148
+
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths: [.github/workflows/cpanel-retire-headless-148.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  retire-obsolete-shell:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    environment: management-hub-production
+    steps:
+      - name: Checkout approved production branch
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Test exact target, metadata, config veto and dry-run safeguards
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_retire_headless_148.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_headless_dependency_audit.py -v
+      - name: Protected dry run, fail closed on direct runtime references
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          timeout --signal=TERM --kill-after=10s 150s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_retire_headless_148.py
+      - name: Delete only the obsolete Headless Shell 148 directory if preflight passes
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          timeout --signal=TERM --kill-after=10s 150s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_retire_headless_148.py --apply
+      - name: Confirm installed Chrome and current Headless Shell and check quota
+        if: always()
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
