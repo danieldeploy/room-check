@@ -58,3 +58,8 @@ A execução protegida [40964594901](https://github.com/danieldeploy/room-check/
 - Os 11 logs totalizam ~150.68 MiB: 3 erros (~144.78 MiB), com 110.67 MiB num ficheiro recentemente modificado e 33.94 MiB num ficheiro com 372 dias sem alteração; 4 arquivos comprimidos (~5.27 MiB), 4 outros (~0.63 MiB). Apenas **metadados** foram inspecionados; nenhum log foi eliminado. A eliminação de históricos requer análise de retenção, não uma exclusão indiscriminada.
 - As instalações Chrome/Puppeteer continuam com ~704.8 MiB, incluindo duas versões Headless Shell (~311.7 MiB). Ainda não foi verificada a dependência real de todas as versões; não as remover automaticamente.
 - A intervenção não tocou nos emails nem testou entrega/receção, deixados para a próxima fase por instrução expressa.
+
+
+## Retirada pontual de log de erros muito antigo (31/10/2026)
+
+Esta ação **não faz parte da limpeza diária** nem abrange `mail/`. A execução protegida `.github/workflows/cpanel-old-log-reclaim.yml` recebe o segredo WHM do ambiente existente. Reutiliza `Fileman::search` de leitura, e só autoriza `Fileman::delete_file` para um único ficheiro regular diretamente sob `~/logs`, de categoria erros, não comprimido, entre 20–60 MiB e sem modificação há pelo menos **365 dias**. Antes de apagar, exige que a listagem e os metadados de tamanho e mtime não tenham mudado e, depois, confirma a ausência na listagem. Ficheiros de log recentes ou ativos, arquivos comprimidos, diretórios, links simbólicos, browsers, emails e backups permanecem excluídos. O resultado e a quota devem ser verificados nos logs protegidos; uma operação incerta não deve ser repetida sem nova auditoria.
