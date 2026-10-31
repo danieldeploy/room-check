@@ -352,3 +352,10 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 
 - A segunda execução read-only [41223311365](https://github.com/danieldeploy/room-check/actions/runs/41223311365) deixou de atingir o limite de dimensão por ficheiro, mas falhou com `api_request_failed` durante a exploração de uma árvore da conta. Não ocorreu alteração nem eliminação.
 - O scanner passa a registar **apenas contagens** de diretórios inacessíveis, separadas por código privado e web, e disponibiliza o resumo parcial antes da auditoria de binários. Caminhos, conteúdo, nomes de ficheiro, e dados confidenciais continuam ausentes do output. Uma inspeção com diretórios inacessíveis fica marcada **incompleta**; não pode justificar eliminação do Headless 153.
+
+## Verificar Jailed Shell no cPanel pela API WHM (2026-10-31)
+
+- O projeto instala `puppeteer@25.11.0` como dependência do `invoice-runner`, com script `install-chrome: puppeteer browsers install chrome`. O download correspondente em `/home/welcome/.cache/puppeteer` coincide com o Chrome 153 do projeto; o processo exato que efetuou o download não foi identificado por um registo inequívoco. A Shell 148 já foi removida e a 153 preservada.
+- A falha de SSH na porta 22 observada no Windows (timeout) **não comprova** que Jailed Shell esteja desativado: pode existir uma porta alternativa ou bloqueio de rede/firewall. Verificar em vez de presumir.
+- O novo workflow protegido `.github/workflows/cpanel-shell-status-audit.yml` usa exclusivamente leitura via WHM API 1 `accountsummary` e `listaccts` com pesquisa restrita a `welcome`. Classifica somente o campo shell em jailed, normal, disabled, other ou not_verified, sem publicar domínios, contactos, chaves ou segredos. Não altera permissões de acesso ou estados de automação.
+- Resultado real apenas após execução protegida bem-sucedida; Jailed Shell ativo não significa necessariamente que a porta 22 esteja acessível externamente ou que uma chave SSH válida esteja configurada.
