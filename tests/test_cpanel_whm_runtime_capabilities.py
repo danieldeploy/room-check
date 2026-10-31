@@ -12,6 +12,8 @@ import cpanel_whm_runtime_capabilities as scope
 class WHMRuntimeScopeTests(unittest.TestCase):
     def test_script_paths_restrict_to_code_subfolders(self):
         commands=[{"command":"php /home/welcome/room-check-private/cron/daily.php"},
+                  {"metadata":"cron_header_without_command"},
+                  {"command":None},
                   {"command":"node /home/welcome/mail/secret.js"},
                   {"command":"bash /home/welcome/room-check-private/cron/worker.sh"}]
         with mock.patch.object(scope,"request_api",return_value={"data":commands}):
