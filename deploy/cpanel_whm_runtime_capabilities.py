@@ -86,7 +86,7 @@ def script_paths_from_crons():
         containing_version += int("148.0.7778.97" in cmd or "153.0.8010.36" in cmd)
         for match in SCRIPT.finditer(cmd):
             path = match.group(1)
-            if not CONFIG_PATH.search(path):
+            if not CONFIG_PATH.search(path) and not any(segment in (".", "..") for segment in path.split("/")):
                 paths.add(path)
     if len(paths) > MAX_SCRIPTS:
         raise Rejected("too_many_cron_scripts")
@@ -96,7 +96,8 @@ def script_paths_from_crons():
 
 
 def safe_read_script(path):
-    if not SCRIPT.fullmatch(path) or CONFIG_PATH.search(path):
+    if (not SCRIPT.fullmatch(path) or CONFIG_PATH.search(path)
+            or any(segment in (".", "..") for segment in path.split("/"))):
         raise Rejected("script_outside_allowlist")
     dirname, base = path.rsplit("/", 1)
     result = request_api("Fileman", "get_file_content", {"dir": dirname, "file": base})
