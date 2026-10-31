@@ -359,3 +359,10 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 - A falha de SSH na porta 22 observada no Windows (timeout) **não comprova** que Jailed Shell esteja desativado: pode existir uma porta alternativa ou bloqueio de rede/firewall. Verificar em vez de presumir.
 - O novo workflow protegido `.github/workflows/cpanel-shell-status-audit.yml` usa exclusivamente leitura via WHM API 1 `accountsummary` e `listaccts` com pesquisa restrita a `welcome`. Classifica somente o campo shell em jailed, normal, disabled, other ou not_verified, sem publicar domínios, contactos, chaves ou segredos. Não altera permissões de acesso ou estados de automação.
 - Resultado real apenas após execução protegida bem-sucedida; Jailed Shell ativo não significa necessariamente que a porta 22 esteja acessível externamente ou que uma chave SSH válida esteja configurada.
+
+
+## Remoção autorizada do Puppeteer Linux obsoleto (31/10/2026)
+
+- O proprietário confirmou a decisão original de setembro: no alojamento partilhado não foi possível executar o Chrome com as dependências e sandbox necessários; as tarefas de browser passaram para o agente Windows AccesControl (PR #72 e #78). O cron PHP no cPanel mantém manutenção, documentos, Drive e notificações, sem executar Chrome em modo Windows.
+- Autoriza eliminar **apenas** as instalações Linux Chrome 153 e Headless Shell 153 na cache `/home/welcome/.cache/puppeteer`, mais os módulos npm `puppeteer`, `puppeteer-core` e `@puppeteer/browsers` se a identidade e os conteúdos da instalação privada `/home/welcome/room-check-private/invoice-runner/node_modules` puderem ser validados. Não remover o source code do runner, outras dependências Node, dados, emails, backups, PHP cron, nem o agente Windows.
+- Workflow de uso único `.github/workflows/cpanel-linux-puppeteer-cleanup-once.yml` protegido por `management-hub-production`: testes, dry-run, inventário e controlo de referências cron, remoção exata via WHM/cPanel e verificação posterior de quota. A execução pode bloquear caso haja configuração/uso inesperado. Não afirmar remoção antes de confirmar o log do GitHub Actions.
