@@ -3,7 +3,9 @@ name: WHM protected Puppeteer runtime and API capabilities inspection
 on:
   push:
     branches: [agent/room-item-assignments]
-    paths: [.github/workflows/cpanel-whm-runtime-capabilities.yml]
+    paths:
+      - .github/workflows/cpanel-whm-runtime-capabilities.yml
+      - deploy/cpanel_whm_runtime_capabilities.py
   workflow_dispatch:
 
 permissions:
