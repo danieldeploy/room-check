@@ -32,7 +32,7 @@ IGNORED_DIRS = frozenset({
 ALLOWED_SUFFIX = (".php", ".py", ".sh", ".js", ".mjs", ".cjs", ".json", ".yaml",
                   ".yml", ".ini", ".conf", ".env")
 SENSITIVE_DENY = re.compile(r"pass(word)?|secret|token|cookie|session|credentials|private.key|\.pem$", re.I)
-PUPPETEER_REF = re.compile(r"chrome-headless-shell|headless\s*:\s*['\"]shell['\"]|PUPPETEER_EXECUTABLE_PATH|PUPPETEER_CHROME_HEADLESS_SHELL|linux-153\.0\.8010\.36", re.I)
+PUPPETEER_REF = re.compile(r"chrome-headless-shell|headless\s*:\s*['\"]shell['\"]|PUPPETEER_EXECUTABLE_PATH|PUPPETEER_CHROME_HEADLESS_SHELL", re.I)
 CHROME_OVERRIDE = re.compile(r"executablePath|PUPPETEER_EXECUTABLE_PATH|browserExecutablePath", re.I)
 PUPPETEER_USAGE = re.compile(r"puppeteer|chrome-headless-shell|chromium", re.I)
 SOURCE_IS_CODE = re.compile(r"\.(php|py|sh|mjs|js|cjs)$", re.I)
