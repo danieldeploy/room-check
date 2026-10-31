@@ -1,0 +1,33 @@
+name: Read-only WHM jailed shell status check
+
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - .github/workflows/cpanel-shell-status-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  check-account-shell:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: management-hub-production
+    steps:
+      - name: Checkout protected branch
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Check scope and sensitive field suppression
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_shell_status_probe.py -v
+      - name: Inspect cPanel account shell using WHM API (read only)
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: timeout --signal=TERM --kill-after=10s 110s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_shell_status_probe.py
