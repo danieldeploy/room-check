@@ -273,3 +273,9 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 - A instalação Chrome 153 (391.1 MiB) e as duas Chrome Headless Shell 153 (259.7 MiB) e 148 (52.0 MiB) continuam preservadas: o runner permite executablePath configurado na runtime e a ausência de referências estáticas não comprova ausência de uso no alojamento. Não apagar sem confirmar a execução real.
 - Os emails e os testes de receção ficam para uma fase posterior por instrução do proprietário.
 - Estado de aceitação deste trabalho: script e workflow preparados em PR; **eliminação real e quota pós-limpeza só se confirmam pelos logs da execução protegida**.
+
+## Bloqueio de remoção do log muito antigo — 31/10/2026
+
+- O PR #305 integrou a remoção isolada de log de erro com >=365 dias. A execução protegida [41201812000](https://github.com/danieldeploy/room-check/actions/runs/41201812000) identificou um único candidato de 33.94 MiB, mas parou com `uapi_failed` durante verificação ou eliminação. A auditoria posterior confirmou que **o log continua presente** e a quota permanece em ~82.5%; não houve recuperação deste ficheiro.
+- Por segurança, **não repetir automaticamente** a operação falhada, nem utilizar métodos alternativos sem conhecer a causa. A nova alteração do mesmo workflow substitui temporariamente o passo destrutivo por `cpanel_log_access_probe.py`, apenas de leitura. Compara acesso UAPI a metadata por caminho relativo/absoluto, API2 statfiles e list_files, relatando somente sucesso/erro, permissões agregadas e correspondência de tamanho/mtime, nunca nomes, domínios, conteúdo dos logs ou credenciais.
+- A conclusão depende da execução protegida e da verificação de permissões. O log recente de 110.7 MiB, browsers e emails continuam protegidos.
