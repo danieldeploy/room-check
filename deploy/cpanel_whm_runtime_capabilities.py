@@ -79,7 +79,11 @@ def script_paths_from_crons():
     paths = set()
     containing_shell = containing_version = 0
     for row in rows:
+        if not isinstance(row, dict):
+            raise Rejected("invalid_cron_entry")
         cmd = row.get("command")
+        if cmd is None:
+            continue
         if not isinstance(cmd, str):
             raise Rejected("invalid_cron_entry")
         containing_shell += int("chrome-headless-shell" in cmd.lower())
