@@ -10,6 +10,7 @@ import collections
 import json
 import re
 import sys
+import time
 
 from cpanel_disk_cleanup import Rejected, request_api
 from cpanel_headless_dependency_audit import browser_inventory
@@ -58,7 +59,8 @@ def directory_entries(path):
 
 
 def script_content(path):
-    if not isinstance(path, str) or not any(path.startswith(root + "/") for root in ROOTS):
+    if (not isinstance(path, str) or any(part in (".", "..") for part in path.split("/"))
+            or not any(path.startswith(root + "/") for root in ROOTS)):
         raise Rejected("code_path_outside_allowlist")
     dirname, basename = path.rsplit("/", 1)
     if SENSITIVE_DENY.search(basename) and basename not in (".env",):
@@ -168,7 +170,7 @@ def main():
         status = "shell_references_found"
     else:
         status = "no_explicit_shell_reference_in_scanned_files"
-    browser = browser_inventory(0)
+    browser = browser_inventory(int(time.time()))
     report = {
         "ok": True, "read_only": True, "code": summary, "status": status,
         "cron_entries": c["crons"], "cron_scripts_identified": len(paths),
