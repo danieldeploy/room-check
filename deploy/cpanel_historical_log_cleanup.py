@@ -53,15 +53,35 @@ def snapshot(now):
 
 
 def inspect_exact(path):
-    data = request_api("Fileman", "get_file_information", {"path": path})
-    if isinstance(data, list) and len(data) == 1:
-        data = data[0]
-    if not isinstance(data, dict) or data.get("type") != "file":
+    # cPanel UAPI Fileman/get_file_information refuses ~/logs paths on this
+    # account. The same account's legacy Fileman/statfiles is read-only and
+    # confirmed to work for this exact directory; it also proves ownership.
+    if not path.startswith("logs/") or "/" in path[len("logs/"):]:
+        raise Rejected("historical_log_outside_scope")
+    basename = path[len("logs/"):]
+    data = request_api("Fileman", "statfiles",
+                       {"dir": "logs", "files": basename}, legacy=True)
+    rows = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        raise Rejected("invalid_legacy_statfiles")
+    files = [item for item in rows if isinstance(item, dict)
+             and item.get("file") == basename]
+    if len(files) != 1 or files[0].get("type") != "file":
         raise Rejected("log_not_regular_file")
+    item = files[0]
+    if item.get("user") != "welcome":
+        raise Rejected("historical_log_owner_mismatch")
     try:
-        size, modified = int(data["size"]), int(data["mtime"])
+        mode = int(item["mode"])
+        modified = int(item["mtime"])
+        raw_size = item.get("size")
+        size = int(raw_size) if raw_size not in (None, "") else None
     except (ValueError, TypeError, KeyError):
         raise Rejected("invalid_log_file_metadata") from None
+    # The legacy statfiles API sometimes returns empty sizes, but the
+    # independent scoped Fileman/search must still match exactly.
+    if not (mode & 0o200) or modified <= 0:
+        raise Rejected("historical_log_not_owner_writable")
     return size, modified
 
 
@@ -85,7 +105,8 @@ def main(apply):
     _, fresh = snapshot(int(time.time()))
     if fresh != candidates:
         raise Rejected("historical_log_changed_since_preflight")
-    if inspect_exact(path) != (size, modified):
+    legacy_size, legacy_mtime = inspect_exact(path)
+    if legacy_mtime != modified or legacy_size not in (None, size):
         raise Rejected("historical_log_file_changed")
     result = request_api("Fileman", "delete_file", {"path": path, "skip_trash": 1})
     # Always verify absence. Never silently retry a potentially succeeded deletion.
