@@ -1,0 +1,34 @@
+name: Inspect indirect Headless Shell 153 usage on production account
+
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - .github/workflows/cpanel-headless-153-source-scan.yml
+      - deploy/cpanel_headless_153_source_scan.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  read-only-source-scan:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: management-hub-production
+    steps:
+      - name: Checkout reviewed production source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Test strict path scope and confidential-output invariants
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_headless_153_source_scan.py -v
+      - name: Read only actual hosted PHP Node configuration and dependent scripts
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: timeout --signal=TERM --kill-after=10s 540s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_headless_153_source_scan.py
