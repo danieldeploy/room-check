@@ -347,3 +347,8 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 
 - A primeira auditoria protegida de referências indiretas do Headless Shell 153 [41222919465](https://github.com/danieldeploy/room-check/actions/runs/41222919465) foi exclusivamente de leitura e terminou sem eliminação com `code_source_exceeds_limit`: pelo menos um dos ficheiros de código da conta ultrapassava 160 KiB.
 - Para concluir a inspeção, ampliou-se somente o orçamento de leitura (até 2 MiB por ficheiro, 32 MiB no total, 850 ficheiros e 260 diretórios). Persistem as exclusões de mail, logs, backups, uploads, reservas, bibliotecas de terceiros e perfis Chrome. A auditoria permanece estritamente de leitura, não autoriza eliminação e falha fechada se esses limites forem ultrapassados.
+
+## Auditoria Shell 153: pasta inacessível pela API (31/10/2026)
+
+- A segunda execução read-only [41223311365](https://github.com/danieldeploy/room-check/actions/runs/41223311365) deixou de atingir o limite de dimensão por ficheiro, mas falhou com `api_request_failed` durante a exploração de uma árvore da conta. Não ocorreu alteração nem eliminação.
+- O scanner passa a registar **apenas contagens** de diretórios inacessíveis, separadas por código privado e web, e disponibiliza o resumo parcial antes da auditoria de binários. Caminhos, conteúdo, nomes de ficheiro, e dados confidenciais continuam ausentes do output. Uma inspeção com diretórios inacessíveis fica marcada **incompleta**; não pode justificar eliminação do Headless 153.
