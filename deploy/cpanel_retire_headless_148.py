@@ -66,7 +66,7 @@ def old_snapshot():
         if not isinstance(item, dict):
             raise Rejected("invalid_browser_entry")
         path = item.get("file")
-        if not isinstance(path, str) or not path.startswith(OLD + "/"):
+        if not isinstance(path, str) or not (path == OLD or path.startswith(OLD + "/")):
             raise Rejected("browser_entry_outside_expected_root")
         if path in paths:
             raise Rejected("duplicate_browser_entry")
@@ -81,7 +81,7 @@ def old_snapshot():
             atime = int(item.get("atime") or 0)
         except (ValueError, TypeError, KeyError):
             raise Rejected("invalid_browser_entry_metadata") from None
-        if size <= 0 or size > MAX_SIZE:
+        if size < 0 or size > MAX_SIZE:
             raise Rejected("unexpected_browser_file_size")
         sizes.append(size)
         if atime > 0:
