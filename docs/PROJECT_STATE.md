@@ -308,3 +308,10 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 - A auditoria inicial [41203927397](https://github.com/danieldeploy/room-check/actions/runs/41203927397) confirmou cinco tarefas cron, sem referências explícitas a `chrome-headless-shell`, mas uma execução Node.js e scripts intermediários. Falta validar usos indiretos e caminhos `executablePath`.
 - O workflow novo, de **leitura apenas**, `.github/workflows/cpanel-whm-runtime-capabilities.yml` interroga a lista pública de funções WHM API1 (filtrando apenas nomes ligados a processos) e os pontos de entrada que as tarefas cron referenciam, através de `Fileman/get_file_content` com caminhos estritamente limitados à árvore de código da conta. Só produz contagens de padrões Chrome/Puppeteer e disponibilidade de função. Não imprime os scripts, comandos, nomes de ficheiros, segredos nem conteúdo de email. Proíbe entrada em pastas de mail, ficheiros de configuração e travessias de diretórios.
 - Esse diagnóstico **não elimina browsers nem serviços** e ainda não constitui prova de que as duas versões Headless Shell são dispensáveis; a conclusão depende da execução real protegida e dos resultados do endpoint WHM. Nenhuma eliminação por suposição.
+
+
+## Corrigir leitura de cron na auditoria WHM (31/10/2026)
+
+- O primeiro diagnóstico protegido `cpanel-whm-runtime-capabilities.yml` [41205480771](https://github.com/danieldeploy/room-check/actions/runs/41205480771) não fez alterações, mas terminou com `invalid_cron_entry`: a lista API2 Cron inclui linhas de metadata sem campo `command`.
+- A correção mantém a rejeição de linhas malformadas, mas ignora as que não têm comando, de acordo com a auditoria de cron já existente. Teste de regressão atualizado. O diagnóstico continua **só de leitura**, sem consultar mail, sem devolver comandos ou ficheiros privados e sem eliminar browsers.
+- A prova de utilização de Headless Shell continua pendente até uma execução protegida bem sucedida e revisão dos resultados da API.
