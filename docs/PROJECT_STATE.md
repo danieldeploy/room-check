@@ -315,3 +315,7 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 - O primeiro diagnóstico protegido `cpanel-whm-runtime-capabilities.yml` [41205480771](https://github.com/danieldeploy/room-check/actions/runs/41205480771) não fez alterações, mas terminou com `invalid_cron_entry`: a lista API2 Cron inclui linhas de metadata sem campo `command`.
 - A correção mantém a rejeição de linhas malformadas, mas ignora as que não têm comando, de acordo com a auditoria de cron já existente. Teste de regressão atualizado. O diagnóstico continua **só de leitura**, sem consultar mail, sem devolver comandos ou ficheiros privados e sem eliminar browsers.
 - A prova de utilização de Headless Shell continua pendente até uma execução protegida bem sucedida e revisão dos resultados da API.
+
+## Acionar novamente auditoria WHM corrigida (31/10/2026)
+
+- O PR #311 corrigiu a aceitação de linhas de cron sem campo de comando; testes aprovados. O workflow existente tinha filtro de push apenas para o seu próprio ficheiro, pelo que a correção do script não disparou a auditoria. O filtro passa também a abranger `deploy/cpanel_whm_runtime_capabilities.py`. A execução continua protegida, apenas de leitura, e sem eliminação de browsers, logs ou emails. O resultado real deverá ser confirmado nos logs protegidos.
