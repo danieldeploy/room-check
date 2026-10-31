@@ -85,6 +85,7 @@ def source_tree_audit():
     skipped_dirs = 0
     total_files = 0
     filtered_files = 0
+    listing_failures = collections.Counter()
     kinds = collections.Counter()
     for root in ROOTS:
         queue = [(root, 0)]
@@ -96,7 +97,14 @@ def source_tree_audit():
             checked_dirs += 1
             if checked_dirs > MAX_DIRS:
                 raise Rejected("code_tree_too_large")
-            for name, metadata in directory_entries(dirname):
+            try:
+                entries = directory_entries(dirname)
+            except Rejected as error:
+                if str(error) == "api_request_failed":
+                    listing_failures["private" if dirname.startswith(ROOTS[0]) else "web"] += 1
+                    continue
+                raise
+            for name, metadata in entries:
                 kind = metadata.get("type")
                 full = dirname + "/" + name
                 if kind == "dir":
@@ -154,7 +162,8 @@ def source_tree_audit():
         "config_files_read": hits["config_files_scanned"],
         "explicit_shell_refs_in_config": hits["shell_in_config"],
         "explicit_shell_refs_in_code": hits["shell_in_code"],
-        "complete_code_scan": unreadable == 0,
+        "unreadable_directory_counts": dict(listing_failures),
+        "complete_code_scan": unreadable == 0 and not listing_failures,
         "process_list_still_unavailable": True
     }
 
@@ -170,6 +179,8 @@ def main():
         status = "shell_references_found"
     else:
         status = "no_explicit_shell_reference_in_scanned_files"
+    print(json.dumps({"stage": "source_scan", "read_only": True,
+                      "code": summary, "status": status}, sort_keys=True), flush=True)
     browser = browser_inventory(int(time.time()))
     report = {
         "ok": True, "read_only": True, "code": summary, "status": status,
