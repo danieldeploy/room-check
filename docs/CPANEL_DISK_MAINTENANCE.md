@@ -63,3 +63,27 @@ A execução protegida [40964594901](https://github.com/danieldeploy/room-check/
 ## Retirada pontual de log de erros muito antigo (31/10/2026)
 
 Esta ação **não faz parte da limpeza diária** nem abrange `mail/`. A execução protegida `.github/workflows/cpanel-old-log-reclaim.yml` recebe o segredo WHM do ambiente existente. Reutiliza `Fileman::search` de leitura, e só autoriza `Fileman::delete_file` para um único ficheiro regular diretamente sob `~/logs`, de categoria erros, não comprimido, entre 20–60 MiB e sem modificação há pelo menos **365 dias**. Antes de apagar, exige que a listagem e os metadados de tamanho e mtime não tenham mudado e, depois, confirma a ausência na listagem. Ficheiros de log recentes ou ativos, arquivos comprimidos, diretórios, links simbólicos, browsers, emails e backups permanecem excluídos. O resultado e a quota devem ser verificados nos logs protegidos; uma operação incerta não deve ser repetida sem nova auditoria.
+
+## Relatório diário TXT privado e WhatsApp por incidente (01/11/2026)
+
+A rotina existente de GitHub Actions (`main/.github/workflows/cpanel-disk-schedule.yml`) despacha o job `cpanel-auto-cleanup.yml` na branch protegida por volta das 03:17 UTC. Depois das fases de backup/cache, mesmo que alguma delas falhe, o passo final `deploy/cpanel_daily_disk_report.py` guarda um **TXT por dia** na conta `welcome`:
+
+```
+/home/welcome/room-check-private/whm-disk-AAAA-MM-DD.txt
+```
+
+Os relatórios são privados, fora de `public_html`, não são enviados diariamente e contêm apenas contagens, MB, percentagens, evolução em relação ao último TXT, indicadores anonimizados de novas pastas de raiz e resultados das fases de limpeza. Não ler ou copiar emails, dados de hóspedes, credenciais, conteúdo de logs ou dados de backups para o TXT. A gravação usa POST WHM Fileman e leitura de confirmação; falhas do upload não são ignoradas. A leitura não alcança processos Linux na conta de revendedor, assinalando essa limitação.
+
+Incidentes que podem originar alerta: quota >=80% (crítico >=90%), aumento >=250 MB entre relatórios, crescimento de logs >=70 MB, reaparecimento de um browser Puppeteer Linux, falha no inventário ou em fases da manutenção. Pastas de raiz novas aparecem no TXT como contagem de identificadores não reversíveis, mas a mera criação de uma pasta não provoca WhatsApp.
+
+O cron **já existente** `cron/whatsapp-reminders.php` consulta apenas o TXT privado recente e envia pelo `WhatsAppCloudClient` existente, para o Gerente ativo já selecionado em `invoice_notification_settings.recipient_user_id`, apenas quando há um **incidente diferente do último notificado**. O recibo de deduplicação fica em `room-check-private/whm-disk-whatsapp-state.json`, com permissões 0600; no caso de envio de resultado incerto não reenviar automaticamente. O desaparecimento do problema limpa o estado, permitindo um novo alerta no futuro. Não se enviam relatórios de rotina por WhatsApp.
+
+A automação WhatsApp **permanece desativada** até o novo template ser aprovado pela Meta e habilitado no `config.local.php` privado. Não reutilizar templates de faturas, traduções ou atribuições, cujo texto não corresponde ao alerta de armazenamento.
+
+**Template Meta proposto** (categoria *utility*, `pt_PT`, nome `whm_storage_alert_v1`, exatamente 3 parâmetros):
+
+> Aviso automático do Management Hub: estado do servidor {{1}}. Motivo: {{2}}. Ação recomendada: {{3}}. O relatório de armazenamento está guardado na área privada do servidor.
+
+Depois da aprovação, ativar apenas `whatsapp.disk_alert.enabled=true` no ficheiro privado `config.local.php`, mantendo nome `whm_storage_alert_v1` e o Gerente já configurado. A aceitação de um envio pela Meta não significa entrega confirmada ao telemóvel; testar com o destinatário autorizado e verificar o estado. Se o cron PHP não tiver recebido o código atualizado por bloqueio de deploy, **TXT funcional não implica WhatsApp funcional**.
+
+Não criar um novo cron, webhook público, token ou destinatário. Não ampliar a limpeza automática de diretórios só por aparecerem no relatório. A deteção de novos diretórios é indicativa; é necessária prova de não utilização para os eliminar.

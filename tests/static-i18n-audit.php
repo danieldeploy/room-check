@@ -62,6 +62,13 @@ $technicalExceptions = [
         'O argumento',
         'do template WhatsApp está vazio.',
     ],
+    // Dedicated WhatsApp utility-template parameters are server-side transport
+    // text, not shared UI. Do not broaden this exception to other paths.
+    'src/Notifications/WhatsAppDiskHealthNotifier.php' => [
+        'Verifique a quota e nao elimine dados sem auditoria.',
+        'Reveja as categorias maiores e a limpeza segura.',
+        'Investigue o log ativo sem o apagar.',
+    ],
 ];
 foreach ($technicalExceptions as $path => $values) {
     $technicalExceptions[$path] = array_fill_keys($values, true);

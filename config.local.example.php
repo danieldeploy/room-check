@@ -39,6 +39,12 @@ return [
             'en' => 'en',
         ],
         'default_country_code' => '351',
+        // Enable only after the dedicated whm_storage_alert_v1 template is approved
+        // in Meta Business Manager. Uses the existing invoice Gerente recipient.
+        'disk_alert' => [
+            'enabled' => false,
+            'template_name' => 'whm_storage_alert_v1',
+        ],
     ],
     'translation' => [
         // Google Cloud Translation Basic. The JSON file contains

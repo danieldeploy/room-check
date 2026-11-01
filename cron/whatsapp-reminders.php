@@ -7,6 +7,7 @@ require $appRoot . '/lib.php';
 require $appRoot . '/src/Notifications/WhatsAppCloudClient.php';
 require $appRoot . '/src/Notifications/WhatsAppReminderTemplate.php';
 require $appRoot . '/src/Notifications/WhatsAppTranslationQuotaTemplate.php';
+require $appRoot . '/src/Notifications/WhatsAppDiskHealthNotifier.php';
 require $appRoot . '/src/I18n/TranslationQuotaManager.php';
 $config = require $appRoot . '/config.php';
 $configuredTemplate = (string) ($config['whatsapp']['template_name'] ?? '');
@@ -61,6 +62,25 @@ try {
             }
             fwrite(STDERR, "Translation quota alert: {$quotaAlertError->getMessage()}\n");
         }
+    }
+
+    // The scheduled WHM job writes a private TXT every day. Only new incidents
+    // produce WhatsApp, never routine daily reports. Existing manager only.
+    try {
+        $serverHome = rtrim((string) getenv('HOME'), '/');
+        if ($serverHome !== '') {
+            $diskNotifier = new WhatsAppDiskHealthNotifier(
+                $pdo, $config['whatsapp'], $serverHome . '/room-check-private'
+            );
+            $diskStatus = $diskNotifier->dispatch();
+            if (in_array($diskStatus, ['recipient_not_configured', 'delivery_unconfirmed',
+                    'unapproved_template_name'], true)) {
+                fwrite(STDERR, "WHM disk alert: {$diskStatus}\n");
+            }
+        }
+    } catch (Throwable) {
+        // Never disrupt existing reminders or reveal Meta credentials/recipient.
+        fwrite(STDERR, "WHM disk alert: dispatch_failed\n");
     }
 
     $query = $pdo->query(
