@@ -74,7 +74,7 @@ A rotina existente de GitHub Actions (`main/.github/workflows/cpanel-disk-schedu
 
 Os relatórios são privados, fora de `public_html`, não são enviados diariamente e contêm apenas contagens, MB, percentagens, evolução em relação ao último TXT, indicadores anonimizados de novas pastas de raiz e resultados das fases de limpeza. Não ler ou copiar emails, dados de hóspedes, credenciais, conteúdo de logs ou dados de backups para o TXT. A gravação usa POST WHM Fileman e leitura de confirmação; falhas do upload não são ignoradas. A leitura não alcança processos Linux na conta de revendedor, assinalando essa limitação.
 
-Incidentes que podem originar alerta: quota >=80% (crítico >=90%), aumento >=250 MB entre relatórios, crescimento de logs >=70 MB, reaparecimento de um browser Puppeteer Linux, falha no inventário ou em fases da manutenção. Pastas de raiz novas aparecem no TXT como contagem de identificadores não reversíveis, mas a mera criação de uma pasta não provoca WhatsApp.
+Incidentes que podem originar alerta: **primeiro aos 90%, depois aos 95%, 98% e 100% de ocupação** (sem alerta de quota aos 80%), aumento >=250 MB entre relatórios, crescimento de logs >=70 MB, reaparecimento de um browser Puppeteer Linux, falha no inventário ou em fases da manutenção. Quando a ocupação salta vários patamares entre relatórios, enviar apenas o nível mais elevado medido; nos dias seguintes avisar somente se ultrapassar novo nível. Se baixar de 98% para 95%, **não** repetir os 95%; a memória de patamar só reinicia quando a ocupação fica abaixo dos 90%. A categoria de incidentes técnicos continua a funcionar, independentemente dos níveis de quota. Pastas de raiz novas aparecem no TXT como contagem de identificadores não reversíveis, mas a mera criação de uma pasta não provoca WhatsApp.
 
 O cron **já existente** `cron/whatsapp-reminders.php` consulta apenas o TXT privado recente e envia pelo `WhatsAppCloudClient` existente, para o Gerente ativo já selecionado em `invoice_notification_settings.recipient_user_id`, apenas quando há um **incidente diferente do último notificado**. O recibo de deduplicação fica em `room-check-private/whm-disk-whatsapp-state.json`, com permissões 0600; no caso de envio de resultado incerto não reenviar automaticamente. O desaparecimento do problema limpa o estado, permitindo um novo alerta no futuro. Não se enviam relatórios de rotina por WhatsApp.
 
@@ -82,8 +82,15 @@ A automação WhatsApp **permanece desativada** até o novo template ser aprovad
 
 **Template Meta proposto** (categoria *utility*, `pt_PT`, nome `whm_storage_alert_v1`, exatamente 3 parâmetros):
 
-> Aviso automático do Management Hub: estado do servidor {{1}}. Motivo: {{2}}. Ação recomendada: {{3}}. O relatório de armazenamento está guardado na área privada do servidor.
+> Aviso automático do Management Hub\n>\n> Estado do servidor: {{1}}\n>\n> Problema identificado: {{2}}\n>\n> Ação recomendada: {{3}}\n>\n> O relatório detalhado está guardado na área privada do servidor.
 
 Depois da aprovação, ativar apenas `whatsapp.disk_alert.enabled=true` no ficheiro privado `config.local.php`, mantendo nome `whm_storage_alert_v1` e o Gerente já configurado. A aceitação de um envio pela Meta não significa entrega confirmada ao telemóvel; testar com o destinatário autorizado e verificar o estado. Se o cron PHP não tiver recebido o código atualizado por bloqueio de deploy, **TXT funcional não implica WhatsApp funcional**.
 
 Não criar um novo cron, webhook público, token ou destinatário. Não ampliar a limpeza automática de diretórios só por aparecerem no relatório. A deteção de novos diretórios é indicativa; é necessária prova de não utilização para os eliminar.
+
+
+### Patamares aprovados pelo proprietário (01/11/2026)
+
+- 90%, 95%, 98% e 100%, só uma mensagem por patamar durante o mesmo episódio de ocupação elevada. Um novo episódio começa após medição inferior a 90%; se houver subida direta de 89% para 98%, enviar um só aviso de 98%, não três.
+- O relatório TXT diário continua a ser criado sempre; crescimento e falhas continuam monitorizados. As mensagens WhatsApp de quota só partem depois da aprovação Meta e ativação segura da configuração; não forçar um envio com template em revisão.
+- A criação e submissão no WhatsApp Manager pertencem à conta profissional Active Lines Unip. Lda.; evitar o perfil pessoal/de teste. Não tratar a submissão como aprovação, nem ativar o envio antes de confirmar o estado e realizar um teste controlado.
