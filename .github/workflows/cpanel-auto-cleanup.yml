@@ -61,3 +61,13 @@ jobs:
             echo "cache_cleanup_incomplete_or_timed_out; review log, do not retry blindly"
             exit 1
           fi
+
+      - name: Save and verify private daily WHM TXT report
+        if: always() && steps.checkout_source.outcome == 'success'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          INVENTORY_STEP: ${{ steps.inventory.outcome }}
+          BACKUP_STEP: ${{ steps.backups.outcome }}
+          CACHE_STEP: ${{ steps.cache.outcome }}
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_daily_disk_report.py
