@@ -384,3 +384,11 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 - `WhatsAppDiskHealthNotifier`, chamado por `cron/whatsapp-reminders.php`, reutiliza `WhatsAppCloudClient`, a credencial já protegida e o número do Gerente selecionado em `invoice_notification_settings`. Evita repetição diária do mesmo incidente e não reenvia mensagens de aceitação incerta. Não altera os alertas de faturas e de empregadas.
 - **Bloqueio externo antes do WhatsApp real:** criar/aprovar na Meta o template `whm_storage_alert_v1` / `pt_PT` / 3 parâmetros e ativar `whatsapp.disk_alert.enabled` no `config.local.php` privado. O código vem desativado por defeito; não usar templates de outros módulos. A verificação em produção só fica concluída após aprovação Meta, versão PHP instalada confirmada e envio de alerta controlado aceite pelo fornecedor.
 - Ver `docs/CPANEL_DISK_MAINTENANCE.md` para escopo, template, política, fluxo e limitações. Não inventar destinatários, nem expor relatórios privados pela web.
+
+
+## Consulta pontual da aprovacao Meta do template WHM (01/11/2026)
+
+- O proprietario autorizou confirmar no Meta o estado de `whm_storage_alert_v1` (locale `pt_PT`) e realizar um teste para o Gerente ja configurado **somente se o template estiver aprovado e com o contrato correto de tres parametros**.
+- O workflow protegido `.github/workflows/whm-meta-template-probe-once.yml` so consulta o estado via Graph API e nao faz envios. Lê temporariamente os dados WhatsApp ja protegidos em `room-check-private/whatsapp-secrets.json` no runner protegido usando a API WHM existente, sem os imprimir, gravar em logs ou colocar no repositorio. Valida a WABA contra o telefone emissor e verifica estado, categoria UTILITY e tres placeholders. Apenas estados sanitizados sao registados.
+- Nao interpretar `NOT_FOUND`, `UNVERIFIED` ou falta de permissao Graph como `REJECTED`. Um template apenas proposto em documentacao nao significa que foi submetido a aprovacao Meta.
+- Se `APPROVED` e compativel, um teste real isolado exige confirmar o destinatario Gerente configurado, fazer um unico envio com identificacao clara de TESTE e verificar aceite Meta; nunca confundir aceite com entregue nem disparar alertas falsos de incidentes. Se nao aprovado, nao enviar.

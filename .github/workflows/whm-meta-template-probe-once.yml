@@ -1,0 +1,35 @@
+name: One-off WhatsApp WHM Meta template status (read only)
+
+on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - .github/workflows/whm-meta-template-probe-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-cpanel-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/agent/room-item-assignments'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    environment: management-hub-production
+    steps:
+      - name: Checkout reviewed production source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Verify no secret logging and correct template contract
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_whm_meta_template_probe_once.py -v
+      - name: Read exact WhatsApp template review status from Meta
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          timeout --signal=TERM --kill-after=10s 145s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/whm_meta_template_probe_once.py
