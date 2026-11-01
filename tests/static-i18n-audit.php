@@ -68,6 +68,10 @@ $technicalExceptions = [
         'Verifique a quota e nao elimine dados sem auditoria.',
         'Reveja as categorias maiores e a limpeza segura.',
         'Investigue o log ativo sem o apagar.',
+        'Reveja a quota e elimine apenas ficheiros comprovadamente dispensaveis.',
+        'Prioridade alta: investigue a ocupacao e execute limpeza segura.',
+        'Urgente: verifique a quota e liberte espaco com seguranca.',
+        'Critico: quota cheia; atue apenas apos verificar as dependencias.',
     ],
 ];
 foreach ($technicalExceptions as $path => $values) {
