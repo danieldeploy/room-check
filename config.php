@@ -72,6 +72,12 @@ return [
             'en' => 'en',
         ],
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
+        // Only a dedicated Meta-approved template can enable WHM incident alerts.
+        'disk_alert' => [
+            'enabled' => (bool) ($localConfig['whatsapp']['disk_alert']['enabled'] ?? false),
+            'template_name' => $localConfig['whatsapp']['disk_alert']['template_name']
+                ?? 'whm_storage_alert_v1',
+        ],
     ],
     'translation' => [
         // User-authored bilingual content is translated server-side with Google
