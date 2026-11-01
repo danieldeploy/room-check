@@ -16,17 +16,28 @@ final class WhatsAppDiskHealthNotifier
     private const REPORT_PATTERN = '/^whm-disk-20[0-9]{2}-[0-9]{2}-[0-9]{2}\.txt$/D';
     private const STATE_NAME = 'whm-disk-whatsapp-state.json';
 
+    private const QUOTA_LEVELS = [
+        'quota90' => 90,
+        'quota95' => 95,
+        'quota98' => 98,
+        'quota100' => 100,
+    ];
+
     private const DETAILS = [
-        'quota90' => 'Disco WHM acima de 90%',
-        'quota80' => 'Disco WHM acima de 80%',
+        'quota90' => 'Ocupacao do disco atingiu 90%',
+        'quota95' => 'Ocupacao do disco atingiu 95%',
+        'quota98' => 'Ocupacao do disco atingiu 98%',
+        'quota100' => 'Ocupacao do disco atingiu 100%',
         'growth' => 'Crescimento anormal do disco',
         'logs_growth' => 'Crescimento anormal dos logs',
         'linux_browser_returned' => 'Foi instalado novamente um browser Linux',
         'maintenance_issue' => 'Falha na manutencao ou auditoria do servidor',
     ];
     private const ACTIONS = [
-        'quota90' => 'Verifique a quota e nao elimine dados sem auditoria.',
-        'quota80' => 'Reveja as categorias maiores e a limpeza segura.',
+        'quota90' => 'Reveja a quota e elimine apenas ficheiros comprovadamente dispensaveis.',
+        'quota95' => 'Prioridade alta: investigue a ocupacao e execute limpeza segura.',
+        'quota98' => 'Urgente: verifique a quota e liberte espaco com seguranca.',
+        'quota100' => 'Critico: quota cheia; atue apenas apos verificar as dependencias.',
         'growth' => 'Compare o relatorio TXT atual com o anterior.',
         'logs_growth' => 'Investigue o log ativo sem o apagar.',
         'linux_browser_returned' => 'Verifique dependencias antes de eliminar o browser.',
@@ -95,7 +106,7 @@ final class WhatsAppDiskHealthNotifier
     private function state(): array
     {
         $path = $this->privateDir . '/' . self::STATE_NAME;
-        if (!file_exists($path)) return ['code' => 'none', 'state' => 'none'];
+        if (!file_exists($path)) return ['code' => 'none', 'state' => 'none', 'quota_highest' => 0];
         if (!is_file($path) || is_link($path) || filesize($path) > 4096) {
             throw new RuntimeException('disk_alert_state_invalid');
         }
@@ -106,6 +117,15 @@ final class WhatsAppDiskHealthNotifier
                 ['none', 'sending', 'sent', 'unconfirmed'], true)) {
             throw new RuntimeException('disk_alert_state_invalid');
         }
+        // Existing files written before this upgrade contain no tier marker.
+        // A previously notified quota90 already counts as 90, preventing a
+        // duplicate when the new scheme becomes active.
+        $highest = $state['quota_highest']
+            ?? (self::QUOTA_LEVELS[$state['code']] ?? 0);
+        if (!is_int($highest) || !in_array($highest, [0, 90, 95, 98, 100], true)) {
+            throw new RuntimeException('disk_alert_state_invalid');
+        }
+        $state['quota_highest'] = $highest;
         return $state;
     }
 
@@ -134,8 +154,9 @@ final class WhatsAppDiskHealthNotifier
         return preg_match('/\A[+0-9 ]{8,20}\z/D', $mobile) ? $mobile : '';
     }
 
-    /** Dispatch once per incident, never once per day. Returns an internal status only.
-     *  Injection seams allow local tests without network, DB or credentials.
+    /** Notify each increasing quota tier once during an occupancy episode.
+     *  The episode resets only once the measured quota falls below 90%.
+     *  Technical incidents retain their existing once-per-code behavior.
      */
     public function dispatch(?callable $sender = null, ?callable $recipientProvider = null): string
     {
@@ -149,22 +170,50 @@ final class WhatsAppDiskHealthNotifier
         $report = $this->latest();
         if ($report === null) return 'no_fresh_report';
         $state = $this->state();
+
+        $percent = (float) $report['percent'];
+        if ($percent < 90 && $state['quota_highest'] > 0) {
+            // Falling from e.g. 98% to 95% must not send a fresh 95% alert.
+            // Only a later recovery below 90% starts a new quota episode.
+            $state['quota_highest'] = 0;
+            if (isset(self::QUOTA_LEVELS[$state['code']])) {
+                $state['code'] = 'none';
+                $state['state'] = 'none';
+            }
+            $this->saveState($state);
+        }
+
         if ($report['code'] === 'none') {
-            if ($state['code'] !== 'none') $this->saveState(['code' => 'none', 'state' => 'none']);
+            if ($state['code'] !== 'none' || $state['quota_highest'] !== 0) {
+                $this->saveState(['code' => 'none', 'state' => 'none', 'quota_highest' => 0]);
+            }
             return 'healthy_no_message';
         }
-        if ($state['code'] === $report['code']) return 'already_notified';
+
+        $code = $report['code'];
+        $tier = self::QUOTA_LEVELS[$code] ?? 0;
+        if ($tier > 0) {
+            if ($percent < $tier) return 'invalid_quota_tier';
+            if ($tier <= $state['quota_highest']) return 'already_notified';
+        } elseif ($state['code'] === $code) {
+            return 'already_notified';
+        }
         $mobile = $recipientProvider ? (string) $recipientProvider() : $this->configuredRecipient();
         if ($mobile === '') return 'recipient_not_configured';
-        $code = $report['code'];
         $values = [
             'WHM ' . $report['date'] . ' - ' . $report['percent'] . '%',
             self::DETAILS[$code],
             self::ACTIONS[$code],
         ];
-        // Persist BEFORE sending to avoid duplicate WhatsApp on a crash or
-        // ambiguous provider response. An unconfirmed send is not retried blindly.
-        $this->saveState(['code' => $code, 'state' => 'sending', 'date' => $report['date']]);
+        $next = [
+            'code' => $code,
+            'state' => 'sending',
+            'date' => $report['date'],
+            'quota_highest' => max($state['quota_highest'], $tier),
+        ];
+        // Persist BEFORE sending; ambiguous responses must not be retried
+        // blindly, and lower thresholds may never be resent on a decrease.
+        $this->saveState($next);
         try {
             if ($sender) {
                 $id = $sender($mobile, $values, self::LANGUAGE, self::TEMPLATE);
@@ -173,11 +222,14 @@ final class WhatsAppDiskHealthNotifier
                 $id = $client->sendTemplate($mobile, $values, self::LANGUAGE, self::TEMPLATE);
             }
             if (!is_string($id) || $id === '') throw new RuntimeException('delivery_unconfirmed');
-            $this->saveState(['code' => $code, 'state' => 'sent', 'date' => $report['date']]);
+            $next['state'] = 'sent';
+            $this->saveState($next);
             return 'meta_accepted';
         } catch (Throwable) {
-            $this->saveState(['code' => $code, 'state' => 'unconfirmed', 'date' => $report['date']]);
+            $next['state'] = 'unconfirmed';
+            $this->saveState($next);
             return 'delivery_unconfirmed';
         }
     }
+
 }

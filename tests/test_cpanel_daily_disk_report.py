@@ -9,13 +9,24 @@ import cpanel_daily_disk_report as report
 
 
 class DailyDiskReportTests(unittest.TestCase):
-    def test_warning_and_critical_thresholds(self):
-        self.assertEqual(report.compute_alert(79.9, None, None, 0, {}, [], {
-            "backup": "success", "cache": "success", "inventory": "success"})[1], "none")
-        self.assertEqual(report.compute_alert(80, None, None, 0, {}, [], {
-            "backup": "success", "cache": "success", "inventory": "success"})[1], "quota80")
-        self.assertEqual(report.compute_alert(90, None, None, 0, {}, [], {
-            "backup": "success", "cache": "success", "inventory": "success"})[1], "quota90")
+    def test_exact_requested_quota_thresholds(self):
+        healthy = {"backup": "success", "cache": "success", "inventory": "success"}
+        samples = [
+            (80, "none", "ok"), (89.99, "none", "ok"),
+            (90, "quota90", "warning"), (94.99, "quota90", "warning"),
+            (95, "quota95", "warning"), (97.99, "quota95", "warning"),
+            (98, "quota98", "critical"), (99.99, "quota98", "critical"),
+            (100, "quota100", "critical"),
+        ]
+        for pct, code, status in samples:
+            with self.subTest(percent=pct):
+                got = report.compute_alert(pct, None, None, 0, {}, [], healthy)
+                self.assertEqual((got[1], got[0]), (code, status))
+
+    def test_quota_tier_overrides_other_incidents(self):
+        bad = {"backup": "failure", "cache": "success", "inventory": "success"}
+        self.assertEqual(
+            report.compute_alert(98.2, 300, 75, 0, {"chrome": 200}, [], bad)[1], "quota98")
 
     def test_large_growth_and_maintenance_failure_trigger_alerts(self):
         good = {"backup": "success", "cache": "success", "inventory": "success"}
@@ -26,6 +37,16 @@ class DailyDiskReportTests(unittest.TestCase):
         self.assertEqual(report.compute_alert(70, 5, 0, 0, {}, [], dict(good, backup="failure"))[1],
                          "maintenance_issue")
         self.assertEqual(report.compute_alert(70, 0, 0, 1, {}, [], good)[1], "none")
+
+    def test_100_percent_caps_overquota_report_for_php_reader(self):
+        now = dt.datetime(2026, 11, 1, 10, tzinfo=report.TZ)
+        summary = {"quota_used_mb": 6060, "quota_limit_mb": 6000,
+                   "directories_mb": {"logs": 100}}
+        body, status, code, pct, _ = report.report(
+            now, {}, summary, {}, {"installed_version_sizes_mb": {}}, {},
+            [], "", {"backup":"success", "inventory":"success", "cache":"success"})
+        self.assertEqual((status,code,pct), ("critical", "quota100", 100))
+        self.assertIn("quota_percent=100.00", body)
 
     def test_report_does_not_contain_protected_names_or_content(self):
         now = dt.datetime(2026, 11, 1, 10, tzinfo=report.TZ)

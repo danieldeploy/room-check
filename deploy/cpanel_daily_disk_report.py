@@ -119,10 +119,17 @@ def outcome(name):
 
 def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_errors, outcomes):
     reasons = []
-    if pct >= 90:
+    # A single highest crossed storage tier is included per daily sample.
+    # The PHP sender remembers the highest tier already notified in this
+    # incident; downward movements do not resend lower-level notifications.
+    if pct >= 100:
+        reasons.append("quota100")
+    elif pct >= 98:
+        reasons.append("quota98")
+    elif pct >= 95:
+        reasons.append("quota95")
+    elif pct >= 90:
         reasons.append("quota90")
-    elif pct >= 80:
-        reasons.append("quota80")
     if growth is not None and growth >= 250:
         reasons.append("growth")
     if log_growth is not None and log_growth >= 70:
@@ -131,16 +138,19 @@ def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_er
         reasons.append("linux_browser_returned")
     if audit_errors or any(x != "success" for x in outcomes.values()):
         reasons.append("maintenance_issue")
-    # A new folder is a review candidate, not an automatic WhatsApp alert;
-    # unlike significant growth, directory creation alone is not an incident.
-    priority = ("quota90", "maintenance_issue", "linux_browser_returned",
-                "growth", "logs_growth", "quota80")
+    # Storage tier always takes precedence so no 95/98/100 escalation is hidden.
+    # A new root folder is an audit candidate, not an automatic WhatsApp alert.
+    priority = ("quota100", "quota98", "quota95", "quota90",
+                "maintenance_issue", "linux_browser_returned", "growth", "logs_growth")
     selected = next((x for x in priority if x in reasons), "none")
-    status = "critical" if selected in ("quota90", "maintenance_issue") else (
+    status = "critical" if selected in (
+        "quota98", "quota100", "maintenance_issue") else (
         "warning" if selected != "none" else "ok")
     details = {
-        "quota90": "Ocupacao do disco >= 90 por cento",
-        "quota80": "Ocupacao do disco >= 80 por cento",
+        "quota90": "Ocupacao do disco atingiu 90 por cento",
+        "quota95": "Ocupacao do disco atingiu 95 por cento",
+        "quota98": "Ocupacao do disco atingiu 98 por cento",
+        "quota100": "Ocupacao do disco atingiu 100 por cento",
         "growth": "Crescimento anormal do disco desde o ultimo relatorio",
         "logs_growth": "Crescimento anormal dos logs",
         "linux_browser_returned": "Browser Linux Puppeteer foi instalado novamente",
@@ -148,8 +158,10 @@ def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_er
         "none": "Sem alerta",
     }
     actions = {
-        "quota90": "Verificar quota e candidatos seguros antes de remover dados",
-        "quota80": "Rever maiores categorias e plano de limpeza",
+        "quota90": "Rever maiores categorias e limpar apenas itens seguros",
+        "quota95": "Prioridade alta: analisar quota e iniciar limpeza segura",
+        "quota98": "Urgente: rever quota e dependencias antes de libertar espaco",
+        "quota100": "Critico: quota cheia, agir apenas com medidas verificadas",
         "growth": "Comparar categorias do relatorio TXT privado",
         "logs_growth": "Investigar origem do log ativo, nao apagar sem verificacao",
         "linux_browser_returned": "Confirmar dependencia antes de eliminar o navegador",
@@ -163,7 +175,7 @@ def report(now, previous, summary, backup_data, browser_data, log_data, errors, 
     datestr = now.strftime("%Y-%m-%d")
     used = float(summary["quota_used_mb"])
     limit = float(summary["quota_limit_mb"])
-    pct = round(100 * used / limit, 2)
+    pct = min(100.0, round(100 * used / limit, 2))
     dirs = summary["directories_mb"]
     logs_mb = float(log_data.get("bytes_recursive_mb", dirs.get("logs", 0)))
     growth = round(used - previous["usage_mb"], 1) if previous else None
