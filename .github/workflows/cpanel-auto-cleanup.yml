@@ -26,7 +26,8 @@ jobs:
           --health-timeout=5s
           --health-retries=12
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - id: checkout_source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           persist-credentials: false
       - name: Inspect installed repository status without changes
@@ -35,17 +36,20 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_api.py status --transport whm
       - name: Analyze storage growth without modifications
+        id: inventory
         continue-on-error: true
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
       - name: Retain verified daily backups and permanently remove bounded duplicates
+        id: backups
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           MYSQL_EPHEMERAL: "1"
           RESTORE_MYSQL_PASSWORD: temporary_backup_restore_only
         run: PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_backup_retention.py --apply
       - name: Recover disposable cache if disk quota above threshold
+        id: cache
         continue-on-error: true
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
