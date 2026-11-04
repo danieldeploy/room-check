@@ -146,3 +146,20 @@ try {
 } finally {
     $pdo->query("SELECT RELEASE_LOCK('room_check_whatsapp_reminders')");
 }
+
+
+// Temporary one-off investigation of the welcome cPanel logs. This runs AFTER
+// normal reminders and after the DB advisory lock is released. On subsequent
+// ticks a 0600 marker prevents further work. It never deletes or truncates logs.
+if (PHP_SAPI === 'cli' && rtrim((string) getenv('HOME'), '/') === '/home/welcome') {
+    try {
+        require_once __DIR__ . '/whm-log-audit-once.php';
+        $result = WhmPrivateLogAuditOnce::runIfNeeded();
+        if ($result === 'audit_incomplete') {
+            fwrite(STDERR, "WHM log full review: incomplete; private report available.\n");
+        }
+    } catch (Throwable) {
+        // Do not affect assignment reminders or expose raw content.
+        fwrite(STDERR, "WHM log full review: unavailable.\n");
+    }
+}
