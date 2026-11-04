@@ -84,6 +84,43 @@ export async function controlledBookingPasswordPage(browser) {
   return exactBookingPasswordTab(await browser.defaultBrowserContext().pages());
 }
 
+/**
+ * Ownership belongs to the current task, never to the persistent Chrome profile.
+ * Only tabs explicitly created by this task can be closed. No watchdog or polling.
+ */
+export function createControlledTabOwnership() {
+  const owned = new Set();
+  let humanChallenge = false;
+  return {
+    track(selection) {
+      if (selection?.created === true && selection.page) owned.add(selection.page);
+      return selection?.page;
+    },
+    preserveHumanChallenge() { humanChallenge = true; },
+    async closeOwned({ settled = false } = {}) {
+      // On an interrupted task or an unresolved human challenge, leave Chrome as-is.
+      if (!settled || humanChallenge) return;
+      for (const page of owned) {
+        owned.delete(page);
+        try {
+          if (page.isClosed?.()) continue;
+          // Only a boolean leaves the page; never read or log the draft contents.
+          const unsafe = await page.evaluate(() => {
+            if (document.readyState === 'loading') return true;
+            const focused = document.activeElement;
+            if (focused?.matches?.('input:not([type="hidden"])') && focused.value?.trim()) return true;
+            return [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')]
+              .some(el => el.getClientRects().length > 0
+                && String('value' in el ? el.value : el.textContent || '').trim().length > 0);
+          });
+          if (unsafe !== false) continue;
+          await page.close();
+        } catch { /* Unknown state: preserve the tab rather than risk losing work. */ }
+      }
+    },
+  };
+}
+
 // Both discovery and login use the dedicated persistent Chrome profile. A fresh
 // incognito context discards the human verification already completed there.
 export async function controlledBookingPage(browser, purpose = 'primary', { fromEntry = false } = {}) {

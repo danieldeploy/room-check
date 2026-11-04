@@ -7,7 +7,7 @@ import path from 'node:path';
 import { portalUrl } from '../portal.mjs';
 import { parseControlledEndpoint, controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions,
   controlledBookingPage, startBookingCollection, guardPortalRequests, usesControlledBrowser,
-  isolatedBrowserLaunchOptions } from '../controlled-browser.mjs';
+  isolatedBrowserLaunchOptions, createControlledTabOwnership } from '../controlled-browser.mjs';
 
 test('Windows Hostelworld inspection uses a fresh window without accepting launch overrides', () => {
   const runtime = { executablePath: 'C:\\Chrome\\chrome.exe', headless: true,
@@ -302,4 +302,47 @@ test('new collection reuses Booking entry tabs and resets once without retrying 
   assert.equal(calls,1);
   for (const action of ['login','discover']) await startBookingCollection(page,{portal:'booking',accountId:1,action});
   assert.equal(calls,1,'access-test continuation must retain its page');
+});
+
+test('task-owned tabs close after completion without touching existing or manually opened tabs', async () => {
+  const closed = [];
+  const page = name => ({ isClosed: () => false, evaluate: async () => false,
+    close: async () => { closed.push(name); } });
+  const manual = page('manual');
+  const reused = page('reused');
+  const first = page('first');
+  const later = page('later');
+  const ownership = createControlledTabOwnership();
+  ownership.track({ page: manual, created: false });
+  ownership.track({ page: reused, created: false });
+  ownership.track({ page: first, created: true });
+  ownership.track({ page: later, created: true });
+  ownership.track({ page: first, created: true }); // no double close
+  await ownership.closeOwned(); // interrupted task: never close still-running work
+  assert.deepEqual(closed, []);
+  await ownership.closeOwned({ settled: true });
+  assert.deepEqual(closed, ['first', 'later']);
+  await ownership.closeOwned({ settled: true });
+  assert.deepEqual(closed, ['first', 'later']);
+});
+
+test('drafts, uncertain pages and active human verification never lose their tabs', async () => {
+  const closed = [];
+  const make = (name, result) => ({
+    isClosed: () => false,
+    evaluate: async () => { if (result === 'unresponsive') throw new Error('renderer unavailable'); return result; },
+    close: async () => { closed.push(name); },
+  });
+  const tabs = createControlledTabOwnership();
+  tabs.track({ page: make('draft', true), created: true });
+  tabs.track({ page: make('unresponsive', 'unresponsive'), created: true });
+  tabs.track({ page: make('safe', false), created: true });
+  tabs.track({ page: { isClosed: () => true, close: async () => closed.push('already closed') }, created: true });
+  await tabs.closeOwned({ settled: true });
+  assert.deepEqual(closed, ['safe']);
+  const challenge = createControlledTabOwnership();
+  challenge.track({ page: make('human challenge', false), created: true });
+  challenge.preserveHumanChallenge();
+  await challenge.closeOwned({ settled: true });
+  assert.deepEqual(closed, ['safe']);
 });
