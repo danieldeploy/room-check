@@ -225,7 +225,7 @@ final class WhmPrivateLogAuditOnce
             arsort($reasons);
             arsort($years);
             usort($fingerprints, static fn($a, $b) => $b['count'] <=> $a['count']);
-            $file += [
+            $file = array_merge($file, [
                 'status' => 'fully_streamed',
                 'lines' => $lines,
                 'bytes_read_mb' => round($expanded / 1048576, 2),
@@ -237,7 +237,7 @@ final class WhmPrivateLogAuditOnce
                                               'severity' => $x['severity']],
                               $fingerprints), 0, 6
                 ),
-            ];
+            ]);
             $report['total_lines_read'] += $lines;
             foreach ($counts as $key => $value) $allSeverity[$key] = ($allSeverity[$key] ?? 0) + $value;
             foreach ($reasons as $key => $value) $allReasons[$key] = ($allReasons[$key] ?? 0) + $value;
