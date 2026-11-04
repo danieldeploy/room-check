@@ -38,6 +38,33 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   end-to-end automation has been verified and the owner explicitly asks for its
   withdrawal. Keep manual confirmation, repeat protection and private test history.
 
+## Browser tabs opened by automations (permanent owner rule)
+
+- Applies to **every existing and future browser automation**, whether Booking,
+  Meta/Facebook, Cloudbeds, email or another portal. The automation that creates
+  a Chrome tab must explicitly **register ownership of that tab/page ID** and
+  release it in its normal completion/finally path. New browser workflows must
+  include tests for owned-tab cleanup; never rely on the owner repeating this rule.
+- Close only task-created temporary tabs as soon as their task is finished and
+  it is safe to do so. Never close a tab opened manually, a pre-existing/reused
+  page, or a page required continuously by another task. Preserve human
+  verification/CAPTCHA steps, active operations and unsaved form/message drafts.
+  On uncertain ownership or page state, leave the tab open.
+- Keep the persistent Chrome process/profile, cookies, authenticated sessions,
+  Management Hub access and Booking login continuation intact. Closing a tab is
+  not permission to log out, clear browser data, terminate Chrome, or delete a
+  persistent profile.
+- Implement tab ownership within the **existing Windows AccesControl agent/task**
+  (e.g. `createControlledTabOwnership` for the invoice runner); other automation
+  entrypoints must adopt the same contract. **Do not create a new watchdog,
+  permanent service, cron or five-minute global tab scan.** No task = no tab
+  cleanup work. A short delay is permitted only for a specific pending tab,
+  never as an always-on poller.
+- Acceptance for any new browser automation: explicitly track each created tab,
+  safely close it after completion (including error cleanup when confirmed safe),
+  retain reused/manual tabs and all sessions, preserve human intervention and
+  drafts, and confirm the agent's next task still works.
+
 ## Project memory and orientation
 
 - Before changing a module, read `docs/PROJECT_MEMORY.md`, then

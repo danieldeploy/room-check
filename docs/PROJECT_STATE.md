@@ -41,6 +41,24 @@ under `docs/flows/`.
   already available, but Management Hub does not depend on one for build,
   deployment or production operation.
 
+## Abas Chrome criadas por automações — regra transversal (2026-11-04)
+
+- Owner decision: every current and future browser automation must register
+  tabs it **creates** and close only those tabs after its task finishes safely.
+  No always-on watchdog, cron, extra Windows service or periodic full-browser
+  scan. Manual/reused tabs, active operations, unsaved drafts and pages awaiting
+  human verification are preserved; persistent Chrome profiles, cookies and
+  sessions must remain intact.
+- The existing AccesControl invoice runner already closes one newly created
+  controlled tab in normal cleanup, but not every possible later created tab.
+  This change introduces per-task ownership covering both initial and later
+  controlled Booking tab creation, with tests and an explicit human-challenge
+  exception. Other new automation entrypoints must adopt the contract from
+  `AGENTS.md`.
+- Status in this PR: **prepared; CI, merge, installation in the Windows
+  AccesControl app and live acceptance remain to be verified separately**.
+  See `docs/invoices-multiplatform.md` for behavior and acceptance.
+
 ## Management Hub / Room Check
 
 - PHP/MySQL application hosted at `check.welcomehostel.pt`.

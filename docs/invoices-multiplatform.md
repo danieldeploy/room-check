@@ -128,3 +128,30 @@ The Airbnb transformation must be defined with real CSV samples before activatin
 
 Google API reference: https://developers.google.com/workspace/drive/api/guides/manage-uploads
 \n## Separação do arquivo ZKTeco\n\nO cron de faturas conserva exclusivamente as tarefas de faturas, Drive e TOConline.\nA entrega dos backups da base MySQL do ZKTeco foi retirada de\n`cron/invoices.php` e passa para `cron/zkaccess-backups.php`, com um agendamento\ncPanel próprio e bloqueio MySQL separado. Ver `docs/flows/zkaccess-backup.md`.\n
+
+## Ciclo de vida das abas de automação no AccesControl (2026-11-04)
+
+Decisão transversal: a automação que abre uma aba temporária é responsável por
+registar essa aba (identidade do objeto/target) e fechá-la depois de concluir a
+tarefa. Esta regra aplica-se também a futuras automações de Booking, Facebook,
+Meta Business, Cloudbeds e outros portais, não apenas às faturas. Não se cria
+watchdog, serviço permanente, cron ou verificação global de cinco em cinco
+minutos: o trabalho ocorre no próprio agente Windows, apenas durante uma tarefa.
+
+O agente de faturas possui um Chrome persistente para Booking: só as páginas
+explicitamente criadas por essa tarefa são suas; páginas existentes, reutilizadas
+ou abertas manualmente nunca são encerradas. A primeira página e quaisquer
+outras páginas criadas na mesma execução devem ser registadas. No `finally`,
+após libertar guardas/interceções, o agente fecha apenas páginas suas cujo
+estado seja seguro (sem editor preenchido, operação em curso ou dúvida).
+Falha de consulta do estado, interrupção ou verificação humana pendente
+conservam a aba. O navegador é **desligado da ligação CDP**, nunca encerrado;
+perfil, cookies, 2FA humano e sessões persistentes continuam disponíveis.
+Navegadores isolados descartáveis conservam o seu encerramento existente.
+
+Para futuras automações com outros pontos de entrada, a regra de `AGENTS.md`
+exige o mesmo registo explícito e limpeza após a operação, com testes
+reproduzíveis de três casos: uma aba criada é fechada; uma aba preexistente
+não é fechada; um rascunho ou pedido de intervenção humana é preservado.
+A aceitação operacional exige observar uma tarefa real que abre e fecha a
+sua própria aba, sem terminar a sessão nem interromper a seguinte tarefa.

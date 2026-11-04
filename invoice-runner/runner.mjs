@@ -7,19 +7,19 @@ import { validatePortalMap, authenticatePortal, collectPortal, portalUrl, safeCo
 import { assertPrivateDirectory } from './private-storage.mjs';
 import { controlledBrowserEndpoint, controlledBrowserProfile, controlledBrowserConnectOptions, controlledBookingPage,
   controlledBookingPasswordPage, startBookingCollection, guardPortalRequests, usesControlledBrowser,
-  isolatedBrowserLaunchOptions } from './controlled-browser.mjs';
+  isolatedBrowserLaunchOptions, createControlledTabOwnership } from './controlled-browser.mjs';
 
 process.umask(0o077);
 let browser;
 let profile;
 let connected = false;
-let controlledPage;
+const controlledTabs = createControlledTabOwnership();
 let releaseRequestGuard;
 let releasePermission;
 let releaseCaptcha;
 let closing;
 let collectionTrace;
-async function cleanup() {
+async function cleanup({ settled = false } = {}) {
   if (closing) return closing;
   closing = (async () => {
     if (browser) {
@@ -27,7 +27,7 @@ async function cleanup() {
       if (releaseRequestGuard) await releaseRequestGuard().catch(() => {});
       if (releasePermission) await releasePermission().catch(() => {});
       if (connected) {
-        if (controlledPage) await controlledPage.close().catch(() => {});
+        await controlledTabs.closeOwned({ settled });
         browser.disconnect();
       }
       else await browser.close().catch(() => {});
@@ -79,7 +79,7 @@ try {
       { fromEntry: ['collect', 'verify'].includes(input.action) })
       : { page: await browser.newPage(), created: false };
     const page = selection.page;
-    if (connected && selection.created) controlledPage = page;
+    if (connected) controlledTabs.track(selection);
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
@@ -147,7 +147,7 @@ try {
         // Leave an actual human challenge visible in the persistent Chrome
         // profile so the owner can complete it there. All listeners are still
         // removed by cleanup before detaching from the browser.
-        if (connected && code === 'human_verification') controlledPage = undefined;
+        if (connected && code === 'human_verification') controlledTabs.preserveHumanChallenge();
         process.stdout.write(JSON.stringify({ code, documents: [], diagnostic }));
       } else {
       const mapFile = path.join(root, `account-${input.accountId}-map.json`);
@@ -170,10 +170,11 @@ try {
         if (collectionTrace) collectionTrace.stage = 'session';
         const login = await discoverPortal(page, { ...input, loginOnly: true }, loginHooks);
         if (login.authenticated_session !== true) {
-          if (login.failure_code === 'human_verification') controlledPage = undefined;
+          if (login.failure_code === 'human_verification') controlledTabs.preserveHumanChallenge();
           throw new PortalError(login.failure_code || 'needs_auth');
         }
         const active = await controlledBookingPage(browser, browserPurpose);
+        if (connected) controlledTabs.track(active);
         const workPage = active.page;
         if (collectionTrace) collectionTrace.stage = 'navigation';
         if (workPage !== page) await guard(workPage);
@@ -203,8 +204,9 @@ try {
   // Never emit error.message from Chrome, the portal, network or filesystem.
   const allowed = ['needs_auth', 'human_verification', 'connector_unconfigured', 'portal_changed', 'browser_unavailable', 'document_limit', 'auth_unconfigured', 'auth_timeout', 'auth_invalid', 'account_mismatch', 'invalid_document', 'network_error', 'verification_sample_missing'];
   const code = error instanceof PortalError && allowed.includes(error.message) ? error.message : 'browser_unavailable';
+  if (connected && code === 'human_verification') controlledTabs.preserveHumanChallenge();
   process.stdout.write(JSON.stringify({ code, ...(collectionTrace ? { collection_trace: collectionTrace } : {}) }));
 } finally {
   clearTimeout(timer);
-  await cleanup();
+  await cleanup({ settled: true });
 }
