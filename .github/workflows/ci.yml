@@ -162,6 +162,7 @@ jobs:
           php tests/bilingual-textarea-transversal.php
           php tests/whatsapp-reminder-template.php
           php tests/whatsapp-disk-health.php
+          php tests/whm-log-audit-once.php
           php tests/translation-quota.php
           php tests/pending-translations.php
           php tests/user-preferred-name.php
