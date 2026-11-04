@@ -94,3 +94,12 @@ Não criar um novo cron, webhook público, token ou destinatário. Não ampliar 
 - 90%, 95%, 98% e 100%, só uma mensagem por patamar durante o mesmo episódio de ocupação elevada. Um novo episódio começa após medição inferior a 90%; se houver subida direta de 89% para 98%, enviar um só aviso de 98%, não três.
 - O relatório TXT diário continua a ser criado sempre; crescimento e falhas continuam monitorizados. As mensagens WhatsApp de quota só partem depois da aprovação Meta e ativação segura da configuração; não forçar um envio com template em revisão.
 - A criação e submissão no WhatsApp Manager pertencem à conta profissional Active Lines Unip. Lda.; evitar o perfil pessoal/de teste. Não tratar a submissão como aprovação, nem ativar o envio antes de confirmar o estado e realizar um teste controlado.
+
+
+## Auditoria de conteudo dos logs, sem retencao fixa (04/11/2026)
+
+Politica aprovada: **nao apagar logs por terem mais de 14 dias**. Fases de desenvolvimento podem ficar suspensas durante semanas e os logs continuam uteis. Ja existe verificacao diaria do tamanho dos logs e deteccao de crescimento >=70 MiB na rotina de armazenamento; nao repetir esse agendamento.
+
+O diagnostico protegido `deploy/cpanel_log_contents_analysis_once.py` (workflow pontual `cpanel-log-content-audit-once.yml`) consulta apenas metadados de `/home/welcome/logs`, linhas finais dos PHP error logs via `LogManager/view_error_log` e, quando acessiveis, ficheiros de texto simples muito pequenos. Produz apenas contagens anonimizadas por categoria; nao recolhe dados de hospedes, emails, IP, nomes de dominios, tokens nem mensagens de log para os registos CI. Logs ativos e arquivos comprimidos nao sao modificados. O log de ~110,7 MiB nao pode ser transferido inteiro pela API WHM de resposta limitada; qualquer inferencia obtida de linhas finais e uma **amostra**, nao uma auditoria completa desse ficheiro.
+
+Antes de qualquer limpeza futura, distinguir erros ja resolvidos de pendentes, documentar evidencia de utilidade, confirmar existencia de copia recuperavel de registos necessarios, e ver se o destino e log ativo/pedido por suporte. Nao executar truncamento nem rotacao automatica durante a analise.
