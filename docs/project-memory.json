@@ -120,6 +120,20 @@
       "required_docs": [
         "docs/flows/zkaccess-backup.md"
       ]
+    },
+    {
+      "name": "whm-daily-log-verification",
+      "paths": [
+        "cron/whm-log-daily.php",
+        "cron/whm-log-audit-once.php",
+        "deploy/cpanel_daily_log_report.py",
+        "deploy/cpanel_daily_disk_report.py",
+        "src/Notifications/WhatsAppDiskHealthNotifier.php"
+      ],
+      "required_docs": [
+        "docs/PROJECT_STATE.md",
+        "docs/CPANEL_DISK_MAINTENANCE.md"
+      ]
     }
   ]
 }

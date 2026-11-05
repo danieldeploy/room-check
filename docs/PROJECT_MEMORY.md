@@ -96,3 +96,11 @@ in the same change.
 
 When a new architecture-sensitive module is introduced, add it to
 `docs/project-memory.json` as part of the same PR.
+
+## Daily WHM log continuity
+
+`docs/CPANEL_DISK_MAINTENANCE.md` defines the incremental cursor/report contract.
+The historical full scan completed on 2026-11-05; never reset its marker or
+report to force a repeat. Daily cursors belong in private storage, and a corrupt
+cursor requires diagnosis, not automatic rebaselining. Reuse the installed
+ZKAccess cron tick with isolated failures; no additional permanent scheduler.

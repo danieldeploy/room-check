@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from cpanel_deep_audit import backups, browsers, disk_usage, logs, search, BACKUP, BROWSER
 from cpanel_disk_cleanup import Rejected, request_api
+from cpanel_daily_log_report import read_daily
 
 HOME = "/home/welcome"
 PRIVATE = HOME + "/room-check-private"
@@ -117,7 +118,7 @@ def outcome(name):
     return value if value in SAFE_OUTCOMES else "unknown"
 
 
-def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_errors, outcomes):
+def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_errors, outcomes, log_content=None):
     reasons = []
     # A single highest crossed storage tier is included per daily sample.
     # The PHP sender remembers the highest tier already notified in this
@@ -138,13 +139,15 @@ def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_er
         reasons.append("linux_browser_returned")
     if audit_errors or any(x != "success" for x in outcomes.values()):
         reasons.append("maintenance_issue")
+    if log_content and any(log_content.get("severity_counts", {}).get(k, 0) for k in ("fatal", "parse", "http_5xx")):
+        reasons.append("log_errors")
     # Storage tier always takes precedence so no 95/98/100 escalation is hidden.
     # A new root folder is an audit candidate, not an automatic WhatsApp alert.
     priority = ("quota100", "quota98", "quota95", "quota90",
-                "maintenance_issue", "linux_browser_returned", "growth", "logs_growth")
+                "maintenance_issue", "log_errors", "linux_browser_returned", "growth", "logs_growth")
     selected = next((x for x in priority if x in reasons), "none")
     status = "critical" if selected in (
-        "quota98", "quota100", "maintenance_issue") else (
+        "quota98", "quota100", "maintenance_issue", "log_errors") else (
         "warning" if selected != "none" else "ok")
     details = {
         "quota90": "Ocupacao do disco atingiu 90 por cento",
@@ -155,6 +158,7 @@ def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_er
         "logs_growth": "Crescimento anormal dos logs",
         "linux_browser_returned": "Browser Linux Puppeteer foi instalado novamente",
         "maintenance_issue": "Falha ou auditoria incompleta na manutencao diaria",
+        "log_errors": "Novos erros graves nos logs ativos",
         "none": "Sem alerta",
     }
     actions = {
@@ -166,12 +170,13 @@ def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_er
         "logs_growth": "Investigar origem do log ativo, nao apagar sem verificacao",
         "linux_browser_returned": "Confirmar dependencia antes de eliminar o navegador",
         "maintenance_issue": "Consultar GitHub Actions e confirmar a causa da falha",
+        "log_errors": "Consultar contagens e datas no TXT privado; preservar os logs",
         "none": "Nenhuma acao necessaria",
     }
     return status, selected, details[selected], actions[selected], reasons
 
 
-def report(now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes):
+def report(now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes, log_content=None):
     datestr = now.strftime("%Y-%m-%d")
     used = float(summary["quota_used_mb"])
     limit = float(summary["quota_limit_mb"])
@@ -184,7 +189,7 @@ def report(now, previous, summary, backup_data, browser_data, log_data, errors, 
     new_roots = len(root_set - previous["root_hashes"]) if previous else 0
     browser_versions = browser_data.get("installed_version_sizes_mb", {})
     status, alert, detail, action, reasons = compute_alert(
-        pct, growth, log_growth, new_roots, browser_versions, errors, outcomes)
+        pct, growth, log_growth, new_roots, browser_versions, errors, outcomes, log_content)
     fields = [
         ("schema", "whm-disk-v1"),
         ("date_lisbon", datestr),
@@ -220,6 +225,11 @@ def report(now, previous, summary, backup_data, browser_data, log_data, errors, 
         ("process_audit", "not_available_via_reseller_whm_api"),
         ("security", "metadata_only_private_whm_report"),
     ]
+    if log_content:
+        for key, value in log_content.items():
+            if isinstance(value, dict):
+                value = ",".join(f"{k}:{v}" for k, v in sorted(value.items())) or "none"
+            fields.append(("log_content_" + key, "unknown" if value is None else str(value)))
     payload = "".join(f"{key}={value}\n" for key, value in fields)
     require(len(payload.encode("utf-8")) < MAX_TEXT_BYTES, "report_too_large")
     return payload, status, alert, pct, new_roots
@@ -245,17 +255,26 @@ def main():
     previous = previous_report(entries, date_str)
     summary, backup_data, browser_data, log_data, errors = audit()
     roots = root_hashes()
+    log_content = None
+    try:
+        log_content = read_daily(date_str)
+        if log_content["status"] == "partial":
+            errors.append("daily_log_content_partial")
+    except Rejected:
+        errors.append("daily_log_content_unavailable")
     outcomes = {k: outcome(v) for k, v in (
         ("backup", "BACKUP_STEP"), ("cache", "CACHE_STEP"), ("inventory", "INVENTORY_STEP"))}
     text, status, alert, pct, new_dirs = report(
-        now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes)
+        now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes, log_content)
     name = f"whm-disk-{date_str}.txt"
     write_once(name, text, entries)
     print(json.dumps({"ok": True, "report": "private_daily_txt",
                       "date": date_str, "status": status, "alert": alert,
                       "quota_percent": pct, "new_root_directories": new_dirs,
-                      "readback_verified": True, "whatsapp_delivery": "separate_private_hub_cron"},
+                      "readback_verified": True, "log_content": log_content, "whatsapp_delivery": "separate_private_hub_cron"},
                      sort_keys=True), flush=True)
+    if log_content is None or log_content["status"] == "partial":
+        raise Rejected("daily_log_verification_incomplete_txt_saved")
 
 
 if __name__ == "__main__":

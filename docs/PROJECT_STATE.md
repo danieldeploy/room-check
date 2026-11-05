@@ -1,33 +1,32 @@
 # Management Hub — current project state
 
-## Log analysis start boundary confirmed (2026-11-05)
+## Daily WHM log verification (2026-11-05)
 
-Read-only run 41939754500 confirmed exactly one reminder cron targeting the
-private script, with the reviewed audit hook present and matching source.
-The private directory is readable and report, marker and temporary file are
-all absent. Therefore the one-time scan has not acquired its start marker;
-neither slow log reading nor a PHP timeout has been established. The exact
-reminder/environment early exit is not yet diagnosed.
+Historical full scan is confirmed: production `8342de8` / deployment 384;
+protected audit run 41940619898 succeeded with 13/13 logs fully streamed,
+118.19 MiB on disk, 151.33 MiB expanded and 696351 chunks read. The 51 fatal
+and four parse-error occurrences are historical totals, not dated current Hub
+incidents. No logs were deleted. The completed one-off release hook is removed;
+its private report and marker remain intact.
 
-Remove the temporary dependency on completion of the reminders task. The
-ordinary reviewed release now invokes the same bounded PHP scanner once,
-after its normal work, with a 60-second limit, existing private marker and
-unchanged read-only scope. It never resets a marker or deletes logs. The
-protected reader inspects metadata first and waits for the release report;
-it accepts PHP's empty counter arrays without relaxing allowed keys/types.
-Real content results and daily incremental integration remain pending.
+The reviewed daily implementation reuses the existing five-minute ZKAccess
+cron before DB/Drive work, with its own file lock and isolated failures. The
+first pass establishes explicit byte-position baselines; subsequent Lisbon
+calendar days read appended/new content only. Partial passes resume on the
+next existing tick. No new cron, daemon, endpoint or credential is introduced.
+The existing protected daily maintenance workflow verifies the installed
+scanner hash, reads only allowlisted aggregates and includes them in its
+private TXT with exact readback verification. Missing/stale/partial content
+becomes maintenance_issue and a failed workflow, never a silent healthy result.
+New active fatal/parse/HTTP 5xx errors have a separate log_errors incident;
+archived errors are reported separately. Existing quota priority is preserved.
 
-## WHM log report diagnosis (2026-11-05)
-
-Deployment 381 installed `3c2f6d0`; CI passed. Audit run 41907079872 failed
-with `private_report_not_generated_before_timeout` in the **Python reader**.
-This is not evidence of a PHP runtime timeout: the reader also treated an
-unreadable report as missing. Before retrying any execution, the same protected
-read-only workflow now checks exact report/marker/temp metadata and the active
-reminder cron's known entrypoint and source hash. It prints only fixed labels,
-booleans and metadata, never cron commands or private source. No log deletion,
-cron edit, marker reset or application behavior change is part of this probe.
-Daily incremental content analysis remains pending the diagnosis and acceptance.
+Local regression checks cover baseline, append, rename/truncate, gzip,
+idempotence, bounded continuation, privacy, reader validation and failure TXT.
+Production baseline/cron/TXT acceptance for this change must still be observed
+after merge; implementation alone is not functional verification.
+WhatsApp remains disabled pending confirmed Meta approval and delivery test.
+See `docs/CPANEL_DISK_MAINTENANCE.md` for timing, limits and recovery.
 
 Last reviewed: 2026-10-29 (Europe/Lisbon)
 

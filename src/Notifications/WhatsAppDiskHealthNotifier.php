@@ -30,6 +30,7 @@ final class WhatsAppDiskHealthNotifier
         'quota100' => 'Ocupacao do disco atingiu 100%',
         'growth' => 'Crescimento anormal do disco',
         'logs_growth' => 'Crescimento anormal dos logs',
+        'log_errors' => 'Novos erros graves nos logs ativos',
         'linux_browser_returned' => 'Foi instalado novamente um browser Linux',
         'maintenance_issue' => 'Falha na manutencao ou auditoria do servidor',
     ];
@@ -40,6 +41,7 @@ final class WhatsAppDiskHealthNotifier
         'quota100' => 'Critico: quota cheia; atue apenas apos verificar as dependencias.',
         'growth' => 'Compare o relatorio TXT atual com o anterior.',
         'logs_growth' => 'Investigue o log ativo sem o apagar.',
+        'log_errors' => 'Consulte contagens e datas no TXT privado; preserve os logs.',
         'linux_browser_returned' => 'Verifique dependencias antes de eliminar o browser.',
         'maintenance_issue' => 'Consulte a execucao no GitHub Actions.',
     ];

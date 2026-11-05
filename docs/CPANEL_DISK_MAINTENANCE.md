@@ -126,3 +126,62 @@ existente. A análise continua só de leitura. Se ficar marcador sem relatório,
 não reiniciar nem apagar o marcador sem nova inspeção. O leitor protegido
 espera pela publicação e valida apenas os dados agregados. Esta execução
 pontual ainda não implementa a análise diária incremental.
+
+## Incremental daily log verification — 2026-11-05
+
+The full historical scan is complete (run 41940619898, deployment 384). The
+old release hook is removed without touching its marker/report or any log.
+`cron/whm-log-daily.php` reuses only the classifications from that scanner.
+
+- `cron/zkaccess-backups.php` calls the scanner **before** DB/Drive initialization.
+  An independent private file lock prevents overlapping scans. Exceptions emit
+  a fixed safe diagnostic and never prevent the original backup worker running.
+- The first existing five-minute tick of each Europe/Lisbon calendar day scans
+  since the last committed checkpoint. First activation is explicitly
+  `baseline`: capture current positions, do not re-alert on historical errors.
+  The report records its start/check timestamps and observation window.
+- State `whm-log-cursors.json` and aggregate `whm-log-daily.json` are atomic,
+  owner-only files in `/home/welcome/room-check-private`. State is committed
+  before the projection; a repeated tick repairs an interrupted projection.
+  Completed same-day passes are idempotent. Partial passes resume next tick.
+- Plain logs use offsets, device/inode and a 256-byte boundary fingerprint.
+  Renames preserve a matching inode cursor; truncation/replacement resets the
+  affected cursor. A write confined to already-read bytes away from the boundary
+  cannot be detected by an incremental scan. Removed files are counted, not
+  reconstructed. Logs rotated away before any observation cannot be recovered.
+- Unchanged gzip files are skipped; changed/new gzip files stream with logical
+  offsets and separate archive severity counts. Archives may repeat content
+  previously present in an active log, so archived errors never independently
+  trigger a new active-error incident. Unsupported archive formats fail closed.
+- Limits: 150 files, 1 GiB per plain file, 16 MiB per gzip on disk, 256 MiB
+  expanded per gzip, 32 MiB of new chunks and eight seconds per pass (one chunk
+  may cross the byte budget). Chunks are at most 8191 bytes; exceptionally long
+  records may count as several chunks. Unfinished final records retain their
+  starting offset and pending byte count until the writer completes them.
+  No raw messages, names, domains or paths
+  appear in aggregates. Dates support ISO, PHP and Apache forms; origin labels
+  are only Management Hub, WordPress, Roundcube or unknown.
+- The existing daily GitHub schedule remains 03:17 UTC (actual start can be
+  delayed by GitHub). It still runs the established backup restore/retention,
+  bounded cache recovery, quota and growth checks. Relevant maintenance-code
+  updates also trigger this workflow for deployment acceptance. The protected
+  reader allows up to 690 seconds for deployment plus the existing cron tick,
+  verifies the scanner source hash, and reads only the fixed aggregate file.
+- The daily `whm-disk-YYYY-MM-DD.txt` includes counters, dates, coverage state
+  and origins, and is read back exactly. A missing/stale/partial log report is
+  saved as `maintenance_issue`, then fails the job. New active fatal/parse/5xx
+  counts create `log_errors`; quota tiers retain precedence. Warnings and
+  deprecations remain visible without sending a message per occurrence.
+- No log removal, rotation, email access or new retention rule is introduced.
+  WhatsApp sending still requires approved `whm_storage_alert_v1`, configured
+  enablement and verified delivery; report creation does not imply delivery.
+
+Acceptance: run PHP append/rotation/gzip/continuation/privacy tests and Python
+aggregate/failure-report checks, mandatory CI, then confirm installed SHA,
+actual existing-cron baseline, and protected TXT readback. Local fixtures prove
+incremental semantics; baseline in production does not prove a future day's
+scheduled run or a WhatsApp delivery. Diagnose stale/missing cursor/report and
+cron metadata before any retry; never delete a cursor to make a check green.
+
+On maintenance-code pushes, the existing read-only Meta probe checks the alert
+template dependency. It never enables sending or sends a message.
