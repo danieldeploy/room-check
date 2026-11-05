@@ -107,7 +107,11 @@ def inspect_state():
         print(json.dumps(result, sort_keys=True), flush=True)
         return
     exists = state.get("report", {}).get("state") == "file"
-    raise Rejected("private_report_unreadable" if exists else "private_report_absent_or_listing_unavailable")
+    if exists:
+        raise Rejected("private_report_unreadable")
+    # The reviewed release runs the scanner once, independently of reminders.
+    # Waiting only reads the fixed report; it never executes or resets a scan.
+    main()
 
 def number(x, maximum=1000000000):
     if type(x) is not int or not (0 <= x <= maximum):
@@ -120,6 +124,8 @@ def nonnegative_float(x, maximum=10000):
     return round(float(x), 2)
 
 def safe_counts(obj, allowed):
+    if obj == []:
+        obj = {}  # PHP json_encode represents an empty counter array as [].
     if not isinstance(obj, dict) or len(obj) > len(allowed):
         raise Rejected("unsafe_counters")
     result = {}
@@ -171,6 +177,8 @@ def sanitize(data):
             item["reason_counts"] = safe_counts(f.get("reason_counts"), ALLOWED_REASONS)
             item["year_counts"] = {}
             years = f.get("year_counts", {})
+            if years == []:
+                years = {}
             if not isinstance(years, dict) or len(years) > 50:
                 raise Rejected("invalid_year_counts")
             for k, v in years.items():

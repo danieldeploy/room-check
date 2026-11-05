@@ -52,3 +52,15 @@ export PRIVATEPATH="$HOME/room-check-private/"
 if ! /usr/local/bin/php deploy/compress_release_dumps.php; then
     printf '%s\n' 'Optional backup compaction skipped; inspect private audit' >&2
 fi
+
+# Owner-authorized one-time read-only log scan. Its private marker prevents
+# repeats. Do not depend on the WhatsApp job reaching its normal final line.
+# Failure preserves the logs and must not mask an otherwise complete release.
+if ! /usr/bin/timeout --signal=TERM --kill-after=5s 60s /usr/local/bin/php -r '
+    require $argv[1];
+    $status = WhmPrivateLogAuditOnce::runIfNeeded();
+    echo "WHM private log audit: ", $status, PHP_EOL;
+    exit(in_array($status, ["saved", "completed_previously"], true) ? 0 : 1);
+' "$PRIVATEPATH/cron/whm-log-audit-once.php"; then
+    printf '%s\n' 'WHM private log audit incomplete; inspect marker/report before retry' >&2
+fi
