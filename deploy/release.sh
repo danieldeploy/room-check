@@ -52,3 +52,9 @@ export PRIVATEPATH="$HOME/room-check-private/"
 if ! /usr/local/bin/php deploy/compress_release_dumps.php; then
     printf '%s\n' 'Optional backup compaction skipped; inspect private audit' >&2
 fi
+
+# Approved dedicated template; existing manager only, one test with a pre-send
+# private receipt. Never retries an uncertain send or masks the core release.
+if ! /usr/local/bin/php deploy/activate_whm_alerts_once.php "$DEPLOYPATH"; then
+    printf '%s\n' 'WHM alert activation incomplete; inspect private receipt before retry' >&2
+fi

@@ -18,6 +18,23 @@ require_once $appRoot . '/src/ZKAccess/BackupDrive.php';
 $config = require $appRoot . '/config.php';
 $pdo = database();
 
+// WHM incident notifications use the verified tick, independent of reminders.
+// Keep their lock and errors separate from the ZKAccess archive worker.
+$alertLocked = false;
+try {
+    if ((int)$pdo->query("SELECT GET_LOCK('room_check_whm_disk_alert', 0)")->fetchColumn() === 1) {
+        $alertLocked = true;
+        require_once $appRoot . '/src/Notifications/WhatsAppCloudClient.php';
+        require_once $appRoot . '/src/Notifications/WhatsAppDiskHealthNotifier.php';
+        (new WhatsAppDiskHealthNotifier($pdo, $config['whatsapp'],
+            '/home/welcome/room-check-private'))->runAndRecord();
+    }
+} catch (Throwable) {
+    fwrite(STDERR, "WHM alert check failed; inspect private maintenance report.\n");
+} finally {
+    if ($alertLocked) $pdo->query("SELECT RELEASE_LOCK('room_check_whm_disk_alert')");
+}
+
 $locked = false;
 $failed = false;
 try {

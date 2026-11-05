@@ -74,3 +74,31 @@ def read_daily(day, wait_seconds=690):
         if time.monotonic() >= deadline:
             raise Rejected("daily_log_report_unavailable")
         time.sleep(min(20, max(0, deadline - time.monotonic())))
+
+
+def read_alert_check(wait_seconds=360):
+    """Verify activation and the existing cron's dispatch heartbeat, without IDs."""
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            activation = request_api("Fileman", "get_file_content", {"dir": PRIVATE, "file": "whm-disk-alert-activation.json"})
+            check = request_api("Fileman", "get_file_content", {"dir": PRIVATE, "file": "whm-disk-whatsapp-last-check.json"})
+            for item in (activation, check):
+                if not isinstance(item, dict) or not isinstance(item.get("content"), str) or len(item["content"]) > 4096:
+                    raise ValueError()
+            activation = json.loads(activation["content"])
+            check = json.loads(check["content"])
+            if (activation.get("template") != "whm_storage_alert_v1" or activation.get("language") != "pt_PT"
+                    or activation.get("state") != "meta_accepted" or check.get("schema") != "whm-disk-alert-check-v1"):
+                raise ValueError()
+            when = dt.datetime.strptime(check["checked_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+            age = (dt.datetime.now(dt.timezone.utc) - when).total_seconds()
+            if not 0 <= age <= 900 or check.get("status") not in {"healthy_no_message", "already_notified", "meta_accepted"}:
+                raise ValueError()
+            return {"activation": "meta_accepted", "dispatch": check["status"], "checked_utc": check["checked_utc"],
+                    "handset_delivery": "not_confirmed"}
+        except (Rejected, ValueError, KeyError, TypeError, AttributeError):
+            pass
+        if time.monotonic() >= deadline:
+            raise Rejected("daily_whatsapp_check_unverified")
+        time.sleep(min(20, max(0, deadline - time.monotonic())))

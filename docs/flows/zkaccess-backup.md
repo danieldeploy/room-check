@@ -102,3 +102,9 @@ ou email. Uma falha não altera o resultado do arquivo ZKTeco nem impede a sua
 execução; a auditoria diária assinala o relatório de logs em falta/desatualizado.
 Não foi criado outro cron. Horários, locks MySQL, upload e retenção ZKTeco
 mantêm-se. Contrato: `docs/CPANEL_DISK_MAINTENANCE.md`.
+
+A verificação de alertas WHM reutiliza também este tick, após inicializar a DB,
+com lock MySQL independente `room_check_whm_disk_alert`. O dispatcher grava um
+heartbeat privado sem destinatário/ID de mensagem; falhas não interrompem o
+arquivo ZKTeco. A chamada WHM saiu do cron de lembretes, sem alterar os lembretes
+de tarefas/tradução. O teste de ativação é único e separado da execução normal.

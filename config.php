@@ -74,7 +74,10 @@ return [
         'default_country_code' => $localConfig['whatsapp']['default_country_code'] ?? '351',
         // Only a dedicated Meta-approved template can enable WHM incident alerts.
         'disk_alert' => [
-            'enabled' => (bool) ($localConfig['whatsapp']['disk_alert']['enabled'] ?? false),
+            // Absent = require the private successful activation receipt.
+            // An explicit false remains an operator-controlled disable.
+            'enabled' => isset($localConfig['whatsapp']['disk_alert']['enabled'])
+                ? (bool)$localConfig['whatsapp']['disk_alert']['enabled'] : null,
             'template_name' => $localConfig['whatsapp']['disk_alert']['template_name']
                 ?? 'whm_storage_alert_v1',
         ],

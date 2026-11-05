@@ -11,11 +11,12 @@ import json
 import os
 import re
 import sys
+import time
 from zoneinfo import ZoneInfo
 
 from cpanel_deep_audit import backups, browsers, disk_usage, logs, search, BACKUP, BROWSER
 from cpanel_disk_cleanup import Rejected, request_api
-from cpanel_daily_log_report import read_daily
+from cpanel_daily_log_report import read_daily, read_alert_check
 
 HOME = "/home/welcome"
 PRIVATE = HOME + "/room-check-private"
@@ -176,7 +177,7 @@ def compute_alert(pct, growth, log_growth, new_roots, browser_versions, audit_er
     return status, selected, details[selected], actions[selected], reasons
 
 
-def report(now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes, log_content=None):
+def report(now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes, log_content=None, alert_check=None):
     datestr = now.strftime("%Y-%m-%d")
     used = float(summary["quota_used_mb"])
     limit = float(summary["quota_limit_mb"])
@@ -230,6 +231,8 @@ def report(now, previous, summary, backup_data, browser_data, log_data, errors, 
             if isinstance(value, dict):
                 value = ",".join(f"{k}:{v}" for k, v in sorted(value.items())) or "none"
             fields.append(("log_content_" + key, "unknown" if value is None else str(value)))
+    if alert_check:
+        fields.extend(("whatsapp_" + key, value) for key, value in alert_check.items())
     payload = "".join(f"{key}={value}\n" for key, value in fields)
     require(len(payload.encode("utf-8")) < MAX_TEXT_BYTES, "report_too_large")
     return payload, status, alert, pct, new_roots
@@ -256,24 +259,31 @@ def main():
     summary, backup_data, browser_data, log_data, errors = audit()
     roots = root_hashes()
     log_content = None
+    alert_check = None
+    started = time.monotonic()
     try:
         log_content = read_daily(date_str)
         if log_content["status"] == "partial":
             errors.append("daily_log_content_partial")
     except Rejected:
         errors.append("daily_log_content_unavailable")
+    if log_content is not None:
+        try:
+            alert_check = read_alert_check(wait_seconds=max(0, 690 - (time.monotonic() - started)))
+        except Rejected:
+            errors.append("daily_whatsapp_check_unverified")
     outcomes = {k: outcome(v) for k, v in (
         ("backup", "BACKUP_STEP"), ("cache", "CACHE_STEP"), ("inventory", "INVENTORY_STEP"))}
     text, status, alert, pct, new_dirs = report(
-        now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes, log_content)
+        now, previous, summary, backup_data, browser_data, log_data, errors, roots, outcomes, log_content, alert_check)
     name = f"whm-disk-{date_str}.txt"
     write_once(name, text, entries)
     print(json.dumps({"ok": True, "report": "private_daily_txt",
                       "date": date_str, "status": status, "alert": alert,
                       "quota_percent": pct, "new_root_directories": new_dirs,
-                      "readback_verified": True, "log_content": log_content, "whatsapp_delivery": "separate_private_hub_cron"},
+                      "readback_verified": True, "log_content": log_content, "whatsapp": alert_check},
                      sort_keys=True), flush=True)
-    if log_content is None or log_content["status"] == "partial":
+    if log_content is None or log_content["status"] == "partial" or alert_check is None:
         raise Rejected("daily_log_verification_incomplete_txt_saved")
 
 
