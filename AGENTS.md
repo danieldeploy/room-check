@@ -60,6 +60,20 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   permanent service, cron or five-minute global tab scan.** No task = no tab
   cleanup work. A short delay is permitted only for a specific pending tab,
   never as an always-on poller.
+- The same ownership rule applies to File Explorer windows created by an
+  automation on AccesControl: register the exact HWND when opening and close
+  only that window after verified task completion. Never terminate
+  `explorer.exe` or close windows opened manually, reused by the owner,
+  in use, or of uncertain origin.
+- A reusable **nonresident** helper is installed locally at
+  `%LOCALAPPDATA%\\ChatGPTAutomation\\ManagedUI\\managed-ui.mjs` (read
+  `README.md` in that folder). Ad-hoc ChatGPT/Remote Desktop Commander
+  automations may use `begin`, `open-tab`/`open-explorer`, and `finish`
+  to keep exact task ownership. Existing code that already tracks its own
+  tabs, such as the invoice runner, must keep its verified cleanup.
+  Never assume the helper automatically intercepts every ChatGPT tool,
+  browser, chat, or manually opened window; unsupported tools must use
+  their own cleanup when possible or report the limit.
 - Acceptance for any new browser automation: explicitly track each created tab,
   safely close it after completion (including error cleanup when confirmed safe),
   retain reused/manual tabs and all sessions, preserve human intervention and
