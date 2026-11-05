@@ -59,6 +59,28 @@ under `docs/flows/`.
   AccesControl app and live acceptance remain to be verified separately**.
   See `docs/invoices-multiplatform.md` for behavior and acceptance.
 
+## ChatGPT shared Chrome/Explorer cleanup on AccesControl (2026-11-04)
+
+- The browser-tab ownership rule was integrated via PR #326 (commit
+  `17fba71d93ae5b3102e48ef90281a7758d552ea7`); the Windows agent files
+  were installed and checked with a real temporary Chrome tab, preserving
+  existing tabs and running Chrome sessions. It adds no background watcher.
+- A reusable **local helper for ad-hoc chats** is installed at
+  `%LOCALAPPDATA%\\ChatGPTAutomation\\ManagedUI\\managed-ui.mjs`, with
+  `explorer-ownership.ps1`, a README and a prepared global-instructions text.
+  It opens/registers exact task-owned Chrome targets and Explorer HWNDs, and
+  attempts safe closure only when `finish` is explicitly invoked. Tests
+  confirmed created Chrome/Explorer windows close while prior windows remain;
+  a synthetic filled textarea was preserved pending safe manual completion.
+- This helper does **not** hook all ChatGPT plugins, cloud browsers or commands
+  that open windows without it. Unowned/manual windows are deliberately untouched.
+  ChatGPT global Custom Instructions cannot be edited through the currently
+  connected account tools; the user must save the prepared text in ChatGPT
+  Settings -> Personalization for cross-conversation guidance. This remains
+  guidance, not universal tool-level enforcement.
+- The ad-hoc helper has no cPanel deployment component; this PR only makes
+  its usage/limitations durable in the Management Hub repository.
+
 ## Management Hub / Room Check
 
 - PHP/MySQL application hosted at `check.welcomehostel.pt`.
