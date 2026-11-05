@@ -5,6 +5,8 @@ Never prints any raw log content, name, path, domain, URL, token or arbitrary
 string from server. Polls only the exact known private JSON file. No writes.
 """
 import json
+import hashlib
+from pathlib import Path
 import os
 import re
 import sys
@@ -14,6 +16,7 @@ from cpanel_disk_cleanup import Rejected, request_api
 
 PRIVATE = "/home/welcome/room-check-private"
 REPORT = "whm-log-full-20261104.json"
+MARKER = "whm-log-full-20261104.started"
 MAX_JSON = 60000
 WAIT_SECONDS = 690
 STEP = 25
@@ -32,6 +35,79 @@ ALLOWED_STATES = {
     "fully_streamed", "empty", "not_readable", "gzip_reader_missing",
     "compression_not_supported", "not_scanned",
 }
+
+def artifact_state():
+    """Read directory metadata, never unknown file contents or names."""
+    try:
+        rows = request_api("Fileman", "list_files", {"dir": PRIVATE, "show_hidden": 1})
+    except Rejected:
+        return {"directory_status": "unavailable"}
+    if not isinstance(rows, list) or len(rows) > 3000:
+        raise Rejected("invalid_private_listing")
+    out = {"directory_status": "read"}
+    for label, name in (("report", REPORT), ("marker", MARKER), ("temporary", REPORT + ".tmp")):
+        matches = [r for r in rows if isinstance(r, dict) and (r.get("file") or r.get("name")) == name]
+        if not matches:
+            out[label] = {"state": "absent"}
+        elif len(matches) == 1:
+            row = matches[0]
+            out[label] = {"state": "file" if row.get("type") == "file" else "nonregular",
+                          "size_bytes": number(int(row.get("size") or 0)),
+                          "mtime": number(int(row.get("mtime") or 0), 5000000000)}
+        else:
+            raise Rejected("ambiguous_private_artifact")
+    return out
+
+def cron_state():
+    result = request_api("Cron", "listcron", {}, legacy=True)
+    rows = result.get("data") if isinstance(result, dict) else None
+    if not isinstance(rows, list) or len(rows) > 100:
+        raise Rejected("invalid_cron_list")
+    known = {
+        "private": PRIVATE + "/cron/whatsapp-reminders.php",
+        "repository": "/home/welcome/repositories/room-check/cron/whatsapp-reminders.php",
+        "public_legacy": "/home/welcome/public_html/check/cron/whatsapp-reminders.php",
+    }
+    out = {"reminder_entries": 0, "entrypoints": []}
+    for row in rows:
+        cmd = row.get("command") if isinstance(row, dict) else None
+        if cmd is None: continue
+        if not isinstance(cmd, str): raise Rejected("invalid_cron_command")
+        if "whatsapp-reminders.php" not in cmd: continue
+        out["reminder_entries"] += 1
+        kind = next((k for k, p in known.items()
+                     if re.search(r"(?<![A-Za-z0-9_./-])" + re.escape(p) + r"(?=$|[\s\"'])", cmd)), None)
+        item = {"target": kind or "unrecognized", "php_cli_explicit": "/usr/local/bin/php" in cmd}
+        if kind:
+            path = known[kind]
+            try:
+                response = request_api("Fileman", "get_file_content", {
+                    "dir": path.rsplit("/", 1)[0], "file": "whatsapp-reminders.php"})
+                source = response if isinstance(response, str) else next(
+                    (response[k] for k in ("content", "file_content", "data")
+                     if isinstance(response, dict) and isinstance(response.get(k), str)), None)
+                if source is None or len(source.encode()) > 100000:
+                    raise Rejected("invalid_cron_source")
+                item.update({"source_read": True,
+                             "audit_hook_present": "WhmPrivateLogAuditOnce::runIfNeeded" in source,
+                             "matches_reviewed_source": hashlib.sha256(source.encode()).hexdigest() ==
+                             hashlib.sha256((Path(__file__).resolve().parents[1] /
+                                             "cron/whatsapp-reminders.php").read_bytes()).hexdigest()})
+            except Rejected:
+                item["source_read"] = False
+        out["entrypoints"].append(item)
+    return out
+
+def inspect_state():
+    state = artifact_state()
+    print(json.dumps({"read_only": True, "private_artifacts": state,
+                      "cron": cron_state()}, sort_keys=True), flush=True)
+    result = fetch()
+    if result is not None:
+        print(json.dumps(result, sort_keys=True), flush=True)
+        return
+    exists = state.get("report", {}).get("state") == "file"
+    raise Rejected("private_report_unreadable" if exists else "private_report_absent_or_listing_unavailable")
 
 def number(x, maximum=1000000000):
     if type(x) is not int or not (0 <= x <= maximum):
@@ -150,7 +226,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        inspect_state() if sys.argv[1:] == ["--inspect-state"] else main()
     except Rejected as e:
         print(json.dumps({"ok": False, "read_only": True,
                           "error_code": str(e)}), flush=True)

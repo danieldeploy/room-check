@@ -30,6 +30,36 @@ def valid():
 
 
 class ReadBackTests(unittest.TestCase):
+    def test_metadata_distinguishes_absence_from_api_failure(self):
+        with mock.patch.object(reader, "request_api", return_value=[]):
+            self.assertEqual(reader.artifact_state()["report"]["state"], "absent")
+        with mock.patch.object(reader, "request_api", side_effect=reader.Rejected("uapi_failed")):
+            self.assertEqual(reader.artifact_state()["directory_status"], "unavailable")
+
+    def test_metadata_only_outputs_fixed_artifacts(self):
+        rows = [{"file": "private-secret.json", "type": "file", "size": "123"},
+                {"file": reader.REPORT, "type": "file", "size": "345", "mtime": "1"},
+                {"file": reader.MARKER, "type": "file", "size": "0", "mtime": "2"}]
+        with mock.patch.object(reader, "request_api", return_value=rows):
+            out = reader.artifact_state()
+        self.assertEqual(out["report"]["size_bytes"], 345)
+        self.assertEqual(out["marker"]["state"], "file")
+        self.assertNotIn("private-secret", json.dumps(out))
+
+    def test_cron_probe_checks_only_known_source_and_never_prints_commands(self):
+        script = "/home/welcome/room-check-private/cron/whatsapp-reminders.php"
+        rows = [{"command": "SECRET=value /usr/local/bin/php " + script + " > /private/output 2>&1"}]
+        def api(module, function, params, **kw):
+            if module == "Cron": return {"data": rows}
+            self.assertEqual(params["file"], "whatsapp-reminders.php")
+            return {"content": "WhmPrivateLogAuditOnce::runIfNeeded SECRET"}
+        with mock.patch.object(reader, "request_api", side_effect=api):
+            out = reader.cron_state()
+        self.assertEqual(out["reminder_entries"], 1)
+        self.assertTrue(out["entrypoints"][0]["audit_hook_present"])
+        self.assertNotIn("SECRET", json.dumps(out))
+        self.assertNotIn("/private/output", json.dumps(out))
+
     def test_exact_sanitized_projection_no_content_or_filenames(self):
         payload = valid()
         out = reader.sanitize(payload)
