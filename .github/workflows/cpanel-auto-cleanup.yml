@@ -1,5 +1,12 @@
-name: Automatic cPanel cache recovery
+name: Daily cPanel storage and log verification
 on:
+  push:
+    branches: [agent/room-item-assignments]
+    paths:
+      - cron/whm-log-daily.php
+      - deploy/cpanel_daily_log_report.py
+      - deploy/cpanel_daily_disk_report.py
+      - .github/workflows/cpanel-auto-cleanup.yml
   workflow_dispatch:
 
 permissions:
@@ -13,7 +20,7 @@ jobs:
   recovery:
     if: github.ref == 'refs/heads/agent/room-item-assignments'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 20
     environment: management-hub-production
     services:
       mysql:
@@ -70,4 +77,11 @@ jobs:
           BACKUP_STEP: ${{ steps.backups.outcome }}
           CACHE_STEP: ${{ steps.cache.outcome }}
         run: |
-          timeout --signal=TERM --kill-after=10s 180s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_daily_disk_report.py
+          timeout --signal=TERM --kill-after=10s 850s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_daily_disk_report.py
+
+      - name: Verify WhatsApp template dependency after maintenance changes
+        if: always() && github.event_name == 'push' && steps.checkout_source.outcome == 'success'
+        continue-on-error: true
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: timeout --signal=TERM --kill-after=5s 90s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/whm_meta_template_probe_once.py

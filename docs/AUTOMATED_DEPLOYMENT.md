@@ -114,12 +114,11 @@ Falhas na compactação deixam o backup original intacto e não bloqueiam a publ
 
 ## Migrações e manutenção
 
-A investigação pontual de logs autorizada em 05/11/2026 chama o scanner
-privado `cron/whm-log-audit-once.php` no fim da publicação, através do PHP CLI
-já usado pelo deploy, com limite de 60 segundos. O marcador privado impede
-repetições; falhas são assinaladas sem bloquear uma publicação já completa.
-Não altera crontab, logs, retenção ou dados. Verificar o relatório privado
-antes de retirar esta chamada; não limpar marcadores automaticamente.
+A investigação pontual de logs concluiu com sucesso no deployment 384 e no
+relatório protegido 41940619898. A chamada temporária no fim do release foi
+retirada; os respetivos marcador e relatório privados são preservados.
+A verificação incremental diária usa o cron existente, conforme
+`CPANEL_DISK_MAINTENANCE.md`, sem adicionar execução de logs ao deploy.
 
 O fluxo mantém apenas a migração específica já integrada pelo projeto. Não executa
 automaticamente todos os ficheiros SQL antigos. Cada migração futura deve ser

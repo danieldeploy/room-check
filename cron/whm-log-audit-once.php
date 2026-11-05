@@ -5,7 +5,7 @@ declare(strict_types=1);
  * ONE-OFF full streaming log analysis; installed under the private cPanel cron
  * directory, never under public_html. No raw log content, filenames or domains
  * appear in result/STDOUT/STDERR. No log removal, rotation or truncation.
- * The existing WhatsApp reminders cron invokes runIfNeeded once only.
+ * Historical scan completed 2026-11-05. Classifiers are reused by the daily scanner.
  */
 final class WhmPrivateLogAuditOnce
 {

@@ -7,6 +7,11 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+// Reuse this existing tick before DB/Drive work. Own lock, bounded read-only
+// pass once per Lisbon day; failures never interrupt backup delivery.
+require_once __DIR__ . '/whm-log-daily.php';
+WhmDailyLogAudit::runIfDue();
+
 $appRoot = getenv('ROOM_CHECK_APP_ROOT') ?: rtrim((string) getenv('HOME'), '/') . '/public_html/check';
 require $appRoot . '/lib.php';
 require_once $appRoot . '/src/ZKAccess/BackupDrive.php';

@@ -92,3 +92,13 @@ insuficiente pode ainda impedir a receção ou o arquivo e exige correção de q
 5. Confirmar na produção a execução agendada separada e verificar um novo
    backup criado no Windows e arquivado no Drive; apenas o cron instalado não
    constitui prova do ciclo diário completo.
+
+## Reutilização limitada do tick — 2026-11-05
+
+Antes de inicializar a base de dados/Drive, este cron chama a verificação diária
+privada dos logs WHM. Usa lock próprio, uma passagem limitada a oito segundos
+por dia de Lisboa (ou retoma de uma passagem incompleta), sem ler SQL, faturas
+ou email. Uma falha não altera o resultado do arquivo ZKTeco nem impede a sua
+execução; a auditoria diária assinala o relatório de logs em falta/desatualizado.
+Não foi criado outro cron. Horários, locks MySQL, upload e retenção ZKTeco
+mantêm-se. Contrato: `docs/CPANEL_DISK_MAINTENANCE.md`.

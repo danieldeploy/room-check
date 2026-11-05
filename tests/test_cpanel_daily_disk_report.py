@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import pathlib
 import sys
 import unittest
@@ -6,9 +7,61 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy"))
 import cpanel_daily_disk_report as report
+import cpanel_daily_log_report as daily_logs
 
 
 class DailyDiskReportTests(unittest.TestCase):
+    def log_fixture(self, **changes):
+        value = dict(schema="whm-log-daily-v1", date_lisbon="2026-11-05", status="complete",
+                     started_utc="2026-11-05T00:00:00Z", checked_utc="2026-11-05T00:00:01Z",
+                     window_start_utc="2026-11-04T00:00:00Z", first_event_date=None, last_event_date=None)
+        value.update({k: 0 for k in daily_logs.NUMBERS})
+        value.update({k: [] for k in daily_logs.COUNTS})
+        return dict(value, **changes)
+
+    def test_safe_aggregate_rejects_unknown_names_and_raw_strings(self):
+        good = self.log_fixture(severity_counts={"fatal": 2})
+        self.assertEqual(daily_logs.validate(json.dumps(good), "2026-11-05")["severity_counts"], {"fatal": 2})
+        for change in (dict(severity_counts={"guest@example.org": 2}), dict(bytes_read=True),
+                       dict(first_event_date="secret"), dict(date_lisbon="2026-11-04"),
+                       dict(origin_counts={"unknown": "SECRET"})):
+            with self.subTest(change=change), self.assertRaises(report.Rejected):
+                daily_logs.validate(json.dumps(dict(good, **change)), "2026-11-05")
+
+    def test_reader_uses_exact_private_source_and_aggregate_only(self):
+        source = (pathlib.Path(__file__).resolve().parents[1] / "cron/whm-log-daily.php").read_text()
+        with mock.patch.object(daily_logs, "request_api", side_effect=[
+                {"content": source}, {"content": json.dumps(self.log_fixture())}]) as api:
+            value = daily_logs.read_daily("2026-11-05", wait_seconds=0)
+        self.assertEqual(value["status"], "complete")
+        self.assertEqual([c.args[2]["file"] for c in api.call_args_list], ["whm-log-daily.php", "whm-log-daily.json"])
+        self.assertTrue(all(c.args[1] == "get_file_content" for c in api.call_args_list))
+        with mock.patch.object(daily_logs, "request_api", return_value={"content": "stale source"}):
+            with self.assertRaises(report.Rejected):
+                daily_logs.read_daily("2026-11-05", wait_seconds=0)
+
+    def test_new_active_errors_alert_but_archives_do_not(self):
+        good = {"backup": "success", "cache": "success", "inventory": "success"}
+        self.assertEqual(report.compute_alert(70, 0, 0, 0, {}, [], good,
+            {"severity_counts": {"fatal": 1}})[1], "log_errors")
+        self.assertEqual(report.compute_alert(70, 0, 0, 0, {}, [], good,
+            {"archive_severity_counts": {"fatal": 100}})[1], "none")
+        self.assertEqual(report.compute_alert(98, 0, 0, 0, {}, [], good,
+            {"severity_counts": {"fatal": 1}})[1], "quota98")
+
+    def test_unavailable_content_is_written_as_failure_before_exit(self):
+        audit = ({"quota_used_mb": 4200, "quota_limit_mb": 6000, "directories_mb": {}}, {}, {}, {}, [])
+        with mock.patch.object(report, "directory", return_value={}), \
+                mock.patch.object(report, "audit", return_value=audit), \
+                mock.patch.object(report, "root_hashes", return_value=""), \
+                mock.patch.object(report, "read_daily", side_effect=report.Rejected("failed")), \
+                mock.patch.object(report, "outcome", return_value="success"), \
+                mock.patch.object(report, "write_once") as write, mock.patch("builtins.print"):
+            with self.assertRaises(report.Rejected): report.main()
+        txt = write.call_args.args[1]
+        self.assertIn("daily_log_content_unavailable", txt)
+        self.assertIn("alert_code=maintenance_issue", txt)
+
     def test_exact_requested_quota_thresholds(self):
         healthy = {"backup": "success", "cache": "success", "inventory": "success"}
         samples = [

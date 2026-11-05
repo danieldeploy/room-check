@@ -15,6 +15,8 @@ function txt(string $day, string $code, string $status = 'warning', float $pct =
         "usage_mb=4950.0\n";
 }
 $day = (new DateTimeImmutable('now', new DateTimeZone('Europe/Lisbon')))->format('Y-m-d');
+verify(WhatsAppDiskHealthNotifier::parse(txt($day,'log_errors','critical',70))['code'] === 'log_errors',
+       'Accepts new active-log error incident');
 verify(WhatsAppDiskHealthNotifier::parse(txt($day,'quota90'))['code'] === 'quota90',
        'Accepts 90 percent alert');
 verify(WhatsAppDiskHealthNotifier::parse(txt($day,'quota95','warning',95))['code'] === 'quota95',
