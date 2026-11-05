@@ -110,3 +110,10 @@ Antes de qualquer limpeza futura, distinguir erros ja resolvidos de pendentes, d
 A API de revendedor consegue listar os logs mas não ler integralmente um ficheiro com 110,78 MiB. A análise em leitura da UAPI devolveu zero linhas classificáveis para dois domínios (sem excluir que o conteúdo exista). Para analisar os bytes locais com custo de memória limitado, `cron/whm-log-audit-once.php` é instalado **fora do webroot** na pasta privada cron e executado uma única vez pelo cron WhatsApp existente **após** os avisos e a libertação do bloqueio de BD. Restringe-se a `/home/welcome/logs`, lê até 250 MiB de ficheiros, tenta descomprimir `.gz` (máximo 450 MiB descomprimidos) e devolve só contagens de severidade, causas, anos, repetição e MB para um JSON privado de nome fixo. Não inclui linhas, caminhos, domínios, utilizadores, IP ou tokens. Ficheiros não suportados são marcados como não analisados; não inferir eliminação segura do nome ou idade.
 
 O marcador `whm-log-full-20261104.started` é criado uma vez para impedir revisitas e evitar consumo contínuo; o resultado fica em `whm-log-full-20261104.json`. O gancho temporário será retirado após leitura e verificação do resultado. Não cria cron adicional e não altera o agendamento diário existente.
+
+O timeout observado em 04/11 foi do leitor Python, não uma prova de timeout
+do PHP. A opção `--inspect-state` verifica primeiro metadados dos três
+artefactos de nome fixo e o destino/código do cron conhecido, sem expor comandos
+ou código privado. Distingue relatório ausente de existente mas ilegível,
+sem limpar o marcador nem voltar a executar o analisador. Não confundir este
+diagnóstico pontual com análise incremental diária já implementada.

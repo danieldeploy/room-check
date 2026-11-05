@@ -1,5 +1,17 @@
 # Management Hub — current project state
 
+## WHM log report diagnosis (2026-11-05)
+
+Deployment 381 installed `3c2f6d0`; CI passed. Audit run 41907079872 failed
+with `private_report_not_generated_before_timeout` in the **Python reader**.
+This is not evidence of a PHP runtime timeout: the reader also treated an
+unreadable report as missing. Before retrying any execution, the same protected
+read-only workflow now checks exact report/marker/temp metadata and the active
+reminder cron's known entrypoint and source hash. It prints only fixed labels,
+booleans and metadata, never cron commands or private source. No log deletion,
+cron edit, marker reset or application behavior change is part of this probe.
+Daily incremental content analysis remains pending the diagnosis and acceptance.
+
 Last reviewed: 2026-10-29 (Europe/Lisbon)
 
 This file records the current project state, not an immutable history. Durable

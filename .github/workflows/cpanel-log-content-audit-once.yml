@@ -33,9 +33,9 @@ jobs:
         run: |
           timeout --signal=TERM --kill-after=10s 350s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_log_contents_analysis_once.py
 
-      - name: Read and sanitize one private PHP cron full-log report after deployment
+      - name: Inspect private report metadata and active cron before any retry
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_read_private_full_log_audit_once.py -v
-          timeout --signal=TERM --kill-after=10s 750s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_read_private_full_log_audit_once.py
+          timeout --signal=TERM --kill-after=10s 120s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_read_private_full_log_audit_once.py --inspect-state
