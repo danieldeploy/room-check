@@ -188,3 +188,14 @@ before another release; never `git reset --hard` merely from size metadata.
 
 O diagnóstico protegido apontou dois ficheiros versionados alterados e dois ficheiros extra na pasta `.github` do clone de *staging*, mesmo depois de preservar os nove extras anteriores em quarentena privada. A correção guardada pelo workflow usa um novo diretório privado (0700), separadamente do anterior; valida novamente o SHA instalado, ausência de tarefas ativas, divergências exatas e fast-forward, conserva os originais e extras, e só então repõe `ci.yml` e `PROJECT_STATE.md` a partir dos blobs de GitHub correspondentes ao SHA **instalado**, com comparação do hash Git e releitura no servidor. O conteúdo enviado ao WHM segue num corpo POST, não na URL. Se falhar qualquer etapa, não repete operações incertas e não autoriza o deploy. O fluxo habitual mantém os testes, backup pré-publicação e verificações do commit e da versão instalados.
 
+
+## WHM alert activation after Meta UI approval (2026-11-05)
+
+The reviewed optional `deploy/activate_whm_alerts_once.php` is fixed to the
+welcome Hub and the existing configured manager. After observing the dedicated
+Utility/PT template active in Meta, the owner-authorized test is sent through
+the existing client. An exclusive private pre-send receipt prevents repetition;
+only a confirmed provider message ID enables default incident sending. A failure
+does not mask a completed core release and is checked by daily acceptance.
+Do not reset an uncertain receipt, expose provider IDs/recipients or equate API
+acceptance with handset delivery. No app secret or config.local.php is rewritten.

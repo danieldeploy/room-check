@@ -104,3 +104,8 @@ The historical full scan completed on 2026-11-05; never reset its marker or
 report to force a repeat. Daily cursors belong in private storage, and a corrupt
 cursor requires diagnosis, not automatic rebaselining. Reuse the installed
 ZKAccess cron tick with isolated failures; no additional permanent scheduler.
+
+WHM alert template approval was confirmed in the existing Meta UI on 2026-11-05;
+WABA discovery failure is not equivalent to rejection. Treat private activation
+and dispatch receipts as authoritative runtime evidence. Do not repeat the
+one-time message on uncertain outcomes or export recipient/provider identifiers.

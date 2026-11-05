@@ -23,9 +23,25 @@ archived errors are reported separately. Existing quota priority is preserved.
 
 Local regression checks cover baseline, append, rename/truncate, gzip,
 idempotence, bounded continuation, privacy, reader validation and failure TXT.
-Production baseline/cron/TXT acceptance for this change must still be observed
-after merge; implementation alone is not functional verification.
-WhatsApp remains disabled pending confirmed Meta approval and delivery test.
+Production acceptance succeeded: PR #331, commit `51a438c`, deployment 385;
+run 41946097000 verified 13-log baseline produced by the existing cron at
+2026-11-05 01:10:02 UTC and exact private TXT readback. Latest sampled quota
+72.17%; two eligible duplicate backups removed after successful MySQL restore.
+The next calendar day's append scan has not yet been observed in production.
+
+The Meta API probe could not discover the WABA (`waba_id_unavailable`). This
+was not proof of pending template approval: the existing authorized Meta UI
+was refreshed and confirmed `whm_storage_alert_v1` active, Utility, Portuguese
+(POR), with exactly three parameters. No new Meta template or recipient.
+A reviewed one-time activation test now uses the existing manager and client,
+records an exclusive pre-send receipt and enables WHM alerts only after Meta
+accepts the dedicated test. A configured explicit false still disables alerts.
+Uncertain sends remain disabled and are never automatically repeated. The
+normal dispatcher moves from the unverified reminders entrypoint to the
+already verified ZKAccess tick, under a separate MySQL lock, with a private
+heartbeat. The protected daily TXT verifies both activation and fresh dispatch.
+Production test acceptance/heartbeat remain to be observed after this release;
+Meta API acceptance must not be described as confirmed handset delivery.
 See `docs/CPANEL_DISK_MAINTENANCE.md` for timing, limits and recovery.
 
 Last reviewed: 2026-10-29 (Europe/Lisbon)

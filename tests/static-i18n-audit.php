@@ -65,6 +65,9 @@ $technicalExceptions = [
     // Dedicated WhatsApp utility-template parameters are server-side transport
     // text, not shared UI. Do not broaden this exception to other paths.
     'src/Notifications/WhatsAppDiskHealthNotifier.php' => [
+        'Teste da verificação diária',
+        'Mensagem de teste, sem incidente real',
+        'Nenhuma ação necessária. Os alertas automáticos serão enviados apenas quando existir um problema.',
         'Verifique a quota e nao elimine dados sem auditoria.',
         'Reveja as categorias maiores e a limpeza segura.',
         'Investigue o log ativo sem o apagar.',

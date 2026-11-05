@@ -40,6 +40,22 @@ class DailyDiskReportTests(unittest.TestCase):
             with self.assertRaises(report.Rejected):
                 daily_logs.read_daily("2026-11-05", wait_seconds=0)
 
+    def test_alert_check_requires_accepted_test_and_fresh_normal_cron(self):
+        activation = dict(template="whm_storage_alert_v1", language="pt_PT", state="meta_accepted",
+                          message_id="PRIVATE_MESSAGE_ID")
+        heartbeat = dict(schema="whm-disk-alert-check-v1", status="healthy_no_message",
+                         checked_utc=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        responses = [{"content": json.dumps(v)} for v in (activation, heartbeat)]
+        with mock.patch.object(daily_logs, "request_api", side_effect=responses):
+            got = daily_logs.read_alert_check(wait_seconds=0)
+        self.assertEqual(got["dispatch"], "healthy_no_message")
+        self.assertNotIn("PRIVATE", json.dumps(got))
+        self.assertEqual(got["handset_delivery"], "not_confirmed")
+        for changes in (dict(status="disabled_until_meta_approval"), dict(checked_utc="2020-01-01T00:00:00Z")):
+            responses = [{"content": json.dumps(v)} for v in (activation, dict(heartbeat, **changes))]
+            with mock.patch.object(daily_logs, "request_api", side_effect=responses), self.assertRaises(report.Rejected):
+                daily_logs.read_alert_check(wait_seconds=0)
+
     def test_new_active_errors_alert_but_archives_do_not(self):
         good = {"backup": "success", "cache": "success", "inventory": "success"}
         self.assertEqual(report.compute_alert(70, 0, 0, 0, {}, [], good,

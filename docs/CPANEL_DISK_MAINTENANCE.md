@@ -185,3 +185,38 @@ cron metadata before any retry; never delete a cursor to make a check green.
 
 On maintenance-code pushes, the existing read-only Meta probe checks the alert
 template dependency. It never enables sending or sends a message.
+
+## Alert activation and actual cron proof — 2026-11-05
+
+Daily verification passed in run 41946097000 on installed `51a438c` / deploy 385:
+13-log baseline at 01:10:02 UTC, TXT readback verified, 72.17% sampled quota.
+The two eligible backup deletions were preceded by successful MySQL restore.
+No logs or emails were removed.
+
+The existing Meta UI now confirms the dedicated Utility/PT template **active**.
+The API's `waba_id_unavailable` was a discovery limitation, not a rejection.
+The temporary lookup-only workflow probe is retired in favor of checking the
+actual private test receipt and ordinary dispatch heartbeat.
+
+- The reviewed optional release helper `activate_whm_alerts_once.php` calls
+  the existing WhatsApp client and selects only the already configured active
+  gerente. It sends one explicitly labelled test, without a false incident.
+- An exclusive `whm-disk-alert-activation.json` is written **before** sending;
+  only `meta_accepted` enables default WHM sending. `sending`/`unconfirmed`
+  prevent retries and keep sending disabled. The provider ID stays private.
+  Never delete/reset this receipt to retry an ambiguous send. A configured
+  explicit `whatsapp.disk_alert.enabled=false` overrides successful activation.
+- WHM dispatch now runs on the verified existing `zkaccess-backups.php` tick,
+  after DB initialization, with lock `room_check_whm_disk_alert` independent
+  of the backup lock. Its old call is removed from `whatsapp-reminders.php`;
+  assignment and translation reminders retain their previous behavior.
+- The ordinary tick records `whm-disk-whatsapp-last-check.json` (0600), containing
+  only a fixed schema, status and UTC timestamp. No recipient/message ID.
+  Notification failures are isolated from ZKAccess backup processing.
+- The protected daily reader checks the accepted activation receipt and a
+  successful dispatch heartbeat no older than 15 minutes. It adds the result
+  to the TXT; unverified notification readiness produces maintenance_issue and
+  a failed check. Log/alert waits share the existing 690-second deadline.
+- A healthy report sends no routine message. Quota escalation, once-per-incident
+  deduplication and ambiguous-send protection remain unchanged. API acceptance
+  is verified separately from handset delivery; no delivery webhook is added.

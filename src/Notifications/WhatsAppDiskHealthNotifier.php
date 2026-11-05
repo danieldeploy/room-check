@@ -15,6 +15,8 @@ final class WhatsAppDiskHealthNotifier
 
     private const REPORT_PATTERN = '/^whm-disk-20[0-9]{2}-[0-9]{2}-[0-9]{2}\.txt$/D';
     private const STATE_NAME = 'whm-disk-whatsapp-state.json';
+    private const ACTIVATION_NAME = 'whm-disk-alert-activation.json';
+    private const CHECK_NAME = 'whm-disk-whatsapp-last-check.json';
 
     private const QUOTA_LEVELS = [
         'quota90' => 90,
@@ -131,15 +133,71 @@ final class WhatsAppDiskHealthNotifier
         return $state;
     }
 
-    private function saveState(array $state): void
+    private function saveState(array $state, string $name = self::STATE_NAME): void
     {
-        $path = $this->privateDir . '/' . self::STATE_NAME;
+        if (!in_array($name, [self::STATE_NAME, self::ACTIVATION_NAME, self::CHECK_NAME], true)) throw new RuntimeException('invalid_state_name');
+        $path = $this->privateDir . '/' . $name;
         $tmp = $path . '.tmp';
+        if (is_link($path) || is_link($tmp)) throw new RuntimeException('unsafe_state');
         $data = json_encode($state, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
         if (file_put_contents($tmp, $data, LOCK_EX) !== strlen($data)
             || !chmod($tmp, 0600) || !rename($tmp, $path)) {
             throw new RuntimeException('disk_alert_state_write_failed');
         }
+    }
+
+    private function activation(): array
+    {
+        $path = $this->privateDir . '/' . self::ACTIVATION_NAME;
+        if (!file_exists($path)) return ['state' => 'not_attempted'];
+        if (is_link($path) || !is_file($path) || filesize($path) > 4096) throw new RuntimeException('invalid_activation');
+        $data = json_decode((string) file_get_contents($path), true);
+        if (!is_array($data) || ($data['template'] ?? '') !== self::TEMPLATE
+            || ($data['language'] ?? '') !== self::LANGUAGE
+            || !in_array($data['state'] ?? '', ['sending', 'meta_accepted', 'unconfirmed'], true)) throw new RuntimeException('invalid_activation');
+        return $data;
+    }
+
+    /** Private CLI provisioning only, after the owner-authorized Meta UI review.
+     * A persisted pre-send marker prevents repeat sends after ambiguous outcomes.
+     */
+    public function activateApprovedTemplateOnce(?callable $sender = null, ?callable $recipientProvider = null): string
+    {
+        if (PHP_SAPI !== 'cli') throw new RuntimeException('cli_required');
+        $previous = $this->activation();
+        if ($previous['state'] !== 'not_attempted') return $previous['state'];
+        $mobile = $recipientProvider ? (string)$recipientProvider() : $this->configuredRecipient();
+        if ($mobile === '') return 'recipient_not_configured';
+        $path = $this->privateDir . '/' . self::ACTIVATION_NAME;
+        $mask = umask(0077);
+        try { $lock = @fopen($path, 'x'); } finally { umask($mask); }
+        if (!$lock) return 'attempt_already_started';
+        $receipt = ['template' => self::TEMPLATE, 'language' => self::LANGUAGE,
+            'state' => 'sending', 'checked_utc' => gmdate('Y-m-d\TH:i:s\Z')];
+        try {
+            $json = json_encode($receipt, JSON_THROW_ON_ERROR);
+            if (fwrite($lock, $json) !== strlen($json) || !fflush($lock)) throw new RuntimeException('activation_write_failed');
+        } finally { fclose($lock); }
+        try {
+            $values = ['Teste da verificação diária', 'Mensagem de teste, sem incidente real',
+                'Nenhuma ação necessária. Os alertas automáticos serão enviados apenas quando existir um problema.'];
+            $id = $sender ? $sender($mobile, $values, self::LANGUAGE, self::TEMPLATE)
+                : (new WhatsAppCloudClient($this->config))->sendTemplate($mobile, $values, self::LANGUAGE, self::TEMPLATE);
+            if (!is_string($id) || $id === '') throw new RuntimeException('unconfirmed_send');
+            $receipt['state'] = 'meta_accepted';
+            $receipt['message_id'] = $id; // Private receipt only; never printed in deployment logs.
+        } catch (Throwable) { $receipt['state'] = 'unconfirmed'; }
+        $this->saveState($receipt, self::ACTIVATION_NAME);
+        return $receipt['state'];
+    }
+
+    public function runAndRecord(): string
+    {
+        try { $status = $this->dispatch(); }
+        catch (Throwable) { $status = 'dispatch_failed'; }
+        $this->saveState(['schema' => 'whm-disk-alert-check-v1', 'status' => $status,
+            'checked_utc' => gmdate('Y-m-d\TH:i:s\Z')], self::CHECK_NAME);
+        return $status;
     }
 
     private function configuredRecipient(): string
@@ -163,7 +221,9 @@ final class WhatsAppDiskHealthNotifier
     public function dispatch(?callable $sender = null, ?callable $recipientProvider = null): string
     {
         $setting = $this->config['disk_alert'] ?? [];
-        if (!is_array($setting) || ($setting['enabled'] ?? false) !== true) {
+        $enabled = is_array($setting) ? ($setting['enabled'] ?? null) : false;
+        if ($enabled === null) $enabled = $this->activation()['state'] === 'meta_accepted';
+        if ($enabled !== true) {
             return 'disabled_until_meta_approval';
         }
         if (($setting['template_name'] ?? self::TEMPLATE) !== self::TEMPLATE) {
