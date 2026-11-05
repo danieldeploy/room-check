@@ -30,6 +30,14 @@ def valid():
 
 
 class ReadBackTests(unittest.TestCase):
+    def test_accepts_empty_php_counter_arrays_without_accepting_nonempty_lists(self):
+        payload = valid()
+        payload["files"][0]["year_counts"] = []
+        self.assertEqual(reader.sanitize(payload)["files"][0]["year_counts"], {})
+        self.assertEqual(reader.safe_counts([], reader.ALLOWED_REASONS), {})
+        with self.assertRaises(reader.Rejected):
+            reader.safe_counts(["private-line"], reader.ALLOWED_REASONS)
+
     def test_metadata_distinguishes_absence_from_api_failure(self):
         with mock.patch.object(reader, "request_api", return_value=[]):
             self.assertEqual(reader.artifact_state()["report"]["state"], "absent")

@@ -117,3 +117,12 @@ artefactos de nome fixo e o destino/código do cron conhecido, sem expor comando
 ou código privado. Distingue relatório ausente de existente mas ilegível,
 sem limpar o marcador nem voltar a executar o analisador. Não confundir este
 diagnóstico pontual com análise incremental diária já implementada.
+
+Em 05/11, a inspeção confirmou cron e código atualizados, mas ausência do
+marcador e do relatório: o analisador não tinha iniciado. O gancho temporário
+nos lembretes é retirado; a publicação normal invoca uma vez o mesmo PHP
+privado após as tarefas habituais, limitado a 60 segundos e ao marcador
+existente. A análise continua só de leitura. Se ficar marcador sem relatório,
+não reiniciar nem apagar o marcador sem nova inspeção. O leitor protegido
+espera pela publicação e valida apenas os dados agregados. Esta execução
+pontual ainda não implementa a análise diária incremental.

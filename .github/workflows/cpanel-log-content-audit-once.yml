@@ -38,4 +38,4 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_read_private_full_log_audit_once.py -v
-          timeout --signal=TERM --kill-after=10s 120s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_read_private_full_log_audit_once.py --inspect-state
+          timeout --signal=TERM --kill-after=10s 750s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_read_private_full_log_audit_once.py --inspect-state

@@ -1,5 +1,22 @@
 # Management Hub — current project state
 
+## Log analysis start boundary confirmed (2026-11-05)
+
+Read-only run 41939754500 confirmed exactly one reminder cron targeting the
+private script, with the reviewed audit hook present and matching source.
+The private directory is readable and report, marker and temporary file are
+all absent. Therefore the one-time scan has not acquired its start marker;
+neither slow log reading nor a PHP timeout has been established. The exact
+reminder/environment early exit is not yet diagnosed.
+
+Remove the temporary dependency on completion of the reminders task. The
+ordinary reviewed release now invokes the same bounded PHP scanner once,
+after its normal work, with a 60-second limit, existing private marker and
+unchanged read-only scope. It never resets a marker or deletes logs. The
+protected reader inspects metadata first and waits for the release report;
+it accepts PHP's empty counter arrays without relaxing allowed keys/types.
+Real content results and daily incremental integration remain pending.
+
 ## WHM log report diagnosis (2026-11-05)
 
 Deployment 381 installed `3c2f6d0`; CI passed. Audit run 41907079872 failed
