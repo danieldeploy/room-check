@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][ValidateSet('install','schedule','status','open-explorer','inspect','close','process','start-chrome')][string]$Action)
+param([Parameter(Mandatory=$true)][ValidateSet('install','schedule','status','open-explorer','inspect','close','process','start-chrome','browser-present')][string]$Action)
 $ErrorActionPreference='Stop'
 $raw=[Console]::In.ReadToEnd();$request=if($raw){$raw|ConvertFrom-Json}else{[pscustomobject]@{}}
 $root=Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -25,6 +25,12 @@ try {
   if(-not $task){throw 'scheduler_missing'}
   if($Action -eq 'schedule'){$task.Enabled=($request.enabled -eq $true)}
   Output @{ok=$true;enabled=[bool]$task.Enabled;interval=[string]$task.Definition.Triggers.Item(1).Repetition.Interval;lastResult=$task.LastTaskResult};exit 0
+ }
+ if($Action -eq 'browser-present'){
+  $profile=if($request.profile -eq 'primary'){'controlled-booking-chrome'}elseif($request.profile -eq 'fresh_login'){'controlled-booking-login-chrome'}else{throw 'invalid_profile'}
+  $directory=Join-Path $env:LOCALAPPDATA ('ManagementHub\Invoices\data\'+$profile)
+  $present=@(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'"|Where-Object{[string]$_.CommandLine -notmatch '--type=' -and ([string]$_.CommandLine).IndexOf($directory,[StringComparison]::OrdinalIgnoreCase) -ge 0}).Count -gt 0
+  Output @{ok=$true;present=$present};exit 0
  }
  if($Action -eq 'start-chrome'){
   $profile=if($request.profile -eq 'primary'){'controlled-booking-chrome'}elseif($request.profile -eq 'fresh_login'){'controlled-booking-login-chrome'}else{throw 'invalid_profile'}

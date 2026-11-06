@@ -25,7 +25,8 @@ export function platform(action, data = {}) {
 export class Manager {
   constructor({ root = here, native = platform, browser, clock = () => Date.now() } = {}) {
     this.native = native; this.clock = clock;
-    this.browser = browser || new BrowserAdapter(process.env.LOCALAPPDATA, profile => native('start-chrome', { profile }));
+    this.browser = browser || new BrowserAdapter(process.env.LOCALAPPDATA, profile => native('start-chrome', { profile }),
+      async profile => (await native('browser-present', { profile })).present);
     this.registry = new Registry(root, enabled => native('schedule', { enabled }));
   }
   task(state, id) {
@@ -115,11 +116,10 @@ async function main() {
       const page = await manager.browser.open('fresh_login', item => manager.register(task, item), args[0]);
       return { registered: true, target: page.target };
     }
-    if (action === 'open-explorer' || action === 'open-program') {
-      const payload = action === 'open-explorer' ? { folder: args[0] } : { executable: args[0], arguments: args.slice(1) };
-      const result = await platform(action, payload);
+    if (action === 'open-explorer') {
+      const result = await platform(action, { folder: args[0] });
       const id = await manager.register(task, result.resource);
-      return { registered: true, resourceId: id, protected: result.resource.protected };
+      return { registered: true, resourceId: id };
     }
     throw Error('invalid_action');
   } finally { manager.dispose(); }

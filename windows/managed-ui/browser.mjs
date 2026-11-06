@@ -14,7 +14,7 @@ function activityRecorder(key) {
   }
 }
 export class BrowserAdapter {
-  constructor(localAppData, start = null) { this.local = localAppData; this.start = start; this.connections = new Map(); }
+  constructor(localAppData, start = null, present = null) { this.local = localAppData; this.start = start; this.present = present; this.connections = new Map(); }
   async connect(profile) {
     if (!['primary', 'fresh_login'].includes(profile)) throw Error('invalid_profile');
     if (this.connections.has(profile)) return this.connections.get(profile);
@@ -69,7 +69,12 @@ export class BrowserAdapter {
     return target ? await target.page() : null;
   }
   async inspect(item) {
-    const page = await this.target(item);
+    let page;
+    try { page = await this.target(item); }
+    catch (error) {
+      if (this.present && await this.present(item.profile) === false) return { exists: false };
+      throw error;
+    }
     if (!page || page.isClosed()) return { exists: false };
     let safe = true, lastActivity = 0;
     const frames = page.frames();
@@ -77,7 +82,6 @@ export class BrowserAdapter {
     for (const frame of frames) {
       const result = await frame.evaluate(key => {
         const activity = globalThis[key];
-        // Old/uninstrumented documents are not proof of idleness.
         if (!activity || !Number.isFinite(activity.last)) return { safe: false, last: 0 };
         const fields = 'textarea,[contenteditable=true],[role=textbox],input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])';
         const draft = [...document.querySelectorAll(fields)].some(el => el.getClientRects().length > 0 && String('value' in el ? el.value : el.textContent || '').trim().length > 0);
@@ -96,7 +100,6 @@ export class BrowserAdapter {
     if (decision(item, observation, Date.now(), completed) !== 'close') return false;
     const page = await this.target(item);
     if (!page) return true;
-    // Do not force confirmations. A beforeunload dialog keeps the resource registered.
     await page.close({ runBeforeUnload: true });
     for (let i = 0; i < 10; i++) {
       if (page.isClosed()) return true;
