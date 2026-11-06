@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 15735)
-Total output lines: 540
-
 # Management Hub — current project state
 
 ## Daily WHM log verification (2026-11-05)
@@ -372,7 +369,38 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 
 ## Resultado verificado da limpeza NPM e revisão de logs/Puppeteer (2026-10-30)
 
-- O workflow protegido [41129358547](https://github.com/danieldeploy/room-check/actions/runs/41129358547), integrado através do PR #303, executou **oito lotes seriais concluídos com sucesso**. E…1735 tokens truncated…s contagem de tarefas cron com referências explícitas a Shell/Chrome/Node/Puppeteer, sem imprimir comandos, domínios, arquivos privados ou credenciais. O inventário de cron **não** comprova ausência de executáveis usados por processos interativos, jobs encadeados ou variáveis de ambiente.
+- O workflow protegido [41129358547](https://github.com/danieldeploy/room-check/actions/runs/41129358547), integrado através do PR #303, executou **oito lotes seriais concluídos com sucesso**. Eliminou 290 ficheiros regulares com mais de 14 dias de `.npm/_cacache` (~4.826 MiB). O último lote confirmou `files=0`, `eligible_files=0` e `total_mb=0`. Não houve eliminação de diretórios. A pasta `.npm` ainda ocupa aproximadamente 3.8 MiB por elementos fora dessa cache; esses outros elementos não foram apagados.
+- A quota no fim era ~82.06% segundo a UAPI, com 4920.6 MiB de 6000 MiB usados segundo a auditoria DiskUsage. A quota pode variar por alterações de outros processos. Os dois indicadores não são perfeitamente idênticos.
+- Os **11 logs** analisados totalizam 150.68 MiB. A classificação de metadados (sem ler conteúdo ou imprimir nomes/domínios) identificou 3 ficheiros de tipo erro (~144.78 MiB), incluindo o maior (110.67 MiB, atualizado há 1 dia) e outro de 33.94 MiB (sem alterações há 372 dias). Existem 4 arquivos comprimidos (~5.27 MiB) e 4 outros logs (~0.63 MiB). **Nenhum log foi eliminado.** O log antigo é candidato a avaliação de retenção; não remover o recente sem diagnóstico de rotação/uso.
+- A pasta Puppeteer continua com ~704.8 MiB: Chrome 153.0.8010.36 (391.1 MiB), Chrome Headless Shell 153.0.8010.36 (259.7 MiB), Chrome Headless Shell 148.0.7778.97 (52.0 MiB). O projeto fixa Puppeteer 25.11.0/Chrome 153; `headless: true` usa Chrome completo nas versões modernas. Potencial de poupança das duas shells ~311.7 MiB **não é autorização para eliminação sem verificação de processos/dependências**. Nenhuma instalação de browser foi removida.
+- Por instrução do proprietário, emails e testes reais de receção ficam fora desta intervenção, para uma fase posterior.
+
+## Limpeza adicional de logs antigos — execução isolada (31/10/2026)
+
+- A manutenção diária protegida [41189983019](https://github.com/danieldeploy/room-check/actions/runs/41189983019) removeu mais 1 backup redundante (~6.98 MB), verificou restauro SQL (passed) e registou quota 82.5% de 6 GB, sem limpeza de emails. O conjunto de 26 backups permaneceu dentro da política, com 25 protegidos.
+- Auditoria recente de `~/logs`: ~151 MiB, com um log de erros ainda ativo (~110.7 MiB) e outro ficheiro de erros não alterado há aproximadamente 373 dias (~33.9 MiB). Os logs comprimidos encontrados não cumprem a retenção automática atual.
+- A pedido do proprietário, o novo workflow isolado `.github/workflows/cpanel-old-log-reclaim.yml` só pode apagar **um ficheiro de log de erros** diretamente em `~/logs`, regular (não symlink), não comprimido, com **mais de 365 dias sem alteração** e entre **20 e 60 MiB**, após reconfirmar pesquisa, metadata exata e resultado de exclusão. Nenhum nome de domínio/conteúdo de log é incluído nos resultados. Uma candidatura ambígua bloqueia tudo. Os testes obrigatórios de CI devem passar primeiro. Este workflow não altera a retenção diária nem autoriza excluir logs recentes.
+- A instalação Chrome 153 (391.1 MiB) e as duas Chrome Headless Shell 153 (259.7 MiB) e 148 (52.0 MiB) continuam preservadas: o runner permite executablePath configurado na runtime e a ausência de referências estáticas não comprova ausência de uso no alojamento. Não apagar sem confirmar a execução real.
+- Os emails e os testes de receção ficam para uma fase posterior por instrução do proprietário.
+- Estado de aceitação deste trabalho: script e workflow preparados em PR; **eliminação real e quota pós-limpeza só se confirmam pelos logs da execução protegida**.
+
+## Bloqueio de remoção do log muito antigo — 31/10/2026
+
+- O PR #305 integrou a remoção isolada de log de erro com >=365 dias. A execução protegida [41201812000](https://github.com/danieldeploy/room-check/actions/runs/41201812000) identificou um único candidato de 33.94 MiB, mas parou com `uapi_failed` durante verificação ou eliminação. A auditoria posterior confirmou que **o log continua presente** e a quota permanece em ~82.5%; não houve recuperação deste ficheiro.
+- Por segurança, **não repetir automaticamente** a operação falhada, nem utilizar métodos alternativos sem conhecer a causa. A nova alteração do mesmo workflow substitui temporariamente o passo destrutivo por `cpanel_log_access_probe.py`, apenas de leitura. Compara acesso UAPI a metadata por caminho relativo/absoluto, API2 statfiles e list_files, relatando somente sucesso/erro, permissões agregadas e correspondência de tamanho/mtime, nunca nomes, domínios, conteúdo dos logs ou credenciais.
+- A conclusão depende da execução protegida e da verificação de permissões. O log recente de 110.7 MiB, browsers e emails continuam protegidos.
+
+## Correção de verificação para remoção de log muito antigo (31/10/2026)
+
+- A execução protegida e exclusivamente de leitura [41202204788](https://github.com/danieldeploy/room-check/actions/runs/41202204788) confirmou que **Fileman/get_file_information (UAPI)** recusa tanto o caminho relativo como absoluto em `~/logs`. **Fileman/statfiles (API2)** funciona, reconhece exatamente um ficheiro regular de 33.94 MiB, titular `welcome` e permissão de escrita. `Fileman/list_files` (UAPI) também consegue listar a entrada.
+- A rotina pontual de eliminação passa a obter a confirmação de `type`, `user`, `mode` e `mtime` da API2 `statfiles`, sem executar operações de escrita por API2. Continua a exigir tamanho/mtime exatos em duas pesquisas independentes, único ficheiro de erro plano diretamente em `~/logs`, mínimo 365 dias de idade, tamanho 20–60 MiB e confirmação de ausência depois de uma só chamada de `Fileman/delete_file` UAPI.
+- O PR reabilita o passo destrutivo sob testes/ambiente de produção protegidos; **o resultado ainda depende da execução real**. Caso a API de eliminação também recuse, nenhum método alternativo deverá ser usado sem auditoria posterior. A restrição de não tocar em emails, browser ou log ativo mantém-se.
+
+## Verificação de dependências de browsers Puppeteer Linux — 31/10/2026
+
+- A eliminação do log muito antigo foi **confirmada** pela execução protegida [41202585352](https://github.com/danieldeploy/room-check/actions/runs/41202585352): uma cópia de 33.94 MiB eliminada, zero candidatos restantes e os logs desceram de ~150.9 para ~117 MiB, com quota UAPI 82.74% -> 82.18%. Nenhuma mensagem de email foi aberta/alterada.
+- O inventário Linux contém Chrome 153 (391.1 MiB), Headless Shell 153 (259.7 MiB) e Headless Shell 148 (52.0 MiB). Puppeteer 25.11.0 no repositório usa `headless: true` no runner, que seleciona o Chrome completo, mas também aceita `runtime.executablePath` configurado e outros programas do alojamento podem usar shells diretamente. Ausência de referência no repositório não comprova falta de uso.
+- `.github/workflows/cpanel-headless-audit.yml` executa apenas um diagnóstico protegido sem escrita: inventário de versões/execuções e seus atributos de acesso (não fiáveis sob relatime/noatime), mais contagem de tarefas cron com referências explícitas a Shell/Chrome/Node/Puppeteer, sem imprimir comandos, domínios, arquivos privados ou credenciais. O inventário de cron **não** comprova ausência de executáveis usados por processos interativos, jobs encadeados ou variáveis de ambiente.
 - **Nenhuma remoção de browsers foi autorizada pela lógica do diagnóstico.** Antes de apagar binários instalados, é necessário obter prova positiva suficiente (configuração e processos ou comportamento funcional, existência de binário alternativo testado) e plano de recuperação; não executar uma eliminação recursiva por suposição. Os emails seguem fora de âmbito.
 
 ## Resultado final da auditoria de dependências Headless Shell (31/10/2026)
