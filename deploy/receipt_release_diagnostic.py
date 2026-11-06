@@ -41,6 +41,16 @@ def configured_node(text):
         return value
     return None
 
+def cron_nodes(rows):
+    if not isinstance(rows,list) or len(rows)>100: return []
+    paths=set()
+    for row in rows:
+        cmd=row.get('command','') if isinstance(row,dict) else ''
+        if not isinstance(cmd,str): continue
+        for match in re.finditer(r"(?:^|[=\s\"'])(/(?:usr|opt|home/welcome)/[A-Za-z0-9_./-]{1,200}/node)(?=$|[\s\"'])",cmd):
+            if '..' not in match[1].split('/'): paths.add(match[1])
+    return sorted(paths)[:10]
+
 def main():
     tasks=request_api('VersionControlDeployment','retrieve',{})
     matches=[t for t in tasks if str(t.get('deploy_id'))==FAILED_ID and t.get('repository_state',{}).get('identifier')==FAILED_SHA]
@@ -52,7 +62,10 @@ def main():
         text=content(APP+'/config.local.php'); node=configured_node(text)
         print(json.dumps({'node_config':{'literal_absolute_path':node is not None,'field_present':'node_binary' in text}})); del text
     except Rejected: node=None; print(json.dumps({'node_config':{'readable':False}}))
-    candidates=list(dict.fromkeys(([node] if node else [])+['/usr/bin/node','/usr/local/bin/node','/opt/cpanel/ea-nodejs22/bin/node','/opt/cpanel/ea-nodejs24/bin/node']))
+    try: cron_paths=cron_nodes(request_api('Cron','listcron',{},legacy=True).get('data'))
+    except Rejected: cron_paths=[]
+    print(json.dumps({'cron_node_paths':cron_paths}))
+    candidates=list(dict.fromkeys(([node] if node else [])+cron_paths+['/usr/bin/node','/usr/local/bin/node','/opt/cpanel/ea-nodejs22/bin/node','/opt/cpanel/ea-nodejs24/bin/node']))
     for path in candidates: print(json.dumps({'node_path':path,**metadata(path)}))
     print(json.dumps({'installed_receipt_pdf_class':metadata(APP+'/src/Invoices/InvoiceReceiptPdf.php')}))
     print(json.dumps({'invoice_private_directory':metadata('/home/welcome/room-check-private/invoices')}))
