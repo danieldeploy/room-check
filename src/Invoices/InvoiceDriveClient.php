@@ -8,7 +8,7 @@ final class InvoiceDriveClient
     private string $token = '';
     public function __construct(private readonly InvoiceVault $vault) {}
     public const CALLBACK = 'https://check.welcomehostel.pt/admin/invoice-drive.php';
-    public function authorizationUrl(string $state): string
+    public function authorizationUrl(string $state, bool $receipts = false): string
     {
         if (!$this->vault->has('drive-oauth.enc')) throw new RuntimeException('drive_not_configured');
         $c = $this->vault->read('drive-oauth.enc');
@@ -17,12 +17,12 @@ final class InvoiceDriveClient
             'client_id'=>$c['client_id'], 'redirect_uri'=>self::CALLBACK, 'response_type'=>'code',
             // Read existing folder/file metadata to reuse the accounting tree;
             // content writes remain limited to files created/opened by this app.
-            'scope'=>'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly',
+            'scope'=>($receipts || $this->receiptsAuthorized()) ? 'https://www.googleapis.com/auth/drive' : 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly',
             'access_type'=>'offline', 'prompt'=>'consent',
             'state'=>$state, 'login_hint'=>'daniel.ciorcas@welcomehostel.pt'
         ]);
     }
-    public function finishAuthorization(string $code): void
+    public function finishAuthorization(string $code, bool $receipts = false): void
     {
         $c = $this->vault->read('drive-oauth.enc');
         $r = $this->request('POST', 'https://oauth2.googleapis.com/token', http_build_query([
@@ -30,9 +30,11 @@ final class InvoiceDriveClient
             'redirect_uri'=>self::CALLBACK, 'grant_type'=>'authorization_code'
         ]), ['Content-Type: application/x-www-form-urlencoded']);
         if (empty($r['refresh_token']) || empty($r['access_token'])) throw new RuntimeException('drive_auth');
+        if ($receipts && !in_array('https://www.googleapis.com/auth/drive',explode(' ',(string)($r['scope']??'')),true)) throw new RuntimeException('receipt_connect');
         $this->token = $r['access_token'];
         $about = $this->api('GET', 'about?fields=user(emailAddress)');
         if (strtolower($about['user']['emailAddress'] ?? '') !== 'daniel.ciorcas@welcomehostel.pt') throw new RuntimeException('drive_account_mismatch');
+        $c['scope'] = (string)($r['scope'] ?? '');
         $c['refresh_token'] = $r['refresh_token']; $this->vault->save('drive-oauth.enc', $c);
     }
     public function connect(): string
@@ -80,7 +82,7 @@ final class InvoiceDriveClient
     public function metadata(string $id): ?array
     {
         self::assertId($id);
-        try { return $this->api('GET', 'files/' . $id . '?fields=id,size,md5Checksum,trashed,parents,mimeType,owners(emailAddress),capabilities(canAddChildren)'); }
+        try { return $this->api('GET', 'files/' . $id . '?fields=id,name,size,md5Checksum,trashed,parents,mimeType,appProperties,owners(emailAddress),capabilities(canAddChildren)'); }
         catch (RuntimeException $e) { if ($e->getMessage() === 'drive_not_found') return null; throw $e; }
     }
     public function folder(string $id, string $parent, string $name): void
@@ -261,6 +263,118 @@ final class InvoiceDriveClient
         if ($ok===false || $status!==200 || strlen($pdf)!==$size || !str_starts_with($pdf,'%PDF-')
             || !hash_equals((string)$d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
         return $pdf;
+    }
+
+    public function receiptsAuthorized(): bool
+    {
+        $c=$this->vault->has('drive-oauth.enc')?$this->vault->read('drive-oauth.enc'):[];
+        return in_array('https://www.googleapis.com/auth/drive',explode(' ',(string)($c['scope']??'')),true);
+    }
+
+    /** Bounded snapshot, including only real descendants; never follow shortcuts. */
+    public function scanFiles(string $root): array
+    {
+        self::assertId($root); $folders=[$root]; $seen=[]; $files=[];
+        while ($folders) {
+            $parent=array_shift($folders);
+            if (isset($seen[$parent]) || count($seen)>=40) throw new RuntimeException('receipt_limit');
+            $seen[$parent]=true; $page='';
+            do {
+                $r=$this->api('GET','files?'.http_build_query(['q'=>"'".$parent."' in parents and trashed=false",'pageSize'=>100,
+                    'fields'=>'nextPageToken,files(id,name,mimeType,size,md5Checksum,parents,appProperties)','pageToken'=>$page,'spaces'=>'drive']));
+                foreach ($r['files']??[] as $f) {
+                    if (($f['mimeType']??'')==='application/vnd.google-apps.folder') $folders[]=$f['id'];
+                    elseif (empty($f['appProperties']['hubReceiptOcr'])) $files[]=$f;
+                    if (count($files)>500) throw new RuntimeException('receipt_limit');
+                }
+                $page=$r['nextPageToken']??'';
+            } while ($page!=='');
+        }
+        return $files;
+    }
+
+    public function scanPdf(array $f): string
+    {
+        $meta=$this->metadata($f['id']);
+        if (!$meta || ($meta['trashed']??true) || ($meta['mimeType']??'')!=='application/pdf'
+            || ($meta['md5Checksum']??'')!==$f['md5Checksum'] || (int)($meta['size']??0)!==(int)$f['size']
+            || !in_array($f['source_parent'],$meta['parents']??[],true)) throw new RuntimeException('drive_verify');
+        $pdf=$this->raw('files/'.$f['id'].'?alt=media',(int)$f['size']);
+        if (strlen($pdf)!==(int)$f['size'] || !str_starts_with($pdf,'%PDF-') || !hash_equals($f['md5Checksum'],md5($pdf))) throw new RuntimeException('drive_verify');
+        return $pdf;
+    }
+
+    /** Drive's native PDF-to-Docs OCR; original scan is never converted or overwritten. */
+    public function createReceiptOcr(string $pdf, string $source, string $parent): string
+    {
+        self::assertId($source); self::assertId($parent);
+        $meta=['name'=>'Hub OCR '.$source,'mimeType'=>'application/vnd.google-apps.document','parents'=>[$parent],
+            'appProperties'=>['hubReceiptOcr'=>$source]];
+        $headers=[];
+        $this->request('POST','https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&ocrLanguage=pt&fields=id',
+            json_encode($meta,JSON_THROW_ON_ERROR),['Content-Type: application/json','X-Upload-Content-Type: application/pdf',
+            'X-Upload-Content-Length: '.strlen($pdf)],$headers);
+        $url=$headers['location']??'';
+        if (!str_starts_with($url,'https://www.googleapis.com/upload/drive/v3/files?')) throw new RuntimeException('drive_upload');
+        $r=$this->request('PUT',$url,$pdf,['Content-Type: application/pdf']);
+        $id=(string)($r['id']??''); self::assertId($id); return $id;
+    }
+
+    public function findReceiptOcr(string $source,string $parent): ?string
+    {
+        self::assertId($source); self::assertId($parent);
+        $q="'".$parent."' in parents and trashed=false and appProperties has { key='hubReceiptOcr' and value='".$source."' }";
+        $r=$this->api('GET','files?'.http_build_query(['q'=>$q,'pageSize'=>10,'fields'=>'nextPageToken,files(id)']));
+        if (!empty($r['nextPageToken']) || count($r['files']??[])>1) throw new RuntimeException('drive_conflict');
+        return $r['files'][0]['id']??null;
+    }
+
+    public function receiptOcrText(string $id): string
+    {
+        self::assertId($id);
+        return $this->raw('files/'.$id.'/export?mimeType=text%2Fplain',1024*1024);
+    }
+
+    public function trashReceiptOcr(string $id, string $source): void
+    {
+        $m=$this->metadata($id);
+        if (!$m || ($m['appProperties']['hubReceiptOcr']??'')!==$source) throw new RuntimeException('drive_verify');
+        $this->api('PATCH','files/'.$id,['trashed'=>true]);
+    }
+
+    public function moveReceipt(array $d): void
+    {
+        $m=$this->metadata($d['id']);
+        if (!$m || ($m['trashed']??true) || ($m['md5Checksum']??'')!==$d['md5Checksum']
+            || (int)($m['size']??0)!==(int)$d['size']) throw new RuntimeException('drive_verify');
+        if (in_array($d['drive_parent'],$m['parents']??[],true)) return; // Recover an already executed move.
+        if (($m['parents']??[])!==[$d['source_parent']]) throw new RuntimeException('drive_verify');
+        $this->api('PATCH','files/'.$d['id'].'?'.http_build_query(['addParents'=>$d['drive_parent'],'removeParents'=>$d['source_parent']]),[]);
+        $m=$this->metadata($d['id']);
+        if (!$m || ($m['parents']??[])!==[$d['drive_parent']] || ($m['md5Checksum']??'')!==$d['md5Checksum']) throw new RuntimeException('drive_verify');
+    }
+
+    public function trashReceiptDuplicate(array $d): void
+    {
+        $m=$this->metadata($d['id']);
+        if (!$m || ($m['parents']??[])!==[$d['drive_parent']] || ($m['md5Checksum']??'')!==$d['md5Checksum']
+            || (int)($m['size']??0)!==(int)$d['size']) throw new RuntimeException('drive_verify');
+        if (!($m['trashed']??false)) $this->api('PATCH','files/'.$d['id'],['trashed'=>true]);
+        if (!(($this->metadata($d['id']))['trashed']??false)) throw new RuntimeException('drive_verify');
+    }
+
+    private function raw(string $path, int $limit): string
+    {
+        if ($limit<1 || $limit>10*1024*1024) throw new RuntimeException('receipt_limit');
+        $h=curl_init('https://www.googleapis.com/drive/v3/'.$path); $data='';
+        curl_setopt_array($h,[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_TIMEOUT=>60,
+            CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$this->token],
+            CURLOPT_WRITEFUNCTION=>static function($h,string $chunk) use (&$data,$limit): int {
+                if (strlen($data)+strlen($chunk)>$limit) return 0; $data.=$chunk; return strlen($chunk);
+            }]);
+        $ok=curl_exec($h); $status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE); curl_close($h);
+        if ($ok===false || $status!==200) throw new RuntimeException($status===403?'drive_permission':'drive_network');
+        return $data;
     }
 
     private function request(string $method, string $url, ?string $body, array $headers, array &$responseHeaders = []): array

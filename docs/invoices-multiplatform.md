@@ -166,3 +166,66 @@ reproduzíveis de três casos: uma aba criada é fechada; uma aba preexistente
 não é fechada; um rascunho ou pedido de intervenção humana é preservado.
 A aceitação operacional exige observar uma tarefa real que abre e fecha a
 sua própria aba, sem terminar a sessão nem interromper a seguinte tarefa.
+
+## Manual receipt intake (2026-11-06)
+
+The separate `admin/receipts.php` module uses `receipts.view` / `receipts.run`.
+Both are mandatory for Gerente; Governanta receives neither until the manager
+assigns them through the existing permissions matrix. Run implies view only,
+not access to portal settings or accounts. Only Gerente can confirm unreadable
+metadata and company ownership. Every mutation uses CSRF and the existing
+`room_check_invoices` advisory lock.
+
+After scanning, a user with run permission explicitly starts a snapshot of
+`temp_scan` directly below the configured accounting root, including its real
+subfolders. Folder names and filenames never determine the invoice month.
+There is no new scheduler, service, or automatic intake on deployment. The
+existing invoice cron continues queued work, one original per invocation.
+A repeated click/scan is idempotent by Drive ID; an existing record is never
+silently replaced after a file edit. PDF only, one document per file, <=10 MiB;
+unsupported input stays in Drive for correction. Snapshot bounds: 40 folders,
+500 files. The encrypted history stops at 2,000 documents without pruning.
+
+Receipt access is an explicit, manager-only Google OAuth upgrade to `drive`.
+The previous `drive.file`/metadata grant cannot read/move new mobile scans.
+The consent screen must allow this scope; a partial grant is rejected before
+replacing the existing credential. Existing portal authorization and verified
+archive readiness remain in force. The public privacy copy describes the
+optional broader grant. Code restricts intake to the chosen accounting tree.
+
+Google Drive's PDF-to-Docs OCR uses a tagged temporary copy. The original PDF
+is never re-rendered. Automatic classification requires one distinct explicitly
+labelled issue date, one document number, and the configured recipient NIF near
+a customer label. Invalid/future/ambiguous dates, wrong company, multiple
+identities or unreadable scans require manager review. The manager opens the
+original and explicitly confirms date, document number, company and one document
+per PDF. Uncertain OCR creation is recovered by its private appProperties tag;
+it is never blindly recreated. Temporary OCR copies are trashed after reading.
+A missing response with no discoverable copy requires manual review.
+
+The original is moved, with its ID/name/content preserved, into
+`YYYY/<Portuguese month>_YYYY/taloes`. Existing year/month aliases and the shared
+folder cache are reused. Metadata/checksum validation and persisted move intent
+allow interrupted moves to resume. The original PDF is checked again before
+email. The Booking/Hostelworld/Cloudbeds `pdf` flow and Airbnb exception do not
+change.
+
+`receipts-workflow.enc` is the encrypted private queue/history, covered by the
+existing private-vault backups. The shared TOConline ledger uses disjoint
+`receipt:<Drive ID>` targets and `receipt-<identity hash>.pdf` correlation names.
+The existing sender, destination, pilot, enabled flag, MIME transport and DKIM
+reply verification are reused. An intent is persisted before mail; unknown
+send outcomes are never automatically resent. Local content duplicates remain
+visible and are not deleted. A signed, uniquely correlated `toc_existing`
+response alone authorizes trashing **this intake's file ID**, after rechecking
+its archived parent, size and checksum. Historical accepted originals are never
+searched for or deleted. Unknown/rejected/unsigned responses never delete files.
+A lost queue/transport ledger fails closed. Transient processing failures back
+off and stop after five attempts; a permitted user can request a retry after
+fixing the cause. Manual review is limited to the manager.
+
+Acceptance: `tests/invoice-receipts.php`, existing Drive/TOConline/pipe tests and
+PT/EN contracts. Live OCR, source movement, delivery and authenticated duplicate
+cleanup require the manager's new Google grant plus a genuine PDF in temp_scan.
+An empty folder or public login response is not end-to-end acceptance. Do not
+send files from `Teste Faturas` as production test data.

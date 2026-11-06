@@ -60,8 +60,8 @@ return [
     "With account authorization, the integration reads Google Drive file and folder information, including names, identifiers, structure, owner, size and checksum. It uses this information to identify the authorized account and folder, reuse the existing archive and verify documents."
   ],
   'write' => [
-    "A permissão de escrita abrange os ficheiros específicos utilizados com esta aplicação e permite vê-los, criá-los, editá-los e eliminá-los. O fluxo de arquivo envia faturas e cria as pastas necessárias; não solicita acesso geral ao conteúdo de todos os ficheiros do Drive.",
-    "Write permission covers the specific files used with this application and permits viewing, creating, editing and deleting them. The archive workflow uploads invoices and creates required folders; it does not request general access to the contents of every Drive file."
+    "A permissão de escrita abrange os ficheiros específicos utilizados com esta aplicação e permite vê-los, criá-los, editá-los e eliminá-los. O arquivo dos portais envia faturas e cria as pastas necessárias. A automação opcional de talões pede acesso adicional ao Drive para ler e mover scans existentes em temp_scan, usar OCR do Google numa cópia temporária e colocar no Lixo novas cópias cujo duplicado seja confirmado pelo TOConline.",
+    "Write permission covers the specific files used with this application and permits viewing, creating, editing and deleting them. Portal archiving uploads invoices and creates required folders. The optional receipt automation requests additional authorization to read and move existing scans in temp_scan, use Google OCR on a temporary copy, and trash new copies whose duplicate status is confirmed by TOConline."
   ],
   'storageTitle' => [
     "Armazenamento e conservação",

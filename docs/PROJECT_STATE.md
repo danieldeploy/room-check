@@ -578,3 +578,25 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 
 
 - O workflow protegido `.github/workflows/cpanel-log-content-audit-once.yml` foi estendido com uma segunda fase de consulta: depois do deploy do PHP privado e da seguinte execução do cron existente, aguarda pelo JSON de nome fixo e só mostra chaves e contagens estritamente permitidas via `deploy/cpanel_read_private_full_log_audit_once.py`. O ficheiro e os logs brutos nunca saem do cPanel. Falha se não aparecer o relatório dentro do limite, se estiver incompleto ou se contiver estrutura inesperada.
+
+### 2026-11-06 — Manual receipt workflow in Management Hub
+
+- Added a separate Talões module, always available to Gerente, with narrow
+  `receipts.view` / `receipts.run` permissions delegable through the existing
+  matrix. Governanta starts intake only after the manager grants permission;
+  ambiguous document/company/date review remains manager-only.
+- Explicit start snapshots `temp_scan` under the existing accounting root.
+  The existing cron reads PDFs using Google OCR, verifies the recipient NIF and
+  issue date, preserves original IDs/content and moves them to the issue month's
+  `taloes` folder. Existing portal `pdf` uploads and Airbnb exception unchanged.
+- Reuses the private encrypted vault, Drive OAuth/folder helpers and TOConline
+  transport/ledger/DKIM confirmation. No extra daemon, cron or dependency.
+  Only an authenticated external duplicate authorizes trashing this run's copy;
+  uncertain deliveries and local duplicate detections never trigger deletion.
+- Requires a manager Google consent upgrade for existing scanned files. No
+  consent or scan processing is activated by deployment. `temp_scan` was empty
+  during investigation. Live OCR/move/email/duplicate acceptance remains pending
+  that grant and a genuine scan; local tests use synthetic documents only.
+- Targeted tests cover permissions, issue-vs-service date, company validation,
+  ambiguity, repeated clicks, interrupted move/OCR, reply authentication and
+  history loss. See `docs/invoices-multiplatform.md` for bounds and recovery.
