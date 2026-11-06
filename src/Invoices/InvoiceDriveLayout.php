@@ -11,7 +11,7 @@ final class InvoiceDriveLayout
         if (!preg_match('/\A\d{4}-(0[1-9]|1[0-2])\z/', $period)) throw new RuntimeException('invalid_request');
         $year = substr($period, 0, 4);
         $month = self::MONTHS[(int) substr($period, 5, 2)];
-        return [[$year], [$month.'_'.$year, $month.' '.$year], ['online']];
+        return [[$year], [$month.'_'.$year, $month.' '.$year], ['pdf']];
     }
 
     public static function filename(array $document, bool $suffix = false): string
