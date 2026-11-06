@@ -49,6 +49,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_log_access_probe.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_log_contents_analysis_once.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_read_private_full_log_audit_once.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_log_compaction_report.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_headless_dependency_audit.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_whm_runtime_capabilities.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cpanel_shell_status_probe.py -v
@@ -166,6 +167,7 @@ jobs:
           php tests/whatsapp-disk-activation.php
           php tests/whm-log-audit-once.php
           php tests/whm-log-daily.php
+          php tests/whm-log-compaction.php
           php tests/translation-quota.php
           php tests/pending-translations.php
           php tests/user-preferred-name.php

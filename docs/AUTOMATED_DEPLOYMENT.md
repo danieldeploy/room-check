@@ -199,3 +199,15 @@ only a confirmed provider message ID enables default incident sending. A failure
 does not mask a completed core release and is checked by daily acceptance.
 Do not reset an uncertain receipt, expose provider IDs/recipients or equate API
 acceptance with handset delivery. No app secret or config.local.php is rewritten.
+
+
+## One-off inactive-log cleanup — 2026-11-06
+
+The owner-authorized optional CLI `compact_inactive_logs_once.php` runs after
+normal release tasks under the existing deploy lock. Its fixed exclusive
+private receipt prevents repeats; a failure does not mask a completed core
+release. The helper preserves complete historical bytes in verified private
+gzip before removing only inactive redundant plaintext. It never changes
+active logs, daily cursors or the historical audit marker. Read
+`CPANEL_DISK_MAINTENANCE.md` for eligibility, recovery and live acceptance;
+never repeat an ambiguous run by resetting its marker.

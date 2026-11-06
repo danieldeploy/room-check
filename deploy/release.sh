@@ -58,3 +58,9 @@ fi
 if ! /usr/local/bin/php deploy/activate_whm_alerts_once.php "$DEPLOYPATH"; then
     printf '%s\n' 'WHM alert activation incomplete; inspect private receipt before retry' >&2
 fi
+
+# Owner-authorized one-off: lossless private compaction of inactive logs only.
+# Its exclusive receipt prevents retries; active logs and daily cursors stay intact.
+if ! /usr/local/bin/php deploy/compact_inactive_logs_once.php; then
+    printf '%s\n' 'Inactive log compaction incomplete; inspect private receipt before retry' >&2
+fi
