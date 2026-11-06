@@ -378,7 +378,7 @@ final class InvoiceDriveClient
         if (!$m || ($m['parents']??[])!==[$d['drive_parent']] || ($m['md5Checksum']??'')!==$d['md5Checksum']) throw new RuntimeException('drive_verify');
     }
 
-    public function trashReceiptDuplicate(array $d): void
+    public function trashReceiptFile(array $d): void
     {
         $m=$this->metadata($d['id']);
         if (!$m || ($m['parents']??[])!==[$d['drive_parent']] || ($m['md5Checksum']??'')!==$d['md5Checksum']

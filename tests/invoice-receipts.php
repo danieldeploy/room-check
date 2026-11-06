@@ -29,7 +29,7 @@ try {
     rc(Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_VIEW) && !Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_INVOICES_VIEW),'delegation stays narrow');
     $drive=new class($text) {
         public array $files=[]; public array $moved=[]; public array $trashed=[]; public array $folderNames=[];
-        public int $ocr=0; public int $discovered=0; public bool $grant=true; public bool $crashMove=false; public bool $crashOcr=false;
+        public array $pageTexts=[]; public array $ocrTexts=[]; public int $uploads=0; public bool $crashUpload=false; public int $ocr=0; public int $discovered=0; public bool $grant=true; public bool $crashMove=false; public bool $crashOcr=false;
         public function __construct(public string $text) {}
         public function add(string $id,string $pdf,string $format='pdf',int $month=10): void { $this->files[$id]=['id'=>$id,'name'=>'scan.'.$format,'mimeType'=>$format==='jpg'?'image/jpeg':'application/pdf','size'=>strlen($pdf),'md5Checksum'=>md5($pdf),'parents'=>['scan-month-'.$month],'pdf'=>$pdf,'trashed'=>false]; }
         public function receiptsAuthorized(): bool { return $this->grant; }
@@ -40,17 +40,22 @@ try {
         public function newId(): string { return 'folder-'.bin2hex(random_bytes(8)); }
         public function folder(string $id,string $parent,string $name): void { $this->folderNames[]=$name; }
         public function scanDocument(array $d): string { rc($this->files[$d['id']]['md5Checksum']===$d['md5Checksum'],'source hash'); return $this->files[$d['id']]['pdf']; }
-        public function createReceiptOcr(string $pdf,string $id,string $parent,string $mime='application/pdf'): string { $this->ocr++; if ($this->crashOcr) throw new RuntimeException('drive_network'); return 'ocr-'.$id; }
+        public function createReceiptOcr(string $pdf,string $id,string $parent,string $mime='application/pdf'): string { $this->ocr++; $this->ocrTexts['ocr-'.$id]=$this->pageTexts[$pdf]??$this->text; if ($this->crashOcr) throw new RuntimeException('drive_network'); return 'ocr-'.$id; }
         public function findReceiptOcr(string $source,string $parent): ?string { return null; }
-        public function receiptOcrText(string $id): string { return $this->text; }
+        public function receiptOcrText(string $id): string { return $this->ocrTexts[$id]??$this->text; }
         public function trashReceiptOcr(string $id,string $source): void {}
         public function moveReceipt(array $d): void { $this->files[$d['id']]['parents']=[$d['drive_parent']]; $this->moved[$d['id']]=true; if ($this->crashMove) { $this->crashMove=false; throw new RuntimeException('drive_network'); } }
-        public function verifiedReceipt(array $d): string { rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'archived before email'); return $this->files[$d['id']]['pdf']; }
-        public function trashReceiptDuplicate(array $d): void { rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'trash bound to archive'); $this->files[$d['id']]['trashed']=true; $this->trashed[]=$d['id']; }
+        public function upload(string $id,string $parent,string $name,string $path,string $format): array {
+            if (!isset($this->files[$id])) { $this->uploads++; $this->add($id,(string)file_get_contents($path)); $this->files[$id]['parents']=[$parent]; }
+            if ($this->crashUpload) { $this->crashUpload=false; throw new RuntimeException('drive_network'); }
+            return $this->files[$id];
+        }
+        public function verifiedReceipt(array $d): string { rc(!$this->files[$d['id']]['trashed'] && hash('sha256',$this->files[$d['id']]['pdf'])===$d['sha256'],'verified archive content'); rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'archived before email'); return $this->files[$d['id']]['pdf']; }
+        public function trashReceiptFile(array $d): void { rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'trash bound to archive'); $this->files[$d['id']]['trashed']=true; $this->trashed[]=$d['id']; }
     };
     $sent=[]; $toc=new InvoiceToconline($pdo,$vault,$drive,static function($to,$message) use (&$sent) { $sent[]=[$to,$message]; return true; });
     $vault->save('toconline-settings.enc',['nif'=>'500000000','sender'=>'test@welcomehostel.pt','enabled'=>true,'pilot_verified'=>true]);
-    $flow=new InvoiceReceipts($pdo,$vault,$drive,$toc);
+    $flow=new InvoiceReceipts($pdo,$vault,$drive,$toc,static fn($bytes)=>['count'=>1,'pages'=>[]]);
     $flow->run(); rc(!$vault->has(InvoiceReceipts::FILE),'deploy never starts intake');
     $drive->grant=false; rr(fn()=>$flow->request(1,2026,[10]),'existing per-file grant is insufficient'); $drive->grant=true;
     rr(fn()=>$flow->request(1,2026,[]),'at least one month');
@@ -78,7 +83,7 @@ try {
     $drive->add('scan-original-two','%PDF-1.4 synthetic receipt two'); $drive->text='Unreadable OCR'; $flow->request(1,2026,[10]); $flow->run();
     rc($flow->status()['documents']['scan-original-two']['stage']==='review' && count($sent)===1,'ambiguous stays in source and unsent');
     rr(fn()=>$flow->review('scan-original-two','2026-10-02','FT2',false,1),'review requires explicit company and single document confirmation');
-    $flow->review('scan-original-two','2026-10-30','FT2',true,1); $drive->crashMove=true; $flow->run();
+    $flow->review('scan-original-two','2026-09-30','FT2',true,1); $drive->crashMove=true; $flow->run();
     $s=$flow->status(); $s['documents']['scan-original-two']['next_attempt']=0; $vault->save(InvoiceReceipts::FILE,$s); $flow->run();
     rc(count($sent)===2 && $flow->status()['documents']['scan-original-two']['stage']==='archived','recover unknown move without duplicate upload');
     $drive->add('scan-original-three','%PDF-1.4 synthetic receipt three'); $drive->crashOcr=true; $flow->request(1,2026,[10]); $flow->run();
@@ -88,14 +93,11 @@ try {
     $drive->add('wrong-period-file','%PDF-1.4 wrong month');
     $drive->text=str_replace('02/10/2026','30/09/2026',$text); $flow->request(1,2026,[10]); $flow->run();
     $wrong=$flow->status()['documents']['wrong-period-file'];
-    rc($wrong['stage']==='review' && $wrong['error']==='receipt_period_mismatch' && $drive->files['wrong-period-file']['parents']===['scan-month-10'],'mismatch retained, no archive or deletion');
-    rr(fn()=>$flow->review('wrong-period-file','2026-09-30','FT9',true,1),'manager cannot send wrong month');
+    rc($wrong['stage']==='archived' && $wrong['issued_on']==='2026-09-30' && in_array('Setembro_2026',$drive->folderNames,true),'source October automatically routes to September issue date');
     unset($drive->files['unselected-september']);
-    $drive->files['wrong-period-file']['parents']=['scan-month-9']; $flow->request(1,2026,[9]); $flow->run();
-    rc($flow->status()['documents']['wrong-period-file']['stage']==='archived','correct folder selection recovers mismatch without new Drive ID');
     $drive->add('wrong-year-file','%PDF-1.4 wrong year'); $drive->text=str_replace('02/10/2026','02/10/2025',$text);
-    $flow->request(1,2026,[10]); $flow->run(); rc($flow->status()['documents']['wrong-year-file']['error']==='receipt_period_mismatch','same month wrong year rejected');
-    $flow->request(1,2025,[10]); $flow->run(); $flow->run(); rc($flow->status()['documents']['wrong-year-file']['stage']==='archived','selected year honored');
+    $flow->request(1,2026,[10]); $flow->run();
+    rc($flow->status()['documents']['wrong-year-file']['stage']==='archived' && in_array('Outubro_2025',$drive->folderNames,true),'source year does not override invoice year');
     $jpg=base64_decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==');
     rc(InvoiceDriveClient::receiptBytesValid($jpg,'jpg') && !InvoiceDriveClient::receiptBytesValid('%PDF-1.4','jpg'),'JPEG content checked');
     rc(InvoiceDriveClient::receiptFormat(['name'=>'SCAN.JPEG','mimeType'=>'image/jpeg'])==='jpg','uppercase JPEG extension');
@@ -120,6 +122,41 @@ try {
     $oldMd5=$flow->status()['documents']['scan-original-three']['md5Checksum'];
     $drive->add('scan-original-three','%PDF-1.4 replaced contents'); $flow->request(1,2026,[10]); $flow->run();
     rc($flow->status()['documents']['scan-original-three']['md5Checksum']===$oldMd5 && !isset($drive->moved['scan-original-three']),'replaced bytes never reuse stale OCR or get silently reclassified');
+    // Each PDF page is a distinct invoice; partial failure cannot retire the master.
+    $pages=['%PDF-1.4 split page one','%PDF-1.4 split page two','%PDF-1.4 split page three'];
+    $splitter=static function(string $bytes) use($vault,$pages): array {
+        if ($bytes!=='%PDF-1.4 three-page master') return ['count'=>1,'pages'=>[]];
+        $result=['count'=>3,'pages'=>[]];
+        foreach ($pages as $n=>$page) {
+            $sha=hash('sha256',$page); InvoiceVault::atomicWrite($vault->path('receipt-page-'.$sha.'.pdf'),$page);
+            $result['pages'][]=['number'=>$n+1,'size'=>strlen($page),'sha256'=>$sha,'md5Checksum'=>md5($page)];
+        }
+        return $result;
+    };
+    $flow=new InvoiceReceipts($pdo,$vault,$drive,$toc,$splitter);
+    $drive->pageTexts=[$pages[0]=>$text,$pages[1]=>str_replace('02/10/2026','30/09/2025',$text),$pages[2]=>'Illegible'];
+    $drive->add('multipage-master','%PDF-1.4 three-page master'); $before=count($sent);
+    $flow->request(1,2026,[10]); $flow->run();
+    $master=$flow->status()['documents']['multipage-master']; $children=$master['children'];
+    rc($master['stage']==='split' && count($children)===3 && count($sent)===$before,'master split once and never submitted');
+    $drive->crashUpload=true; $flow->run();
+    rc(!$drive->files['multipage-master']['trashed'] && count($sent)===$before,'unknown upload preserves source and does not send');
+    $s=$flow->status(); $s['documents'][$children[0]]['next_attempt']=0; $vault->save(InvoiceReceipts::FILE,$s);
+    $flow->run(); $flow->run(); $flow->run();
+    rc($drive->uploads===2 && count($sent)===$before+2,'resume uses same child ID; each readable page sends once');
+    rc($flow->status()['documents'][$children[1]]['issued_on']==='2025-09-30' && in_array('Setembro_2025',$drive->folderNames,true),'pages independently routed across years');
+    rc($flow->status()['documents'][$children[2]]['stage']==='review' && !$drive->files['multipage-master']['trashed'],'unreadable page preserves whole original');
+    $flow->request(1,2026,[10]); $flow->run(); rc($flow->status()['documents']['multipage-master']['children']===$children,'rediscovery cannot split or resend master again');
+    preg_match('/receipt-([a-f0-9]{64})\.pdf/',$sent[$before][1]['body'],$pageKey);
+    $proof['outcome']='toc_existing';
+    $toc->receive('no_reply@toconline.pt','','Foram recusados os seguintes ficheiros por já constarem no seu arquivo: receipt-'.$pageKey[1].'.pdf',hash('sha256','page duplicate'),$proof);
+    $flow->run(); rc($drive->files[$children[0]]['trashed'] && !$drive->files['multipage-master']['trashed'],'one confirmed duplicate removes only that page');
+    // Missing private derivative is reconstructed from the unchanged master, with identical checksum.
+    unlink($vault->path('receipt-page-'.hash('sha256',$pages[2]).'.pdf'));
+    $flow->review($children[2],'2026-08-15','FT3',true,1); $flow->run(); $flow->run();
+    rc($drive->uploads===3 && count($sent)===$before+3 && $drive->files['multipage-master']['trashed'],'master removed only after all page archives verified');
+    rc($flow->status()['documents']['multipage-master']['stage']==='split_completed' && !glob($dir.'/receipt-page-*.pdf'),'split completes with private derivatives cleaned');
+    $flow->run(); rc(count($sent)===$before+3,'finished split never resends');
     $saved=$vault->read('toconline-ledger.enc'); unlink($vault->path('toconline-ledger.enc')); rr(fn()=>$toc->reconcile(),'missing transport ledger fails closed'); $vault->save('toconline-ledger.enc',$saved);
     unlink($vault->path(InvoiceReceipts::FILE)); rr(fn()=>$flow->status(),'missing receipt history fails closed');
     echo "Receipt workflow safeguards passed\n";
