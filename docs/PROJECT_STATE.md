@@ -628,3 +628,18 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
   The protected receipt-release diagnostic reads only exact deployment 390,
   bounded runtime metadata and installed code checksums. It never prints raw
   configuration/logs, reads invoices, sends mail or writes to the server.
+
+- Read-only diagnostic run `42250031533` confirmed deployment 390 stopped at the
+  receipt split probe; installed receipt source SHA-256 still matches 8d67fd6
+  (`391b4a3f6f8e9231157967948220d20bd1c3ebcac7bcc3b792aba6c7fb877712`).
+  `/usr/bin/node` is unavailable; no explicit invoice Node setting exists. The
+  existing cron uses `/home/welcome/nodevenv/booking-vault-agent/22/bin/node`,
+  confirmed present. Private invoice directory remains 0700; no new app files
+  were copied. The splitter now tries that existing runtime only when the default
+  is unavailable in this known account layout; explicit runtime overrides remain
+  authoritative. No Node install, agent change or credential update is needed.
+- Recovery is scoped solely to inspected failure 390 at exact commit 372a1f1,
+  still requiring a corrected descendant, current production HEAD, backup,
+  serialized deploy and synthetic page extraction before application copies.
+  Any different/new failure blocks recovery. Live scan acceptance still awaits
+  manager Drive consent and genuine files.

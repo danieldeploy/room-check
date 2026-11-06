@@ -6,9 +6,21 @@ require_once __DIR__.'/InvoiceVault.php';
 final class InvoiceReceiptPdf
 {
     public function __construct(private readonly InvoiceVault $vault,private readonly array $config) {}
+    /** Keep configured runtimes authoritative; only the absent default may use the inspected cPanel Node. */
+    public static function nodeCandidates(array $config): array
+    {
+        $node=(string)($config['node_binary']??''); $paths=[$node];
+        if ($node==='/usr/bin/node' && preg_match('~\A(/home/[a-z][a-z0-9_-]{0,31})/room-check-private/invoices\z~',rtrim((string)($config['private_dir']??''),'/'),$m)) {
+            $paths[]=$m[1].'/nodevenv/booking-vault-agent/22/bin/node';
+        }
+        return $paths;
+    }
     public function split(string $bytes): array
     {
-        $node=(string)($this->config['node_binary']??'');
+        $node='';
+        foreach (self::nodeCandidates($this->config) as $candidate) {
+            if ($candidate!=='' && $candidate[0]==='/' && is_executable($candidate)) { $node=$candidate; break; }
+        }
         $script=dirname((string)($this->config['runner_script']??'')).'/receipt-pdf-split.mjs';
         if (strlen($bytes)>10*1024*1024 || !str_starts_with($bytes,'%PDF-')) throw new RuntimeException('receipt_split_failed');
         if (!function_exists('proc_open') || $node==='' || $node[0]!=='/' || !is_executable($node)

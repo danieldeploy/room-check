@@ -295,3 +295,11 @@ regeneration, invalid/oversized PDFs, wrong month/year, mixed formats, interrupt
 child upload, per-page duplicates, incomplete source retention and complete cleanup.
 Live Google OCR/Drive/TOConline acceptance still requires the broader Drive grant
 and genuine scan files; deployment alone does not prove this cycle.
+
+The 2026-11-06 production runtime inspection found `/usr/bin/node` absent and the
+existing Node 22 virtual environment used by the account cron available. Only
+when the default invoice Node path is unavailable, the splitter may use
+`/home/<account>/nodevenv/booking-vault-agent/22/bin/node` for the established
+`/home/<account>/room-check-private/invoices` layout. Explicit `node_binary`
+overrides never silently fall back. The same selection is used in the release
+probe and worker; the existing Node agent/configuration remains unchanged.
