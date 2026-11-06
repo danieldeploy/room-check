@@ -61,9 +61,11 @@ final class InvoiceToconline
         return [hash('sha256',$nif."\0".$scope."\0".$number), hash('sha256',$nif."\0".$d['sha256'])];
     }
 
-    public static function message(string $pdf, string $key, string $sender, string $portal='booking'): array
+    public static function message(string $pdf, string $key, string $sender, string $portal='booking', string $format='pdf'): array
     {
         if (!in_array($portal,['booking','hostelworld','cloudbeds','receipt'],true)) throw new RuntimeException('toc_ineligible');
+        if (!in_array($format,['pdf','jpg'],true) || ($format==='jpg' && $portal!=='receipt')) throw new RuntimeException('toc_ineligible');
+        $mime=$format==='jpg'?'image/jpeg':'application/pdf';
         $label=['booking'=>'Booking','hostelworld'=>'Hostelworld','cloudbeds'=>'Cloudbeds','receipt'=>'Taloes'][$portal];
         if (!preg_match('/\A[a-f0-9]{64}\z/',$key) || !filter_var($sender,FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/',$sender)) throw new RuntimeException('toc_invalid_settings');
         $boundary='hub_'.bin2hex(random_bytes(16));
@@ -71,7 +73,7 @@ final class InvoiceToconline
             'Message-ID: <toc-'.$key.'@check.welcomehostel.pt>', 'Content-Type: multipart/mixed; boundary="'.$boundary.'"'];
         $body='--'.$boundary."\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".
             chunk_split(base64_encode('Management Hub — '.$label.' invoice for digital archive.'),76,"\r\n").
-            '--'.$boundary."\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=\"".$portal.'-'.$key.".pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n".
+            '--'.$boundary."\r\nContent-Type: ".$mime."\r\nContent-Disposition: attachment; filename=\"".$portal.'-'.$key.'.'.$format."\"\r\nContent-Transfer-Encoding: base64\r\n\r\n".
             chunk_split(base64_encode($pdf),76,"\r\n").'--'.$boundary."--\r\n";
         return ['subject'=>'Management Hub - '.$label.' - '.substr($key,0,16),'headers'=>$headers,'body'=>$body];
     }
@@ -124,7 +126,7 @@ final class InvoiceToconline
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
         if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
         $ledger=$this->ledger(); $settings=$this->settings(); $matches=[];
-        preg_match_all('/(?:(?:booking|hostelworld|cloudbeds|receipt)[-_]|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
+        preg_match_all('/(?:(?:booking|hostelworld|cloudbeds|receipt)[-_]|toc-)([a-f0-9]{64})(?:\.(?:pdf|jpe?g)|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
         foreach (array_unique($tokens[1]) as $key) {
             $entry=$ledger[strtolower($key)]??null;
             if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(string)$entry['document_id']]=true;
@@ -229,15 +231,16 @@ final class InvoiceToconline
     {
         $settings=$this->settings();
         if (empty($settings['enabled']) || empty($settings['pilot_verified'])) return;
-        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('toc_ineligible');
+        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || substr($d['issued_on'],0,7)!==($d['expected_period']??'') || ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('toc_ineligible');
         $id='receipt:'.$d['id']; $ledger=$this->ledger();
-        $identity=hash('sha256',$settings['nif']."\0receipt\0".$d['sha256']);
-        $content=hash('sha256',$settings['nif']."\0".$d['sha256']);
-        $existing=$ledger[$identity]??$ledger[$content]??null;
+        $identity=hash('sha256',$settings['nif']."\0receipt\0".$d['id']."\0".$d['sha256']);
+        // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.
+        $content=$identity; $existing=$ledger[$identity]??null;
         if ($existing) { $this->state($id,(string)$existing['document_id']===$id?$existing['state']:'toc_duplicate'); return; }
-        $document=$d+['drive_id'=>$d['id'],'size_bytes'=>(int)$d['size']];
-        $pdf=$this->drive->verifiedPdf($document); self::assertPdf($pdf,$document);
-        $message=self::message($pdf,$identity,$settings['sender'],'receipt');
+        $pdf=$this->drive->verifiedReceipt($d);
+        if (strlen($pdf)!==(int)$d['size'] || strlen($pdf)>10*1024*1024
+            || !InvoiceDriveClient::receiptBytesValid($pdf,$d['format']) || !hash_equals($d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
+        $message=self::message($pdf,$identity,$settings['sender'],'receipt',$d['format']);
         $this->transmit($ledger,$id,$identity,$content,$settings,$message,self::destination($settings['nif']));
     }
 

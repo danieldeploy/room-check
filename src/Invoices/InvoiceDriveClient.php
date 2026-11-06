@@ -293,30 +293,54 @@ final class InvoiceDriveClient
         return $files;
     }
 
-    public function scanPdf(array $f): string
+    public function scanDocument(array $f): string
     {
         $meta=$this->metadata($f['id']);
-        if (!$meta || ($meta['trashed']??true) || ($meta['mimeType']??'')!=='application/pdf'
+        if (!$meta || ($meta['trashed']??true) || ($meta['mimeType']??'')!==($f['mimeType']??'')
             || ($meta['md5Checksum']??'')!==$f['md5Checksum'] || (int)($meta['size']??0)!==(int)$f['size']
             || !in_array($f['source_parent'],$meta['parents']??[],true)) throw new RuntimeException('drive_verify');
         $pdf=$this->raw('files/'.$f['id'].'?alt=media',(int)$f['size']);
-        if (strlen($pdf)!==(int)$f['size'] || !str_starts_with($pdf,'%PDF-') || !hash_equals($f['md5Checksum'],md5($pdf))) throw new RuntimeException('drive_verify');
+        if (strlen($pdf)!==(int)$f['size'] || !self::receiptBytesValid($pdf,$f['format']??'') || !hash_equals($f['md5Checksum'],md5($pdf))) throw new RuntimeException('drive_verify');
         return $pdf;
     }
 
-    /** Drive's native PDF-to-Docs OCR; original scan is never converted or overwritten. */
-    public function createReceiptOcr(string $pdf, string $source, string $parent): string
+    public static function receiptFormat(array $meta): ?string
+    {
+        if (($meta['mimeType']??'')==='application/pdf' && preg_match('/\.pdf\z/i',$meta['name']??'')) return 'pdf';
+        if (($meta['mimeType']??'')==='image/jpeg' && preg_match('/\.jpe?g\z/i',$meta['name']??'')) return 'jpg';
+        return null;
+    }
+
+    public static function receiptBytesValid(string $bytes,string $format): bool
+    {
+        if ($format==='pdf') return str_starts_with($bytes,'%PDF-');
+        if ($format!=='jpg' || !str_starts_with($bytes,"\xff\xd8\xff")) return false;
+        $info=@getimagesizefromstring($bytes);
+        return $info && ($info[2]??0)===IMAGETYPE_JPEG && $info[0]>0 && $info[1]>0 && $info[0]*$info[1]<=100000000;
+    }
+
+    public function verifiedReceipt(array $d): string
+    {
+        $f=$d; $f['source_parent']=$d['drive_parent'];
+        $bytes=$this->scanDocument($f);
+        if (!hash_equals($d['sha256'],hash('sha256',$bytes))) throw new RuntimeException('drive_verify');
+        return $bytes;
+    }
+
+    /** Drive's native PDF/JPEG-to-Docs OCR; original scan is never converted or overwritten. */
+    public function createReceiptOcr(string $pdf, string $source, string $parent, string $mime='application/pdf'): string
     {
         self::assertId($source); self::assertId($parent);
+        if (!in_array($mime,['application/pdf','image/jpeg'],true)) throw new RuntimeException('drive_verify');
         $meta=['name'=>'Hub OCR '.$source,'mimeType'=>'application/vnd.google-apps.document','parents'=>[$parent],
             'appProperties'=>['hubReceiptOcr'=>$source]];
         $headers=[];
         $this->request('POST','https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&ocrLanguage=pt&fields=id',
-            json_encode($meta,JSON_THROW_ON_ERROR),['Content-Type: application/json','X-Upload-Content-Type: application/pdf',
+            json_encode($meta,JSON_THROW_ON_ERROR),['Content-Type: application/json','X-Upload-Content-Type: '.$mime,
             'X-Upload-Content-Length: '.strlen($pdf)],$headers);
         $url=$headers['location']??'';
         if (!str_starts_with($url,'https://www.googleapis.com/upload/drive/v3/files?')) throw new RuntimeException('drive_upload');
-        $r=$this->request('PUT',$url,$pdf,['Content-Type: application/pdf']);
+        $r=$this->request('PUT',$url,$pdf,['Content-Type: '.$mime]);
         $id=(string)($r['id']??''); self::assertId($id); return $id;
     }
 

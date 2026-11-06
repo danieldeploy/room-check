@@ -20,7 +20,7 @@ try {
         if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
         try {
             $action=(string)($_POST['action']??''); $id=(string)($_POST['id']??'');
-            if ($action==='start') $receipts->request((int)$user['id']);
+            if ($action==='start') $receipts->request((int)$user['id'],(int)($_POST['year']??0),is_array($_POST['months']??null)?$_POST['months']:[]);
             elseif ($action==='retry') $receipts->retry($id);
             elseif ($action==='review' && $manager) $receipts->review($id,(string)($_POST['issued_on']??''),(string)($_POST['invoice_number']??''),($_POST['confirmed']??'')==='1',(int)$user['id']);
             else throw new RuntimeException('forbidden',403);
@@ -33,6 +33,8 @@ try {
 $escape=static fn($v)=>htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
 $t=static fn($key)=>htmlspecialchars(InvoiceText::get($key),ENT_QUOTES,'UTF-8');
 $flash=$_SESSION['receipt_flash']??''; unset($_SESSION['receipt_flash']);
+$year=(int)($state['year']??(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y'));
+$monthEnglish=[1=>'January','February','March','April','May','June','July','August','September','October','November','December'];
 $page=max(1,(int)($_GET['page']??1)); $all=array_reverse($state['documents'],true); $documents=array_slice($all,($page-1)*50,50,true);
 ?>
 <!doctype html><html lang="<?= $escape(Translator::locale()) ?>"><head>
@@ -48,7 +50,13 @@ $page=max(1,(int)($_GET['page']??1)); $all=array_reverse($state['documents'],tru
 <section class="card"><p><?= $t('receipt_help') ?></p><p><?= $t('receipt_duplicates') ?></p>
 <?php if (!$connected): ?><div class="alert"><?= $t('receipt_connect') ?></div>
 <?php if ($manager): ?><p><?= $t('receipt_scope') ?></p><form method="post" action="invoice-drive.php"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="receipts" value="1"><button class="primary-button" type="submit"><?= $t('receipt_connect_button') ?></button></form><?php endif; ?>
-<?php elseif ($canRun): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="start"><button class="primary-button" type="submit" <?= $state['requested']?'disabled':'' ?>><?= $t('receipt_start') ?></button></form><?php endif; ?>
+<?php elseif ($canRun): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="start">
+<label><?= $t('receipt_year') ?> <input type="number" name="year" min="2000" max="<?= (int)(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y') ?>" value="<?= $year ?>" required></label>
+<fieldset><legend><?= $t('receipt_months') ?></legend><div class="form-grid">
+<?php foreach (InvoiceDriveLayout::MONTHS as $month=>$name): ?><label class="check-row"><input type="checkbox" name="months[]" value="<?= $month ?>" <?= in_array($month,$state['months']??[],true)?'checked':'' ?>> <?= $escape(SiteTranslations::text($name,$monthEnglish[$month])) ?></label> <?php endforeach; ?>
+</div></fieldset><div class="form-actions"><button class="primary-button" type="submit" <?= $state['requested']?'disabled':'' ?>><?= $t('receipt_start') ?></button></div></form><?php endif; ?>
+<?php if (!empty($state['months'])): ?><p><?= $t('receipt_selection') ?>: <?= $year ?> · <?= $escape(implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$state['months']))) ?></p><?php endif; ?>
+<?php if (!empty($state['missing_periods'])): ?><p class="alert"><?= $t('receipt_missing_month') ?>: <?= $escape(implode(', ',$state['missing_periods'])) ?></p><?php endif; ?>
 <?php if ($state['requested']): ?><p role="status"><?= $t('receipt_queued') ?></p><?php endif; ?>
 <?php if (empty($tocSettings['enabled']) || empty($tocSettings['pilot_verified'])): ?><p class="alert"><?= $t('receipt_toc_disabled') ?></p><?php endif; ?>
 <?php if ($manager): ?><p><?= $t('receipt_grant') ?> <a href="permissions.php"><?= $escape(SiteTranslations::text('Permissões','Permissions')) ?></a></p><?php endif; ?>
@@ -59,6 +67,7 @@ $page=max(1,(int)($_GET['page']??1)); $all=array_reverse($state['documents'],tru
 <?php foreach ($documents as $id=>$d): ?>
 <article class="card"><h3 data-i18n-skip><?= $escape($d['name']) ?></h3>
 <p><a href="https://drive.google.com/file/d/<?= $escape(rawurlencode($id)) ?>/view" target="_blank" rel="noopener noreferrer"><?= $t('receipt_file') ?></a></p>
+<p><?= $t('receipt_expected') ?>: <?= $escape($d['expected_period']??'') ?></p>
 <p><?= $t('receipt_stage_'.$d['stage']) ?> · <?= $t($d['toconline_state']) ?></p>
 <?php if (!empty($d['issued_on'])): ?><p><?= $t('receipt_date') ?>: <?= $escape($d['issued_on']) ?> · <?= $escape($d['invoice_number']) ?></p><?php endif; ?>
 <?php if (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>

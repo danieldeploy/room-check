@@ -30,11 +30,20 @@ final class InvoiceReceipts
         if (!isset($s['documents'][$id])) throw new RuntimeException('receipt_history_missing');
         $s['documents'][$id]['toconline_state']=$state; $vault->save(self::FILE,$s);
     }
-    public function request(int $actor): void
+    public function request(int $actor, int $year, array $months): void
     {
+        $currentYear=(int)(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y');
+        if ($year<2000 || $year>$currentYear || !$months || count($months)>12) throw new RuntimeException('receipt_select_periods');
+        foreach ($months as $month) if (!is_scalar($month) || !preg_match('/\A(?:[1-9]|1[0-2])\z/',(string)$month)) throw new RuntimeException('receipt_select_periods');
+        $months=array_values(array_unique(array_map('intval',$months))); sort($months);
         if (!$this->drive->receiptsAuthorized()) throw new RuntimeException('receipt_connect');
         $s=$this->status();
-        if (!$s['requested']) { $s['requested']=true; $s['requested_by']=$actor; $s['requested_at']=gmdate('c'); $s['error']=''; $this->save($s); }
+        if ($s['requested']) {
+            if (($s['year']??null)!==$year || ($s['months']??[])!==$months) throw new RuntimeException('worker_busy');
+            return;
+        }
+        $s['requested']=true; $s['requested_by']=$actor; $s['requested_at']=gmdate('c');
+        $s['year']=$year; $s['months']=$months; $s['missing_periods']=[]; $s['error']=''; $this->save($s);
     }
     public static function validDate(string $value): bool
     {
@@ -62,9 +71,10 @@ final class InvoiceReceipts
     public function review(string $id,string $date,string $number,bool $confirmed,int $actor): void
     {
         $s=$this->status(); $d=$s['documents'][$id]??[];
-        if (($d['stage']??'')!=='review' || empty($d['sha256']) || ($d['mimeType']??'')!=='application/pdf'
+        if (($d['stage']??'')!=='review' || empty($d['sha256']) || !in_array($d['format']??'',['pdf','jpg'],true)
             || !self::validDate($date) || !$confirmed || trim($number)==='' || mb_strlen($number)>128
             || preg_match('/[\x00-\x1f]/',$number)) throw new RuntimeException('receipt_review_required');
+        if (substr($date,0,7)!==($d['expected_period']??'')) throw new RuntimeException('receipt_period_mismatch');
         $settings=$this->toc->settings(); InvoiceToconline::destination($settings['nif']);
         if (!empty($d['ocr_id']) && empty($d['ocr_cleaned'])) {
             $this->drive->connect(); $this->drive->trashReceiptOcr($d['ocr_id'],$id); $d['ocr_cleaned']=true;
@@ -89,15 +99,40 @@ final class InvoiceReceipts
             || !in_array('daniel.ciorcas@welcomehostel.pt',array_column($meta['owners']??[],'emailAddress'),true)) throw new RuntimeException('drive_account_mismatch');
         $matches=$this->drive->namedItems($root,['temp_scan'],true);
         if (count($matches)!==1) throw new RuntimeException('receipt_source');
-        $source=$matches[0]['id']; $files=$this->drive->scanFiles($source);
+        $source=$matches[0]['id']; $files=[]; $s['missing_periods']=[];
+        if (empty($s['year']) || empty($s['months'])) throw new RuntimeException('receipt_select_periods');
+        foreach ($s['months'] as $month) {
+            $period=sprintf('%04d-%02d',$s['year'],$month);
+            $label=InvoiceDriveLayout::MONTHS[$month];
+            $names=array_values(array_unique([$label,mb_strtolower($label),mb_strtoupper($label),str_replace('ç','c',mb_strtolower($label))]));
+            $folders=$this->drive->namedItems($source,$names,true);
+            if (count($folders)>1) throw new RuntimeException('drive_conflict');
+            if (!$folders) { $s['missing_periods'][]=$period; continue; }
+            foreach ($this->drive->scanFiles($folders[0]['id']) as $f) {
+                $files[]=$f+['expected_period'=>$period,'source_month'=>$folders[0]['id']];
+                if (count($files)>500) throw new RuntimeException('receipt_limit');
+            }
+        }
         foreach ($files as $f) {
             $id=$f['id']; InvoiceDriveClient::assertId($id);
-            if (isset($s['documents'][$id])) continue;
-            if (count($s['documents'])>=2000) throw new RuntimeException('receipt_limit');
-            $valid=($f['mimeType']??'')==='application/pdf' && (int)($f['size']??0)>=5 && (int)$f['size']<=10*1024*1024 && !empty($f['md5Checksum']);
-            $s['documents'][$id]=$f+['source_parent'=>$f['parents'][0]??'', 'root'=>$root,'source'=>$source,
-                'stage'=>$valid?'queued':'review','error'=>$valid?'':'receipt_pdf_required','toconline_state'=>'pending',
+            $old=$s['documents'][$id]??null;
+            if ($old) {
+                // Explicit reselection can recover a wrongly filed/replaced, still-unsent scan.
+                if ($old['stage']!=='review' || $old['toconline_state']!=='pending' || !empty($old['drive_parent'])
+                    || (($old['expected_period']??'')===$f['expected_period'] && ($old['source_parent']??'')===($f['parents'][0]??'')
+                        && ($old['md5Checksum']??'')===($f['md5Checksum']??''))) continue;
+            }
+            if (!$old && count($s['documents'])>=2000) throw new RuntimeException('receipt_limit');
+            $format=InvoiceDriveClient::receiptFormat($f);
+            $valid=$format!==null && (int)($f['size']??0)>=5 && (int)$f['size']<=10*1024*1024 && !empty($f['md5Checksum']);
+            $s['documents'][$id]=$f+['format'=>$format,'source_parent'=>$f['parents'][0]??'', 'root'=>$root,'source'=>$source,
+                'stage'=>$valid?'queued':'review','error'=>$valid?'':'receipt_format_required','toconline_state'=>'pending',
                 'requested_by'=>$s['requested_by'],'created_at'=>gmdate('c'),'attempts'=>0];
+            if ($old && !empty($old['ocr_creating']) && empty($old['ocr_cleaned'])) {
+                // Never lose an unresolved temporary copy when the owner corrects the folder.
+                $s['documents'][$id]['ocr_creating']=true;
+                $s['documents'][$id]['ocr_id']=$old['ocr_id']??null;
+            }
         }
         $s['requested']=false; $s['source']=$source; $s['root']=$root; $s['scanned_at']=gmdate('c'); $s['error']=''; $this->save($s);
     }
@@ -135,7 +170,7 @@ final class InvoiceReceipts
     private function process(string $id,array $d): void
     {
         if (in_array($d['stage'],['queued','reading'],true)) {
-            $pdf=$this->drive->scanPdf($d); $d['sha256']=hash('sha256',$pdf); $d['stage']='reading'; $this->put($id,$d);
+            $pdf=$this->drive->scanDocument($d); $d['sha256']=hash('sha256',$pdf); $d['stage']='reading'; $this->put($id,$d);
             if (!empty($d['ocr_creating']) && empty($d['ocr_id'])) {
                 $d['ocr_id']=$this->drive->findReceiptOcr($id,$d['source']);
                 if (!$d['ocr_id']) { $d['stage']='review'; $d['error']='receipt_ocr_uncertain'; $this->put($id,$d); return; }
@@ -143,26 +178,29 @@ final class InvoiceReceipts
             }
             if (empty($d['ocr_id'])) {
                 $d['ocr_creating']=true; $this->put($id,$d); // Unknown creation outcome is never blindly repeated.
-                $d['ocr_id']=$this->drive->createReceiptOcr($pdf,$id,$d['source']); $this->put($id,$d);
+                $d['ocr_id']=$this->drive->createReceiptOcr($pdf,$id,$d['source'],$d['mimeType']); $this->put($id,$d);
             }
             $text=$this->drive->receiptOcrText($d['ocr_id']);
             $settings=$this->toc->settings(); InvoiceToconline::destination($settings['nif']);
             $result=self::classify($text,$settings['nif']); unset($text,$pdf);
             $this->drive->trashReceiptOcr($d['ocr_id'],$id); $d['ocr_cleaned']=true;
             if (!$result) { $d['stage']='review'; $d['error']='receipt_review_required'; $this->put($id,$d); return; }
-            $d=array_merge($d,$result,['company_nif'=>$settings['nif'],'stage'=>'ready']); $this->put($id,$d);
+            $d=array_merge($d,$result,['company_nif'=>$settings['nif'],'stage'=>'ready']);
+            if (substr($d['issued_on'],0,7)!==($d['expected_period']??'')) { $d['stage']='review'; $d['error']='receipt_period_mismatch'; $this->put($id,$d); return; }
+            $this->put($id,$d);
         }
         if (in_array($d['stage'],['ready','moving'],true)) {
+            if (substr($d['issued_on'],0,7)!==($d['expected_period']??'')) throw new RuntimeException('receipt_period_mismatch');
             if ($d['company_nif']!==$this->toc->settings()['nif']) throw new RuntimeException('receipt_company_changed');
             if (empty($d['drive_parent'])) {
-                $parent=$d['root']; $layout=InvoiceDriveLayout::folders(substr($d['issued_on'],0,7)); $layout[2]=['taloes'];
+                $parent=$d['root']; $layout=InvoiceDriveLayout::folders(substr($d['issued_on'],0,7)); $layout[2]=[$d['format']==='jpg'?'taloes':'pdf'];
                 $folders=new InvoiceDrive($this->pdo,$this->vault,$this->drive);
                 foreach ($layout as $names) $parent=$folders->folder($parent,$names);
                 $d['drive_parent']=$parent; $d['stage']='moving'; $this->put($id,$d);
             }
             $m=$this->drive->metadata($id);
             if (!in_array($d['drive_parent'],$m['parents']??[],true)) {
-                $pdf=$this->drive->scanPdf($d);
+                $pdf=$this->drive->scanDocument($d);
                 if (!hash_equals($d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
             }
             $this->drive->moveReceipt($d); $d['stage']='archived'; $d['archived_at']=gmdate('c'); $d['error']=''; $this->put($id,$d);
