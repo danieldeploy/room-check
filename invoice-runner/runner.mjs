@@ -79,7 +79,7 @@ try {
       { fromEntry: ['collect', 'verify'].includes(input.action) })
       : { page: await browser.newPage(), created: false };
     const page = selection.page;
-    if (connected) controlledTabs.track(selection);
+    if (connected) await controlledTabs.track(selection);
     page.setDefaultNavigationTimeout(30000); page.setDefaultTimeout(15000);
     if (input.action === 'preflight') {
       await page.setContent('<!doctype html><title>Invoice preflight</title><p>ready</p>');
@@ -174,7 +174,7 @@ try {
           throw new PortalError(login.failure_code || 'needs_auth');
         }
         const active = await controlledBookingPage(browser, browserPurpose);
-        if (connected) controlledTabs.track(active);
+        if (connected) await controlledTabs.track(active);
         const workPage = active.page;
         if (collectionTrace) collectionTrace.stage = 'navigation';
         if (workPage !== page) await guard(workPage);
