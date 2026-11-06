@@ -620,3 +620,11 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
   cross-year/month classification, per-page duplicate, partial retention and cleanup.
   Live acceptance remains pending manager Drive scope upgrade and genuine scans;
   no real invoices were submitted as development fixtures.
+
+- PR #337 integrated at `372a1f13a4adf84e1096448e7a908fe57372a887` after both
+  required checks passed. Production deployment 390 failed; read-only inspection
+  confirms checkout at that commit but last successful deployment remains
+  `8d67fd623ded3a04cfe29dbf65b77e7bbe5e8f0f` (389). Do not retry publication blindly.
+  The protected receipt-release diagnostic reads only exact deployment 390,
+  bounded runtime metadata and installed code checksums. It never prints raw
+  configuration/logs, reads invoices, sends mail or writes to the server.
