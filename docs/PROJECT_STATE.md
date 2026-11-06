@@ -27,7 +27,30 @@ Production acceptance succeeded: PR #331, commit `51a438c`, deployment 385;
 run 41946097000 verified 13-log baseline produced by the existing cron at
 2026-11-05 01:10:02 UTC and exact private TXT readback. Latest sampled quota
 72.17%; two eligible duplicate backups removed after successful MySQL restore.
-The next calendar day's append scan has not yet been observed in production.
+The next calendar day's incremental pass is now verified by protected run
+[42207376884](https://github.com/danieldeploy/room-check/actions/runs/42207376884)
+on 2026-11-06. The installed and last-deployed commit were both `2a97a67`
+(deployment 386). The existing cron completed at 00:00:03 UTC, covering from
+2026-11-05 01:10:02 UTC: 14 files, 10 unchanged, 3 reset/replaced files,
+7,564,251 bytes / 55,359 chunks read, zero pending tail bytes. Active severity
+counts were empty; archived counts included 12 HTTP 5xx occurrences, which
+are not new active incidents. This verifies this observed day, not future runs.
+
+The scheduled GitHub bridge started at 11:03 UTC, later than its nominal
+03:17 UTC schedule. All maintenance steps passed. Quota was 72.97% in the
+verified TXT (approximately 4,378 / 6,000 MiB used); logs remained 118.5 MiB,
+including the approximately 110.8 MiB recently modified error log. Browser
+version inventory was empty. Temporary MySQL restore passed; zero backups or
+caches were deleted during this run. The private TXT was written and read back
+exactly, with no incident alert and no new root directories.
+
+Log reduction remains **pending**, separately from daily verification. The
+historical report supplies severity/reason counts but no dated origin breakdown
+for its 51 fatal occurrences. Those totals must not be assigned to the Hub or
+treated as current faults. Before reducing the active error log, establish its
+writer/origin and resolved-versus-needed history, preserve recoverable evidence,
+and follow the existing no-blind-truncation/no-fixed-retention decision. No
+additional log deletion or rotation was performed during this acceptance check.
 
 The Meta API probe could not discover the WABA (`waba_id_unavailable`). This
 was not proof of pending template approval: the existing authorized Meta UI
@@ -40,11 +63,14 @@ Uncertain sends remain disabled and are never automatically repeated. The
 normal dispatcher moves from the unverified reminders entrypoint to the
 already verified ZKAccess tick, under a separate MySQL lock, with a private
 heartbeat. The protected daily TXT verifies both activation and fresh dispatch.
-Production test acceptance/heartbeat remain to be observed after this release;
-Meta API acceptance must not be described as confirmed handset delivery.
+Production activation and ordinary dispatch heartbeat are now verified by run
+42207376884: activation `meta_accepted`, dispatch `healthy_no_message`,
+checked at 2026-11-06 11:05:01 UTC. No routine WhatsApp was sent. The machine
+report still records handset delivery as not confirmed; it cannot independently
+establish delivery to the phone. Never reset the one-time activation receipt.
 See `docs/CPANEL_DISK_MAINTENANCE.md` for timing, limits and recovery.
 
-Last reviewed: 2026-10-29 (Europe/Lisbon)
+Last reviewed: 2026-11-06 (Europe/Lisbon)
 
 This file records the current project state, not an immutable history. Durable
 behavioral decisions live under `docs/decisions/`; detailed workflows live

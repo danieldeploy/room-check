@@ -220,3 +220,31 @@ actual private test receipt and ordinary dispatch heartbeat.
 - A healthy report sends no routine message. Quota escalation, once-per-incident
   deduplication and ambiguous-send protection remain unchanged. API acceptance
   is verified separately from handset delivery; no delivery webhook is added.
+
+
+## Observed next-day acceptance — 2026-11-06
+
+Protected run [42207376884](https://github.com/danieldeploy/room-check/actions/runs/42207376884)
+confirmed installed/last-deployed `2a97a67` (deployment 386), all maintenance
+steps successful, MySQL restoration passed, and exact private TXT readback.
+The existing cron completed the next Lisbon day's incremental scan at
+00:00:03 UTC: 14 files, 10 unchanged, 3 resets/replacements, 7,564,251 bytes,
+55,359 chunks, and no pending tail. No active severe events were recorded;
+the 12 archived HTTP 5xx counts remain archive history. This acceptance does
+not imply that errors appended after this scan were already inspected.
+
+Quota was 72.97% of 6,000 MiB, logs 118.5 MiB, largest recent error log about
+110.8 MiB, and no installed Linux browser versions were found. Zero backups
+or caches were removed during this run. The dispatcher heartbeat at 11:05:01
+UTC was `healthy_no_message`, with accepted activation and no routine send.
+The machine report alone does not confirm handset delivery.
+
+The GitHub schedule bridge started at 11:03 UTC rather than nominal 03:17 UTC;
+record actual execution time separately from schedule configuration. The local
+incremental scan had already run at midnight via the existing ZKAccess tick.
+
+Daily verification is accepted for this observed pass. Log reduction remains
+pending: historical severity totals alone do not establish writer/origin,
+incident dates, or that the active log is dispensable. Preserve historical
+reports/cursors, useful logs and mail; no deletion, rotation, blind truncation,
+new scheduler or fixed retention period is introduced by this acceptance.
