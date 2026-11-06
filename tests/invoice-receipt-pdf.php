@@ -5,6 +5,9 @@ $directory=sys_get_temp_dir().'/receipt-pdf-test-'.bin2hex(random_bytes(10)); mk
 function pdfAssert(bool $value,string $message): void { if (!$value) throw new RuntimeException($message); }
 try {
     $config=['private_dir'=>$directory,'node_binary'=>getenv('TEST_NODE_BINARY')?:'/usr/bin/node','runner_script'=>dirname(__DIR__).'/invoice-runner/runner.mjs'];
+    pdfAssert(InvoiceReceiptPdf::nodeCandidates(['node_binary'=>'/usr/bin/node','private_dir'=>'/home/welcome/room-check-private/invoices'])===['/usr/bin/node','/home/welcome/nodevenv/booking-vault-agent/22/bin/node'],'inspected cPanel runtime only follows the default');
+    pdfAssert(InvoiceReceiptPdf::nodeCandidates(['node_binary'=>'/custom/bin/node','private_dir'=>'/home/welcome/room-check-private/invoices'])===['/custom/bin/node'],'explicit runtime never silently replaced');
+    pdfAssert(InvoiceReceiptPdf::nodeCandidates(['node_binary'=>'/usr/bin/node','private_dir'=>'/unrelated/private'])===['/usr/bin/node'],'no guessed runtime outside known layout');
     verifyReceiptSplit($config);
     pdfAssert(!glob($directory.'/*'),'release probe leaves no artifacts');
     $splitter=new InvoiceReceiptPdf(new InvoiceVault($directory),$config);

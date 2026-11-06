@@ -42,6 +42,7 @@ if (PHP_SAPI==='cli' && realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
         verifyReceiptSplit($config);
         echo json_encode(['ok'=>true,'receipt_pdf_split'=>'passed','pages'=>2])."\n";
     } catch (Throwable $e) {
-        echo json_encode(['ok'=>false,'receipt_pdf_split'=>'failed','error'=>'receipt_split_unavailable'])."\n"; exit(1);
+        $code=in_array($e->getMessage(),['receipt_split_unavailable','receipt_split_failed','receipt_split_limit','private_storage_unavailable','private_storage_permissions'],true)?$e->getMessage():'receipt_split_failed';
+        echo json_encode(['ok'=>false,'receipt_pdf_split'=>'failed','error'=>$code])."\n"; exit(1);
     }
 }

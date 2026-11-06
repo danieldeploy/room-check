@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recover only inspected deployment 288; every other failure keeps the normal gate."""
+"""Recover only inspected receipt deployment 390; every other failure keeps the normal gate."""
 import argparse
 import json
 import os
@@ -7,8 +7,8 @@ import sys
 from automated_release import (Config,CpanelAPI,Deployment,WHM_ORIGIN,BRANCH,GitHub,commit,require,
     DeploymentError,release,inspect_release_state,health_check,require_backup_gate)
 
-FAILED_ID="288"
-FAILED_SHA="eb45c3be90d12e4295e262f0f10e3916dbe3b962"
+FAILED_ID="390"
+FAILED_SHA="372a1f13a4adf84e1096448e7a908fe57372a887"
 
 def latest_task(runner):
     tasks=runner.tasks()
@@ -34,9 +34,9 @@ def inspect(runner):
     if runner.task_state(t)=="succeeded": return inspect_release_state(runner)
     known_failure(runner,t)
     row=runner.repository(); current=runner.inspect(row)
-    return {"mode":"inspected-hostelworld-recovery","writes":False,"current_commit":current,
+    return {"mode":"inspected-receipt-runtime-recovery","writes":False,"current_commit":current,
             "failed_deploy_id":FAILED_ID,"failed_commit":FAILED_SHA,
-            "cause":"hostelworld_account_binding_missing_or_ambiguous"}
+            "cause":"receipt_split_default_node_missing"}
 
 def recover(runner,github,expected):
     expected=commit(expected)
@@ -77,5 +77,5 @@ if __name__=="__main__":
         print(json.dumps({"ok":False,"error":str(e),"deploy_id":e.deploy_id}),file=sys.stderr)
         sys.exit(1)
     except Exception:
-        print('{"ok":false,"error":"hostelworld_recovery_failed_inspect_server"}',file=sys.stderr)
+        print('{"ok":false,"error":"receipt_runtime_recovery_failed_inspect_server"}',file=sys.stderr)
         sys.exit(1)

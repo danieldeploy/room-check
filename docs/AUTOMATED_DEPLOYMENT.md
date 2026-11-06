@@ -220,3 +220,10 @@ novo e um PDF sintético de duas páginas. Usa uma pasta privada própria e remo
 ficheiros de teste; não lê scans nem envia emails. Falha bloqueia a publicação.
 Não instala Node/npm/Puppeteer nem altera credenciais. O resultado só apresenta
 sucesso/falha e a contagem de páginas.
+
+A falha 390 foi inspecionada em leitura: o teste de PDF parou antes das cópias
+porque `/usr/bin/node` não existe; o Node 22 privado já usado pelo cron existe.
+A recuperação atual fica limitada a esse ID e ao SHA
+`372a1f13a4adf84e1096448e7a908fe57372a887`, exigindo uma versão descendente
+corrigida e todas as verificações normais. O divisor e o teste usam a mesma
+resolução do Node existente. Qualquer nova falha volta a bloquear a publicação.
