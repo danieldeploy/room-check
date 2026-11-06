@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { assertPrivateDirectory } from './private-storage.mjs';
+import { createSharedUiBridge } from './shared-ui-bridge.mjs';
 
 // Compare Hostelworld discovery in ordinary windowed Chrome on the Windows
 // desktop. Keep the disposable profile and all existing launch safeguards.
@@ -85,19 +86,24 @@ export async function controlledBookingPasswordPage(browser) {
 }
 
 /**
- * Ownership belongs to the current task, never to the persistent Chrome profile.
- * Only tabs explicitly created by this task can be closed. No watchdog or polling.
+ * Ownership belongs to the task, never to the persistent Chrome profile.
+ * The shared controller adds abandoned-task recovery; this fallback preserves older installs.
  */
 export function createControlledTabOwnership() {
   const owned = new Set();
+  const shared = createSharedUiBridge();
   let humanChallenge = false;
   return {
     track(selection) {
-      if (selection?.created === true && selection.page) owned.add(selection.page);
+      if (selection?.created === true && selection.page && !owned.has(selection.page)) {
+        owned.add(selection.page);
+        return Promise.resolve(shared.track(selection.page)).then(() => selection.page);
+      }
       return selection?.page;
     },
     preserveHumanChallenge() { humanChallenge = true; },
     async closeOwned({ settled = false } = {}) {
+      if (await shared.finish({ settled, humanChallenge })) return;
       // On an interrupted task or an unresolved human challenge, leave Chrome as-is.
       if (!settled || humanChallenge) return;
       for (const page of owned) {
