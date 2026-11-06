@@ -1,5 +1,21 @@
 # Management Hub — current project state
 
+## Monthly invoice archive folder (2026-11-06)
+
+- Owner request: preserve the accounting root/year/Portuguese month structure,
+  replacing the final `online` folder with lowercase `pdf` for invoice uploads.
+- The shared Drive layout now targets `pdf`; Booking, Hostelworld and Cloudbeds
+  keep the existing collection, issue-date classification and TOConline delivery.
+  Airbnb CSV/export-month behavior and TOConline exclusion remain unchanged.
+- Existing monthly folders must be renamed in place, retaining Drive IDs and all
+  documents. Pending deliveries retain `drive_parent`; new cache entries discover
+  the renamed folder. No database reset, document reimport or email resend.
+- Regression coverage exercises reuse with a historical `online` cache entry,
+  month aliases and persistent folder/document identity across upload retries.
+- Prepared in this change. CI, deployment and the live Drive rename/readback
+  remain separate acceptance checks. Sibling `taloes` folders remain untouched.
+  See `docs/invoices-multiplatform.md` for the transition contract.
+
 ## Daily WHM log verification (2026-11-05)
 
 Historical full scan is confirmed: production `8342de8` / deployment 384;

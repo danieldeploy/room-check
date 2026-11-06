@@ -38,10 +38,21 @@ content-write access to unrelated documents. File creation stays under drive.fil
 Set the existing accounting root and run the real destination test before enabling
 uploads. A previously connected account must reconnect to grant metadata access.
 
-Archive hierarchy: accounting root / year / Portuguese month_year / online.
+Archive hierarchy: accounting root / year / Portuguese month_year / pdf.
 Reuse existing month folders using either an underscore or a space (for example,
 Junho_2026 or Junho 2026); ambiguous matching folders stop with drive_conflict.
-The configured root must contain the years, not point to one month's online folder.
+The configured root must contain the years, not point to one month's pdf folder.
+Owner decision, 2026-11-06: the final folder is lowercase `pdf`, replacing `online`.
+Rename existing monthly `online` folders in place after checking that no `pdf`
+folder conflicts. Preserve folder/file IDs, parents, contents and delivery history;
+do not copy, reimport or resend invoices. The new path cache discovers the renamed
+folder by name; existing document `drive_parent` values and retries keep that ID.
+Historical `online` cache entries need no database rewrite. Complete and verify
+the Drive rename together with this release; do not revert just the folder name
+while this layout is active. New months create `pdf` through the existing worker.
+This is a folder-name change only: issue-month rules, the Airbnb CSV/export-month
+exception and TOConline eligibility remain unchanged. Sibling `taloes` folders
+and receipt processing are outside this step.
 Filenames use portal_property_month, for example booking_city_center_junho.pdf.
 An occupied filename gets an invoice-number/document-ID suffix; existing Drive
 files are never replaced. The worker waits for a successful destination test
