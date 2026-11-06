@@ -42,7 +42,7 @@ final class InvoiceToconline
         // Missing history after a partial restore must stop delivery, never reset deduplication.
         if ((int)$this->pdo->query("SELECT COUNT(*) FROM invoice_document_delivery WHERE toconline_state IN ('toc_sending','toc_submitted','toc_uncertain','toc_accepted','toc_duplicate','toc_existing','toc_rejected','toc_review','toc_no_confirmation')")->fetchColumn()>0) throw new RuntimeException('toc_ledger_missing');
         if ($this->vault->has('receipts-workflow.enc')) foreach ($this->vault->read('receipts-workflow.enc')['documents']??[] as $d) {
-            if (!in_array($d['toconline_state'],['pending','toc_retry'],true)) throw new RuntimeException('toc_ledger_missing');
+            if (!in_array($d['toconline_state'],['pending','toc_retry','receipt_per_page'],true)) throw new RuntimeException('toc_ledger_missing');
         }
         return [];
     }
@@ -231,7 +231,7 @@ final class InvoiceToconline
     {
         $settings=$this->settings();
         if (empty($settings['enabled']) || empty($settings['pilot_verified'])) return;
-        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || substr($d['issued_on'],0,7)!==($d['expected_period']??'') || ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('toc_ineligible');
+        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('toc_ineligible');
         $id='receipt:'.$d['id']; $ledger=$this->ledger();
         $identity=hash('sha256',$settings['nif']."\0receipt\0".$d['id']."\0".$d['sha256']);
         // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.

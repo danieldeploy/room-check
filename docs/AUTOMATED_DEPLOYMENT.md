@@ -211,3 +211,12 @@ gzip before removing only inactive redundant plaintext. It never changes
 active logs, daily cursors or the historical audit marker. Read
 `CPANEL_DISK_MAINTENANCE.md` for eligibility, recovery and live acceptance;
 never repeat an ambiguous run by resetting its marker.
+
+### Verificação da divisão de scans PDF
+
+Depois do backup e antes das cópias, `deploy/verify_receipt_split.php` carrega apenas
+internamente a configuração instalada e verifica o Node configurado com o splitter
+novo e um PDF sintético de duas páginas. Usa uma pasta privada própria e remove os
+ficheiros de teste; não lê scans nem envia emails. Falha bloqueia a publicação.
+Não instala Node/npm/Puppeteer nem altera credenciais. O resultado só apresenta
+sucesso/falha e a contagem de páginas.

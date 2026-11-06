@@ -11,6 +11,7 @@ require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 require_once __DIR__ . '/InvoiceNotificationTest.php';
 require_once __DIR__.'/CloudbedsInbox.php';
 require_once __DIR__.'/InvoiceReceipts.php';
+require_once __DIR__.'/InvoiceReceiptPdf.php';
 
 final class InvoiceRunner
 {
@@ -122,7 +123,7 @@ final class InvoiceRunner
         (new InvoiceTocMailbox($vault,$toc))->poll();
         (new InvoiceDrive($this->pdo, $vault, new InvoiceDriveClient($vault)))->run();
         $toc->run();
-        (new InvoiceReceipts($this->pdo,$vault,new InvoiceDriveClient($vault),$toc))->run();
+        (new InvoiceReceipts($this->pdo,$vault,new InvoiceDriveClient($vault),$toc,[new InvoiceReceiptPdf($vault,$this->config),'split']))->run();
     }
 
     private function finishFailure(array $job, string $code, InvoiceAlerts $alerts): void
