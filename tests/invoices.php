@@ -13,7 +13,7 @@ function rejectsInvoice(callable $fn, string $message): void {
     try { $fn(); } catch (Throwable) { checkInvoice(true, $message); return; }
     checkInvoice(false, $message);
 }
-checkInvoice(InvoiceDriveLayout::folders('2026-06') === [['2026'], ['Junho_2026','Junho 2026'], ['online']], 'Accounting June folder aliases');
+checkInvoice(InvoiceDriveLayout::folders('2026-06') === [['2026'], ['Junho_2026','Junho 2026'], ['pdf']], 'Accounting June folder aliases and lowercase PDF destination');
 checkInvoice(InvoiceDriveLayout::folders('2027-03')[1] === ['Março_2027','Março 2027'], 'Accounting accented month and year rollover');
 rejectsInvoice(fn()=>InvoiceDriveLayout::folders('2026-13'), 'Invalid accounting month rejected');
 $namingDocument=['id'=>1,'portal'=>'booking','property_label'=>'City Center Guest House','period'=>'2026-06','invoice_number'=>'INV/1','format'=>'pdf'];

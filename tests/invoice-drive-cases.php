@@ -11,6 +11,10 @@ $content="Invoice,Company\nINV-12,Active Lines\n";
 $service->import($vault,$job,['number'=>'csv-2026-08','period'=>'2026-08','period_basis'=>'export_month','format'=>'csv','content'=>base64_encode($content)]);
 $doc=(int)$pdo->query('SELECT MAX(id) FROM invoice_documents')->fetchColumn();
 $pdo->exec("UPDATE invoice_drive_settings SET folder_id='testroot00000001',state='ready' WHERE id=1");
+// The owner renamed the existing Drive folder in place. Preserve its ID even
+// while the database still contains the historical online cache entry.
+$pdo->prepare('INSERT INTO invoice_drive_folders (path_key,drive_id,parent_id,name) VALUES (?,?,?,?)')
+ ->execute([hash('sha256',"existingmonth00001\0online"),'existingpdf000001','existingmonth00001','online']);
 $client=new class {
  public bool $fail=true; public bool $corrupt=false; public array $uploads=[]; public array $folderNames=[]; public array $fileNames=[]; private int $counter=0;
  public function connect(): string {return 'daniel.ciorcas@welcomehostel.pt';}
@@ -18,6 +22,8 @@ $client=new class {
  public function folder(string $id,string $parent,string $name): void {$this->folderNames[]=$name;}
  public function namedItems(string $parent,array $names,bool $foldersOnly=false): array {
   if($foldersOnly && $names[0]==='2026')return [['id'=>'existingyear00001','name'=>'2026']];
+  if($foldersOnly && in_array('Agosto 2026',$names,true))return [['id'=>'existingmonth00001','name'=>'Agosto 2026']];
+  if($foldersOnly && $parent==='existingmonth00001' && $names===['pdf'])return [['id'=>'existingpdf000001','name'=>'pdf']];
   if(!$foldersOnly && $names[0]==='airbnb_test_airbnb_agosto.csv')return [['id'=>'unrelatedexistingfile','name'=>$names[0]]];
   return [];
  }
@@ -36,10 +42,12 @@ try {
  if($client->uploads || (int)$pdo->query("SELECT COUNT(*) FROM invoice_document_delivery WHERE attempts>0")->fetchColumn())throw new RuntimeException('Unconfigured destination consumed an upload attempt');
  $pdo->exec("UPDATE invoice_drive_settings SET state='ready' WHERE id=1");
  $drive->run($now);
- if($client->folderNames!==['2026','Agosto_2026','online'])throw new RuntimeException('Accounting hierarchy');
+ if($client->folderNames!==['2026','Agosto_2026','pdf'])throw new RuntimeException('Accounting hierarchy');
  if($pdo->query("SELECT drive_id FROM invoice_drive_folders WHERE name='2026'")->fetchColumn()!=='existingyear00001')throw new RuntimeException('Existing year not reused');
+ if($pdo->query("SELECT drive_id FROM invoice_drive_folders WHERE name='pdf'")->fetchColumn()!=='existingpdf000001')throw new RuntimeException('Renamed PDF folder not reused');
  if($client->fileNames[0]!=='airbnb_test_airbnb_agosto_csv_2026_08_'.$doc.'.csv')throw new RuntimeException('Existing monthly filename not protected');
  $row=$pdo->query("SELECT * FROM invoice_document_delivery WHERE document_id=$doc")->fetch(PDO::FETCH_ASSOC);
+ if($row['drive_parent']!=='existingpdf000001')throw new RuntimeException('Renamed folder identity changed');
  if((int)$row['attempts']!==1 || $row['drive_state']!=='retry' || strtotime($row['next_attempt_at'].' UTC')!==$now+10800)throw new RuntimeException('Initial retry schedule');
  $drive->run($now+10799);
  if((int)$pdo->query("SELECT attempts FROM invoice_document_delivery WHERE document_id=$doc")->fetchColumn()!==1)throw new RuntimeException('Retried early');
@@ -56,5 +64,6 @@ try {
  $row=$pdo->query("SELECT * FROM invoice_document_delivery WHERE document_id=$doc")->fetch(PDO::FETCH_ASSOC);
  if($row['drive_state']!=='verified'||is_file($path)||$row['company_state']!=='validated')throw new RuntimeException('Verified archive cleanup');
  if(count(array_unique($client->uploads))!==1)throw new RuntimeException('Manual retry created duplicate');
+ if($row['drive_parent']!=='existingpdf000001')throw new RuntimeException('Retry changed renamed folder identity');
  echo "Drive retries, 24h cap, terminal alert, persistent identity, corrupt upload retention and verified cleanup passed.\n";
 }finally{foreach(glob($tmp.'/*')?:[]as$f)unlink($f);rmdir($tmp);}
