@@ -6,12 +6,13 @@ Last reviewed: 2026-11-06 (Europe/Lisbon).
 
 **Read [PROJECT_STATE_BASE_20261106.md](PROJECT_STATE_BASE_20261106.md) together
 with this file.** It preserves the complete previous state document byte-for-byte
-(Git blob `550f2984f4445f39c4de52f1f7fa591989936c1b`), including log maintenance,
-invoices/receipts, Cloudbeds/PINs, backup/deployment evidence and all outstanding
-limitations. No unrelated module state is removed or implicitly declared complete.
-This index contains the later UI-cleanup decision; it supersedes only the older
-Chrome/Explorer paragraphs in that required continuation. Future module changes
-must update this index and the relevant flow, preserving the continuation.
+(Git blob `210738a9356f4c6a6f721b673bf6040809dbc98c`), including the concurrent
+multi-page receipt update, log maintenance, invoices, Cloudbeds/PINs, backups,
+deployment evidence and all outstanding limitations. No unrelated module state
+is removed or implicitly declared complete. This index contains the later
+UI-cleanup decision; it supersedes only older Chrome/Explorer paragraphs in that
+required continuation. Future module changes must update this index and the
+relevant flow, preserving the continuation.
 
 ## Unified task-owned UI cleanup — 2026-11-06
 

@@ -66,7 +66,8 @@ $page=max(1,(int)($_GET['page']??1)); $all=array_reverse($state['documents'],tru
 <?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
 <?php foreach ($documents as $id=>$d): ?>
 <article class="card"><h3 data-i18n-skip><?= $escape($d['name']) ?></h3>
-<p><a href="https://drive.google.com/file/d/<?= $escape(rawurlencode($id)) ?>/view" target="_blank" rel="noopener noreferrer"><?= $t('receipt_file') ?></a></p>
+<p><a href="https://drive.google.com/file/d/<?= $escape(rawurlencode(empty($d['archived_at'])?($d['source_id']??$id):$id)) ?>/view" target="_blank" rel="noopener noreferrer"><?= $t('receipt_file') ?></a></p>
+<?php if (!empty($d['page_number'])): ?><p><?= $t('receipt_page') ?> <?= (int)$d['page_number'] ?> / <?= (int)$d['page_count'] ?></p><?php endif; ?>
 <p><?= $t('receipt_expected') ?>: <?= $escape($d['expected_period']??'') ?></p>
 <p><?= $t('receipt_stage_'.$d['stage']) ?> · <?= $t($d['toconline_state']) ?></p>
 <?php if (!empty($d['issued_on'])): ?><p><?= $t('receipt_date') ?>: <?= $escape($d['issued_on']) ?> · <?= $escape($d['invoice_number']) ?></p><?php endif; ?>

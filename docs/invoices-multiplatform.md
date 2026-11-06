@@ -184,22 +184,21 @@ and explicitly starts intake. Only the corresponding named month folders below
 subfolders. Portuguese month names accept case variants and Marco/Março. Missing
 months are reported; duplicate month folders stop discovery. Unselected months
 and loose files in temp_scan are untouched. File/folder names never replace the
-invoice's issue date: it must match both the selected year and source month.
-A mismatch stays in its source folder, without email or deletion. Replacing the
+invoice's issue date. The selection limits discovery only; each invoice's issue
+year/month selects its destination, even across year boundaries. A mismatch is
+processed normally. Only ambiguous/invalid data requires review. Replacing the
 bytes of a recorded file requires uploading a new file ID, so old OCR is never
-reused for changed content. The manager
-can correct an OCR error against the original, but cannot approve another month.
-If the user moves a misfiled scan or corrects the selected year, an explicit new
-request can reconsider that still-unsent item. Its Drive ID remains unchanged.
+reused for changed content. Existing unsent mismatch reviews resume under this
+rule; previously archived or submitted history is never reprocessed.
 
 There is no new scheduler, service or automatic intake on deployment. The
-existing invoice cron continues queued work, one original per invocation.
+existing invoice cron continues queued work, one invoice or source cleanup per invocation.
 Repeat requests are idempotent by Drive ID; changing a pending discovery's
-selection is rejected instead of silently ignored. One document per file,
-<=10 MiB, PDF or JPG/JPEG. MIME, extension and content must agree. Unsupported
+selection is rejected instead of silently ignored. One invoice per JPG/JPEG or PDF page,
+<=10 MiB, maximum 50 PDF pages. MIME, extension and content must agree. Unsupported
 files stay in Drive for correction. Snapshot bounds: 40 folders per selected
 month, 500 files total. The encrypted history stops at 2,000 documents without
-pruning. Existing queued work continues under its own original selection.
+pruning. Existing queued work continues using its recorded source folders.
 
 Receipt access is an explicit, manager-only Google OAuth upgrade to `drive`.
 The previous `drive.file`/metadata grant cannot read/move new mobile scans.
@@ -213,11 +212,12 @@ is never re-rendered. Automatic classification requires one distinct explicitly
 labelled issue date, one document number and the configured recipient NIF near
 a customer label. Invalid/future/ambiguous dates, wrong company or multiple
 identities require manager review. The manager opens the original and confirms
-date, number, company and one document per file. Uncertain OCR creation is
+date, number, company and one document per page/image. Uncertain OCR creation is
 recovered by its appProperties tag, never blindly recreated. Temporary OCR copies
 are trashed after reading. An unresolved creation requires manual review.
 
-After date/company checks, the original is moved with ID/name/content preserved:
+After date/company checks, JPGs and single-page PDFs move with ID/name/content
+preserved; extracted PDF pages upload to their individually selected destination:
 
 | Input | Destination below accounting root |
 | --- | --- |
@@ -238,7 +238,8 @@ names. Identity includes source ID and content hash: repeating this scan never
 resends, while a separate scan gets its own externally correlated result.
 The existing sender, destination, pilot, enabled flag, MIME transport and DKIM
 reply verification are reused. JPG is sent as image/jpeg, PDF as application/pdf.
-TOConline officially supports both formats; originals are attached unchanged.
+TOConline supports both formats; JPG/single-page originals or the exact archived
+extracted PDF page are attached.
 No receipt entry overwrites a portal or older receipt's content/identity record.
 
 Intent is persisted before mail; unknown outcomes are never automatically
@@ -260,3 +261,39 @@ Do not send files from `Teste Faturas` as production test data.
 References: Google Drive upload conversion and OAuth scope guides; TOConline
 [Robot de arquivo e classificação de documentos](https://manual.toconline.pt/support/solutions/articles/3000108314-robot-de-arquivo-e-classifica%C3%A7%C3%A3o-de-documentos)
 confirms PDF/JPG support for email archiving.
+
+
+### Multi-page scan handling (2026-11-06)
+
+`InvoiceReceiptPdf` invokes the existing configured private Node binary, without
+shell, network or browser, using the vendored MIT pdf-lib 1.17.1 bundle. It copies
+individual pages without rasterisation, preserving dimensions/rotation/content;
+no promise is made that a signature on the multi-page original applies to the
+extracted derivatives. A one-page PDF remains byte-identical. Bundle provenance
+and integrity are recorded beside the vendor file; no npm install is needed.
+Limits: 10 MiB input/page, 50 pages, 50 MiB total output, 256 MiB Node heap and
+30-second process deadline. Malformed/encrypted/over-limit files remain in source.
+
+Split parent and all reserved child Drive IDs commit together to the encrypted
+history before OCR/uploads. Each page gets independent OCR, date/NIF review,
+archive, submission and authenticated duplicate result. The UI shows page number
+and links to the source PDF until that page is archived. Retries reuse IDs and
+checksums; missing private derivatives regenerate only from the unchanged source.
+Private workspaces are removed on exit and content-addressed page caches after
+verified archival. No temporary PDF or extracted text is publicly served/logged.
+
+The master remains in `temp_scan/<month>` until every child has a verified Drive
+archive. Then each destination is freshly verified (or the exact child has already
+been removed following authenticated duplicate confirmation) before the master is
+placed in Drive Trash. Partial review/failure cannot retire the master; interrupted
+cleanup is idempotent. Trash remains reversible. Only a verified TOConline duplicate
+may remove a final child copy; acceptance/pending/rejection of another page has no
+effect on its siblings. Source cleanup does not claim TOConline acceptance.
+
+The existing release runs a private synthetic two-page extraction probe with the
+active configured Node binary after backup and before application copies. A failed
+probe blocks release. Automated tests cover page content/rotation, deterministic
+regeneration, invalid/oversized PDFs, wrong month/year, mixed formats, interrupted
+child upload, per-page duplicates, incomplete source retention and complete cleanup.
+Live Google OCR/Drive/TOConline acceptance still requires the broader Drive grant
+and genuine scan files; deployment alone does not prove this cycle.

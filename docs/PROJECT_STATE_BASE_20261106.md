@@ -585,17 +585,17 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
   `receipts.run` permissions delegable to Governanta through the existing matrix.
   Ambiguous company/date/document review remains manager-only.
 - The user chooses a year and months, then starts processing only their folders
-  under `temp_scan`. Issue year/month must match that selection; wrong or unclear
-  scans stay in the source for correction. JPG/JPEG moves to the month's `taloes`,
+  under `temp_scan`. The issue date determines the destination even when its
+  year/month differs from the selection; unclear scans await manager review. JPG/JPEG moves to the month's `taloes`,
   PDF moves to `pdf`, preserving IDs/content and removing the processed file from
   its temporary month folder. Unselected months remain untouched.
 - Reuses the existing cron, encrypted vault, Drive OAuth/folders and TOConline
   transport/ledger/DKIM confirmation. Google OCR reads a temporary copy; original
-  JPG/PDF is emailed unchanged. No extra daemon, cron or dependency. Repeated
+  JPG/PDF is emailed unchanged. No extra daemon or cron. Repeated
   requests never resend the same scan. Only an authenticated external duplicate
   authorizes trashing that new scan; historical originals remain intact.
 - Requires manager Google consent for existing scans. No consent or processing
-  is activated by deployment. Source folders were empty during investigation;
+  is activated by deployment. No genuine scan cycle has been performed;
   live OCR/move/email/duplicate acceptance remains pending the grant and genuine
   scans. Existing portal pdf workflow and Airbnb exception are preserved.
 - Targeted tests cover roles, selected/unselected periods, wrong year/month,
@@ -603,3 +603,20 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
   ambiguity, repeated clicks, interrupted move/OCR, authenticated JPEG duplicate
   replies, preserved accepted originals and history loss. See the invoice flow
   documentation for bounds and recovery.
+
+### 2026-11-06 — Issue-date routing and per-page PDF scans
+
+- Prepared correction: selected year/month folders bound intake; each invoice is
+  archived under its own issue year/month. Existing unsent mismatch reviews resume;
+  permissions, JPG→taloes/PDF→pdf, portal collection and Airbnb are preserved.
+- Multi-page PDFs split before OCR; each page has a stable Drive ID, date/company
+  validation and independent TOConline submission/duplicate outcome. Unreadable
+  pages stay for review. Master leaves temp_scan only after all page destinations
+  are verified; signed duplicate proof removes only the relevant new page.
+- New private local splitter reuses configured Node, vendors pinned MIT pdf-lib
+  1.17.1 without npm/browser installs, and bounds time/memory/pages/bytes. Release
+  probes actual Node with a synthetic PDF after backup, before application copies.
+- Local tests cover real splitting/rotation/byte stability, invalid inputs, retries,
+  cross-year/month classification, per-page duplicate, partial retention and cleanup.
+  Live acceptance remains pending manager Drive scope upgrade and genuine scans;
+  no real invoices were submitted as development fixtures.
