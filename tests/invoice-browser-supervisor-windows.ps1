@@ -14,7 +14,7 @@ try {
     foreach ($name in @('Run-Agent.ps1','Agent-Job.ps1','Browser-Supervisor.ps1','Start-Booking-Chrome.ps1','Test-PrivateDirectory.ps1')) {
         Copy-Item (Join-Path $repo ('invoice-runner\windows\' + $name)) $scripts
     }
-    foreach ($name in @('browser-supervisor.mjs','controlled-browser.mjs','private-storage.mjs')) {
+    foreach ($name in @('browser-supervisor.mjs','controlled-browser.mjs','shared-ui-bridge.mjs','private-storage.mjs')) {
         Copy-Item (Join-Path $repo ('invoice-runner\' + $name)) $app
     }
     Copy-Item (Join-Path $PSScriptRoot 'invoice-browser-supervisor-windows.mjs') (Join-Path $app 'windows-agent.mjs')
