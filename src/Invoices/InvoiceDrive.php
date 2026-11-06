@@ -27,7 +27,7 @@ final class InvoiceDrive
         $s->execute([$id]);
         if ($s->rowCount() !== 1) throw new RuntimeException('invalid_request');
     }
-    private function folder(string $parent, array $names): string
+    public function folder(string $parent, array $names): string
     {
         $name = $names[0];
         $key = hash('sha256', $parent . "\0" . $name);

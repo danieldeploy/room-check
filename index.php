@@ -29,6 +29,13 @@ try {
 
 $modules = [
     [
+        'permission'=>Auth::PERMISSION_RECEIPTS_VIEW,
+        'eyebrow'=>InvoiceText::get('receipt_title'),
+        'title'=>InvoiceText::get('receipt_title'),
+        'description'=>InvoiceText::get('receipt_description'),
+        'href'=>'admin/receipts.php','status'=>'Abrir módulo','tone'=>'blue',
+    ],
+    [
         'permission' => Auth::PERMISSION_INVOICES_VIEW,
         'eyebrow' => 'Documentos dos portais',
         'title' => 'Faturas e Portais',

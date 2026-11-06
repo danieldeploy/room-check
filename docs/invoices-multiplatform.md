@@ -166,3 +166,95 @@ reproduzíveis de três casos: uma aba criada é fechada; uma aba preexistente
 não é fechada; um rascunho ou pedido de intervenção humana é preservado.
 A aceitação operacional exige observar uma tarefa real que abre e fecha a
 sua própria aba, sem terminar a sessão nem interromper a seguinte tarefa.
+
+## Manual scan intake (2026-11-06)
+
+The separate `admin/receipts.php` module uses `receipts.view` / `receipts.run`.
+Both are mandatory for Gerente; Governanta receives neither until the manager
+assigns them through the existing permissions matrix. Run implies view only,
+not access to portal settings or accounts. Only Gerente can confirm unreadable
+metadata and company ownership. Every mutation uses CSRF and the existing
+`room_check_invoices` advisory lock.
+
+After scanning, a user with run permission chooses a year and one or more months
+and explicitly starts intake. Only the corresponding named month folders below
+`temp_scan` in the configured accounting root are read, including their real
+subfolders. Portuguese month names accept case variants and Marco/Março. Missing
+months are reported; duplicate month folders stop discovery. Unselected months
+and loose files in temp_scan are untouched. File/folder names never replace the
+invoice's issue date: it must match both the selected year and source month.
+A mismatch stays in its source folder, without email or deletion. Replacing the
+bytes of a recorded file requires uploading a new file ID, so old OCR is never
+reused for changed content. The manager
+can correct an OCR error against the original, but cannot approve another month.
+If the user moves a misfiled scan or corrects the selected year, an explicit new
+request can reconsider that still-unsent item. Its Drive ID remains unchanged.
+
+There is no new scheduler, service or automatic intake on deployment. The
+existing invoice cron continues queued work, one original per invocation.
+Repeat requests are idempotent by Drive ID; changing a pending discovery's
+selection is rejected instead of silently ignored. One document per file,
+<=10 MiB, PDF or JPG/JPEG. MIME, extension and content must agree. Unsupported
+files stay in Drive for correction. Snapshot bounds: 40 folders per selected
+month, 500 files total. The encrypted history stops at 2,000 documents without
+pruning. Existing queued work continues under its own original selection.
+
+Receipt access is an explicit, manager-only Google OAuth upgrade to `drive`.
+The previous `drive.file`/metadata grant cannot read/move new mobile scans.
+The consent screen must allow this scope; a partial grant is rejected before
+replacing the existing credential. Existing portal authorization and verified
+archive readiness remain in force. The public privacy copy describes the
+optional broader grant. Code restricts intake to the selected accounting tree.
+
+Google Drive's PDF/JPEG-to-Docs OCR uses a tagged temporary copy. The original
+is never re-rendered. Automatic classification requires one distinct explicitly
+labelled issue date, one document number and the configured recipient NIF near
+a customer label. Invalid/future/ambiguous dates, wrong company or multiple
+identities require manager review. The manager opens the original and confirms
+date, number, company and one document per file. Uncertain OCR creation is
+recovered by its appProperties tag, never blindly recreated. Temporary OCR copies
+are trashed after reading. An unresolved creation requires manual review.
+
+After date/company checks, the original is moved with ID/name/content preserved:
+
+| Input | Destination below accounting root |
+| --- | --- |
+| JPG / JPEG | `YYYY/<Portuguese month>_YYYY/taloes` |
+| PDF | `YYYY/<Portuguese month>_YYYY/pdf` |
+
+Existing year/month aliases and the shared folder cache are reused. Persisted
+move intent and checksum validation recover an interrupted move. This removes
+the processed original from `temp_scan/<month>` without leaving another source
+copy. Nothing is removed before a verified destination exists. The original is
+checked again before email. Portal invoice collection and Airbnb's exception
+remain unchanged.
+
+`receipts-workflow.enc` is the encrypted private queue/history, covered by the
+existing private-vault backups. The shared TOConline ledger uses disjoint
+`receipt:<Drive ID>` targets and `receipt-<identity hash>.pdf/.jpg` attachment
+names. Identity includes source ID and content hash: repeating this scan never
+resends, while a separate scan gets its own externally correlated result.
+The existing sender, destination, pilot, enabled flag, MIME transport and DKIM
+reply verification are reused. JPG is sent as image/jpeg, PDF as application/pdf.
+TOConline officially supports both formats; originals are attached unchanged.
+No receipt entry overwrites a portal or older receipt's content/identity record.
+
+Intent is persisted before mail; unknown outcomes are never automatically
+resent. Only a signed, uniquely correlated `toc_existing` reply authorizes
+trashing this intake's file ID after rechecking archived parent, size and
+checksum. Historical accepted originals are never searched for or deleted.
+Unknown, rejected, unsigned or multiple-filename replies never delete files.
+Lost queue/transport history fails closed. Processing failures back off and
+stop after five attempts; a permitted user can request a retry after correction.
+
+Acceptance: `tests/invoice-receipts.php`, existing Drive/TOConline/pipe tests and
+PT/EN contracts. Covers year/month selection, mixed formats, source removal,
+mismatches, corrected filing, interruption, unchanged attachments and preservation
+of an accepted historical JPG when its new duplicate is trashed. Live OCR,
+source movement, delivery and signed duplicate cleanup require the new Google
+grant plus genuine scans. Empty folders/public login are not live acceptance.
+Do not send files from `Teste Faturas` as production test data.
+
+References: Google Drive upload conversion and OAuth scope guides; TOConline
+[Robot de arquivo e classificação de documentos](https://manual.toconline.pt/support/solutions/articles/3000108314-robot-de-arquivo-e-classifica%C3%A7%C3%A3o-de-documentos)
+confirms PDF/JPG support for email archiving.

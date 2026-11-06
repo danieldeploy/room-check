@@ -41,6 +41,9 @@ final class InvoiceToconline
         if ($this->vault->has('toconline-ledger.enc')) return $this->vault->read('toconline-ledger.enc');
         // Missing history after a partial restore must stop delivery, never reset deduplication.
         if ((int)$this->pdo->query("SELECT COUNT(*) FROM invoice_document_delivery WHERE toconline_state IN ('toc_sending','toc_submitted','toc_uncertain','toc_accepted','toc_duplicate','toc_existing','toc_rejected','toc_review','toc_no_confirmation')")->fetchColumn()>0) throw new RuntimeException('toc_ledger_missing');
+        if ($this->vault->has('receipts-workflow.enc')) foreach ($this->vault->read('receipts-workflow.enc')['documents']??[] as $d) {
+            if (!in_array($d['toconline_state'],['pending','toc_retry'],true)) throw new RuntimeException('toc_ledger_missing');
+        }
         return [];
     }
 
@@ -58,23 +61,29 @@ final class InvoiceToconline
         return [hash('sha256',$nif."\0".$scope."\0".$number), hash('sha256',$nif."\0".$d['sha256'])];
     }
 
-    public static function message(string $pdf, string $key, string $sender, string $portal='booking'): array
+    public static function message(string $pdf, string $key, string $sender, string $portal='booking', string $format='pdf'): array
     {
-        if (!in_array($portal,['booking','hostelworld','cloudbeds'],true)) throw new RuntimeException('toc_ineligible');
-        $label=['booking'=>'Booking','hostelworld'=>'Hostelworld','cloudbeds'=>'Cloudbeds'][$portal];
+        if (!in_array($portal,['booking','hostelworld','cloudbeds','receipt'],true)) throw new RuntimeException('toc_ineligible');
+        if (!in_array($format,['pdf','jpg'],true) || ($format==='jpg' && $portal!=='receipt')) throw new RuntimeException('toc_ineligible');
+        $mime=$format==='jpg'?'image/jpeg':'application/pdf';
+        $label=['booking'=>'Booking','hostelworld'=>'Hostelworld','cloudbeds'=>'Cloudbeds','receipt'=>'Taloes'][$portal];
         if (!preg_match('/\A[a-f0-9]{64}\z/',$key) || !filter_var($sender,FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/',$sender)) throw new RuntimeException('toc_invalid_settings');
         $boundary='hub_'.bin2hex(random_bytes(16));
         $headers=['From: '.$sender,'Reply-To: '.$sender,'MIME-Version: 1.0',
             'Message-ID: <toc-'.$key.'@check.welcomehostel.pt>', 'Content-Type: multipart/mixed; boundary="'.$boundary.'"'];
         $body='--'.$boundary."\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".
             chunk_split(base64_encode('Management Hub — '.$label.' invoice for digital archive.'),76,"\r\n").
-            '--'.$boundary."\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=\"".$portal.'-'.$key.".pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n".
+            '--'.$boundary."\r\nContent-Type: ".$mime."\r\nContent-Disposition: attachment; filename=\"".$portal.'-'.$key.'.'.$format."\"\r\nContent-Transfer-Encoding: base64\r\n\r\n".
             chunk_split(base64_encode($pdf),76,"\r\n").'--'.$boundary."--\r\n";
         return ['subject'=>'Management Hub - '.$label.' - '.substr($key,0,16),'headers'=>$headers,'body'=>$body];
     }
 
-    private function state(int $id, string $state): void
+    private function state(int|string $id, string $state): void
     {
+        if (str_starts_with((string)$id,'receipt:')) {
+            require_once __DIR__.'/InvoiceReceipts.php';
+            InvoiceReceipts::deliveryState($this->vault,substr((string)$id,8),$state); return;
+        }
         $this->pdo->prepare('UPDATE invoice_document_delivery SET toconline_state=? WHERE document_id=?')->execute([$state,$id]);
     }
 
@@ -83,7 +92,7 @@ final class InvoiceToconline
         if (!in_array($outcome,['toc_accepted','toc_existing','toc_rejected'],true)) throw new RuntimeException('toc_ineligible');
         $settings=$this->settings(); $ledger=$this->ledger(); $found=false;
         foreach ($ledger as &$entry) {
-            if ((int)$entry['document_id']===$id && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
+            if ((string)$entry['document_id']===(string)$id && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
                 && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_review','toc_no_confirmation'],true)) {
                 $entry['state']=$outcome; $entry['confirmed_at']=gmdate('c');
                 $entry['confirmed_by']=$actor; $entry['confirmation_source']='manager'; $found=true;
@@ -108,7 +117,7 @@ final class InvoiceToconline
         } unset($entry);
         $this->vault->save('toconline-ledger.enc',$ledger);
         $nif=$this->settings()['nif']??'';
-        foreach ($ledger as $entry) if ($entry['nif']===$nif) $this->state((int)$entry['document_id'],$entry['state']);
+        foreach ($ledger as $entry) if ($entry['nif']===$nif) $this->state($entry['document_id'],$entry['state']);
     }
 
     /** Mail headers/body are untrusted evidence. Exact correlation only; no automatic acceptance. */
@@ -117,13 +126,13 @@ final class InvoiceToconline
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
         if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
         $ledger=$this->ledger(); $settings=$this->settings(); $matches=[];
-        preg_match_all('/(?:(?:booking|hostelworld|cloudbeds)[-_]|toc-)([a-f0-9]{64})(?:\.pdf|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
+        preg_match_all('/(?:(?:booking|hostelworld|cloudbeds|receipt)[-_]|toc-)([a-f0-9]{64})(?:\.(?:pdf|jpe?g)|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
         foreach (array_unique($tokens[1]) as $key) {
             $entry=$ledger[strtolower($key)]??null;
-            if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(int)$entry['document_id']]=true;
+            if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(string)$entry['document_id']]=true;
         }
         if (count($matches)!==1) return ['result'=>'unmatched'];
-        $id=(int)array_key_first($matches); $suggestion='toc_review';
+        $id=array_key_first($matches); $suggestion='toc_review';
         $auth=$proof['authentication']??[]; $automatic='toc_review'; $applied=false;
         $uniqueTokens=array_unique(array_map('strtolower',$tokens[1]));
         $signedAt=strtotime((string)($auth['signed_at']??''));
@@ -136,7 +145,7 @@ final class InvoiceToconline
         }
         // Only the observed duplicate phrase is recognised. Unknown/new templates remain review.
         if (str_contains(mb_strtolower($text),'por já constarem no seu arquivo')) $suggestion='toc_existing';
-        foreach ($ledger as &$entry) if ((int)$entry['document_id']===$id
+        foreach ($ledger as &$entry) if ((string)$entry['document_id']===(string)$id
             && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
             && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
             $entry['state']=$automatic; $entry['receipt_hash']=$receiptHash;
@@ -147,7 +156,7 @@ final class InvoiceToconline
             $entry['receipt_suggestion']=$suggestion; $entry['receipt_received_at']=gmdate('c');
         }
         unset($entry); $this->vault->save('toconline-ledger.enc',$ledger);
-        foreach ($ledger as $entry) if ((int)$entry['document_id']===$id && $entry['nif']===$settings['nif']) { $this->state($id,$entry['state']); break; }
+        foreach ($ledger as $entry) if ((string)$entry['document_id']===(string)$id && $entry['nif']===$settings['nif']) { $this->state($id,$entry['state']); break; }
         if ($applied && $automatic==='toc_accepted') {
             $settings['pilot_verified']=true; $this->vault->save('toconline-settings.enc',$settings);
         }
@@ -200,18 +209,47 @@ final class InvoiceToconline
                 }
                 $message=self::message($pdf,$identity,$settings['sender'],$d['portal']);
             } catch (Throwable) { $this->state((int)$d['id'],'toc_retry'); continue; }
-            $entry=['document_id'=>(int)$d['id'],'nif'=>$settings['nif'],'sender'=>$settings['sender'],'state'=>'toc_sending','attempted_at'=>gmdate('c')];
-            $ledger[$identity]=$entry; $ledger[$content]=$entry;
-            $this->vault->save('toconline-ledger.enc',$ledger);
-            $this->state((int)$d['id'],'toc_sending');
-            try {
-                $ok=$this->transport ? ($this->transport)($to,$message) : @mail($to,$message['subject'],$message['body'],implode("\r\n",$message['headers']));
-                $entry['state']=$ok?'toc_submitted':'toc_uncertain';
-            } catch (Throwable) { $entry['state']='toc_uncertain'; }
-            unset($pdf,$message);
-            $ledger[$identity]=$entry; $ledger[$content]=$entry;
-            $this->vault->save('toconline-ledger.enc',$ledger); $this->state((int)$d['id'],$entry['state']);
+            $this->transmit($ledger,(int)$d['id'],$identity,$content,$settings,$message,$to);
         }
+    }
+
+    /** Shared at-most-once email transport for portal PDFs and receipt scans. */
+    private function transmit(array &$ledger,int|string $id,string $identity,string $content,array $settings,array $message,string $to): void
+    {
+        $entry=['document_id'=>$id,'nif'=>$settings['nif'],'sender'=>$settings['sender'],'state'=>'toc_sending','attempted_at'=>gmdate('c')];
+        $ledger[$identity]=$entry; $ledger[$content]=$entry;
+        $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,'toc_sending');
+        try {
+            $ok=$this->transport ? ($this->transport)($to,$message) : @mail($to,$message['subject'],$message['body'],implode("\r\n",$message['headers']));
+            $entry['state']=$ok?'toc_submitted':'toc_uncertain';
+        } catch (Throwable) { $entry['state']='toc_uncertain'; }
+        $ledger[$identity]=$entry; $ledger[$content]=$entry;
+        $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,$entry['state']);
+    }
+
+    public function submitReceipt(array $d): void
+    {
+        $settings=$this->settings();
+        if (empty($settings['enabled']) || empty($settings['pilot_verified'])) return;
+        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || substr($d['issued_on'],0,7)!==($d['expected_period']??'') || ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('toc_ineligible');
+        $id='receipt:'.$d['id']; $ledger=$this->ledger();
+        $identity=hash('sha256',$settings['nif']."\0receipt\0".$d['id']."\0".$d['sha256']);
+        // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.
+        $content=$identity; $existing=$ledger[$identity]??null;
+        if ($existing) { $this->state($id,(string)$existing['document_id']===$id?$existing['state']:'toc_duplicate'); return; }
+        $pdf=$this->drive->verifiedReceipt($d);
+        if (strlen($pdf)!==(int)$d['size'] || strlen($pdf)>10*1024*1024
+            || !InvoiceDriveClient::receiptBytesValid($pdf,$d['format']) || !hash_equals($d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
+        $message=self::message($pdf,$identity,$settings['sender'],'receipt',$d['format']);
+        $this->transmit($ledger,$id,$identity,$content,$settings,$message,self::destination($settings['nif']));
+    }
+
+    public function receiptDuplicateConfirmed(string $id): bool
+    {
+        foreach ($this->ledger() as $e) if ((string)$e['document_id']==='receipt:'.$id
+            && $e['nif']===($this->settings()['nif']??'') && $e['sender']===($this->settings()['sender']??'')
+            && $e['state']==='toc_existing' && ($e['confirmation_source']??'')==='dkim_toconline') return true;
+        return false;
     }
 
     private function diagnosticAttempts(): array

@@ -135,6 +135,7 @@ jobs:
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
           php tests/zkaccess-backup.php
+          php tests/invoice-receipts.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-hostelworld-pipe.php

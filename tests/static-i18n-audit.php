@@ -43,6 +43,9 @@ $technicalLiterals = array_fill_keys([
 // diagnostics or the PT branch of a message that already has an explicit EN branch.
 $technicalExceptions = [
     // PDF source-label patterns are parser instructions, never rendered UI.
+    'src/Invoices/InvoiceReceipts.php' => [
+        '/(?:data\s*(?:de\s*)?(?:emiss[aã]o|documento|fatura)|invoice\s*date|issue\s*date)\s*[:\-]?\s*(\d{4}[-\/]\d{2}[-\/]\d{2}|\d{2}[\/.-]\d{2}[\/.-]\d{4})(?!\d)/iu',
+    ],
     'src/Invoices/InvoiceBookingVerification.php' => [
         '~^[\t ]*(?:invoice date|date of issue|issue date|date|data de emissão|data da fatura|data)[\t ]*:?[\t ]*(?:\r?\n[\t ]*)?(',
         '/(?:property|hotel|accommodation|alojamento)[\t ]*(?:id|number|no\.?|número|numero)?[\t ]*:?[\t ]*(?:\r?\n[\t ]*)?',

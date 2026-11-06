@@ -578,3 +578,28 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
 
 
 - O workflow protegido `.github/workflows/cpanel-log-content-audit-once.yml` foi estendido com uma segunda fase de consulta: depois do deploy do PHP privado e da seguinte execução do cron existente, aguarda pelo JSON de nome fixo e só mostra chaves e contagens estritamente permitidas via `deploy/cpanel_read_private_full_log_audit_once.py`. O ficheiro e os logs brutos nunca saem do cPanel. Falha se não aparecer o relatório dentro do limite, se estiver incompleto ou se contiver estrutura inesperada.
+
+### 2026-11-06 — Manual scan workflow in Management Hub
+
+- Added Talões e PDFs, mandatory for Gerente, with narrow `receipts.view` /
+  `receipts.run` permissions delegable to Governanta through the existing matrix.
+  Ambiguous company/date/document review remains manager-only.
+- The user chooses a year and months, then starts processing only their folders
+  under `temp_scan`. Issue year/month must match that selection; wrong or unclear
+  scans stay in the source for correction. JPG/JPEG moves to the month's `taloes`,
+  PDF moves to `pdf`, preserving IDs/content and removing the processed file from
+  its temporary month folder. Unselected months remain untouched.
+- Reuses the existing cron, encrypted vault, Drive OAuth/folders and TOConline
+  transport/ledger/DKIM confirmation. Google OCR reads a temporary copy; original
+  JPG/PDF is emailed unchanged. No extra daemon, cron or dependency. Repeated
+  requests never resend the same scan. Only an authenticated external duplicate
+  authorizes trashing that new scan; historical originals remain intact.
+- Requires manager Google consent for existing scans. No consent or processing
+  is activated by deployment. Source folders were empty during investigation;
+  live OCR/move/email/duplicate acceptance remains pending the grant and genuine
+  scans. Existing portal pdf workflow and Airbnb exception are preserved.
+- Targeted tests cover roles, selected/unselected periods, wrong year/month,
+  corrected filing, mixed JPG/PDF routing, source cleanup, original attachment,
+  ambiguity, repeated clicks, interrupted move/OCR, authenticated JPEG duplicate
+  replies, preserved accepted originals and history loss. See the invoice flow
+  documentation for bounds and recovery.
