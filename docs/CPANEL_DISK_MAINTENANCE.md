@@ -248,3 +248,33 @@ pending: historical severity totals alone do not establish writer/origin,
 incident dates, or that the active log is dispensable. Preserve historical
 reports/cursors, useful logs and mail; no deletion, rotation, blind truncation,
 new scheduler or fixed retention period is introduced by this acceptance.
+
+
+## One-off lossless cleanup after owner instruction — 2026-11-06
+
+The owner authorized removing everything established as dispensable. The
+existing guarded release calls `deploy/compact_inactive_logs_once.php` only
+for this named operation; its exclusive marker prevents repeat execution.
+It reads bounded plaintext profiles (origin labels, dates, severity counts),
+then compacts only same-owner, single-link regular plaintext logs inactive
+for >=365 days, with <=150 files /250 MiB total /200 MiB each and 45 seconds
+for the initial profile. It never truncates/rotates an active log. Inactivity
+selects candidates for lossless compression, not an event-retention expiry.
+
+Recovery copies are owner-only gzip files under private
+`whm-log-preserved-20261106/`. Its private `manifest.json` maps originals to
+archives and preserves SHA-256, byte count, mode, owner/group and mtime.
+The helper verifies every expanded byte against the original digest, refuses
+archives that save no space, rechecks source identity/metadata/hash, commits
+the manifest, then unlinks only the redundant old plaintext. If any result is
+uncertain, inspect the marker, manifest and source state before any retry;
+never clear the marker or repeat an unconfirmed removal. Errors preserve
+recoverable history and do not mask the core release outcome. Do not print
+private manifests, source filenames, contents, paths or digests in CI.
+
+The fixed aggregate is `whm-log-compaction-20261106.json`; the existing
+one-off backup/npm workflow waits for it, validates allowlisted fields only,
+then runs established restore-gated backup retention and bounded NPM cleanup.
+Final storage inventory measures the result. No new schedule, retention rule,
+email access or change to daily log checkpoints. Keep active logs even if
+repetitive; historical error totals alone are not evidence to delete them.

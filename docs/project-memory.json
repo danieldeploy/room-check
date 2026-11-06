@@ -124,6 +124,8 @@
     {
       "name": "whm-daily-log-verification",
       "paths": [
+        "deploy/compact_inactive_logs_once.php",
+        "deploy/cpanel_log_compaction_report.py",
         "cron/whm-log-daily.php",
         "cron/whm-log-audit-once.php",
         "deploy/cpanel_daily_log_report.py",

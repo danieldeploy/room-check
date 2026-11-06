@@ -1,5 +1,29 @@
 # Management Hub — current project state
 
+## Owner-authorized log cleanup — 2026-11-06 (prepared)
+
+The owner explicitly requested execution of all proven-safe cleanup, rather
+than another status-only verification. A one-off CLI helper in the existing
+guarded release profiles plaintext logs locally for origin/date/severity and
+losslessly compacts only single-link, same-owner plaintext logs inactive for
+at least 365 days. This is a conservative inactivity gate for compaction, not
+an expiry/deletion policy: every historical byte, including fatal incidents,
+survives in a private gzip with recovery metadata before the redundant source
+is removed. Active/recent logs, compressed logs, links, mail and application
+files remain untouched. The main 110.8 MiB log may remain ineligible.
+
+The new fixed private marker/report prevents repeat or ambiguous operations.
+The old full-audit marker/report and daily cursors are preserved. The existing
+one-off WHM backup/npm workflow reads a strictly sanitized result, rechecks
+storage, and runs the already-approved restore-gated backup and exact NPM
+cache cleanup. No new cron, service, credential, recipient or threshold.
+
+Acceptance: PHP roundtrip, active/symlink preservation, owner-only archive,
+private manifest, idempotence and uncertain receipt tests; strict Python report
+projection; existing backup/NPM regression checks; mandatory validate/windows-agent,
+then installed SHA, private recovery/compaction receipt and actual quota.
+Integrated/deployed/deleted byte counts remain unconfirmed until live results.
+
 ## Monthly invoice archive folder (2026-11-06)
 
 - Owner request: preserve the accounting root/year/Portuguese month structure,

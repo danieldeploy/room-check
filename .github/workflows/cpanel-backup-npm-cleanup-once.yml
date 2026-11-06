@@ -1,4 +1,4 @@
-name: One-off audited backup and npm cache cleanup
+name: One-off verified inactive log, backup and npm cleanup
 
 on:
   push:
@@ -45,6 +45,12 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
         run: |
           timeout --signal=TERM --kill-after=10s 160s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_deep_audit.py
+      - name: Verify private inactive-log recovery and aggregate cleanup result
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+        run: |
+          python3 tests/test_cpanel_log_compaction_report.py -v
+          timeout --signal=TERM --kill-after=10s 750s env PYTHONDONTWRITEBYTECODE=1 python3 deploy/cpanel_log_compaction_report.py
       - name: Retain verified backups and remove only eligible same-period duplicates
         env:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
