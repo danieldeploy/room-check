@@ -140,32 +140,34 @@ The Airbnb transformation must be defined with real CSV samples before activatin
 Google API reference: https://developers.google.com/workspace/drive/api/guides/manage-uploads
 \n## Separação do arquivo ZKTeco\n\nO cron de faturas conserva exclusivamente as tarefas de faturas, Drive e TOConline.\nA entrega dos backups da base MySQL do ZKTeco foi retirada de\n`cron/invoices.php` e passa para `cron/zkaccess-backups.php`, com um agendamento\ncPanel próprio e bloqueio MySQL separado. Ver `docs/flows/zkaccess-backup.md`.\n
 
-## Ciclo de vida das abas de automação no AccesControl (2026-11-04)
+## Ciclo de vida das abas de automação no AccesControl (2026-11-06)
 
-Decisão transversal: a automação que abre uma aba temporária é responsável por
-registar essa aba (identidade do objeto/target) e fechá-la depois de concluir a
-tarefa. Esta regra aplica-se também a futuras automações de Booking, Facebook,
-Meta Business, Cloudbeds e outros portais, não apenas às faturas. Não se cria
-watchdog, serviço permanente, cron ou verificação global de cinco em cinco
-minutos: o trabalho ocorre no próprio agente Windows, apenas durante uma tarefa.
+A regra de 04/11 evolui para um único controlador: registo de propriedade,
+fecho imediato quando a tarefa termina em segurança e recuperação de tarefas
+abandonadas após pelo menos 30 minutos de inatividade. Um agendamento Windows
+oculto verifica apenas recursos registados, de meia em meia hora; fica desativado
+quando não restam recursos elegíveis e é reativado pela próxima abertura.
+Não existe serviço residente novo nem varrimento de todas as janelas.
 
-O agente de faturas possui um Chrome persistente para Booking: só as páginas
-explicitamente criadas por essa tarefa são suas; páginas existentes, reutilizadas
-ou abertas manualmente nunca são encerradas. A primeira página e quaisquer
-outras páginas criadas na mesma execução devem ser registadas. No `finally`,
-após libertar guardas/interceções, o agente fecha apenas páginas suas cujo
-estado seja seguro (sem editor preenchido, operação em curso ou dúvida).
-Falha de consulta do estado, interrupção ou verificação humana pendente
-conservam a aba. O navegador é **desligado da ligação CDP**, nunca encerrado;
-perfil, cookies, 2FA humano e sessões persistentes continuam disponíveis.
-Navegadores isolados descartáveis conservam o seu encerramento existente.
+O agente de faturas aguarda o registo das abas que cria antes de navegar e usa
+`shared-ui-bridge.mjs` para delegar no controlador local v2. O marcador de versão
+é verificado antes de importar o auxiliar. Instalações antigas conservam a
+limpeza anterior como fallback, não como segunda rotina periódica. Abas
+reutilizadas ou manuais continuam excluídas, incluindo num perfil persistente.
 
-Para futuras automações com outros pontos de entrada, a regra de `AGENTS.md`
-exige o mesmo registo explícito e limpeza após a operação, com testes
-reproduzíveis de três casos: uma aba criada é fechada; uma aba preexistente
-não é fechada; um rascunho ou pedido de intervenção humana é preservado.
-A aceitação operacional exige observar uma tarefa real que abre e fecha a
-sua própria aba, sem terminar a sessão nem interromper a seguinte tarefa.
+No `finally`, após libertar guardas/interceções, apenas páginas próprias e seguras
+são fechadas. Campos preenchidos, carregamento, multimédia ativa, verificação
+humana e estado incerto são preservados. O controlador mantém perfil/cookies e
+apenas desliga a ligação CDP. Os processos essenciais e a ligação AnyDesk ativa
+nunca são encerrados. Navegadores isolados descartáveis mantêm a limpeza existente.
+
+A cobertura confirmada é Chrome e Explorer registados. A intenção do proprietário
+é tudo o que não abriu manualmente, mas ausência de prova de origem nunca autoriza
+fecho. Outros plugins/programas que não registem recursos ainda não estão
+abrangidos automaticamente; a tentativa de acrescentar fecho genérico foi bloqueada
+e não foi contornada. Ver `docs/flows/managed-ui.md` para protocolo, instalação,
+limites e testes de abandono/reativação. Uma instrução de conta ChatGPT não é
+considerada configurada por esta alteração.
 
 ## Manual scan intake (2026-11-06)
 
