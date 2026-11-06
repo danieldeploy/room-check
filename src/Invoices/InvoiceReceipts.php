@@ -117,7 +117,9 @@ final class InvoiceReceipts
             $id=$f['id']; InvoiceDriveClient::assertId($id);
             $old=$s['documents'][$id]??null;
             if ($old) {
-                // Explicit reselection can recover a wrongly filed/replaced, still-unsent scan.
+                // Explicit reselection can recover a wrongly filed, still-unsent scan.
+                // Replacing bytes on the same ID requires a new scan, never stale OCR reuse.
+                if (($old['md5Checksum']??'')!==($f['md5Checksum']??'')) continue;
                 if ($old['stage']!=='review' || $old['toconline_state']!=='pending' || !empty($old['drive_parent'])
                     || (($old['expected_period']??'')===$f['expected_period'] && ($old['source_parent']??'')===($f['parents'][0]??'')
                         && ($old['md5Checksum']??'')===($f['md5Checksum']??''))) continue;

@@ -117,6 +117,9 @@ try {
     rc($ambiguous['outcome']==='toc_review','extra unknown file prevents automatic deletion');
     $proof['outcome']='toc_existing'; $toc->receive('no_reply@toconline.pt','',$parsed['text'],hash('sha256','jpeg duplicate'),$proof); $flow->run();
     rc($drive->files['jpeg-new-duplicate']['trashed'] && !$drive->files['jpeg-original-kept']['trashed'],'only new duplicate trashed, historical JPG preserved');
+    $oldMd5=$flow->status()['documents']['scan-original-three']['md5Checksum'];
+    $drive->add('scan-original-three','%PDF-1.4 replaced contents'); $flow->request(1,2026,[10]); $flow->run();
+    rc($flow->status()['documents']['scan-original-three']['md5Checksum']===$oldMd5 && !isset($drive->moved['scan-original-three']),'replaced bytes never reuse stale OCR or get silently reclassified');
     $saved=$vault->read('toconline-ledger.enc'); unlink($vault->path('toconline-ledger.enc')); rr(fn()=>$toc->reconcile(),'missing transport ledger fails closed'); $vault->save('toconline-ledger.enc',$saved);
     unlink($vault->path(InvoiceReceipts::FILE)); rr(fn()=>$flow->status(),'missing receipt history fails closed');
     echo "Receipt workflow safeguards passed\n";

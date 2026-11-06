@@ -183,7 +183,9 @@ subfolders. Portuguese month names accept case variants and Marco/Março. Missin
 months are reported; duplicate month folders stop discovery. Unselected months
 and loose files in temp_scan are untouched. File/folder names never replace the
 invoice's issue date: it must match both the selected year and source month.
-A mismatch stays in its source folder, without email or deletion. The manager
+A mismatch stays in its source folder, without email or deletion. Replacing the
+bytes of a recorded file requires uploading a new file ID, so old OCR is never
+reused for changed content. The manager
 can correct an OCR error against the original, but cannot approve another month.
 If the user moves a misfiled scan or corrects the selected year, an explicit new
 request can reconsider that still-unsent item. Its Drive ID remains unchanged.
