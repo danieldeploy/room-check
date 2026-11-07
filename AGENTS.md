@@ -38,6 +38,24 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   end-to-end automation has been verified and the owner explicitly asks for its
   withdrawal. Keep manual confirmation, repeat protection and private test history.
 
+## Automation exception alerts (permanent owner rule)
+
+- Owner instruction, 2026-11-07: every existing and future project automation
+  must report detected unexpected exceptions, execution errors and blocked or
+  unverified completion through WhatsApp to the already configured manager.
+  This applies across modules and execution hosts, not only invoice collection.
+- Record each incident durably; deduplicate repeat observations/retries of the
+  same incident. Preserve explicitly approved retry windows and escalation
+  thresholds; do not silently discard a final failure or required human action.
+- Identify the automation, affected account/property when relevant, time in
+  Europe/Lisbon, safe problem summary and required action. Never include
+  credentials, OTPs, raw logs or private document contents.
+- Reuse the existing WhatsApp client and approved recipient. Template reuse
+  requires matching its fixed wording, language and parameter contract.
+  The server-specific `whm_storage_alert_v1` is not a universal automation alert.
+- See [ADR-005](docs/decisions/ADR-005-automation-exception-alerts.md).
+  Recording this rule does not prove universal implementation or delivery.
+
 ## Browser tabs opened by automations (permanent owner rule)
 
 - Applies to **every existing and future browser automation**, whether Booking,
