@@ -9,6 +9,7 @@ preserve unless explicitly superseded.
 - [ADR-002 — Cloudbeds event and ZKAccess confirmation ordering](ADR-002-cloudbeds-zkaccess-ordering.md)
 - [ADR-003 — Room-change PIN reuse and old-room rotation](ADR-003-room-change-pin-reuse.md)
 - [ADR-004 — Independent ZKTeco backup archival](ADR-004-independent-zkaccess-backup.md)
+- [ADR-005 — WhatsApp alerts for automation exceptions](ADR-005-automation-exception-alerts.md)
 
 ## ADR lifecycle
 

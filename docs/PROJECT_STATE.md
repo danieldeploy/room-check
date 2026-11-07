@@ -1,5 +1,23 @@
 # Management Hub — current project state
 
+## Cross-automation exception alerts — 2026-11-07
+
+The owner requires WhatsApp alerts for detected unexpected exceptions, execution
+errors and blocked/unverified completion across all existing and future project
+automations. The durable rule is in `AGENTS.md` and
+`docs/decisions/ADR-005-automation-exception-alerts.md`.
+
+Status: **Planned** for universal runtime coverage; this change records the rule
+only. Existing WHM/invoice notifications remain unchanged. The latest confirmed
+WHM template is `whm_storage_alert_v1`, with server-specific fixed wording and
+three parameters. A separate general automation template is recommended, but
+has not been submitted, approved or enabled by this change. No message is sent.
+
+Future implementation must inventory module coverage, preserve approved retry,
+deduplication and escalation rules, and verify detection through actual delivery.
+Meta acceptance alone is not proof of handset delivery. Do not report every
+automation as covered merely because the requirement has been documented.
+
 ## Owner-authorized log cleanup — 2026-11-06 (prepared)
 
 The owner explicitly requested execution of all proven-safe cleanup, rather
