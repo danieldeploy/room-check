@@ -151,3 +151,11 @@ telemetry have no effect on Cloudbeds webhook or controller permission logic.
 10. Failure/retry behavior is tested without duplicate guest messages.
 11. Production installed version and the authenticated end-to-end result are
     both confirmed separately.
+
+## Independent backup lifecycle — 2026-11-11
+
+The shared ZKAccess source directory also contains the separate MySQL/Drive
+backup worker. Its owner-authorized three-day retention and removal of verified
+local archive copies do not enable webhooks, create PINs or modify guest access.
+See `zkaccess-backup.md` for that independent recovery workflow. The Cloudbeds
+API dependency and all PIN acceptance gates above remain unchanged.

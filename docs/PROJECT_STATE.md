@@ -244,6 +244,12 @@ Windows removes matching uploaded archives on the next existing five-minute tick
 without the previous extra-day delay. No new scheduler or endpoint is added.
 The dedicated cPanel cron continues to be provisioned/verified by guarded deploy.
 
+Read-only Drive metadata also confirms the November 8–10 archive IDs in the
+expected backup folder. A restore of the separate final November 10 SQL backup
+completed into a disposable Windows database: all 100 tables imported and the
+temporary database was dropped. This is not a fresh restore from an encrypted
+daily Drive object. The original database was not replaced.
+
 Status: policy/cleanup change **prepared**, CI, installed commit, cron inspection,
 three-day remote retention and local cleanup readback remain to be confirmed.
 See `docs/flows/zkaccess-backup.md` for recovery and acceptance.
