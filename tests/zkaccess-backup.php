@@ -21,21 +21,21 @@ file_put_contents($root . '/master.key', random_bytes(32));
 chmod($root . '/master.key', 0600);
 try {
     assertBackup(ZKAccessBackupSchedule::DEFAULT_TIME === '04:00', 'schedule');
-    assertBackup(ZKAccessBackupSchedule::RETENTION_DAYS === 10, 'retention');
+    assertBackup(ZKAccessBackupSchedule::RETENTION_DAYS === 3, 'retention');
     assertBackup(ZKAccessBackupStore::validateTime('04:00') === '04:00', 'valid time');
     expectBackupFailure(static fn() => ZKAccessBackupStore::validateTime('24:00'), 'invalid time');
     expectBackupFailure(static fn() => ZKAccessBackupStore::validateTime('4:00'), 'invalid time format');
     assertBackup(ZKAccessBackupDestination::BACKUP_FOLDER_NAME === 'ZKTeco Backup', 'folder');
 
-    // Strict UTC cut-off: ten complete days, no early deletion, always
+    // Strict UTC cut-off: three complete days, no early deletion, always
     // preserve the two newest verified copies even if they are older.
     $clock = strtotime('2026-11-12 12:00:00 UTC');
-    $tenDays = 10 * 86400;
+    $threeDays = 3 * 86400;
     $stamp = static fn(int $seconds): string => gmdate('Y-m-d H:i:s', $seconds);
     $records = [
         'oldest' => ['status' => 'uploaded', 'created_at' => $stamp($clock - 13 * 86400)],
         'old' => ['status' => 'uploaded', 'created_at' => $stamp($clock - 11 * 86400)],
-        'boundary' => ['status' => 'uploaded', 'created_at' => $stamp($clock - $tenDays)],
+        'boundary' => ['status' => 'uploaded', 'created_at' => $stamp($clock - $threeDays)],
         'recent' => ['status' => 'uploaded', 'created_at' => $stamp($clock - 86400)],
         'pending' => ['status' => 'ready', 'created_at' => $stamp($clock - 15 * 86400)],
     ];
@@ -46,8 +46,8 @@ try {
     $records['old']['created_at'] = 'not-a-date';
     assertBackup(!array_key_exists('old', ZKAccessBackupDrive::retentionCandidates($records, $clock)),
         'invalid backup date cannot authorize deletion');
-    assertBackup(ZKAccessBackupDestination::RETENTION_DAYS === 10,
-        'destination retention matches ten-day policy');
+    assertBackup(ZKAccessBackupDestination::RETENTION_DAYS === 3,
+        'destination retention matches three-day policy');
 
     $vault = new InvoiceVault($root);
     $store = new ZKAccessBackupStore($vault);
@@ -136,6 +136,21 @@ try {
     fwrite($handle, "\0");
     fclose($handle);
     expectBackupFailure(static fn() => $store->verify($store->entries()[$id]), 'modified ciphertext refused');
+    $remote = ['id' => 'fixture-drive-id', 'trashed' => false,
+        'parents' => [ZKAccessBackupDestination::BACKUP_FOLDER_ID],
+        'size' => 1234, 'md5Checksum' => str_repeat('a', 32)];
+    expectBackupFailure(static fn() => $store->removeUploadedLocalCopy($id,
+        array_merge($remote, ['md5Checksum' => str_repeat('b', 32)])), 'changed remote preserves local');
+    assertBackup(is_file($archive), 'mismatched remote never deletes local copy');
+    expectBackupFailure(static fn() => $store->removeUploadedLocalCopy($id,
+        array_merge($remote, ['trashed' => true])), 'trashed remote preserves local');
+    $store->removeUploadedLocalCopy($id, $remote);
+    assertBackup(!is_file($archive), 'verified upload removes local ciphertext immediately');
+    assertBackup(is_file($vault->path(ZKAccessBackupStore::keyName($id))), 'remote recovery key survives');
+    assertBackup($store->status()[0]['local_copy_present'] === false, 'local cleanup visible');
+    $store->removeUploadedLocalCopy($id, $remote);
+    assertBackup($store->status()[0]['status'] === 'uploaded', 'cleanup is idempotent');
+
 
     $invoiceWorker = (string)file_get_contents(__DIR__ . '/../cron/invoices.php');
     $backupWorker = (string)file_get_contents(__DIR__ . '/../cron/zkaccess-backups.php');

@@ -148,16 +148,16 @@ async function uploadOne(config, record) {
   record.status = 'ready';
 }
 
-async function cleanup(backups, remote) {
-  const uploaded = new Set((remote.backups ?? []).filter(b => b.status === 'uploaded').map(b => b.id));
+export async function cleanup(backups, remote, folder = FOLDER) {
+  const uploaded = new Map((remote.backups ?? []).filter(b => b.status === 'uploaded').map(b => [b.id, b]));
   for (const record of backups) {
-    if (uploaded.has(record.id)) {
-      record.status = 'uploaded';
-      const age = (Date.now() - Date.parse(record.date + 'T00:00:00Z')) / 86400000;
-      if (age >= 1) {
-        await fs.rm(path.join(FOLDER, record.filename), { force: true });
-        record.local_removed = true;
+    if (uploaded.has(record.id) && uploaded.get(record.id).size === record.size) {
+      if (!/^[a-f0-9]{32}$/.test(record.id) || record.filename !== 'zkeco_db_' + record.id + '.sql.gz') {
+        throw Error('invalid_backup_index');
       }
+      record.status = 'uploaded';
+      await fs.rm(path.join(folder, record.filename), { force: true });
+      record.local_removed = true;
     }
   }
 }
