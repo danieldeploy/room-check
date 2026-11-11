@@ -22,6 +22,20 @@ creation/touch/cleanup and task enabled state. Empty or protected-only registry
 means the checker is disabled; next eligible registration enables it. The checker
 runs hidden and ends after each pass; no resident daemon is introduced.
 
+```mermaid
+flowchart TD
+    A[Create and register owned resource] --> B[Renew activity or busy lease]
+    B --> C{Task finished or idle recovery due?}
+    C -->|No| B
+    C -->|Yes| D{Ownership and safe state verified?}
+    D -->|No or uncertain| E[Preserve resource]
+    D -->|Yes| F[Close exact registered resource]
+    F --> G{Eligible registered resources remain?}
+    E --> G
+    G -->|Yes| H[Keep conditional check enabled]
+    G -->|No| I[Disable check until next registration]
+```
+
 ## Safety checks
 
 - Browser identity pins profile, browser instance and CDP target ID, not URL/title.

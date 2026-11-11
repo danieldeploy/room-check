@@ -8,6 +8,8 @@ machines or external services.
 - [Cloudbeds → ZKAccess guest PIN automation](cloudbeds-zkaccess.md)
 - [Backup ZKTeco — arquivo independente no Drive](zkaccess-backup.md)
 
+- [Registered Chrome and Explorer cleanup](managed-ui.md)
+
 ## Required sections for new flows
 
 Each flow should state:

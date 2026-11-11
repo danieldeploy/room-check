@@ -52,3 +52,12 @@ hashes, actual scheduler activation/deactivation and invoice bridge smoke test
 remain acceptance gates. Do not report the 30-minute checker as installed until
 its Windows task and local version are read back. Normal cPanel guarded deployment
 is unchanged and its installed commit is verified separately.
+
+## Lifecycle reporting
+
+**Prepared** means this implementation is available for review on its feature
+branch. **Integrated** means merged into `agent/room-item-assignments`.
+**Deployed** requires confirmation of the installed revision on each affected
+host; cPanel deployment alone does not install the Windows helper. **Verified**
+requires the acceptance checks above, including real scheduler start/stop and
+the installed invoice bridge. This PR currently claims only prepared status.
