@@ -83,6 +83,7 @@ final class ZKAccessBackupStore
                 'status' => $entry['status'], 'size' => $entry['size'],
                 'received' => $entry['received'], 'drive_id' => $entry['drive_id'] ?? null,
                 'uploaded_at' => $entry['uploaded_at'] ?? null,
+                'local_copy_present' => is_file($this->vault->path(self::dataName($entry['id']))),
                 'received_at' => $entry['received_at'] ?? $entry['verified_at'] ?? null,
                 'last_attempt_at' => $entry['last_attempt_at'] ?? null,
                 'upload_attempts' => (int)($entry['upload_attempts'] ?? 0),
@@ -258,6 +259,26 @@ final class ZKAccessBackupStore
         $entries[$id]['drive_md5'] = (string)$metadata['md5Checksum'];
         $entries[$id]['uploaded_at'] = gmdate('Y-m-d H:i:s', $at);
         $this->saveEntries($entries);
+    }
+
+    /** Remove only redundant archive bytes; retain recovery key and manifest for Drive. */
+    public function removeUploadedLocalCopy(string $id, array $remote): void
+    {
+        self::assertId($id);
+        $entry = $this->entries()[$id] ?? [];
+        if (($entry['status'] ?? '') !== 'uploaded' || empty($entry['uploaded_at'])
+            || empty($entry['drive_id']) || ($remote['id'] ?? '') !== $entry['drive_id']
+            || ($remote['trashed'] ?? true)
+            || !in_array(ZKAccessBackupDestination::BACKUP_FOLDER_ID, $remote['parents'] ?? [], true)
+            || (int)($remote['size'] ?? -1) !== (int)($entry['drive_size'] ?? 0)
+            || empty($entry['drive_md5'])
+            || !hash_equals((string)$entry['drive_md5'], (string)($remote['md5Checksum'] ?? ''))) {
+            throw new RuntimeException('backup_local_cleanup_verification_failed');
+        }
+        $path = $this->vault->path(self::dataName($id));
+        if (is_link($path) || (is_file($path) && !unlink($path))) {
+            throw new RuntimeException('backup_local_cleanup_failed');
+        }
     }
 
     /** Verify encryption integrity and plaintext gzip SHA256 without saving plaintext. */

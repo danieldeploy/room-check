@@ -1,6 +1,6 @@
 # Backup ZKTeco — fluxo independente do Management Hub
 
-Estado: **implementação preparada; aceitação em produção pendente**. A versão
+Estado: **entregas diárias confirmadas pelo manifesto autenticado em 11/11/2026; nova política de três dias preparada**. A versão
 efetivamente instalada e o agendamento no cPanel devem ser verificados após
 o deploy protegido. Não confundir criação de ficheiro, receção no Hub e arquivo
 verificado no Drive.
@@ -18,8 +18,8 @@ verificado no Drive.
   cifrado para `My Drive / Management Hub / ZKTeco Backup`.
 - A entrega apenas é considerada concluída depois de voltar a ler o ficheiro do
   Drive e validar tamanho, checksum e decifragem autenticada.
-- A retenção do ZKTeco no Drive é de 10 dias, conservando pelo menos duas cópias remotas
-  verificadas. Esta redução de 30 para 10 dias é exclusiva dos backups ZKTeco;
+- A retenção do ZKTeco no Drive é de 3 dias, conservando pelo menos duas cópias remotas
+  verificadas. Esta retenção de três dias é exclusiva dos backups ZKTeco;
   backups gerais do Management Hub e documentos de faturas mantêm as suas políticas.
 
 ```mermaid
@@ -108,3 +108,22 @@ com lock MySQL independente `room_check_whm_disk_alert`. O dispatcher grava um
 heartbeat privado sem destinatário/ID de mensagem; falhas não interrompem o
 arquivo ZKTeco. A chamada WHM saiu do cron de lembretes, sem alterar os lembretes
 de tarefas/tradução. O teste de ativação é único e separado da execução normal.
+
+## Limpeza local e retenção — 11/11/2026
+
+- Decisão do proprietário: três dias no total no Drive, com a proteção existente
+  de pelo menos duas cópias verificadas em caso de interrupção prolongada.
+- Após o readback autenticado do Drive, o cron confirma novamente ID, parent,
+  tamanho e MD5 remotos antes de retirar o arquivo cifrado local do cPanel.
+  Também trata arquivos antigos já uploaded mesmo sem novo envio pendente.
+- Chaves cifradas e manifesto ficam no cofre enquanto o arquivo remoto existir:
+  são essenciais ao restauro. Não são cópias redundantes do SQL.
+- O Windows remove o gzip no tick existente seguinte à confirmação uploaded,
+  com ID/ficheiro/tamanho correspondentes, sem esperar pelo dia seguinte.
+- Falhas, arquivos pendentes e metadados remotos divergentes preservam a cópia.
+  Não alterar backups de release do Hub nem o pacote final manual de DLLs.
+- `local_copy_present` no status autenticado permite confirmar a remoção do
+  arquivo do cPanel sem expor chaves, SQL ou credenciais.
+- Aceitação adicional: testar limites de três dias, cópias mínimas, remoto
+  alterado/apagado, cleanup repetido, permanência das chaves e pendentes;
+  confirmar versão instalada, cron único e remoção em ambos os hosts.

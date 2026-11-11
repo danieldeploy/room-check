@@ -5,7 +5,7 @@ require_once __DIR__ . '/BackupStore.php';
 require_once __DIR__ . '/BackupDestination.php';
 require_once __DIR__ . '/../Invoices/InvoiceDriveClient.php';
 
-/** Called by the existing private invoice cron after its original work. */
+/** Independent private ZKTeco archive cron. */
 final class ZKAccessBackupDrive
 {
     public function __construct(
@@ -47,7 +47,9 @@ final class ZKAccessBackupDrive
         $pending = array_filter($entries, static fn(array $e): bool => $e['status'] === 'ready');
         $expired = self::retentionCandidates($entries, $now);
         $result = ['uploaded' => 0, 'expired' => 0];
-        if (!$pending && !$expired) return $result;
+        $local = array_filter($entries, fn(array $e): bool => $e['status'] === 'uploaded'
+            && is_file($this->vault->path(ZKAccessBackupStore::dataName($e['id']))));
+        if (!$pending && !$expired && !$local) return $result;
 
         // Persist the attempt *before* contacting OAuth / Drive. A failed
         // connection is otherwise invisible in the backup history.
@@ -140,11 +142,13 @@ final class ZKAccessBackupDrive
             }
         }
 
-        // Keep one week of encrypted on-host copies for diagnostics,
-        // without extending the 10-day ZKTeco Drive retention.
+        // A current remote metadata match supplements the recorded authenticated
+        // roundtrip. Retry old uploaded copies too, even when there is no new job.
         foreach ($entries as $id => $e) {
-            if ($e['status'] === 'uploaded' && strtotime($e['uploaded_at'] . ' UTC') < $now - 7 * 86400) {
-                @unlink($this->vault->path(ZKAccessBackupStore::dataName($id)));
+            if ($e['status'] === 'uploaded'
+                && is_file($this->vault->path(ZKAccessBackupStore::dataName($id)))) {
+                $remote = $this->drive->metadata((string)$e['drive_id']);
+                $this->store->removeUploadedLocalCopy($id, $remote ?? []);
             }
         }
         return $result;

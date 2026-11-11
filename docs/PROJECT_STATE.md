@@ -225,60 +225,29 @@ under `docs/flows/`.
 
 ## ZKTeco MySQL backups — independent Drive archiving
 
-Status: **Independent worker integrated in GitHub; deployment blocked on cPanel Git readiness**.
-The ZKTeco-only retention has been changed from 30 to **10 days** in the current feature branch; still awaiting publication.
-The two newest verified Drive backups are protected if fewer fresh copies exist.
-The existing 04:00 Europe/Lisbon AccesControl MySQL dump, encrypted Hub intake,
-Google Drive destination remains unchanged; retention is 10 days for ZKTeco backups only (preserve at least two verified copies).
+2026-11-11 live paired-agent inspection confirms the scheduled Windows task is
+installed, enabled and succeeding. The authenticated Hub manifest records daily
+verified Drive delivery for November 1–10, most recently November 10 at 04:05:14
+Europe/Lisbon (dump received at 04:02:06). Windows daily archive files through
+November 10 are already removed. These receipts supersede the old October
+cPanel Git/cron deployment blockers; they do not replace current remote metadata
+or restore acceptance. The schedule is enabled at 04:00 Europe/Lisbon.
 
-The current production design chains ZKTeco Drive delivery after
-`cron/invoices.php`. This can delay archiving when the invoice worker is busy.
-The scoped correction adds an independent five-minute cPanel cron, with
-idempotent WHM provisioning after guarded deploy, and removes backup handling
-from invoice cron. The existing dedicated MySQL advisory lock still serializes
-the paired Windows intake and the Drive upload.
+Owner-authorized policy in this change: **three days total on Drive**, retaining
+the existing minimum-two verified recovery safeguard during outages. Remove
+redundant local daily archive bytes from both Windows and cPanel as soon as
+Drive completion is verified; preserve incomplete/pending transfers. The Hub
+requires a fresh Drive ID/parent/size/checksum match before removing local
+ciphertext. Keep encrypted recovery keys and the manifest until remote expiry:
+they are needed to decrypt the Drive archive and are not redundant backup copies.
+Windows removes matching uploaded archives on the next existing five-minute tick,
+without the previous extra-day delay. No new scheduler or endpoint is added.
+The dedicated cPanel cron continues to be provisioned/verified by guarded deploy.
 
-The private ZKTeco manifest now records verified complete receipt, upload attempt
-times/counts, sanitized failure codes/times and Drive read-back confirmation.
-Old entries retain their existing evidence; missing historical timestamps are
-not fabricated. The manager page shows the new timeline.
-See `docs/flows/zkaccess-backup.md`.
+Status: policy/cleanup change **prepared**, CI, installed commit, cron inspection,
+three-day remote retention and local cleanup readback remain to be confirmed.
+See `docs/flows/zkaccess-backup.md` for recovery and acceptance.
 
-Acceptance remains: required CI, production commit confirmed, one exact cron
-entry verified in WHM, and a successful archive cycle executed by that cron.
-This change does not fix the separate cPanel disk-quota pressure.
-
-The 2026-10-29 protected read-only inspection of the installed clone
-`ee8c516c` confirmed nine *untracked* entries (root 1, deploy 4, docs 1,
-tests 3), zero missing tracked entries and no active deployment. A one-off,
-reversible private quarantine guarded by exact inventory, expected old SHA,
-file type and path validation is prepared to clean the staging clone before
-ordinary deployment; it must not touch live application, secrets or existing
-backups. Deployment and independent cron remain unverified until the WHM
-operation succeeds.
-
-On 2026-10-30, the protected UAPI Fileman operation moved and verified all
-nine previously untracked regular files into the private quarantine. A
-subsequent read-only clone scan found **zero untracked and zero missing**
-entries, yet cPanel still reported `deployable=false`. The next diagnosis
-checks only tracked Git **file-size metadata** against the installed SHA
-and the presence of Git lock filenames; it never reads file contents or
-changes the clone. Do not retry moves or force a Git update while the
-additional dirty-tree condition remains unidentified.
-
-The 2026-10-29 guarded recovery reached the cPanel Fileman move but failed with
-`quarantine_move_unconfirmed`. The subsequent read-only diagnostic still found
-all nine untracked objects in the staging clone; no successful publication was
-recorded. The follow-up recovery first inspects the existing private recovery
-folder, refuses any unknown/nonempty entries, then uses UAPI
-`Fileman::move_file` with an exact target filename and verifies source absence,
-destination presence and identical size/mtime before progressing. It never
-blindly repeats a partial move, deletes files or bypasses the protected deploy
-gate. Independent cron and 10-day ZKTeco retention remain unverified on server. This recovery does **not** reclaim cPanel disk quota.
-The protected read-only repository diagnostic now compares the cPanel clone
-with its actual installed SHA, avoiding false reports of missing files when
-GitHub contains newer commits. Recovery may proceed only after this independent
-check proves the specific dirty-tree cause; no forced pull, reset or deletion.
 
 ## Cloudbeds → ZKAccess guest PIN automation
 
