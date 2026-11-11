@@ -159,3 +159,13 @@ backup worker. Its owner-authorized three-day retention and removal of verified
 local archive copies do not enable webhooks, create PINs or modify guest access.
 See `zkaccess-backup.md` for that independent recovery workflow. The Cloudbeds
 API dependency and all PIN acceptance gates above remain unchanged.
+
+## Native ZKAccess configuration lifecycle
+
+Before implementing configuration/mapping changes, read
+[`ZKACCESS_CONFIGURATION.md`](../ZKACCESS_CONFIGURATION.md). The verified
+2026-11-11 naming incident demonstrates that database/SDK readback alone does
+not validate the collector's event labels. Preserve the native dependent-service
+refresh and require new per-door event acceptance without changing history or
+issuing unauthorized physical-open commands. The documented metadata repair
+does not enable this dormant PIN workflow.
