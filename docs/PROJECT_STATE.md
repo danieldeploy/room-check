@@ -255,6 +255,24 @@ three-day remote retention and local cleanup readback remain to be confirmed.
 See `docs/flows/zkaccess-backup.md` for recovery and acceptance.
 
 
+## ZKAccess door-name event consistency — 2026-11-11
+
+Status: operational repair **Verified** for door 2; native refresh requested for
+all four Welcome main doors. The installed vendor callback was invoked at
+18:13:59 Europe/Lisbon after checking the intended door identities and unchanged
+configuration. It emitted the native collector/monitor refresh notifications,
+without re-saving door fields, changing credentials or opening doors remotely.
+The owner physically tested door 2; the new 18:23:46 event stores the correct
+`WLC Main 1st Floor` label. Other doors await a new real-event acceptance check.
+The cause of the earlier missing/effective refresh remains unproven; do not
+present the prior script, SQL or SDK as the confirmed cause.
+
+`docs/ZKACCESS_CONFIGURATION.md` records observed state, installed-code findings,
+the actual native recovery phase, preservation checks and future implementation
+acceptance. This documentation change introduces no runtime code, daemon,
+scheduler, vendor binary patch or automatic PIN generation. Existing historical
+labels remain intact; Cloudbeds API/physical PIN gates remain separate.
+
 ## Cloudbeds → ZKAccess guest PIN automation
 
 Status: **Prepared / not integrated**.

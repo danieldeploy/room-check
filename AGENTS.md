@@ -97,6 +97,18 @@ This repository powers `check.welcomehostel.pt`. The production branch is
   retain reused/manual tabs and all sessions, preserve human intervention and
   drafts, and confirm the agent's next task still works.
 
+## ZKAccess configuration completeness
+
+- Owner instruction, 2026-11-11: future access-control configuration must preserve
+  the native validation/save/dependency-notification lifecycle and verify a new
+  real event after relevant metadata changes. A correct database name alone is
+  not completion. Use stable door identities, preserve credentials/permissions
+  and historical events, and report per-door acceptance honestly.
+- Read `docs/ZKACCESS_CONFIGURATION.md` before implementing or repairing ZKAccess
+  configuration. It records the inspected vendor callback/refresh mechanism,
+  the successfully verified door-name repair and its limits. Do not generalize
+  the repair to a different software version without inspecting its behavior.
+
 ## Project memory and orientation
 
 - Before changing a module, read `docs/PROJECT_MEMORY.md`, then
