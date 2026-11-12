@@ -26,7 +26,14 @@ try {
     rc(Auth::roleHasPermission($pdo,'gerente',Auth::PERMISSION_RECEIPTS_RUN),'manager permission locked with existing persisted matrix');
     rc(!Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_RUN),'governanta opt-in');
     $pdo->exec("INSERT INTO role_permissions VALUES('governanta','receipts.run')"); Auth::resetPermissionCache();
-    rc(Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_VIEW) && !Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_INVOICES_VIEW),'delegation stays narrow');
+    rc(!Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_VIEW) && !Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_REVIEW) && !Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_INVOICES_VIEW),'running grants summary only');
+    $pdo->exec("INSERT INTO role_permissions VALUES('governanta','receipts.view')"); Auth::resetPermissionCache();
+    rc(!Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_VIEW),'legacy auto-added view cannot expose history');
+    $pdo->exec("INSERT INTO role_permissions VALUES('governanta','receipts.history')"); Auth::resetPermissionCache();
+    rc(Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_VIEW) && !Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_REVIEW),'explicit future history grant does not grant corrections');
+    $pdo->exec("DELETE FROM role_permissions WHERE permission='receipts.history'; INSERT INTO role_permissions VALUES('governanta','receipts.review')"); Auth::resetPermissionCache();
+    rc(Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_VIEW) && Auth::roleHasPermission($pdo,'governanta',Auth::PERMISSION_RECEIPTS_REVIEW),'review includes the history it needs');
+    $pdo->exec("DELETE FROM role_permissions WHERE permission='receipts.review'"); Auth::resetPermissionCache();
     $drive=new class($text) {
         public array $files=[]; public array $moved=[]; public array $trashed=[]; public array $folderNames=[];
         public array $pageTexts=[]; public array $ocrTexts=[]; public int $uploads=0; public bool $crashUpload=false; public int $ocr=0; public int $discovered=0; public bool $grant=true; public bool $crashMove=false; public bool $crashOcr=false;

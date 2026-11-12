@@ -5,8 +5,10 @@ require_once dirname(__DIR__) . '/I18n/Translator.php';
 
 final class Auth
 {
-    public const PERMISSION_RECEIPTS_VIEW = 'receipts.view';
+    // Old receipts.view was implicitly persisted with run: require a new explicit history grant.
+    public const PERMISSION_RECEIPTS_VIEW = 'receipts.history';
     public const PERMISSION_RECEIPTS_RUN = 'receipts.run';
+    public const PERMISSION_RECEIPTS_REVIEW = 'receipts.review';
     public const PERMISSION_INVOICES_VIEW = 'invoices.view';
     public const PERMISSION_INVOICES_RUN = 'invoices.run';
     public const PERMISSION_ROOM_CHECK_VIEW = 'room_check.view';
@@ -27,7 +29,8 @@ final class Auth
 
     public const PERMISSIONS = [
         self::PERMISSION_RECEIPTS_VIEW => ['group'=>'Talões e PDFs','label'=>'Consultar talões'],
-        self::PERMISSION_RECEIPTS_RUN => ['group'=>'Talões e PDFs','label'=>'Iniciar arquivo de talões'],
+        self::PERMISSION_RECEIPTS_RUN => ['group'=>'Talões e PDFs','label'=>'Iniciar arquivo e consultar relatório'],
+        self::PERMISSION_RECEIPTS_REVIEW => ['group'=>'Talões e PDFs','label'=>'Rever talões e corrigir dados'],
         self::PERMISSION_INVOICES_VIEW => ['group' => 'Faturas e Portais', 'label' => 'Consultar faturas'],
         self::PERMISSION_INVOICES_RUN => ['group' => 'Faturas e Portais', 'label' => 'Recolher faturas'],
         self::PERMISSION_ROOM_CHECK_VIEW => ['group' => 'Gestão de Quartos', 'label' => 'Consultar quartos'],
@@ -56,6 +59,7 @@ final class Auth
 
     public const DEFAULT_ROLE_PERMISSIONS = [
         'gerente' => [
+            self::PERMISSION_RECEIPTS_REVIEW,
             self::PERMISSION_RECEIPTS_VIEW,
             self::PERMISSION_RECEIPTS_RUN,
             self::PERMISSION_INVOICES_VIEW,
@@ -96,6 +100,7 @@ final class Auth
 
     public const LOCKED_ROLE_PERMISSIONS = [
         'gerente' => [
+            self::PERMISSION_RECEIPTS_REVIEW,
             self::PERMISSION_RECEIPTS_VIEW,
             self::PERMISSION_RECEIPTS_RUN,
             self::PERMISSION_INVOICES_VIEW,
@@ -107,7 +112,7 @@ final class Auth
     ];
 
     public const PERMISSION_DEPENDENCIES = [
-        self::PERMISSION_RECEIPTS_RUN => [self::PERMISSION_RECEIPTS_VIEW],
+        self::PERMISSION_RECEIPTS_REVIEW => [self::PERMISSION_RECEIPTS_VIEW],
         self::PERMISSION_INVOICES_RUN => [self::PERMISSION_INVOICES_VIEW],
         self::PERMISSION_ROOM_CHECK_EDIT => [self::PERMISSION_ROOM_CHECK_VIEW],
         self::PERMISSION_ZKACCESS_CONFIGURE => [self::PERMISSION_ZKACCESS_VIEW],
