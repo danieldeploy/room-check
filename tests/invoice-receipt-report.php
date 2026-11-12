@@ -36,7 +36,6 @@ $vault=new InvoiceVault($tmp.'/vault'); $vault->save(InvoiceReceipts::FILE,['doc
 file_put_contents($tmp.'/web/config.php','<?php return '.var_export(['invoices'=>['private_dir'=>$tmp.'/vault']],true).';');
 $lib=<<<'PHP'
 <?php
-require_once __DIR__.'/src/Auth/Auth.php';
 require_once __DIR__.'/src/Security/Csrf.php';
 function database(): PDO {
     static $pdo;

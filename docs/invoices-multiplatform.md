@@ -364,3 +364,8 @@ only that child's recorded parent and warns that it may contain other invoices.
 The embedded PDF viewer provides page navigation; no automatic invoice grouping
 is claimed. Future grouped invoice PDFs use the same viewer for all their pages.
 Retired sources remain unavailable; no removed file is restored.
+
+The standalone document endpoint must explicitly load Auth; its test bootstrap
+provides only database configuration, never hidden authentication dependencies.
+Actual role-denial status is checked to detect bootstrap exceptions masked as
+a generic preview failure.

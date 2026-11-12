@@ -2,6 +2,7 @@
 declare(strict_types=1);
 $root=dirname(__DIR__);
 require $root.'/lib.php';
+require_once $root.'/src/Auth/Auth.php';
 require_once $root.'/src/Invoices/InvoiceReceipts.php';
 require_once $root.'/src/Invoices/InvoiceReceiptPdf.php';
 require_once $root.'/src/I18n/InvoiceText.php';
