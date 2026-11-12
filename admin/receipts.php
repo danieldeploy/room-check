@@ -49,6 +49,7 @@ $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse($state['doc
 <link rel="stylesheet" href="../assets/session.css?v=<?= (int)filemtime($root.'/assets/session.css') ?>">
 </head><body><main class="settings-shell">
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
+<?php if ($manager): ?><p><a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
 <header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1><p><?= $t('receipt_description') ?></p></div></header>
 <?php if ($error || !empty($state['error'])): ?><div class="alert" role="alert"><?= $t($error?:$state['error']) ?></div><?php endif; ?>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= $t($flash) ?></div><?php endif; ?>

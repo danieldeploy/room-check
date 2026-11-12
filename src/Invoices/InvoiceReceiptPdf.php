@@ -15,7 +15,7 @@ final class InvoiceReceiptPdf
         }
         return $paths;
     }
-    public function split(string $bytes): array
+    public function split(string $bytes, bool $publish = true): array
     {
         $node='';
         foreach (self::nodeCandidates($this->config) as $candidate) {
@@ -56,7 +56,7 @@ final class InvoiceReceiptPdf
                     || !hash_equals(hash_file('sha256',$file),(string)($page['sha256']??''))
                     || !hash_equals(hash_file('md5',$file),(string)($page['md5Checksum']??''))) throw new RuntimeException('receipt_split_failed');
             }
-            foreach ($result['pages'] as $page) InvoiceVault::atomicWrite($this->vault->path('receipt-page-'.$page['sha256'].'.pdf'),(string)file_get_contents($dir.'/page-'.$page['number'].'.pdf'));
+            if ($publish) foreach ($result['pages'] as $page) InvoiceVault::atomicWrite($this->vault->path('receipt-page-'.$page['sha256'].'.pdf'),(string)file_get_contents($dir.'/page-'.$page['number'].'.pdf'));
             return $result;
         } catch (Throwable $e) {
             if (in_array($e->getMessage(),['receipt_split_failed','receipt_split_limit','receipt_split_unavailable'],true)) throw $e;
