@@ -11,6 +11,8 @@ try {
     verifyReceiptSplit($config);
     pdfAssert(!glob($directory.'/*'),'release probe leaves no artifacts');
     $splitter=new InvoiceReceiptPdf(new InvoiceVault($directory),$config);
+    $inspection=$splitter->split(receiptSplitProbePdf(),false);
+    pdfAssert($inspection['count']===2 && !glob($directory.'/*'),'nonpublishing inspection leaves no artifacts');
     $a=$splitter->split(receiptSplitProbePdf()); $b=$splitter->split(receiptSplitProbePdf());
     pdfAssert($a===$b,'retry reproduces identical page bytes');
     foreach ($a['pages'] as $page) pdfAssert((fileperms($directory.'/receipt-page-'.$page['sha256'].'.pdf')&0777)===0600,'page files private');

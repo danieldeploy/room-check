@@ -337,3 +337,7 @@ unauthorized individual POSTs, manager history/review and preserved scan workflo
 Supplier boundary clarification: customer labels need not contain a colon and
 include Bill to/recipient variants. Legal-heading fallback is used only before
 an identified customer section; customer-only/unknown layout stays unidentified.
+
+### Azure diagnostics (2026-11-12)
+
+Manager-only `admin/invoice-azure.php` configures the existing North Europe F0 resource in InvoiceVault and analyzes owner-selected 1–2-page PDF/JPEG tests (4 MiB). Async operations and allowlisted extracted fields/page evidence are encrypted privately. No Drive mutations, email sending or automatic grouping/deletion. InvoiceReceiptPdf supports nonpublishing inspection for this test path. Authentication, CSRF, upload validation, operation URL allowlist, no redirects, TLS and uncertain-POST replay prevention are mandatory. Future QR-first rules: use readable fiscal QR data; send unreadable and ambiguous duplicate/continuation groups together to Azure; group true continuations and preserve source files until all related invoices finish. Current production pipeline is not switched by this diagnostic addition. See `azure-receipt-tests.md`.

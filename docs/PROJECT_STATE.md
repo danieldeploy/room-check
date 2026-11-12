@@ -683,3 +683,7 @@ Supplier recognition follow-up: bare customer headings and Bill to/recipient
 headings terminate the supplier section too. A legal-company fallback requires
 an identified customer boundary; a lone unlabelled company is insufficient.
 Regression fixtures cover customer-only OCR and separate supplier/customer names.
+
+## Azure invoice diagnostics — 2026-11-12
+
+Prepared manager-only encrypted connection and synchronous UI initiation/asynchronous Azure result checks. Existing owner-created North Europe F0 resource; actual key, connection acceptance and two real PDF tests pending deployment. No existing receipt/Drive/TOConline state is changed by diagnostics. Uncertain submissions are retained and not replayed. See `docs/azure-receipt-tests.md`.

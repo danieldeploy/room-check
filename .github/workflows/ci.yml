@@ -137,6 +137,7 @@ jobs:
           php tests/zkaccess-backup.php
           php tests/invoice-receipts.php
           php tests/invoice-receipt-report.php
+          php tests/invoice-azure.php
           TEST_NODE_BINARY=$(command -v node) php tests/invoice-receipt-pdf.php
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
