@@ -760,3 +760,13 @@ application copies; required validate/windows-agent checks; exact installed comm
 and authenticated batch acceptance after publication. The API key must be configured
 before the new worker can recover the pending batch. Actual accepted/duplicate
 TOConline responses, not email submission, determine external completion.
+
+
+### Receipt release 400 inspection (2026-11-12)
+PR350 passed both required checks and merged as 6697ccd. The guarded release
+400 failed; read-only repository inspection confirms the staging clone at that
+commit and last successful deployment399/e14ca034. Do not retry publication
+until the exact failure is classified. The bounded diagnostic now inspects
+release400, decoder/npm availability and allowlisted npm error codes, never raw
+logs, configuration, invoice data or credentials. This diagnostic changes no
+live application files and does not authorize recovery by itself.

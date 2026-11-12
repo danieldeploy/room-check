@@ -2,8 +2,8 @@
 """Read-only diagnosis of the exact failed scan-PDF release; no raw logs/config output."""
 import hashlib,json,re,sys
 from cpanel_disk_cleanup import request_api,Rejected
-FAILED_ID='390'
-FAILED_SHA='372a1f13a4adf84e1096448e7a908fe57372a887'
+FAILED_ID='400'
+FAILED_SHA='6697ccd695990164dea51df1fe5ce092e168b329'
 APP='/home/welcome/public_html/check'
 
 def content(path):
@@ -32,7 +32,14 @@ def summarize_log(text):
             facts['receipt_pdf_split']=value['receipt_pdf_split']
         if value.get('stage') in ('preconditions','application_backup','database_backup'):
             facts['backup_stage']=value['stage']; facts['backup_ok']=value.get('ok') is True
+    stages={'decoder_ready':'Receipt decoder dependencies ready','decoder_prepare_failed':'Receipt decoder preparation failed before application copies'}
+    for key,marker in stages.items():
+        if marker in text: facts[key]=True
     return facts
+
+def npm_codes(text):
+    allowed=['EACCES','EPERM','ENOSPC','EDQUOT','ENOTFOUND','EAI_AGAIN','ECONNRESET','ETIMEDOUT','EBADENGINE','EUSAGE','ENOENT','ELIFECYCLE']
+    return [code for code in allowed if re.search(r'\b'+code+r'\b',text)]
 
 def configured_node(text):
     match=re.search(r"['\"]node_binary['\"]\s*=>\s*['\"]([^'\"]+)['\"]",text)
@@ -65,8 +72,20 @@ def main():
     try: cron_paths=cron_nodes(request_api('Cron','listcron',{},legacy=True).get('data'))
     except Rejected: cron_paths=[]
     print(json.dumps({'cron_node_paths':cron_paths}))
-    candidates=list(dict.fromkeys(([node] if node else [])+cron_paths+['/usr/bin/node','/usr/local/bin/node','/opt/cpanel/ea-nodejs22/bin/node','/opt/cpanel/ea-nodejs24/bin/node']))
-    for path in candidates: print(json.dumps({'node_path':path,**metadata(path)}))
+    candidates=list(dict.fromkeys(([node] if node else [])+cron_paths+['/home/welcome/nodevenv/booking-vault-agent/22/bin/node','/usr/bin/node','/usr/local/bin/node','/opt/cpanel/ea-nodejs22/bin/node','/opt/cpanel/ea-nodejs24/bin/node']))
+    for path in candidates:
+        print(json.dumps({'node_path':path,**metadata(path)}))
+        print(json.dumps({'npm_path':path.rsplit('/',1)[0]+'/npm',**metadata(path.rsplit('/',1)[0]+'/npm')}))
+    root='/home/welcome/home/welcome/repositories/room-check/invoice-runner/receipt-tools'
+    for suffix in ['.installed-lock','node_modules/zxing-wasm','node_modules/@napi-rs/canvas']:
+        print(json.dumps({'decoder_file':suffix,**metadata(root+'/'+suffix)}))
+    try:
+        rows=request_api('Fileman','list_files',{'dir':'/home/welcome/.npm/_logs','show_hidden':1})
+        if not isinstance(rows,list) or len(rows)>10000: raise Rejected('npm_logs_unavailable')
+        names=[r.get('file') or r.get('name') for r in rows if isinstance(r,dict)]
+        names=sorted([n for n in names if isinstance(n,str) and re.fullmatch(r'2026-11-12T[0-9_.TZ-]+-debug-0\.log',n)],reverse=True)[:3]
+        for index,name in enumerate(names): print(json.dumps({'npm_log_index':index,'codes':npm_codes(content('/home/welcome/.npm/_logs/'+name))}))
+    except Rejected: print(json.dumps({'npm_logs_available':False}))
     print(json.dumps({'installed_receipt_pdf_class':metadata(APP+'/src/Invoices/InvoiceReceiptPdf.php')}))
     print(json.dumps({'invoice_private_directory':metadata('/home/welcome/room-check-private/invoices')}))
     print(json.dumps({'installed_receipts_sha256':hashlib.sha256(content(APP+'/src/Invoices/InvoiceReceipts.php').encode()).hexdigest()}))
