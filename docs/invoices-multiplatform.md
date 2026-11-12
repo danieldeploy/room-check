@@ -425,3 +425,7 @@ The QR does not contain the supplier's legal name. If that name is unknown, Gemi
 also reads it; names paired with a validated QR issuer are cached privately for
 future scans. This supports the operator's duplicate company/number/date report
 without inventing a company name or mistaking the customer for the supplier.
+
+Release diagnostics classify only the private PDF subprocess failure category;
+raw stderr never reaches the report, logs or browser. The synthetic deployment
+probe still blocks application copies when local QR/PDF execution is unavailable.

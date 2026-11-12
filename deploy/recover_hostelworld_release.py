@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recover only inspected receipt deployment 390; every other failure keeps the normal gate."""
+"""Recover only inspected receipt deployment 400; every other failure keeps the normal gate."""
 import argparse
 import json
 import os
@@ -7,8 +7,8 @@ import sys
 from automated_release import (Config,CpanelAPI,Deployment,WHM_ORIGIN,BRANCH,GitHub,commit,require,
     DeploymentError,release,inspect_release_state,health_check,require_backup_gate)
 
-FAILED_ID="390"
-FAILED_SHA="372a1f13a4adf84e1096448e7a908fe57372a887"
+FAILED_ID="400"
+FAILED_SHA="6697ccd695990164dea51df1fe5ce092e168b329"
 
 def latest_task(runner):
     tasks=runner.tasks()
@@ -36,7 +36,7 @@ def inspect(runner):
     row=runner.repository(); current=runner.inspect(row)
     return {"mode":"inspected-receipt-runtime-recovery","writes":False,"current_commit":current,
             "failed_deploy_id":FAILED_ID,"failed_commit":FAILED_SHA,
-            "cause":"receipt_split_default_node_missing"}
+            "cause":"receipt_decoder_runtime_probe_failed"}
 
 def recover(runner,github,expected):
     expected=commit(expected)

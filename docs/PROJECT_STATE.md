@@ -770,3 +770,11 @@ until the exact failure is classified. The bounded diagnostic now inspects
 release400, decoder/npm availability and allowlisted npm error codes, never raw
 logs, configuration, invoice data or credentials. This diagnostic changes no
 live application files and does not authorize recovery by itself.
+
+Read-only run43322653419 confirmed decoder installation succeeded, synthetic
+PDF runtime probe failed and installed InvoiceReceipts hash still matches the
+previous release. A bounded probe now emits only operation, exit code and an
+allowlisted runtime classification (never stderr). Recovery is bound solely to
+inspected failure400/6697ccd, retains backup/probe gates, and cannot publish if
+the synthetic reader still fails. This is diagnostic instrumentation, not a
+claim that the runtime incompatibility has been fixed.
