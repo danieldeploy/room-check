@@ -57,7 +57,12 @@ final class InvoiceReceiptPdf
             } while (microtime(true)<$end && strlen($out)<2*1024*1024);
             if ($status['running']) { proc_terminate($process,9); throw new RuntimeException('receipt_split_failed'); }
             $out.=stream_get_contents($pipes[1]);$err=substr($err.stream_get_contents($pipes[2]),0,16384);
-            if (is_callable($this->diagnostic)) ($this->diagnostic)(['operation'=>$operation,'exit_code'=>$status['exitcode'],'stderr_class'=>self::diagnosticCode($err)]);
+            if (is_callable($this->diagnostic)) {
+                $probe=json_decode($out,true);$class=self::diagnosticCode($err);
+                if (in_array($probe['diagnostic']??'', ['wasm_memory','memory_mapping','native_abi','missing_dependency','node_version','permission','unclassified'],true)) $class=$probe['diagnostic'];
+                $version=preg_match('/\A[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\z/',$probe['node_version']??'')?$probe['node_version']:null;
+                ($this->diagnostic)(['operation'=>$operation,'exit_code'=>$status['exitcode'],'stderr_class'=>$class,'node_version'=>$version]);
+            }
             $result=json_decode($out,true,32,JSON_THROW_ON_ERROR);
             if (($result['error']??'')==='receipt_split_limit') throw new RuntimeException('receipt_split_limit');
             if ($status['exitcode']!==0) throw new RuntimeException('receipt_split_failed');
