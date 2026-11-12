@@ -14,7 +14,7 @@ final class InvoiceAzure
     public function configure(string $key): void
     {
         $key=trim($key);
-        if (!preg_match('/\A[a-fA-F0-9]{32,128}\z/',$key)) throw new RuntimeException('azure_key_invalid');
+        if (!preg_match('/\A[A-Za-z0-9+\/=_-]{32,256}\z/',$key)) throw new RuntimeException('azure_key_invalid');
         $this->vault->save(self::SETTINGS,['key'=>$key,'endpoint'=>self::ENDPOINT,'configured_at'=>gmdate('c')]);
     }
     public function tests(): array { return $this->vault->has(self::TESTS)?$this->vault->read(self::TESTS):[]; }

@@ -19,7 +19,7 @@ $transport=static function($method,$url,$bytes,$mime) use (&$posts,&$gets,&$fixt
  $gets++; return ['status'=>200,'body'=>$fixture];
 };
 try {
- $azure=new InvoiceAzure($vault,$transport); $key=str_repeat('a',32); $azure->configure($key);
+ $azure=new InvoiceAzure($vault,$transport); $key=str_repeat('Az09',21); $azure->configure($key);
  az(!str_contains(file_get_contents($dir.'/'.InvoiceAzure::SETTINGS),$key),'key encrypted');
  foreach (['https://evil.example/','https://management-hub-invoices.cognitiveservices.azure.com.evil.example/documentintelligence/x',InvoiceAzure::ENDPOINT.'/documentintelligence/documentModels/prebuilt-invoice/analyzeResults/../keys?api-version=2024-11-30'] as $url) {
   try { InvoiceAzure::operation($url); throw new RuntimeException('unsafe operation accepted'); } catch (RuntimeException $e) { az($e->getMessage()==='azure_response','operation URL restriction'); }
