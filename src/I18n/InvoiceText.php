@@ -44,7 +44,7 @@ final class InvoiceText
         'azure_field_CustomerName' => ["Cliente","Customer"],
         'azure_field_CustomerTaxId' => ["NIF do cliente","Customer tax number"],
         'azure_field_InvoiceTotal' => ["Total da fatura","Invoice total"],
-        'azure_field_SubTotal' => ["Subtotal","Subtotal"],
+        'azure_field_SubTotal' => ["Subtotal sem impostos","Subtotal"],
         'azure_field_TotalTax' => ["Total de impostos","Total tax"],
         'receipt_permission_help' => ['Permissões de alteração incluem a consulta necessária à ação. Nos talões, iniciar o arquivo permite apenas consultar o relatório; o histórico individual e a revisão têm permissões próprias.', 'Change permissions include the access needed for the action. For receipts, starting archiving permits only the report; individual history and review have separate permissions.'],
         'receipt_report' => ['Relatório de processamento','Processing report'],
