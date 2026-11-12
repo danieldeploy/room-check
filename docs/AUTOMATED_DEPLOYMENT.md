@@ -239,3 +239,9 @@ installation and local inspect/extract are bounded, private and fail before any
 application copies. The normal private runner copy includes these dependencies.
 A failed installation/probe is not a completed release: inspect installed commit
 and the guarded release state before any retry.
+
+### Diagnóstico do leitor no release400
+A instalação npm terminou, mas o teste sintético de execução falhou antes das
+cópias. A versão instalada foi comparada por hash. O probe passa a classificar
+o stderr apenas em categorias fixas, sem conteúdo bruto. A recuperação fica
+vinculada ao ID400 e SHA6697ccd; qualquer falha nova mantém o bloqueio.

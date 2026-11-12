@@ -17,8 +17,8 @@ class Tests(unittest.TestCase):
         with self.assertRaises(r.DeploymentError): r.known_failure(runner,self.task(sha="a"*40))
     def test_previous_or_unrelated_failure_is_not_authorized(self):
         runner=self.runner()
-        self.assertEqual(r.FAILED_ID,'390')
-        self.assertEqual(r.FAILED_SHA,'372a1f13a4adf84e1096448e7a908fe57372a887')
+        self.assertEqual(r.FAILED_ID,'400')
+        self.assertEqual(r.FAILED_SHA,'6697ccd695990164dea51df1fe5ce092e168b329')
         with self.assertRaises(r.DeploymentError): r.known_failure(runner,self.task('288'))
         task=self.task(); task['repository_state']['branch']='main'
         with self.assertRaises(r.DeploymentError): r.known_failure(runner,task)

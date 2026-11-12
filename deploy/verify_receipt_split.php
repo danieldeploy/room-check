@@ -15,13 +15,13 @@ function receiptSplitProbePdf(): string
     foreach (array_slice($offsets,1) as $offset) $pdf.=sprintf('%010d 00000 n ',$offset)."\n";
     return $pdf."trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n".$xref."\n%%EOF\n";
 }
-function verifyReceiptSplit(array $config): void
+function verifyReceiptSplit(array $config,?callable $diagnostic=null): void
 {
     $base=new InvoiceVault($config['private_dir']);
     $directory=$base->path('receipt-probe-'.bin2hex(random_bytes(12)));
     if (!mkdir($directory,0700)) throw new RuntimeException('receipt_split_failed');
     try {
-        $vault=new InvoiceVault($directory); $splitter=new InvoiceReceiptPdf($vault,$config);
+        $vault=new InvoiceVault($directory); $splitter=new InvoiceReceiptPdf($vault,$config,$diagnostic);
         $local=$splitter->inspect(receiptSplitProbePdf(),'pdf');
         if ($local['count']!==2 || count($local['pages'])!==2) throw new RuntimeException('receipt_split_failed');
         $group=$splitter->extract(receiptSplitProbePdf(),[1,2]);
@@ -43,7 +43,7 @@ if (PHP_SAPI==='cli' && realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
         $app=$argv[1]??''; $config=(require $app.'/config.php')['invoices'];
         // Check the incoming splitter before replacing any application files.
         $config['runner_script']=dirname(__DIR__).'/invoice-runner/runner.mjs';
-        verifyReceiptSplit($config);
+        verifyReceiptSplit($config,static function(array $facts): void {echo json_encode(['receipt_runtime'=>$facts])."\n";});
         echo json_encode(['ok'=>true,'receipt_pdf_split'=>'passed','pages'=>2])."\n";
     } catch (Throwable $e) {
         $code=in_array($e->getMessage(),['receipt_split_unavailable','receipt_split_failed','receipt_split_limit','private_storage_unavailable','private_storage_permissions'],true)?$e->getMessage():'receipt_split_failed';

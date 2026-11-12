@@ -27,3 +27,11 @@ test('extract keeps related pages in original order and original dimensions',asy
   assert.deepEqual(await extractPdf(bytes,[2,3]),out);
   for(const pages of [[3,2],[1,1],[0],[5],[]]) await assert.rejects(extractPdf(bytes,pages));
 });
+
+test('runtime diagnostics classify nested causes without returning raw errors', async()=>{
+  const {runtimeFailure}=await import('../receipt-pdf-split.mjs');
+  assert.equal(runtimeFailure(new Error('Cannot find native binding SECRET',{cause:new Error('GLIBC_2.28 not found')})),'native_abi');
+  assert.equal(runtimeFailure(new Error('Cannot find native binding SECRET',{cause:new Error('failed to map segment from shared object')})),'memory_mapping');
+  assert.equal(runtimeFailure(new Error('WebAssembly.Memory(): could not allocate memory SECRET')),'wasm_memory');
+  assert.equal(runtimeFailure(new Error('SECRET')),'unclassified');
+});

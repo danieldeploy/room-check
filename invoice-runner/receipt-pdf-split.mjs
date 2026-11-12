@@ -63,6 +63,17 @@ async function main() {
   }
   process.stdout.write(JSON.stringify(result));
 }
+export function runtimeFailure(error) {
+  let text=''; const seen=new Set();
+  for(let e=error;e && !seen.has(e) && seen.size<8;e=e.cause){seen.add(e);text+=' '+String(e.message??'').slice(0,4096);}
+  if(/WebAssembly/i.test(text) && /memory|allocat/i.test(text))return 'wasm_memory';
+  if(/failed to map segment|cannot allocate memory|std::bad_alloc|Fatal process out of memory/i.test(text))return 'memory_mapping';
+  if(/GLIBC|GLIBCXX|CXXABI|cannot open shared object|invalid ELF/i.test(text))return 'native_abi';
+  if(/Cannot find (module|package|native binding)|ERR_MODULE_NOT_FOUND|Failed to load native binding/i.test(text))return 'missing_dependency';
+  if(/getBuiltinModule|Unexpected token|Unsupported engine/i.test(text))return 'node_version';
+  if(/EACCES|Permission denied/i.test(text))return 'permission';
+  return 'unclassified';
+}
 if (process.argv[1] && import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href) {
-  main().catch(e=>{ process.stdout.write(JSON.stringify({error:e.message==='receipt_split_limit'?e.message:'receipt_split_failed'})); process.exitCode=1; });
+  main().catch(e=>{ process.stdout.write(JSON.stringify({error:e.message==='receipt_split_limit'?e.message:'receipt_split_failed',diagnostic:runtimeFailure(e),node_version:process.versions.node})); process.exitCode=1; });
 }

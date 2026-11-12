@@ -28,6 +28,17 @@ def main():
         "classifications":[k for k in known if k in text]}}))
     decoder=json.JSONDecoder()
     for line in text.splitlines():
+        marker=line.find('{"receipt_runtime":')
+        if marker<0: continue
+        try: payload,_=decoder.raw_decode(line[marker:])
+        except ValueError: continue
+        f=payload.get('receipt_runtime',{})
+        if f.get('operation') in ('inspect','extract','split') and type(f.get('exit_code')) is int and f.get('stderr_class') in ('none','wasm_memory','memory_mapping','native_abi','missing_dependency','node_version','permission','unclassified'):
+            clean={k:f[k] for k in ('operation','exit_code','stderr_class')}
+            if re.fullmatch(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}',str(f.get('node_version',''))): clean['node_version']=f['node_version']
+            print(json.dumps({'receipt_runtime':clean}))
+
+    for line in text.splitlines():
         marker=line.find('{"hostelworld_capability":')
         if marker<0: continue
         try: payload,_=decoder.raw_decode(line[marker:])
