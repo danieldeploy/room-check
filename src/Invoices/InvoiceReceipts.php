@@ -71,10 +71,11 @@ final class InvoiceReceipts
     /** Accept explicit supplier labels only; never substitute the customer or filename. */
     public static function issuerName(string $text): string
     {
-        $head=preg_split('/(?:^|\\n)\\s*(?:cliente|adquirente|customer|client)\\s*[:\\-]/iu', $text,2)[0];
+        $parts=preg_split('/(?:^|\\n)\\s*(?:cliente|adquirente|customer|client|bill(?:ed)?\\s+to|destinat[aá]rio)\\b/iu', $text,2);
+        $head=$parts[0];
         preg_match_all('/(?:^|\\n)\\s*(?:fornecedor|emitente|supplier|issuer|vendedor|seller)\\s*[:\\-]\\s*([^\\r\\n]{1,160})/iu',$head,$matches);
         $names=array_values(array_unique(array_map('trim',$matches[1])));
-        if (!$names) {
+        if (!$names && count($parts)===2) {
             preg_match_all('/(?:^|\\n)\\s*([^\\r\\n]{2,145}\\b(?:Lda\\.?|S\\.?A\\.?|Ltd\\.?|Limited))\\s*(?:\\n|$)/iu',$head,$legal);
             $names=array_values(array_unique(array_map('trim',$legal[1])));
         }
