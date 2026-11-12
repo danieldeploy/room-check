@@ -18,6 +18,9 @@ foreach (['SECRET-','private-','PRIVATE-PARENT','drive.google.com','type="date"'
 foreach (['FT 42','2026-10-02','FT 43','2026-09-01','Supplier &lt;script&gt;','Empresa não identificada',InvoiceText::get('receipt_review_required')] as $public) reportCheck(str_contains($html,$public),'Required duplicate/date/error detail missing');
 reportCheck(InvoiceReceipts::issuerName("Fornecedor: Empresa ABC\nCliente: Active Lines\nFornecedor: Not the supplier") === 'Empresa ABC','Do not mistake customer-section content for supplier');
 reportCheck(InvoiceReceipts::issuerName("Loja Exemplo, Lda.\nNIF: 123456789\nCliente: Active Lines") === 'Loja Exemplo, Lda.', 'Recognize unique legal supplier heading');
+reportCheck(InvoiceReceipts::issuerName("Cliente\nActive Lines, Lda.") === '', 'Bare customer heading must never become supplier');
+reportCheck(InvoiceReceipts::issuerName("Loja Exemplo, Lda.\nCliente\nActive Lines, Lda.") === 'Loja Exemplo, Lda.', 'Bare customer heading bounds the legal supplier header');
+reportCheck(InvoiceReceipts::issuerName("Active Lines, Lda.\nNIF: 500000000") === '', 'Unlabelled legal company alone is not supplier evidence');
 reportCheck(InvoiceReceipts::issuerName("Cliente: Active Lines\nNIF: 500000000") === '', 'Never infer supplier from customer');
 reportCheck(InvoiceReceipts::issuerName("Fornecedor: ABC\nEmitente: DEF") === '', 'Ambiguous suppliers remain unidentified');
 

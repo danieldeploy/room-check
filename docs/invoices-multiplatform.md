@@ -333,3 +333,7 @@ Acceptance: role matrix/legacy rows, explicit future delegation, actual reduced
 HTML with hostile supplier strings and private IDs/filenames, mixed PDFs with
 master/page counts, duplicate dates, missing company names, review/source errors,
 unauthorized individual POSTs, manager history/review and preserved scan workflow.
+
+Supplier boundary clarification: customer labels need not contain a colon and
+include Bill to/recipient variants. Legal-heading fallback is used only before
+an identified customer section; customer-only/unknown layout stays unidentified.

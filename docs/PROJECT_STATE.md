@@ -678,3 +678,8 @@ never infer suppliers from customer NIF, filenames or historical originals.
 Current Drive OAuth, portal/archive/TOConline behavior and direct Drive sharing
 are unchanged. No real scan submission is initiated by deployment. Production
 acceptance and installed commit require separate verification after CI/release.
+
+Supplier recognition follow-up: bare customer headings and Bill to/recipient
+headings terminate the supplier section too. A legal-company fallback requires
+an identified customer boundary; a lone unlabelled company is insufficient.
+Regression fixtures cover customer-only OCR and separate supplier/customer names.
