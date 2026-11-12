@@ -705,3 +705,10 @@ only that child's recorded parent and warns that it may contain other invoices.
 The embedded PDF viewer provides page navigation; no automatic invoice grouping
 is claimed. Future grouped invoice PDFs use the same viewer for all their pages.
 Retired sources remain unavailable; no removed file is restored.
+
+Inline preview acceptance correction: deployment 398 installed 5703316, but live
+preview failed because the standalone endpoint did not load Auth (unlike the
+receipt page via SessionBar). Explicit Auth bootstrap fixes that dependency; the
+endpoint fixture no longer preloads Auth and reproduces the production bootstrap.
+The failure was visible and no invoice processing or Drive mutation occurred.
+Live document acceptance must be repeated after the corrected release.
