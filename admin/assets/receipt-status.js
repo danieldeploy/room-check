@@ -15,6 +15,8 @@
       if(!response.ok)throw new Error('status');const result=await response.json();
       status.dataset.state=result.progress.state;status.dataset.next=result.progress.next_at;
       offset=result.progress.server_time*1000-Date.now();label.textContent=result.label;countdown();
+      const globalError=document.getElementById('receipt-global-error');
+      if(globalError){globalError.textContent=result.error||'';globalError.hidden=!result.error;}
       document.getElementById('receipt-report').innerHTML=result.report;
       const history=document.getElementById('receipt-history');
       if(result.history!==null && result.revision!==revision && !previewBusy() && !history.contains(document.activeElement) && !history.dataset.editing){

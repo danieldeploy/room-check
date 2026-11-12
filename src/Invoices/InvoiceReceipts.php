@@ -281,6 +281,10 @@ final class InvoiceReceipts
         $before=$s['documents'];
         // Upgrade only unsent originals; archived/sent historical PDFs are never split again.
         foreach ($s['documents'] as &$d) {
+            // Recheck older cleanup denials once with Drive's explicit canTrash capability.
+            if (($d['error']??'')==='drive_permission' && empty($d['trash_capability_recheck']) && in_array($d['stage'],['source_trashing','trashing'],true)) {
+                $d['next_attempt']=0;$d['trash_capability_recheck']=true;
+            }
             if (!$this->analysis && $d['stage']==='review' && $d['toconline_state']==='pending' && empty($d['drive_parent'])) {
                 if (($d['format']??'')==='pdf' && empty($d['pdf_pages_checked'])) {
                     $d['stage']='queued';
@@ -314,6 +318,10 @@ final class InvoiceReceipts
             try { $this->process($id,$d); }
             catch (Throwable $e) {
                 $d=$this->status()['documents'][$id];
+                if ($e->getMessage()==='drive_trash_permission') {
+                    $d['resume_stage']=$d['stage'];$d['stage']='failed';$d['error']='drive_trash_permission';$d['next_attempt']=0;
+                    $this->put($id,$d);break;
+                }
                 if ($e instanceof InvoiceGeminiRetry) {
                     $d['error']=$e->getMessage(); $d['next_attempt']=$e->retryAt;
                     if ($e->getMessage()==='gemini_retry') {

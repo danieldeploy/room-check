@@ -43,10 +43,12 @@ $monthEnglish=[1=>'January','February','March','April','May','June','July','Augu
 $report=InvoiceReceiptReport::summary($state['documents']);
 $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse(array_filter($state['documents'],static fn($d)=>($d['stage']??'')!=='superseded'),true):[]; $documents=array_slice($all,($page-1)*50,50,true);
 $progress=InvoiceReceiptReport::progress($state,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));$historyHtml='';
+$globalError=$error?:($state['error']??'');
+$globalError=$globalError!==''?InvoiceText::get(isset(InvoiceText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
 if ($canHistory) { $receiptHistoryRendering=true; ob_start(); require __DIR__.'/receipt-history.php'; $historyHtml=(string)ob_get_clean(); }
 if (($_GET['status']??'')==='1') {
     jsonResponse(['progress'=>$progress,'label'=>InvoiceText::get($progress['state']),'report'=>InvoiceReceiptReport::render($report),
-        'history'=>$canHistory?$historyHtml:null,'revision'=>hash('sha256',json_encode($state['documents']))]);
+        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'revision'=>hash('sha256',json_encode($state['documents']))]);
 }
 ?>
 <!doctype html><html lang="<?= $escape(Translator::locale()) ?>"><head>
@@ -60,7 +62,7 @@ if (($_GET['status']??'')==='1') {
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
 <?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a> · <a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
 <header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1><p><?= $t('receipt_description') ?></p></div></header>
-<?php if ($error || !empty($state['error'])): ?><div class="alert" role="alert"><?= $t($error?:$state['error']) ?></div><?php endif; ?>
+<div id="receipt-global-error" class="alert" role="alert" <?= $globalError===''?'hidden':'' ?>><?= $escape($globalError) ?></div>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= $t($flash) ?></div><?php endif; ?>
 <section class="card"><p><?= $t('receipt_help') ?></p><p><?= $t('receipt_duplicates') ?></p>
 <?php if (!$connected): ?><div class="alert"><?= $t('receipt_connect') ?></div>
