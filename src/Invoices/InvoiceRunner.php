@@ -117,13 +117,17 @@ final class InvoiceRunner
     private function archive(): void
     {
         $vault = new InvoiceVault((string) ($this->config['private_dir'] ?? ''));
-        $toc=new InvoiceToconline($this->pdo,$vault,new InvoiceDriveClient($vault));
+        $drive=new InvoiceDriveClient($vault);
+        $toc=new InvoiceToconline($this->pdo,$vault,$drive);
         $toc->reconcile();
         (new InvoiceTocPipe($vault))->process($toc);
         (new InvoiceTocMailbox($vault,$toc))->poll();
-        (new InvoiceDrive($this->pdo, $vault, new InvoiceDriveClient($vault)))->run();
+        (new InvoiceDrive($this->pdo,$vault,$drive))->run();
         $toc->run();
-        (new InvoiceReceipts($this->pdo,$vault,new InvoiceDriveClient($vault),$toc,[new InvoiceReceiptPdf($vault,$this->config),'split']))->run();
+        $pdf=new InvoiceReceiptPdf($vault,$this->config);
+        $receipts=new InvoiceReceipts($this->pdo,$vault,$drive,$toc,[$pdf,'split'],new InvoiceReceiptAnalysis($pdf,new InvoiceGemini($vault)));
+        try { $receipts->runBatch(); } catch (Throwable $e) { $receipts->recordFailure($e); }
+        (new InvoiceAlerts($this->pdo,$this->config['whatsapp']??[]))->receipts($vault);
     }
 
     private function finishFailure(array $job, string $code, InvoiceAlerts $alerts): void

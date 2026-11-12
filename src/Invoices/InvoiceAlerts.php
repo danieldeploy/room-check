@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/../Notifications/WhatsAppCloudClient.php';
+require_once __DIR__.'/InvoiceVault.php';
+require_once __DIR__.'/../I18n/InvoiceText.php';
 
 final class InvoiceAlerts
 {
@@ -50,6 +52,43 @@ final class InvoiceAlerts
                 $this->pdo->prepare('UPDATE invoice_failure_alerts SET state = ?, next_attempt_at = ?, result_code = ? WHERE id = ?')
                     ->execute([$attempt < 3 ? 'retry' : 'failed', gmdate('Y-m-d H:i:s', time() + $attempt * 600), 'delivery_unconfirmed', $alert['id']]);
             }
+        }
+    }
+
+    /** Same approved invoice template/recipient, with a private durable deduplication ledger. */
+    public function receipts(InvoiceVault $vault,?callable $sender=null): void
+    {
+        if (!$vault->has('receipts-workflow.enc')) return;
+        $state=$vault->read('receipts-workflow.enc');$codes=[];
+        if (!empty($state['error'])) $codes[]=$state['error'];
+        foreach ($state['documents']??[] as $d) {
+            if (in_array($d['stage']??'',['failed','review'],true)) $codes[]=$d['error']?:'receipt_review_required';
+            if (in_array($d['toconline_state']??'',['toc_uncertain','toc_rejected','toc_review','toc_no_confirmation'],true)) $codes[]=$d['toconline_state'];
+        }
+        $name='receipt-alerts.enc';$ledger=$vault->has($name)?$vault->read($name):[];
+        $period=implode(', ',array_map(static fn($m)=>sprintf('%04d-%02d',(int)($state['year']??0),(int)$m),$state['months']??[]));
+        foreach (array_unique($codes) as $code) {
+            $code=isset(InvoiceText::TEXT[$code])?$code:'receipt_failed';
+            $key=hash('sha256',($state['requested_at']??'legacy').'|'.$code);
+            if (!isset($ledger[$key])) $ledger[$key]=['code'=>$code,'period'=>$period,'state'=>'pending','created_at'=>gmdate('c')];
+        }
+        $vault->save($name,$ledger);
+        $settings=$this->pdo->query('SELECT * FROM invoice_notification_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        if (!$settings || empty($settings['enabled']) || !preg_match('/\A[a-z0-9_]{1,100}\z/',$settings['template_name']??'')) return;
+        $q=$this->pdo->prepare("SELECT mobile FROM users WHERE id=? AND role='gerente' AND is_active=1");$q->execute([$settings['recipient_user_id']]);$mobile=$q->fetchColumn();if (!$mobile) return;
+        foreach ($ledger as $key=>$entry) {
+            if ($entry['state']==='sending') { $ledger[$key]['state']='uncertain';$vault->save($name,$ledger);continue; }
+            if ($entry['state']!=='pending') continue;
+            $code=$entry['code'];$at=(new DateTimeImmutable($entry['created_at']))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d/m/Y H:i');
+            $values=['Talões e PDFs','Management Hub',$entry['period'], $at.' — '.(InvoiceText::TEXT[$code][0]??InvoiceText::TEXT['receipt_failed'][0]),
+                'Abra Talões e PDFs no Management Hub e consulte os erros e documentos pendentes.'];
+            $ledger[$key]['state']='sending';$vault->save($name,$ledger);
+            try {
+                if ($sender) $sender($mobile,$values,$settings['template_name']);
+                else (new WhatsAppCloudClient($this->config))->sendTemplate($mobile,$values,'pt_PT',$settings['template_name']);
+                $ledger[$key]['state']='sent';$ledger[$key]['sent_at']=gmdate('c');
+            } catch (Throwable) { $ledger[$key]['state']='uncertain'; }
+            $vault->save($name,$ledger);break;
         }
     }
 

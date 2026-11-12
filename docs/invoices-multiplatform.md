@@ -372,3 +372,56 @@ a generic preview failure.
 
 Receipt preview open/close and retry controls reuse the shared primary-button
 and form-actions classes; no separate button design or permission change.
+
+## QR-first receipts and grouped invoices (supersedes automatic per-page OCR)
+
+`InvoiceReceiptAnalysis` combines local QR decoding, optional Gemini evidence and a
+strict complete page manifest. Fiscal QR fields A/B/F/G/O take precedence over model
+fields. A model cannot merge different fiscal identities, lose/duplicate a source
+page or make a missing printed page complete merely by returning `complete=true`.
+The local `receipt-tools` runtime renders scans sequentially with bounded pixels,
+uses a pinned offline ZXing WASM decoder, and retains exact source PDF pages when
+extracting a group. Original dimensions, rotation and page content are preserved.
+A textless scanned PDF has uncertain structure and requires Gemini even with QR.
+
+Gemini has one fixed HTTPS host/model, no redirects or tools, bounded request/output,
+JSON schema, encrypted content-hash cache and an attempt budget of 400/day with
+10-second spacing. Daily accounting uses the provider's Pacific reset day; actual
+project quota may be lower. Transient retries persist 5/15/45-second eligibility,
+respect Retry-After, and stop after five transient failures. The existing cron can
+wait briefly within its bounded batch; longer waits resume on the next invocation.
+No new cron, service, paid-tier switch or automatic Azure fallback is introduced.
+Sources: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite and
+https://aistudio.google.com/docs/rate-limits (consulted 2026-11-12); concrete quotas
+must still be verified in the owner's project rather than inferred from those pages.
+
+Each selected source gets a durable manifest and stable Drive IDs for invoice
+groups, including repeated copies as separate documents. A repeated-copy suggestion
+never authorizes deletion; the authenticated TOConline verdict does. Each group is
+saved to actual issue year/month (`pdf` or `taloes`) or, if unresolved, to
+`temp_scan/pendentes`. The latter is outside selected month intake, prevents recursive
+re-import and keeps only relevant invoice pages available via the authenticated
+preview. Source cleanup verifies every group copy before trashing that one original;
+structural ambiguity preserves the complete source. Other months/files are untouched.
+
+Legacy recovery is limited to sources whose children have no TOConline ledger
+submission and only pending/retry states. Stable old records are marked superseded,
+not discarded; wrongly dated archive copies stay until the new complete manifest
+has verified replacement copies. Existing submitted, uncertain and accepted history
+is immutable. Pending manual confirmation cannot override a valid QR date/number or
+recipient. Manual page groups require complete coverage and no prior submission.
+A missing physical page may require a corrected rescan; never manufacture it.
+
+`admin/receipts.php?status=1` uses the same role gate and reduced report projection.
+Run-only users get totals, duplicate company/number/date and safe errors, never
+file IDs/history/preview/correction fields. History refresh preserves open viewers
+and unsaved forms. Finalizado requires external accepted/duplicate states and
+completed local work; submission/review is Finalizado com pendentes, not success.
+The receipt exception ledger reuses invoice notification settings and the approved
+invoice template, never the server-storage template. Uncertain alert delivery is
+recorded without blind resend.
+
+The QR does not contain the supplier's legal name. If that name is unknown, Gemini
+also reads it; names paired with a validated QR issuer are cached privately for
+future scans. This supports the operator's duplicate company/number/date report
+without inventing a company name or mistaking the customer for the supplier.

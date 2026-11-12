@@ -718,3 +718,45 @@ show/close and retry. Release 398 remains installed after the auth-fix merge:
 push CI 43308456324 failed Windows browser supervision with
 controlled_chrome_not_ready, so deployment was skipped (not a failed server
 mutation). Next guarded release includes the Auth fix and common button styles.
+
+## Receipt QR, grouping and completion — 2026-11-12
+
+Previous preview release **399 / e14ca034** was confirmed installed. Authenticated
+Dell acceptance showed both an individual one-page PDF and the six-page source,
+including open/close and the global button styling. Mobile embedded PDF rendering
+remains explicitly deferred by the owner.
+
+This change replaces automatic per-page Google Docs OCR with local fiscal QR
+precedence and bounded Gemini structure/field interpretation. The existing
+`gemini-3.5-flash-lite` free-tier project/key is the intended configuration;
+`admin/invoice-gemini.php` stores it in InvoiceVault. Azure stays manager diagnostics,
+not a second automatic read. QR fields override all printed/model conflicts.
+Scanned PDFs without a usable text layer have unknown structure even if QR reads;
+Gemini must return printed pagination evidence, checked independently in PHP.
+
+Pre-release tests: local decoder read 12 QR-bearing pages across the two authorized
+PDF samples; live Gemini schema test kept a two-page invoice together, marked a
+separate repeated copy, and flagged a last page whose preceding page was absent.
+The earlier trial that incorrectly called that last page complete motivated the
+mandatory per-page evidence and code completeness validation. No real Drive
+cleanup or TOConline submission was performed by these diagnostic tests.
+
+Queue implementation retains a complete source/group manifest, verified pending
+copies under `temp_scan/pendentes`, immutable submitted history and per-source
+cleanup. Unsent legacy OCR guesses are reconciled against the TOConline ledger,
+re-read, and their stale archive copies retired only after replacement verification.
+Receipt-only sends now connect their Drive client before fetching content; the
+previous missing-initialization failure was reproduced and regression-tested.
+
+The existing cron performs bounded batches and persisted short retry windows;
+HTTP status polling is read-only every five seconds and preserves open previews
+and edited forms. Reports distinguish processed, pending, errors and confirmed
+external completion. Operator permissions remain report-only; optional history and
+review grants stay separate. Exceptions use the existing approved invoice alert
+recipient/template with a private deduplication ledger.
+
+Release gates: pinned local decoder installation and synthetic runtime probe before
+application copies; required validate/windows-agent checks; exact installed commit
+and authenticated batch acceptance after publication. The API key must be configured
+before the new worker can recover the pending batch. Actual accepted/duplicate
+TOConline responses, not email submission, determine external completion.

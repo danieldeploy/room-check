@@ -39,6 +39,7 @@ final class InvoiceDriveClient
     }
     public function connect(): string
     {
+        if ($this->token !== '') return 'daniel.ciorcas@welcomehostel.pt';
         if (!$this->vault->has('drive-oauth.enc')) throw new RuntimeException('drive_not_configured');
         $c = $this->vault->read('drive-oauth.enc');
         foreach (['client_id', 'client_secret', 'refresh_token'] as $k) if (empty($c[$k])) throw new RuntimeException('drive_not_configured');
@@ -49,7 +50,7 @@ final class InvoiceDriveClient
         if ($this->token === '') throw new RuntimeException('drive_auth');
         $about = $this->api('GET', 'about?fields=user(emailAddress)');
         $email = strtolower((string) ($about['user']['emailAddress'] ?? ''));
-        if ($email !== 'daniel.ciorcas@welcomehostel.pt') throw new RuntimeException('drive_account_mismatch');
+        if ($email !== 'daniel.ciorcas@welcomehostel.pt') { $this->token=''; throw new RuntimeException('drive_account_mismatch'); }
         return $email;
     }
     public function api(string $method, string $path, ?array $data = null): array
@@ -102,7 +103,7 @@ final class InvoiceDriveClient
         self::assertId($id); self::assertId($parent);
         $meta = $this->metadata($id);
         if (!$meta) {
-            $mime = $format === 'pdf' ? 'application/pdf' : 'text/csv';
+            $mime = match ($format) { 'pdf'=>'application/pdf', 'jpg'=>'image/jpeg', 'csv'=>'text/csv', default=>throw new RuntimeException('drive_verify') };
             $headers = [];
             $this->request('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
                 json_encode(['id' => $id, 'name' => $name, 'parents' => [$parent], 'mimeType' => $mime], JSON_THROW_ON_ERROR),
@@ -425,6 +426,8 @@ final class InvoiceDriveClient
             $code = match (true) {
                 $host === 'oauth2.googleapis.com' || $status === 401 => 'drive_auth',
                 $reason === 'storageQuotaExceeded' => 'drive_quota',
+                in_array($reason, ['rateLimitExceeded','userRateLimitExceeded','backendError'],true) => 'drive_network',
+                in_array($reason, ['authError','required','insufficientPermissions'],true) => 'drive_auth',
                 $status === 404 => 'drive_not_found', $status === 409 => 'drive_conflict',
                 $status === 403 => 'drive_permission', $status === 429 || $status >= 500 => 'drive_network',
                 default => 'drive_upload'

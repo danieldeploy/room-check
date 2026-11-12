@@ -17,6 +17,7 @@ export PRIVATEPATH="$HOME/room-check-private/"
 # Restrict private files while keeping newly deployed web assets readable.
 (umask 022; /bin/mkdir -p "$DEPLOYPATH")
 /bin/mkdir -p "$PRIVATEPATH"
+/usr/local/bin/php deploy/prepare_receipt_runtime.php "$DEPLOYPATH"
 /usr/local/bin/php deploy/verify_receipt_split.php "$DEPLOYPATH"
 /usr/local/bin/php deploy/prepare_invoice_workspace.php "$DEPLOYPATH" "$HOME/room-check-backups"
 /usr/local/bin/php deploy/prepare_hub_connector.php "$DEPLOYPATH"

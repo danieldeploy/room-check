@@ -14,3 +14,7 @@ invoice-runtime.json
 account-*-map.json
 task-*-booking-login-metadata.json
 *.har
+
+.superpowers/
+
+invoice-runner/receipt-tools/.installed-lock
