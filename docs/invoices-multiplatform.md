@@ -433,3 +433,8 @@ probe still blocks application copies when local QR/PDF execution is unavailable
 The PDF/QR child uses inline WebAssembly bounds checks (`--disable-wasm-trap-handler`)
 to operate within shared-host virtual-memory limits; the 512 MB JS heap, page/pixel
 caps and timeout remain enforced. This does not change portal browser execution.
+
+Gemini credentials are opaque: do not infer validity from a legacy key prefix.
+Configuration checks bounded printable ASCII without whitespace/control bytes;
+the provider determines authentication. Vault storage and secret-free status
+remain unchanged.

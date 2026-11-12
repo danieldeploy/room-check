@@ -790,3 +790,14 @@ PDF/QR subprocess, not portal Chrome or global hosting limits. Linux CI tests
 the Node 22.14 supported floor and the complete PHP PDF bridge under that limit;
 Windows remains on Node 24. Guarded recovery allows only inspected failure 401.
 Official explanation: https://nodejs.org/download/release/v22.4.0/docs/api/cli.html#--disable-wasm-trap-handler
+
+
+### Gemini key activation follow-up (2026-11-12)
+Release 402 successfully installed 8ed8261 and passed all server PDF/QR probes.
+The existing manager browser session was recovered using native saved login.
+Activation then exposed an overly narrow `AIza` prefix restriction: the owner's
+existing 53-character key had already succeeded in real API tests but the form
+rejected it. Keys are now treated as opaque printable ASCII credentials of
+bounded length; whitespace/control characters and oversized input are rejected.
+No key contents are stored in repository, logs or status output. Actual batch
+acceptance still follows activation; no new key or owner decision is needed.
