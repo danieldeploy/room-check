@@ -21,3 +21,11 @@ test('report refresh never discards an edited form or an open document',async()=
   await timeouts.shift()[0]();assert.ok(h.querySelector('input'));assert.equal(h.querySelector('input').value,'unsaved');assert.equal(dom.window.document.getElementById('receipt-report').textContent,'25');
  }finally{dom.window.close();}}
 });
+test('polling clears resolved connection errors and displays new safe errors as text',async()=>{
+ const {dom,timeouts}=setup();try{
+  const alert=dom.window.document.createElement('div');alert.id='receipt-global-error';alert.textContent='Old missing key';dom.window.document.body.prepend(alert);
+  await timeouts.shift()[0]();assert.equal(alert.textContent,'');assert.equal(alert.hidden,true);
+  dom.window.fetch=async()=>({ok:true,json:async()=>({progress:{state:'receipt_interrupted',next_at:0,server_time:Math.floor(Date.now()/1000)},label:'Interrupted',report:'',history:null,revision:'v3',error:'<safe error>'})});
+  await timeouts.shift()[0]();assert.equal(alert.hidden,false);assert.equal(alert.textContent,'<safe error>');assert.equal(alert.children.length,0);
+ }finally{dom.window.close();}
+});

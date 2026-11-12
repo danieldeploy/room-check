@@ -230,6 +230,15 @@ copy. Nothing is removed before a verified destination exists. The original is
 checked again before email. Portal invoice collection and Airbnb's exception
 remain unchanged.
 
+Receipt cleanup uses Drive's `capabilities.canTrash`, independently of folder write
+permission. An explicit denial preserves the source and verified invoice copies,
+stops automatic retries, records `drive_trash_permission` and requires intervention
+before manual Retry resumes only cleanup. Existing generic trash denials are
+reclassified on the next worker tick. The application does not transfer ownership,
+change sharing or silently remove a file's parent instead of trashing it. The
+five-second status response includes a safe translated global error, so a resolved
+missing-key/connection banner disappears with the live report.
+
 `receipts-workflow.enc` is the encrypted private queue/history, covered by the
 existing private-vault backups. The shared TOConline ledger uses disjoint
 `receipt:<Drive ID>` targets and `receipt-<identity hash>.pdf/.jpg` attachment

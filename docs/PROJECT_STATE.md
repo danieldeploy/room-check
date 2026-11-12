@@ -801,3 +801,15 @@ rejected it. Keys are now treated as opaque printable ASCII credentials of
 bounded length; whitespace/control characters and oversized input are rejected.
 No key contents are stored in repository, logs or status output. Actual batch
 acceptance still follows activation; no new key or owner decision is needed.
+
+### Receipt cleanup capability handling (2026-11-12)
+Cleanup now checks the provider's canTrash capability independently of read/write
+access. An explicit denial preserves all verified copies and the original, stops
+timed retries with an actionable error and supports Retry after permission
+resolution without reanalysis/resubmission. Older generic cleanup denials are
+rechecked once and classified. The application does not transfer ownership,
+change sharing or substitute removal from a parent folder for trashing.
+Polling also clears resolved global connection errors instead of retaining stale
+banners after the worker recovers. Regression tests exercise preservation,
+permission recovery without resubmission, legacy denial classification and safe
+live error updates. Mobile PDF compatibility remains outside this change.

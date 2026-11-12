@@ -83,7 +83,7 @@ final class InvoiceDriveClient
     public function metadata(string $id): ?array
     {
         self::assertId($id);
-        try { return $this->api('GET', 'files/' . $id . '?fields=id,name,size,md5Checksum,trashed,parents,mimeType,appProperties,owners(emailAddress),capabilities(canAddChildren)'); }
+        try { return $this->api('GET', 'files/' . $id . '?fields=id,name,size,md5Checksum,trashed,parents,mimeType,appProperties,owners(emailAddress),capabilities(canAddChildren,canTrash)'); }
         catch (RuntimeException $e) { if ($e->getMessage() === 'drive_not_found') return null; throw $e; }
     }
     public function folder(string $id, string $parent, string $name): void
@@ -384,7 +384,10 @@ final class InvoiceDriveClient
         $m=$this->metadata($d['id']);
         if (!$m || ($m['parents']??[])!==[$d['drive_parent']] || ($m['md5Checksum']??'')!==$d['md5Checksum']
             || (int)($m['size']??0)!==(int)$d['size']) throw new RuntimeException('drive_verify');
-        if (!($m['trashed']??false)) $this->api('PATCH','files/'.$d['id'],['trashed'=>true]);
+        if (!($m['trashed']??false)) {
+            if (($m['capabilities']['canTrash']??null)===false) throw new RuntimeException('drive_trash_permission');
+            $this->api('PATCH','files/'.$d['id'],['trashed'=>true]);
+        }
         if (!(($this->metadata($d['id']))['trashed']??false)) throw new RuntimeException('drive_verify');
     }
 

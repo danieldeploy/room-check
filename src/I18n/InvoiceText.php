@@ -625,6 +625,7 @@ final class InvoiceText
         'drive_not_configured' => ['A ligação ao Drive ainda não está configurada.', 'Drive connection is not configured yet.'],
         'drive_quota' => ['Liberte espaço no Google Drive e tente novamente.', 'Free space in Google Drive and retry.'],
         'drive_permission' => ['Verifique as permissões da pasta Drive.', 'Check Drive folder permissions.'],
+        'drive_trash_permission' => ['A conta ligada ao Hub não pode colocar este ficheiro no Lixo do Drive. As cópias verificadas estão preservadas. Peça ao proprietário que transfira a propriedade para a conta ligada ao Hub e depois clique em Tentar novamente.', 'The account connected to Hub cannot move this file to Drive Trash. Verified copies are preserved. Ask the owner to transfer ownership to the account connected to Hub, then click Retry.'],
         'drive_account_mismatch' => ['Use uma pasta da conta daniel.ciorcas@welcomehostel.pt.', 'Use a folder owned by daniel.ciorcas@welcomehostel.pt.'],
         'drive_invalid_id' => ['Indique um identificador válido da pasta Drive.', 'Enter a valid Drive folder ID.'],
         'drive_network' => ['Falha de ligação ao Google Drive.', 'Google Drive connection failed.'],
