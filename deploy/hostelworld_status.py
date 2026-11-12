@@ -33,7 +33,7 @@ def main():
         try: payload,_=decoder.raw_decode(line[marker:])
         except ValueError: continue
         f=payload.get('receipt_runtime',{})
-        if f.get('operation') in ('inspect','extract','split') and type(f.get('exit_code')) is int and f.get('stderr_class') in ('none','wasm_memory','native_abi','missing_dependency','node_version','permission','unclassified'):
+        if f.get('operation') in ('inspect','extract','split') and type(f.get('exit_code')) is int and f.get('stderr_class') in ('none','wasm_memory','memory_mapping','native_abi','missing_dependency','node_version','permission','unclassified'):
             print(json.dumps({'receipt_runtime':f}))
 
     for line in text.splitlines():

@@ -23,6 +23,7 @@ final class InvoiceReceiptPdf
     {
         if ($stderr==='') return 'none';
         if (stripos($stderr,'WebAssembly')!==false && preg_match('/memory|allocat/i',$stderr)) return 'wasm_memory';
+        if (preg_match('/failed to map segment|cannot allocate memory|std::bad_alloc|Fatal process out of memory/i',$stderr)) return 'memory_mapping';
         if (preg_match('/GLIBC|GLIBCXX|CXXABI|cannot open shared object|invalid ELF/i',$stderr)) return 'native_abi';
         if (preg_match('/Cannot find (module|package)|ERR_MODULE_NOT_FOUND|Failed to load native binding/i',$stderr)) return 'missing_dependency';
         if (preg_match('/getBuiltinModule|Unexpected token|Unsupported engine/i',$stderr)) return 'node_version';

@@ -24,4 +24,4 @@ try {
     echo "Receipt PDF bridge and release probe passed\n";
 } finally { foreach (glob($directory.'/*')?:[] as $file) unlink($file); rmdir($directory); }
 
-foreach (['WebAssembly.instantiate(): Out of memory secret'=>'wasm_memory','GLIBC_2.28 not found secret'=>'native_abi','Cannot find module secret'=>'missing_dependency','token-only-secret'=>'unclassified',''=>'none'] as $input=>$expected) {if (InvoiceReceiptPdf::diagnosticCode($input)!==$expected) throw new RuntimeException('runtime diagnostic redaction failed');}
+foreach (['WebAssembly.instantiate(): Out of memory secret'=>'wasm_memory','GLIBC_2.28 not found secret'=>'native_abi','Cannot find module secret'=>'missing_dependency','Cannot find module, failed to map segment from shared object'=>'memory_mapping','token-only-secret'=>'unclassified',''=>'none'] as $input=>$expected) {if (InvoiceReceiptPdf::diagnosticCode($input)!==$expected) throw new RuntimeException('runtime diagnostic redaction failed');}
