@@ -429,3 +429,7 @@ without inventing a company name or mistaking the customer for the supplier.
 Release diagnostics classify only the private PDF subprocess failure category;
 raw stderr never reaches the report, logs or browser. The synthetic deployment
 probe still blocks application copies when local QR/PDF execution is unavailable.
+
+The PDF/QR child uses inline WebAssembly bounds checks (`--disable-wasm-trap-handler`)
+to operate within shared-host virtual-memory limits; the 512 MB JS heap, page/pixel
+caps and timeout remain enforced. This does not change portal browser execution.

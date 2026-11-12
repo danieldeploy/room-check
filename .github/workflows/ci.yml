@@ -104,7 +104,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22.14.0'
       - name: Install bounded receipt decoder
         run: npm ci --prefix invoice-runner/receipt-tools --ignore-scripts --no-audit --no-fund
 
@@ -149,7 +149,7 @@ jobs:
           php tests/invoice-receipts.php
           php tests/invoice-receipt-report.php
           php tests/invoice-azure.php
-          TEST_NODE_BINARY=$(command -v node) php tests/invoice-receipt-pdf.php
+          (ulimit -v 4000000; TEST_NODE_BINARY=$(command -v node) php tests/invoice-receipt-pdf.php)
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-hostelworld-pipe.php

@@ -778,3 +778,15 @@ allowlisted runtime classification (never stderr). Recovery is bound solely to
 inspected failure400/6697ccd, retains backup/probe gates, and cannot publish if
 the synthetic reader still fails. This is diagnostic instrumentation, not a
 claim that the runtime incompatibility has been fixed.
+
+
+### Receipt WebAssembly runtime correction (2026-11-12)
+Instrumented release 401/d937695 failed the pre-copy inspect operation with
+`wasm_memory`; read-only state still reports last successful release 399/e14ca034.
+Node 22.14 reproduces the failure under a 4 GB virtual-address-space limit. The
+receipt subprocess now uses `--disable-wasm-trap-handler`, retaining inline
+WebAssembly bounds checks and the 512 MB JS heap cap. This changes only the private
+PDF/QR subprocess, not portal Chrome or global hosting limits. Linux CI tests
+the Node 22.14 supported floor and the complete PHP PDF bridge under that limit;
+Windows remains on Node 24. Guarded recovery allows only inspected failure 401.
+Official explanation: https://nodejs.org/download/release/v22.4.0/docs/api/cli.html#--disable-wasm-trap-handler
