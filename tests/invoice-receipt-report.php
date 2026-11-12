@@ -30,6 +30,7 @@ $root=dirname(__DIR__); $tmp=sys_get_temp_dir().'/receipt-report-'.bin2hex(rando
 mkdir($tmp,0700); mkdir($tmp.'/web',0700); mkdir($tmp.'/web/admin',0700); mkdir($tmp.'/vault',0700);
 symlink($root.'/src',$tmp.'/web/src'); symlink($root.'/assets',$tmp.'/web/assets'); symlink($root.'/admin/assets',$tmp.'/web/admin/assets');
 copy($root.'/admin/receipts.php',$tmp.'/web/admin/receipts.php');
+copy($root.'/admin/receipt-history.php',$tmp.'/web/admin/receipt-history.php');
 copy($root.'/admin/receipt-document.php',$tmp.'/web/admin/receipt-document.php');
 file_put_contents($tmp.'/vault/master.key',random_bytes(32)); chmod($tmp.'/vault/master.key',0600);
 $vault=new InvoiceVault($tmp.'/vault'); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'year'=>2026,'months'=>[10]]);
@@ -37,6 +38,7 @@ file_put_contents($tmp.'/web/config.php','<?php return '.var_export(['invoices'=
 $lib=<<<'PHP'
 <?php
 require_once __DIR__.'/src/Security/Csrf.php';
+function jsonResponse(array $payload,int $status=200):never{http_response_code($status);echo json_encode(SiteTranslations::localizePayload($payload));exit;}
 function database(): PDO {
     static $pdo;
     if ($pdo) return $pdo;
@@ -49,10 +51,11 @@ function database(): PDO {
 }
 PHP;
 file_put_contents($tmp.'/web/lib.php',$lib);
-$render=static function(string $role,array $permissions,string $action='',bool $preview=false) use ($tmp): array {
+$render=static function(string $role,array $permissions,string $action='',bool $preview=false,bool $status=false) use ($tmp): array {
     $code='$GLOBALS["fixture_role"]='.var_export($role,true).';$GLOBALS["fixture_permissions"]='.var_export($permissions,true).';'
         .'session_save_path('.var_export($tmp,true).');session_start();$_SESSION=["user_id"=>1,"last_activity"=>time(),"csrf_token"=>"fixture-csrf"];'
         .'$_SERVER["REQUEST_METHOD"]='.var_export($action===''?'GET':'POST',true).';$_POST=["action"=>'.var_export($action,true).',"id"=>"private-error-id","csrf_token"=>"fixture-csrf"];'
+        .'$_GET["status"]='.var_export($status?'1':'',true).';'
         .'ob_start();register_shutdown_function(static function(){echo json_encode(["status"=>http_response_code(),"html"=>ob_get_clean()]);});'
         .'require '.var_export($tmp.'/web/admin/'.($preview?'receipt-document.php':'receipts.php'),true).';';
     $process=proc_open([PHP_BINARY,'-d','display_errors=stderr','-r',$code],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
@@ -64,7 +67,9 @@ try {
     $operator=$render('governanta',['receipts.run','receipts.view']);
     reportCheck($operator['status']!==403 && str_contains($operator['html'],'FT 42') && str_contains($operator['html'],'2026-10-02'),'Existing operator must see reduced report');
     foreach (['SECRET-','private-master-id','private-page-id','PRIVATE-PARENT','receipt-document.php?id=','name="issuer_name"','name="confirmed"','value="review"','value="retry"'] as $private) reportCheck(!str_contains($operator['html'],$private),'Actual operator HTML leaked individual history/corrections');
-    foreach (['review','retry'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
+    $status=json_decode($render('governanta',['receipts.run'],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
+    reportCheck($status['history']===null && !str_contains(json_encode($status),'SECRET-') && !str_contains(json_encode($status),'private-page-id'),'Polling report never exposes documents');
+    foreach (['review','retry','regroup'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
     reportCheck($render('governanta',[])['status']===403 && $render('governanta',['receipts.view'])['status']===403,'No/legacy-only access must fail closed');
     $manager=$render('gerente',[]);
     reportCheck(str_contains($manager['html'],'SECRET-NORMAL-NUMBER') && str_contains($manager['html'],'receipt-document.php?id=') && str_contains($manager['html'],'name="confirmed"'),'Manager detailed history/review regressed: '.json_encode([str_contains($manager['html'],'SECRET-NORMAL-NUMBER'),str_contains($manager['html'],'receipt-document.php?id='),str_contains($manager['html'],'name="confirmed"')]));
@@ -79,6 +84,6 @@ try {
     foreach (glob($tmp.'/sess_*')?:[] as $sessionFile) unlink($sessionFile);
     foreach ([$tmp.'/web/admin/assets',$tmp.'/web/src',$tmp.'/web/assets'] as $link) unlink($link);
     foreach (glob($tmp.'/vault/*')?:[] as $file) unlink($file);
-    unlink($tmp.'/web/admin/receipt-document.php'); unlink($tmp.'/web/admin/receipts.php'); unlink($tmp.'/web/lib.php'); unlink($tmp.'/web/config.php');
+    unlink($tmp.'/web/admin/receipt-history.php'); unlink($tmp.'/web/admin/receipt-document.php'); unlink($tmp.'/web/admin/receipts.php'); unlink($tmp.'/web/lib.php'); unlink($tmp.'/web/config.php');
     rmdir($tmp.'/web/admin'); rmdir($tmp.'/web'); rmdir($tmp.'/vault'); rmdir($tmp);
 }

@@ -1,5 +1,9 @@
 'use strict';
-document.querySelectorAll('[data-receipt-preview]').forEach((root) => {
+const receiptPreviewClosers=new Map();
+function initializeReceiptPreviews(){
+  for(const [root,close] of receiptPreviewClosers)if(!root.isConnected){close();receiptPreviewClosers.delete(root);}
+  document.querySelectorAll('[data-receipt-preview]').forEach((root) => {
+  if(receiptPreviewClosers.has(root))return;
   const button = root.querySelector('button');
   const panel = root.querySelector('[hidden]');
   const status = panel.querySelector('[role="status"]');
@@ -43,5 +47,9 @@ document.querySelectorAll('[data-receipt-preview]').forEach((root) => {
       if (controller === pending && error.name !== 'AbortError') status.textContent = root.dataset.error;
     }
   });
-  window.addEventListener('pagehide', close);
+  receiptPreviewClosers.set(root,close);
 });
+}
+initializeReceiptPreviews();
+window.addEventListener('receipt-history-updated',initializeReceiptPreviews);
+window.addEventListener('pagehide',()=>{for(const close of receiptPreviewClosers.values())close();});

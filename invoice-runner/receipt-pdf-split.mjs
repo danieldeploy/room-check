@@ -25,6 +25,21 @@ export async function splitPdf(bytes) {
   }
   return { count, pages };
 }
+export async function extractPdf(bytes, numbers) {
+  if(bytes.length>10*1024*1024 || Buffer.from(bytes).subarray(0,5).toString()!=='%PDF-') throw new Error('receipt_split_failed');
+  const source=await PDFDocument.load(bytes,{updateMetadata:false,throwOnInvalidObject:true});
+  const count=source.getPageCount();
+  if(source.isEncrypted || count<1 || count>MAX_PAGES || !Array.isArray(numbers) || !numbers.length
+    || numbers.some((n,i)=>!Number.isInteger(n)||n<1||n>count||(i>0&&n<=numbers[i-1]))) throw new Error('receipt_split_failed');
+  let data=Buffer.from(bytes);
+  if(numbers.length!==count) {
+    const target=await PDFDocument.create({updateMetadata:false});
+    for(const page of await target.copyPages(source,numbers.map(n=>n-1))) target.addPage(page);
+    data=Buffer.from(await target.save({useObjectStreams:true,addDefaultPage:false}));
+  }
+  if(data.length>10*1024*1024) throw new Error('receipt_split_limit');
+  return {pages:numbers,bytes:data,sha256:createHash('sha256').update(data).digest('hex'),md5Checksum:createHash('md5').update(data).digest('hex'),size:data.length};
+}
 async function main() {
   let input=''; for await (const chunk of process.stdin) { input+=chunk; if(input.length>8192) throw new Error('receipt_split_failed'); }
   const request=JSON.parse(input); const dir=await fs.realpath(request.directory);
@@ -32,7 +47,17 @@ async function main() {
   const stat=await fs.lstat(dir); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('receipt_split_failed');
   const file=path.join(dir,'source.pdf'); const source=await fs.lstat(file);
   if (!source.isFile() || source.isSymbolicLink() || source.size>10*1024*1024) throw new Error('receipt_split_failed');
-  const result=await splitPdf(await fs.readFile(file));
+  const bytes=await fs.readFile(file);
+  if(request.operation==='inspect') {
+    const {inspect}=await import('./receipt-tools/analyse.mjs');
+    process.stdout.write(JSON.stringify(await inspect(bytes,request.format)));return;
+  }
+  if(request.operation==='extract') {
+    const result=await extractPdf(bytes,request.pages);
+    await fs.writeFile(path.join(dir,'document.pdf'),result.bytes,{flag:'wx',mode:0o600});delete result.bytes;
+    process.stdout.write(JSON.stringify(result));return;
+  }
+  const result=await splitPdf(bytes);
   for (const page of result.pages) {
     await fs.writeFile(path.join(dir,'page-'+page.number+'.pdf'),page.bytes,{flag:'wx',mode:0o600}); delete page.bytes;
   }

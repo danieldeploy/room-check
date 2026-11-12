@@ -102,6 +102,12 @@ jobs:
           npm ci --prefix tests/ui --ignore-scripts --no-audit --no-fund
           node --test tests/ui/*.test.cjs
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install bounded receipt decoder
+        run: npm ci --prefix invoice-runner/receipt-tools --ignore-scripts --no-audit --no-fund
+
       - name: Validate invoice runner
         run: |
           node --check invoice-runner/runner.mjs
@@ -135,6 +141,11 @@ jobs:
           php tests/invoice-workspace.php
           php tests/invoice-drive.php
           php tests/zkaccess-backup.php
+          php tests/invoice-receipt-alerts.php
+          php tests/invoice-gemini.php
+          php tests/invoice-receipt-analysis.php
+          php tests/invoice-receipt-grouped.php
+          php tests/invoice-receipt-progress.php
           php tests/invoice-receipts.php
           php tests/invoice-receipt-report.php
           php tests/invoice-azure.php
@@ -336,6 +347,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Install receipt decoder for Windows
+        run: npm ci --prefix invoice-runner/receipt-tools --ignore-scripts --no-audit --no-fund
       - name: Validate PowerShell and Windows security primitives
         shell: powershell
         run: |

@@ -40,7 +40,7 @@ try {
         public function __construct(public string $text) {}
         public function add(string $id,string $pdf,string $format='pdf',int $month=10): void { $this->files[$id]=['id'=>$id,'name'=>'scan.'.$format,'mimeType'=>$format==='jpg'?'image/jpeg':'application/pdf','size'=>strlen($pdf),'md5Checksum'=>md5($pdf),'parents'=>['scan-month-'.$month],'pdf'=>$pdf,'trashed'=>false]; }
         public function receiptsAuthorized(): bool { return $this->grant; }
-        public function connect(): void {}
+        public bool $connected=false; public function connect(): void { $this->connected=true; }
         public function metadata(string $id): ?array { return $this->files[$id]??['id'=>$id,'trashed'=>false,'mimeType'=>'application/vnd.google-apps.folder','owners'=>[['emailAddress'=>'daniel.ciorcas@welcomehostel.pt']]]; }
         public function namedItems(string $parent,array $names,bool $folder=true): array { if ($names===['temp_scan']) return [['id'=>'temp-scan-folder']]; if ($parent==='temp-scan-folder') foreach (InvoiceDriveLayout::MONTHS as $month=>$name) if (in_array($name,$names,true)) return [['id'=>'scan-month-'.$month]]; return []; }
         public function scanFiles(string $root): array { $this->discovered++; return array_values(array_map(static function($f) { unset($f['pdf']); return $f; },array_filter($this->files,static fn($f)=>$f['parents']===[$root]))); }
@@ -57,10 +57,13 @@ try {
             if ($this->crashUpload) { $this->crashUpload=false; throw new RuntimeException('drive_network'); }
             return $this->files[$id];
         }
-        public function verifiedReceipt(array $d): string { rc(!$this->files[$d['id']]['trashed'] && hash('sha256',$this->files[$d['id']]['pdf'])===$d['sha256'],'verified archive content'); rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'archived before email'); return $this->files[$d['id']]['pdf']; }
+        public function verifiedReceipt(array $d): string { rc($this->connected,'receipt download requires connected client'); rc(!$this->files[$d['id']]['trashed'] && hash('sha256',$this->files[$d['id']]['pdf'])===$d['sha256'],'verified archive content'); rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'archived before email'); return $this->files[$d['id']]['pdf']; }
         public function trashReceiptFile(array $d): void { rc($this->files[$d['id']]['parents']===[$d['drive_parent']],'trash bound to archive'); $this->files[$d['id']]['trashed']=true; $this->trashed[]=$d['id']; }
     };
+    $deliveryDrive=clone $drive;
     $sent=[]; $toc=new InvoiceToconline($pdo,$vault,$drive,static function($to,$message) use (&$sent) { $sent[]=[$to,$message]; return true; });
+    $deliveryDrive->files=&$drive->files; $deliveryDrive->moved=&$drive->moved;
+    $toc=new InvoiceToconline($pdo,$vault,$deliveryDrive,static function($to,$message) use (&$sent) { $sent[]=[$to,$message]; return true; });
     $vault->save('toconline-settings.enc',['nif'=>'500000000','sender'=>'test@welcomehostel.pt','enabled'=>true,'pilot_verified'=>true]);
     $flow=new InvoiceReceipts($pdo,$vault,$drive,$toc,static fn($bytes)=>['count'=>1,'pages'=>[]]);
     $flow->run(); rc(!$vault->has(InvoiceReceipts::FILE),'deploy never starts intake');

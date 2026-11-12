@@ -66,3 +66,9 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
     .permission-name strong { font-size: .9rem; line-height: 1.25; }
     .permission-name small { font-size: .72rem; }
 }
+
+.receipt-totals { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35rem; }
+.receipt-dots { display:none; margin-inline-start:.25em; }
+#receipt-status[data-state="receipt_processing"] .receipt-dots { display:inline-block; animation:receipt-processing 1.2s ease-in-out infinite alternate; }
+@keyframes receipt-processing { from { opacity:.25; transform:translateX(-.12em); } to { opacity:1; transform:translateX(.12em); } }
+@media (prefers-reduced-motion:reduce) { #receipt-status .receipt-dots { animation:none; } }

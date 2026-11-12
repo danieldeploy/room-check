@@ -22,6 +22,10 @@ function verifyReceiptSplit(array $config): void
     if (!mkdir($directory,0700)) throw new RuntimeException('receipt_split_failed');
     try {
         $vault=new InvoiceVault($directory); $splitter=new InvoiceReceiptPdf($vault,$config);
+        $local=$splitter->inspect(receiptSplitProbePdf(),'pdf');
+        if ($local['count']!==2 || count($local['pages'])!==2) throw new RuntimeException('receipt_split_failed');
+        $group=$splitter->extract(receiptSplitProbePdf(),[1,2]);
+        if ($group['pages']!==[1,2]) throw new RuntimeException('receipt_split_failed');
         $result=$splitter->split(receiptSplitProbePdf());
         if ($result['count']!==2 || count($result['pages'])!==2) throw new RuntimeException('receipt_split_failed');
         foreach ($result['pages'] as $page) {

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceVault.php';
 
-/** Private, bounded local page extraction; no browser, network, rasterisation or shell. */
+/** Private bounded PDF extraction and local QR decoding; no browser, network or shell. */
 final class InvoiceReceiptPdf
 {
     public function __construct(private readonly InvoiceVault $vault,private readonly array $config) {}
@@ -16,13 +16,17 @@ final class InvoiceReceiptPdf
         return $paths;
     }
     public function split(string $bytes, bool $publish = true): array
+    { return $this->execute($bytes,$publish,'split'); }
+    public function inspect(string $bytes,string $format): array { return $this->execute($bytes,false,'inspect',[],$format); }
+    public function extract(string $bytes,array $pages): array { return $this->execute($bytes,true,'extract',$pages); }
+    private function execute(string $bytes,bool $publish,string $operation,array $pages=[],string $format='pdf'): array
     {
         $node='';
         foreach (self::nodeCandidates($this->config) as $candidate) {
             if ($candidate!=='' && $candidate[0]==='/' && is_executable($candidate)) { $node=$candidate; break; }
         }
         $script=dirname((string)($this->config['runner_script']??'')).'/receipt-pdf-split.mjs';
-        if (strlen($bytes)>10*1024*1024 || !str_starts_with($bytes,'%PDF-')) throw new RuntimeException('receipt_split_failed');
+        if (strlen($bytes)>10*1024*1024 || ($format==='pdf' && !str_starts_with($bytes,'%PDF-'))) throw new RuntimeException('receipt_split_failed');
         if (!function_exists('proc_open') || $node==='' || $node[0]!=='/' || !is_executable($node)
             || !is_file($script) || str_contains((string)realpath($script),'/public_html/')) throw new RuntimeException('receipt_split_unavailable');
         $dir=$this->vault->path('receipt-split-'.bin2hex(random_bytes(16)));
@@ -30,20 +34,38 @@ final class InvoiceReceiptPdf
         $process=null; $pipes=[];
         try {
             InvoiceVault::atomicWrite($dir.'/source.pdf',$bytes);
-            $process=proc_open([$node,'--max-old-space-size=256',$script],
+            $process=proc_open([$node,'--max-old-space-size=512',$script],
                 [0=>['pipe','r'],1=>['pipe','w'],2=>['file','/dev/null','a']],$pipes,dirname($script));
             if (!is_resource($process)) throw new RuntimeException('receipt_split_unavailable');
-            fwrite($pipes[0],json_encode(['directory'=>$dir],JSON_THROW_ON_ERROR)); fclose($pipes[0]); unset($pipes[0]);
-            stream_set_blocking($pipes[1],false); $out=''; $end=microtime(true)+30;
+            fwrite($pipes[0],json_encode(['directory'=>$dir,'operation'=>$operation,'pages'=>$pages,'format'=>$format],JSON_THROW_ON_ERROR)); fclose($pipes[0]); unset($pipes[0]);
+            stream_set_blocking($pipes[1],false); $out=''; $end=microtime(true)+($operation==='inspect'?120:30);
             do {
                 $out.=stream_get_contents($pipes[1]); $status=proc_get_status($process);
                 if (!$status['running']) break;
                 usleep(10000);
-            } while (microtime(true)<$end && strlen($out)<65536);
+            } while (microtime(true)<$end && strlen($out)<2*1024*1024);
             if ($status['running']) { proc_terminate($process,9); throw new RuntimeException('receipt_split_failed'); }
             $out.=stream_get_contents($pipes[1]);
             $result=json_decode($out,true,32,JSON_THROW_ON_ERROR);
             if (($result['error']??'')==='receipt_split_limit') throw new RuntimeException('receipt_split_limit');
+            if ($status['exitcode']!==0) throw new RuntimeException('receipt_split_failed');
+            if ($operation==='inspect') {
+                $count=$result['count']??0;
+                if (!is_int($count) || $count<1 || $count>50 || count($result['pages']??[])!==$count) throw new RuntimeException('receipt_split_failed');
+                foreach ($result['pages'] as $i=>$p) {
+                    if (($p['number']??0)!==$i+1 || !is_array($p['qr']??null) || count($p['qr'])>8) throw new RuntimeException('receipt_split_failed');
+                    foreach ($p['qr'] as $qr) if (!is_string($qr) || strlen($qr)>4096) throw new RuntimeException('receipt_split_failed');
+                }
+                return $result;
+            }
+            if ($operation==='extract') {
+                $file=$dir.'/document.pdf'; $size=is_file($file)?filesize($file):0;
+                if (($result['pages']??[])!==$pages || $size<5 || $size>10*1024*1024 || $size!==($result['size']??0) || is_link($file)
+                    || !hash_equals(hash_file('sha256',$file),(string)($result['sha256']??''))
+                    || !hash_equals(hash_file('md5',$file),(string)($result['md5Checksum']??''))) throw new RuntimeException('receipt_split_failed');
+                InvoiceVault::atomicWrite($this->vault->path('receipt-page-'.$result['sha256'].'.pdf'),(string)file_get_contents($file));
+                return $result;
+            }
             $count=$result['count']??0;
             if ($status['exitcode']!==0 || !is_int($count) || $count<1 || $count>50 || !is_array($result['pages']??null)
                 || count($result['pages'])!==($count===1?0:$count)) throw new RuntimeException('receipt_split_failed');

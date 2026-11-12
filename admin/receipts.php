@@ -20,12 +20,13 @@ try {
     if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
         Csrf::validate($_POST['csrf_token']??null);
         $action=(string)($_POST['action']??'');
-        if (!(($action==='start' && $canRun) || ($action==='retry' && $canRun && $canHistory) || ($action==='review' && $canReview))) throw new RuntimeException('forbidden',403);
+        if (!(($action==='start' && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup'],true) && $canReview))) throw new RuntimeException('forbidden',403);
         if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
         try {
             $action=(string)($_POST['action']??''); $id=(string)($_POST['id']??'');
             if ($action==='start' && $canRun) $receipts->request((int)$user['id'],(int)($_POST['year']??0),is_array($_POST['months']??null)?$_POST['months']:[]);
             elseif ($action==='retry' && $canRun && $canHistory) $receipts->retry($id);
+            elseif ($action==='regroup' && $canReview) $receipts->regroup($id,(string)($_POST['page_groups']??''),($_POST['confirmed']??'')==='1',(int)$user['id']);
             elseif ($action==='review' && $canReview) $receipts->review($id,(string)($_POST['issued_on']??''),(string)($_POST['invoice_number']??''),($_POST['confirmed']??'')==='1',(int)$user['id'],(string)($_POST['issuer_name']??''));
             else throw new RuntimeException('forbidden',403);
             Auth::audit($pdo,(int)$user['id'],'receipt_'.$action); // No filename, OCR text or invoice data in audit logs.
@@ -40,17 +41,24 @@ $flash=$_SESSION['receipt_flash']??''; unset($_SESSION['receipt_flash']);
 $year=(int)($state['year']??(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y'));
 $monthEnglish=[1=>'January','February','March','April','May','June','July','August','September','October','November','December'];
 $report=InvoiceReceiptReport::summary($state['documents']);
-$page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse($state['documents'],true):[]; $documents=array_slice($all,($page-1)*50,50,true);
+$page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse(array_filter($state['documents'],static fn($d)=>($d['stage']??'')!=='superseded'),true):[]; $documents=array_slice($all,($page-1)*50,50,true);
+$progress=InvoiceReceiptReport::progress($state,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));$historyHtml='';
+if ($canHistory) { $receiptHistoryRendering=true; ob_start(); require __DIR__.'/receipt-history.php'; $historyHtml=(string)ob_get_clean(); }
+if (($_GET['status']??'')==='1') {
+    jsonResponse(['progress'=>$progress,'label'=>InvoiceText::get($progress['state']),'report'=>InvoiceReceiptReport::render($report),
+        'history'=>$canHistory?$historyHtml:null,'revision'=>hash('sha256',json_encode($state['documents']))]);
+}
 ?>
 <!doctype html><html lang="<?= $escape(Translator::locale()) ?>"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">
 <title><?= $t('receipt_title') ?> — Management Hub</title>
 <link rel="stylesheet" href="assets/settings.css?v=<?= (int)filemtime(__DIR__.'/assets/settings.css') ?>">
 <link rel="stylesheet" href="../assets/session.css?v=<?= (int)filemtime($root.'/assets/session.css') ?>">
+<script src="assets/receipt-status.js?v=<?= (int)filemtime(__DIR__.'/assets/receipt-status.js') ?>" defer></script>
 <script src="assets/receipt-preview.js?v=<?= (int)filemtime(__DIR__.'/assets/receipt-preview.js') ?>" defer></script>
 </head><body><main class="settings-shell">
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
-<?php if ($manager): ?><p><a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
+<?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a> · <a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
 <header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1><p><?= $t('receipt_description') ?></p></div></header>
 <?php if ($error || !empty($state['error'])): ?><div class="alert" role="alert"><?= $t($error?:$state['error']) ?></div><?php endif; ?>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= $t($flash) ?></div><?php endif; ?>
@@ -69,44 +77,6 @@ $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse($state['doc
 <?php if ($manager): ?><p><?= $t('receipt_grant') ?> <a href="permissions.php"><?= $escape(SiteTranslations::text('Permissões','Permissions')) ?></a></p><?php endif; ?>
 <p><a href="receipts.php?page=<?= $page ?>"><?= $t('receipt_refresh') ?></a></p>
 </section>
-<?= InvoiceReceiptReport::render($report) ?>
-<?php if ($canHistory): ?>
-<section class="card"><h2><?= $t('receipt_total') ?>: <?= count($all) ?></h2>
-<?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
-<?php foreach ($documents as $id=>$d): ?>
-<article class="card"><h3 data-i18n-skip><?= $escape($d['name']) ?></h3>
-<?php if (!empty($d['page_number'])): ?><p><?= $t('receipt_page') ?> <?= (int)$d['page_number'] ?> / <?= (int)$d['page_count'] ?></p><?php endif; ?>
-<p><?= $t('receipt_expected') ?>: <?= $escape($d['expected_period']??'') ?></p>
-<?php if (!empty($d['issuer_name'])): ?><p data-i18n-skip><?= $escape($d['issuer_name']) ?></p><?php endif; ?>
-<p><?= $t('receipt_stage_'.$d['stage']) ?> · <?= $t($d['toconline_state']) ?></p>
-<?php if (!empty($d['issued_on'])): ?><p><?= $t('receipt_date') ?>: <?= $escape($d['issued_on']) ?> · <?= $escape($d['invoice_number']) ?></p><?php endif; ?>
-<?php if (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
-<?php if (!in_array($d['stage'],['duplicate_trashed','split_completed'],true)): ?>
-<?php
-$previewOptions=['document'=>empty($d['source_id'])?'receipt_show_document':'receipt_show_page'];
-$sourceDocument=$state['documents'][$d['source_id']??'']??null;
-if (is_array($sourceDocument) && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
-foreach ($previewOptions as $previewKind=>$previewLabel): ?>
-<div data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>">
-<div class="form-actions"><button class="primary-button" type="button" aria-expanded="false" aria-controls="preview-<?= $escape($id.'-'.$previewKind) ?>"><?= $t($previewLabel) ?></button></div>
-<div id="preview-<?= $escape($id.'-'.$previewKind) ?>" hidden>
-<?php if ($previewKind==='source'): ?><p><?= $t('receipt_source_warning') ?></p><?php endif; ?>
-<p role="status"></p><div data-document-content></div></div>
-</div>
-<?php endforeach; ?>
-<?php endif; ?>
-<?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></div></form><?php endif; ?>
-<?php if ($d['stage']==='review' && !empty($d['sha256'])): ?>
-<?php if ($canReview): ?><form method="post">
-<input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="review">
-<label><?= $t('receipt_date') ?> <input type="date" name="issued_on" required></label>
-<label><?= $t('receipt_issuer') ?> <input type="text" name="issuer_name" maxlength="160" value="<?= $escape($d['issuer_name']??'') ?>"></label>
-<label><?= $t('receipt_number') ?> <input type="text" name="invoice_number" maxlength="128" required></label>
-<p data-i18n-skip>NIF: <?= $escape($tocSettings['nif']??'') ?></p>
-<label><input type="checkbox" name="confirmed" value="1" required> <?= $t('receipt_confirm') ?></label>
-<div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_approve') ?></button></div>
-</form><?php else: ?><p><?= $t('receipt_wait') ?></p><?php endif; ?>
-<?php endif; ?></article>
-<?php endforeach; ?>
-<nav><?php if ($page>1): ?><a href="?page=<?= $page-1 ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?page=<?= $page+1 ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
-</section><?php endif; ?></main></body></html>
+<section class="card" id="receipt-status" role="status" data-url="receipts.php?status=1&amp;page=<?= $page ?>" data-state="<?= $escape($progress['state']) ?>" data-next="<?= $progress['next_at'] ?>" data-server="<?= $progress['server_time'] ?>" data-retry="<?= $t('receipt_retry_in') ?>" data-due="<?= $t('receipt_retry_due') ?>" data-unavailable="<?= $t('receipt_status_unavailable') ?>"><strong data-status-label><?= $t($progress['state']) ?></strong><span class="receipt-dots" aria-hidden="true">…</span><p data-status-warning hidden></p></section>
+<div id="receipt-report"><?= InvoiceReceiptReport::render($report) ?></div>
+<div id="receipt-history"><?= $historyHtml ?></div></main></body></html>

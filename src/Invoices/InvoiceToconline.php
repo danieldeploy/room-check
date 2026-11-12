@@ -237,6 +237,7 @@ final class InvoiceToconline
         // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.
         $content=$identity; $existing=$ledger[$identity]??null;
         if ($existing) { $this->state($id,(string)$existing['document_id']===$id?$existing['state']:'toc_duplicate'); return; }
+        $this->drive->connect(); // Receipt-only cron runs may never have entered the portal sender.
         $pdf=$this->drive->verifiedReceipt($d);
         if (strlen($pdf)!==(int)$d['size'] || strlen($pdf)>10*1024*1024
             || !InvoiceDriveClient::receiptBytesValid($pdf,$d['format']) || !hash_equals($d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
@@ -244,6 +245,11 @@ final class InvoiceToconline
         $this->transmit($ledger,$id,$identity,$content,$settings,$message,self::destination($settings['nif']));
     }
 
+    public function receiptUnsent(string $id): bool
+    {
+        foreach ($this->ledger() as $e) if ((string)$e['document_id']==='receipt:'.$id) return false;
+        return true;
+    }
     public function receiptDuplicateConfirmed(string $id): bool
     {
         foreach ($this->ledger() as $e) if ((string)$e['document_id']==='receipt:'.$id

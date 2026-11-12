@@ -227,3 +227,15 @@ A recuperação atual fica limitada a esse ID e ao SHA
 `372a1f13a4adf84e1096448e7a908fe57372a887`, exigindo uma versão descendente
 corrigida e todas as verificações normais. O divisor e o teste usam a mesma
 resolução do Node existente. Qualquer nova falha volta a bloquear a publicação.
+
+### Local receipt decoder dependencies
+
+After the existing backup gate, `prepare_receipt_runtime.php` installs only the
+locked `invoice-runner/receipt-tools` package (pdfjs-dist, its canvas runtime and
+zxing-wasm) using the configured/inspected Node environment's npm. Lifecycle scripts
+are disabled; no browser/Puppeteer is installed. The package-lock checksum skips
+unchanged installs; the following runtime probe still runs every release. Both
+installation and local inspect/extract are bounded, private and fail before any
+application copies. The normal private runner copy includes these dependencies.
+A failed installation/probe is not a completed release: inspect installed commit
+and the guarded release state before any retry.

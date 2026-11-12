@@ -1,0 +1,23 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {JSDOM}=require('jsdom');
+const script=fs.readFileSync('admin/assets/receipt-status.js','utf8');
+function setup(){
+ const now=Math.floor(Date.now()/1000);
+ const dom=new JSDOM(`<section id="receipt-status" data-url="receipts.php?status=1" data-state="receipt_retry_wait" data-next="${now+45}" data-server="${now}" data-retry="Retry in {seconds} seconds" data-due="Waiting for worker" data-unavailable="Unavailable"><strong data-status-label></strong><p data-status-warning hidden></p></section><div id="receipt-report"></div><div id="receipt-history"><form><input value="unsaved"></form></div>`,{runScripts:'outside-only',url:'https://check.welcomehostel.pt/admin/receipts.php'});
+ const calls=[],timeouts=[];dom.window.setTimeout=(fn,ms)=>{timeouts.push([fn,ms]);return 1;};dom.window.setInterval=()=>1;
+ dom.window.fetch=async(url,options)=>{calls.push([url,options]);return {ok:true,json:async()=>({progress:{state:'receipt_finished_pending',next_at:0,server_time:now},label:'Completed with pending items',report:'<strong>25</strong>',history:'<p>updated</p>',revision:'v2'})};};
+ dom.window.eval(script);return {dom,calls,timeouts};
+}
+test('five second polling is read-only and displays persisted countdown then final state',async()=>{
+ const {dom,calls,timeouts}=setup();try{
+  assert.match(dom.window.document.querySelector('[data-status-label]').textContent,/Retry in 4[45] seconds/);assert.equal(timeouts[0][1],5000);
+  await timeouts.shift()[0]();assert.equal(calls.length,1);assert.equal(calls[0][1].method,undefined);assert.equal(calls[0][1].credentials,'same-origin');assert.equal(calls[0][1].cache,'no-store');
+  assert.equal(dom.window.document.querySelector('[data-status-label]').textContent,'Completed with pending items');assert.equal(dom.window.document.getElementById('receipt-history').textContent,'updated');assert.equal(timeouts[0][1],5000);
+ }finally{dom.window.close();}
+});
+test('report refresh never discards an edited form or an open document',async()=>{
+ for(const editing of [true,false]){const {dom,timeouts}=setup();try{
+  const h=dom.window.document.getElementById('receipt-history');
+  if(editing)h.querySelector('input').dispatchEvent(new dom.window.Event('input',{bubbles:true}));else h.insertAdjacentHTML('beforeend','<div data-receipt-preview><button aria-expanded="true"></button></div>');
+  await timeouts.shift()[0]();assert.ok(h.querySelector('input'));assert.equal(h.querySelector('input').value,'unsaved');assert.equal(dom.window.document.getElementById('receipt-report').textContent,'25');
+ }finally{dom.window.close();}}
+});
