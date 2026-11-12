@@ -17,7 +17,7 @@ final class InvoiceGemini
     public function configure(string $key): void
     {
         $key=trim($key);
-        if (!preg_match('/\AAIza[A-Za-z0-9_-]{30,200}\z/',$key)) throw new RuntimeException('gemini_key_invalid');
+        if (!preg_match('/\A[\x21-\x7E]{20,204}\z/',$key)) throw new RuntimeException('gemini_key_invalid');
         $this->vault->save(self::SETTINGS,['key'=>$key,'model'=>self::MODEL,'configured_at'=>gmdate('c')]);
     }
     private function budget(): array
