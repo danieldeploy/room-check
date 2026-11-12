@@ -68,16 +68,30 @@ final class InvoiceReceipts
         if (count($dates)!==1 || count($numbers)!==1) return null;
         return ['issued_on'=>array_key_first($dates),'invoice_number'=>$numbers[0]];
     }
-    public function review(string $id,string $date,string $number,bool $confirmed,int $actor): void
+    /** Accept explicit supplier labels only; never substitute the customer or filename. */
+    public static function issuerName(string $text): string
+    {
+        $head=preg_split('/(?:^|\\n)\\s*(?:cliente|adquirente|customer|client)\\s*[:\\-]/iu', $text,2)[0];
+        preg_match_all('/(?:^|\\n)\\s*(?:fornecedor|emitente|supplier|issuer|vendedor|seller)\\s*[:\\-]\\s*([^\\r\\n]{1,160})/iu',$head,$matches);
+        $names=array_values(array_unique(array_map('trim',$matches[1])));
+        if (!$names) {
+            preg_match_all('/(?:^|\\n)\\s*([^\\r\\n]{2,145}\\b(?:Lda\\.?|S\\.?A\\.?|Ltd\\.?|Limited))\\s*(?:\\n|$)/iu',$head,$legal);
+            $names=array_values(array_unique(array_map('trim',$legal[1])));
+        }
+        return count($names)===1 && !preg_match('/[\\x00-\\x1f]/',$names[0]) ? $names[0] : '';
+    }
+    public function review(string $id,string $date,string $number,bool $confirmed,int $actor,string $issuerName=''): void
     {
         $s=$this->status(); $d=$s['documents'][$id]??[];
         if (($d['stage']??'')!=='review' || empty($d['sha256']) || !in_array($d['format']??'',['pdf','jpg'],true)
             || !self::validDate($date) || !$confirmed || trim($number)==='' || mb_strlen($number)>128
             || preg_match('/[\x00-\x1f]/',$number)) throw new RuntimeException('receipt_review_required');
+        if (mb_strlen($issuerName)>160 || preg_match('/[\x00-\x1f]/',$issuerName)) throw new RuntimeException('invalid_request');
         $settings=$this->toc->settings(); InvoiceToconline::destination($settings['nif']);
         if (!empty($d['ocr_id']) && empty($d['ocr_cleaned'])) {
             $this->drive->connect(); $this->drive->trashReceiptOcr($d['ocr_id'],$id); $d['ocr_cleaned']=true;
         }
+        $d['issuer_name']=trim($issuerName);
         $d['issued_on']=$date; $d['invoice_number']=trim($number); $d['company_nif']=$settings['nif'];
         $d['reviewed_by']=$actor; $d['reviewed_at']=gmdate('c'); $d['stage']='ready'; $d['error']=''; $d['attempts']=0;
         $this->put($id,$d);
@@ -272,6 +286,7 @@ final class InvoiceReceipts
             }
             $text=$this->drive->receiptOcrText($d['ocr_id']);
             $settings=$this->toc->settings(); InvoiceToconline::destination($settings['nif']);
+            $d['issuer_name']=self::issuerName($text);
             $result=self::classify($text,$settings['nif']); unset($text,$pdf);
             $this->drive->trashReceiptOcr($d['ocr_id'],$id); $d['ocr_cleaned']=true;
             if (!$result) { $d['stage']='review'; $d['error']='receipt_review_required'; $this->put($id,$d); return; }

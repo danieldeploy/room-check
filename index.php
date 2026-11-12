@@ -29,7 +29,7 @@ try {
 
 $modules = [
     [
-        'permission'=>Auth::PERMISSION_RECEIPTS_VIEW,
+        'permissions_any'=>[Auth::PERMISSION_RECEIPTS_VIEW,Auth::PERMISSION_RECEIPTS_RUN],
         'eyebrow'=>InvoiceText::get('receipt_title'),
         'title'=>InvoiceText::get('receipt_title'),
         'description'=>InvoiceText::get('receipt_description'),

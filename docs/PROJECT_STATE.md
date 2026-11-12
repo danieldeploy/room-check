@@ -654,3 +654,27 @@ is **not** yet confirmed installed; old functioning backups remain untouched.
   serialized deploy and synthetic page extraction before application copies.
   Any different/new failure blocks recovery. Live scan acceptance still awaits
   manager Drive consent and genuine files.
+
+
+## Receipt report and history separation — 2026-11-12
+
+Prepared: `receipts.run` opens the process/year/month selector and a reduced report:
+source-file and invoice/page totals, Drive-processed count, confirmed duplicates
+with supplier name/number/issue date, and the same safe translated errors as the
+manager. It never renders file names, Drive IDs/links, accepted-document details
+or correction/retry forms. PDF masters do not double-count their invoice pages.
+Processed means archived in Drive, not TOConline acceptance.
+
+`receipts.history` replaces legacy `receipts.view`, which was implicitly added
+and persisted alongside run; legacy rows are ignored, avoiding accidental history
+access for an operator on upgrade. Manager history remains mandatory. Explicit
+future history grants are available through the existing matrix; `receipts.review`
+is independently delegable, includes history, and is mandatory for the manager.
+Neither new permission is granted to Governanta. Existing run grants remain.
+
+Supplier names are recorded from explicit supplier/issuer labels or a unique legal company heading, or entered
+by an authorized reviewer. Old/ambiguous names show “Company not identified”;
+never infer suppliers from customer NIF, filenames or historical originals.
+Current Drive OAuth, portal/archive/TOConline behavior and direct Drive sharing
+are unchanged. No real scan submission is initiated by deployment. Production
+acceptance and installed commit require separate verification after CI/release.

@@ -5,6 +5,19 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'receipt_report' => ['Relatório de processamento','Processing report'],
+        'receipt_files' => ['Ficheiros recolhidos','Source files'],
+        'receipt_documents' => ['Faturas e talões (inclui páginas PDF)','Invoices and receipts (includes PDF pages)'],
+        'receipt_processed' => ['Processados','Processed'],
+        'receipt_processed_note' => ['Processados: documentos arquivados no Drive, incluindo os posteriormente identificados como duplicados. Não significa aceitação pelo TOConline.','Processed: documents archived in Drive, including those subsequently identified as duplicates. This does not mean TOConline acceptance.'],
+        'receipt_report_duplicates' => ['Duplicados confirmados','Confirmed duplicates'],
+        'receipt_errors' => ['Erros e situações a rever','Errors and issues requiring review'],
+        'receipt_no_duplicates' => ['Sem duplicados confirmados.','No confirmed duplicates.'],
+        'receipt_no_errors' => ['Sem erros registados.','No recorded errors.'],
+        'receipt_issuer' => ['Empresa emitente / fornecedor','Issuing company / supplier'],
+        'receipt_unknown_issuer' => ['Empresa não identificada','Company not identified'],
+        'receipt_unknown_data' => ['Não identificado','Not identified'],
+        'receipt_review_permission' => ['Rever talões e corrigir dados','Review receipts and correct data'],
         'receipt_year' => ['Ano', 'Year'],
         'receipt_months' => ['Meses a processar', 'Months to process'],
         'receipt_selection' => ['Seleção do último pedido', 'Last request selection'],
@@ -38,7 +51,7 @@ final class InvoiceText
         'receipt_empty' => ['Ainda não foram recolhidos talões.','No receipts have been collected yet.'],
         'receipt_total' => ['Documentos no histórico','Documents in history'],
         'receipt_wait' => ['Revisão do gerente necessária','Manager review required'],
-        'receipt_grant' => ['O gerente pode atribuir Consultar talões e Iniciar arquivo de talões à Governanta na página Permissões.','The manager can grant View receipts and Start receipt archiving to the Housekeeper on the Permissions page.'],
+        'receipt_grant' => ['O gerente pode atribuir separadamente o processamento com relatório, a consulta do histórico e a revisão/correção na página Permissões.','The manager can separately grant processing with reports, individual history and review/correction on the Permissions page.'],
         'receipt_toc_disabled' => ['O envio automático para o TOConline está desativado. Os documentos arquivados aguardam a ativação pelo gerente.','Automatic TOConline submission is disabled. Archived documents await manager activation.'],
         'receipt_page' => ['Página', 'Page'],
         'receipt_per_page' => ['Envio e resultado por página', 'Submission and result per page'],
@@ -58,7 +71,7 @@ final class InvoiceText
         'receipt_stage_trashing' => ['Duplicado confirmado — a remover','Duplicate confirmed — removing'],
         'receipt_stage_duplicate_trashed' => ['Duplicado confirmado — no Lixo do Drive','Duplicate confirmed — in Drive Trash'],
         'receipt_view_permission' => ['Consultar talões','View receipts'],
-        'receipt_run_permission' => ['Iniciar arquivo de talões','Start receipt archiving'],
+        'receipt_run_permission' => ['Iniciar arquivo e consultar relatório','Start archiving and view report'],
 
         'cloudbeds_upload_title' => ['Adicionar fatura Cloudbeds em PDF', 'Add a Cloudbeds PDF invoice'],
         'cloudbeds_upload_note' => ['Selecione a casa indicada na fatura. O Hub valida a empresa e o mês de emissão, guarda no Drive e segue a configuração de envio ao TOConline. PDFs repetidos não são reenviados.', 'Select the property shown on the invoice. The Hub validates the company and issue month, saves to Drive and follows the TOConline delivery settings. Repeated PDFs are not sent again.'],

@@ -171,9 +171,10 @@ sua própria aba, sem terminar a sessão nem interromper a seguinte tarefa.
 
 The separate `admin/receipts.php` module uses `receipts.view` / `receipts.run`.
 Both are mandatory for Gerente; Governanta receives neither until the manager
-assigns them through the existing permissions matrix. Run implies view only,
-not access to portal settings or accounts. Only Gerente can confirm unreadable
-metadata and company ownership. Every mutation uses CSRF and the existing
+assigns them through the existing permissions matrix. Run grants the reduced processing report only; it does not grant individual
+history or portal settings/accounts. History uses explicit `receipts.history`
+and corrections use explicit `receipts.review` (which includes history).
+Both remain mandatory for Gerente and optional, initially unassigned, for Governanta. Every mutation uses CSRF and the existing
 `room_check_invoices` advisory lock.
 
 After scanning, a user with run permission chooses a year and one or more months
@@ -303,3 +304,32 @@ when the default invoice Node path is unavailable, the splitter may use
 `/home/<account>/room-check-private/invoices` layout. Explicit `node_binary`
 overrides never silently fall back. The same selection is used in the release
 probe and worker; the existing Node agent/configuration remains unchanged.
+
+### Operator report and explicit historical/review access (2026-11-12)
+
+The module/home entry accepts run OR history. Run no longer implies historical
+access. The formerly implicit and persisted receipts.view key is retired; an
+explicit receipts.history grant is required, preserving the manager via locked
+permissions without promoting legacy operator rows. The matrix can assign history
+and review independently for future need; review includes the needed history.
+Run-only POSTs cannot review or retry an individual document, even with guessed IDs.
+
+Every authorized viewer sees totals (source files, invoices/pages, Drive-processed,
+duplicates and errors). A split PDF master is a source file, not another invoice;
+its pages each count as invoices. Processed counts verified Drive archives,
+including later duplicates, and never claims downstream acceptance. Duplicate
+rows show only supplier company, invoice number and issue date. Error details
+use the existing allowlisted bilingual diagnostics, never raw provider logs/OCR.
+The reduced HTML contains no original filename, Drive ID, document link, normal
+invoice details or correction form; it is filtered server-side before rendering.
+
+Supplier extraction accepts explicit supplier/issuer labels or a unique legal
+company heading before the customer section; ambiguity remains unidentified. An authorized reviewer can enter a supplier
+name without changing the existing issue-date/NIF/document confirmation. Missing
+or historical names remain explicitly unidentified; no automatic replay is used
+to backfill them. Existing accounting routing and signed duplicate cleanup remain.
+
+Acceptance: role matrix/legacy rows, explicit future delegation, actual reduced
+HTML with hostile supplier strings and private IDs/filenames, mixed PDFs with
+master/page counts, duplicate dates, missing company names, review/source errors,
+unauthorized individual POSTs, manager history/review and preserved scan workflow.
