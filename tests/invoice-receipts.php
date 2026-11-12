@@ -153,6 +153,12 @@ try {
     rc($drive->uploads===2 && count($sent)===$before+2,'resume uses same child ID; each readable page sends once');
     rc($flow->status()['documents'][$children[1]]['issued_on']==='2025-09-30' && in_array('Setembro_2025',$drive->folderNames,true),'pages independently routed across years');
     rc($flow->status()['documents'][$children[2]]['stage']==='review' && !$drive->files['multipage-master']['trashed'],'unreadable page preserves whole original');
+    $previewState=$flow->status(); $previewSent=count($sent); $previewMoved=$drive->moved;
+    $preview=$flow->preview($children[2]);
+    rc($flow->preview($children[2],true)['bytes']===$drive->files['multipage-master']['pdf'],'original preview returns all source pages for context');
+    rc($preview['bytes']===$pages[2] && $preview['type']==='application/pdf','pending preview returns only the selected PDF page');
+    rc($flow->status()===$previewState && count($sent)===$previewSent && $drive->moved===$previewMoved,'preview cannot change workflow, send or move documents');
+    rr(fn()=>$flow->preview('unknown-document'),'unknown IDs cannot read arbitrary Drive files');
     $flow->request(1,2026,[10]); $flow->run(); rc($flow->status()['documents']['multipage-master']['children']===$children,'rediscovery cannot split or resend master again');
     preg_match('/receipt-([a-f0-9]{64})\.pdf/',$sent[$before][1]['body'],$pageKey);
     $proof['outcome']='toc_existing';
@@ -164,6 +170,13 @@ try {
     rc($drive->uploads===3 && count($sent)===$before+3 && $drive->files['multipage-master']['trashed'],'master removed only after all page archives verified');
     rc($flow->status()['documents']['multipage-master']['stage']==='split_completed' && !glob($dir.'/receipt-page-*.pdf'),'split completes with private derivatives cleaned');
     $flow->run(); rc(count($sent)===$before+3,'finished split never resends');
+    rc($flow->preview($children[2])['bytes']===$pages[2],'archived preview reads verified destination after cache removal');
+    rr(fn()=>$flow->preview($children[0]),'removed duplicate preview unavailable');
+    rr(fn()=>$flow->preview('multipage-master'),'retired source preview unavailable');
+    rr(fn()=>$flow->preview($children[2],true),'retired original cannot be retrieved through child');
+    $endpoint=file_get_contents(dirname(__DIR__).'/admin/receipt-document.php');
+    rc(strpos($endpoint,'Auth::PERMISSION_RECEIPTS_VIEW')<strpos($endpoint,'->preview('),'endpoint checks history permission before retrieving bytes');
+    rc(!str_contains($endpoint,'Auth::PERMISSION_RECEIPTS_RUN'),'run-only permission never grants document endpoint');
     $saved=$vault->read('toconline-ledger.enc'); unlink($vault->path('toconline-ledger.enc')); rr(fn()=>$toc->reconcile(),'missing transport ledger fails closed'); $vault->save('toconline-ledger.enc',$saved);
     unlink($vault->path(InvoiceReceipts::FILE)); rr(fn()=>$flow->status(),'missing receipt history fails closed');
     echo "Receipt workflow safeguards passed\n";

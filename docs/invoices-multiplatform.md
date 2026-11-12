@@ -341,3 +341,26 @@ an identified customer section; customer-only/unknown layout stays unidentified.
 ### Azure diagnostics (2026-11-12)
 
 Manager-only `admin/invoice-azure.php` configures the existing North Europe F0 resource in InvoiceVault and analyzes owner-selected 1–2-page PDF/JPEG tests (4 MiB). Async operations and allowlisted extracted fields/page evidence are encrypted privately. No Drive mutations, email sending or automatic grouping/deletion. InvoiceReceiptPdf supports nonpublishing inspection for this test path. Authentication, CSRF, upload validation, operation URL allowlist, no redirects, TLS and uncertain-POST replay prevention are mandatory. Future QR-first rules: use readable fiscal QR data; send unreadable and ambiguous duplicate/continuation groups together to Azure; group true continuations and preserve source files until all related invoices finish. Current production pipeline is not switched by this diagnostic addition. See `azure-receipt-tests.md`.
+
+### Authenticated inline receipt preview
+
+Show/close document toggles a lazy PDF/JPEG preview below the document error.
+`admin/receipt-document.php` requires login plus receipts.history on every GET;
+run-only permission is insufficient even with a guessed ID. Only an ID already
+recorded in the encrypted receipt history is resolved, never an arbitrary URL.
+The Drive client authenticates before retrieving and verifying bytes. Pending
+children show the selected page, using existing checksum-pinned private cache
+and deterministic reconstruction when missing; archived documents use Drive.
+Preview may recreate only private derived page cache, never change queue state,
+submit, move or delete documents. Removed duplicates/retired masters fail closed.
+Responses are no-store, PDF/JPEG only, without raw provider details. Closing
+aborts loading and revokes the browser blob; no new tab or public Drive grant.
+Tests cover selected-page identity, unchanged workflow/send/move state, archive
+retrieval after cache cleanup, unknown/removed IDs and permission boundaries.
+
+Multi-page clarification: existing extracted pages are labelled Show page, not
+complete invoice. A separate inline Show complete source PDF control retrieves
+only that child's recorded parent and warns that it may contain other invoices.
+The embedded PDF viewer provides page navigation; no automatic invoice grouping
+is claimed. Future grouped invoice PDFs use the same viewer for all their pages.
+Retired sources remain unavailable; no removed file is restored.

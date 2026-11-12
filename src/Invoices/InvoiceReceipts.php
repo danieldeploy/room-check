@@ -18,6 +18,26 @@ final class InvoiceReceipts
         }
         return ['documents'=>[],'requested'=>false,'error'=>''];
     }
+    /** Read only a recorded document; never accept a caller-supplied Drive path. */
+    public function preview(string $id, bool $original = false): array
+    {
+        $documents=$this->status()['documents'];
+        $d=$documents[$id]??null;
+        if (!is_array($d) || !in_array($d['format']??'', ['pdf','jpg'],true)
+            || in_array($d['stage']??'', ['duplicate_trashed','split_completed'],true)) throw new RuntimeException('receipt_preview_unavailable');
+        if ($original) {
+            $parent=$documents[$d['source_id']??'']??null;
+            if (!is_array($parent) || ($parent['format']??'')!=='pdf' || !in_array($id,$parent['children']??[],true)
+                || ($parent['stage']??'')==='split_completed') throw new RuntimeException('receipt_preview_unavailable');
+            $d=$parent;
+        }
+        $this->drive->connect();
+        $bytes=empty($d['archived_at'])?$this->sourceBytes($d):$this->drive->verifiedReceipt($d);
+        if (strlen($bytes)>10*1024*1024 || strlen($bytes)!==(int)($d['size']??0)
+            || !InvoiceDriveClient::receiptBytesValid($bytes,$d['format'])
+            || (!empty($d['sha256']) && !hash_equals($d['sha256'],hash('sha256',$bytes)))) throw new RuntimeException('drive_verify');
+        return ['bytes'=>$bytes,'type'=>$d['format']==='pdf'?'application/pdf':'image/jpeg'];
+    }
     private function save(array $state): void { $this->vault->save(self::FILE,$state); }
     private function put(string $id,array $doc): void
     {
