@@ -712,3 +712,9 @@ receipt page via SessionBar). Explicit Auth bootstrap fixes that dependency; the
 endpoint fixture no longer preloads Auth and reproduces the production bootstrap.
 The failure was visible and no invoice processing or Drive mutation occurred.
 Live document acceptance must be repeated after the corrected release.
+
+Preview styling: use the shared Hub primary-button/form-actions controls for
+show/close and retry. Release 398 remains installed after the auth-fix merge:
+push CI 43308456324 failed Windows browser supervision with
+controlled_chrome_not_ready, so deployment was skipped (not a failed server
+mutation). Next guarded release includes the Auth fix and common button styles.

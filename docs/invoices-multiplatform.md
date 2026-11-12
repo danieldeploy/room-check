@@ -369,3 +369,6 @@ The standalone document endpoint must explicitly load Auth; its test bootstrap
 provides only database configuration, never hidden authentication dependencies.
 Actual role-denial status is checked to detect bootstrap exceptions masked as
 a generic preview failure.
+
+Receipt preview open/close and retry controls reuse the shared primary-button
+and form-actions classes; no separate button design or permission change.

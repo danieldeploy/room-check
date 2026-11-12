@@ -88,14 +88,14 @@ $sourceDocument=$state['documents'][$d['source_id']??'']??null;
 if (is_array($sourceDocument) && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
 foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <div data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>">
-<button type="button" aria-expanded="false" aria-controls="preview-<?= $escape($id.'-'.$previewKind) ?>"><?= $t($previewLabel) ?></button>
+<div class="form-actions"><button class="primary-button" type="button" aria-expanded="false" aria-controls="preview-<?= $escape($id.'-'.$previewKind) ?>"><?= $t($previewLabel) ?></button></div>
 <div id="preview-<?= $escape($id.'-'.$previewKind) ?>" hidden>
 <?php if ($previewKind==='source'): ?><p><?= $t('receipt_source_warning') ?></p><?php endif; ?>
 <p role="status"></p><div data-document-content></div></div>
 </div>
 <?php endforeach; ?>
 <?php endif; ?>
-<?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><button type="submit"><?= $t('receipt_retry') ?></button></form><?php endif; ?>
+<?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></div></form><?php endif; ?>
 <?php if ($d['stage']==='review' && !empty($d['sha256'])): ?>
 <?php if ($canReview): ?><form method="post">
 <input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="review">
