@@ -687,3 +687,21 @@ Regression fixtures cover customer-only OCR and separate supplier/customer names
 ## Azure invoice diagnostics — 2026-11-12
 
 Prepared manager-only encrypted connection and synchronous UI initiation/asynchronous Azure result checks. Existing owner-created North Europe F0 resource; actual key, connection acceptance and two real PDF tests pending deployment. No existing receipt/Drive/TOConline state is changed by diagnostics. Uncertain submissions are retained and not replayed. See `docs/azure-receipt-tests.md`.
+
+## Inline receipt preview — 2026-11-12
+
+Prepared: history-authorized users can show/close PDF/JPEG below each document's
+error without a new tab or Google login. The authenticated Hub endpoint resolves
+only recorded receipt IDs, connects its Drive client and verifies original bytes.
+Pending PDF children use their exact pinned page cache (rebuilt from unchanged
+source when needed); archived items use their verified destination. Removed
+duplicates/retired masters are unavailable. Run-only operators receive no preview
+controls and are denied by the endpoint. No public sharing, queue changes, mail
+or reprocessing. Local/CI and deployed functional acceptance are separate gates.
+
+Multi-page clarification: existing extracted pages are labelled Show page, not
+complete invoice. A separate inline Show complete source PDF control retrieves
+only that child's recorded parent and warns that it may contain other invoices.
+The embedded PDF viewer provides page navigation; no automatic invoice grouping
+is claimed. Future grouped invoice PDFs use the same viewer for all their pages.
+Retired sources remain unavailable; no removed file is restored.

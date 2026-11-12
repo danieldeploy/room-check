@@ -49,7 +49,8 @@
         "migrations/027_*.sql",
         "migrations/028_*.sql",
         "migrations/029_*.sql",
-        "admin/receipts.php"
+        "admin/receipts.php",
+        "admin/receipt-document.php"
       ],
       "required_docs": [
         "docs/invoices-multiplatform.md"

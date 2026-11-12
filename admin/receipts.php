@@ -47,6 +47,7 @@ $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse($state['doc
 <title><?= $t('receipt_title') ?> — Management Hub</title>
 <link rel="stylesheet" href="assets/settings.css?v=<?= (int)filemtime(__DIR__.'/assets/settings.css') ?>">
 <link rel="stylesheet" href="../assets/session.css?v=<?= (int)filemtime($root.'/assets/session.css') ?>">
+<script src="assets/receipt-preview.js?v=<?= (int)filemtime(__DIR__.'/assets/receipt-preview.js') ?>" defer></script>
 </head><body><main class="settings-shell">
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
 <?php if ($manager): ?><p><a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
@@ -74,13 +75,26 @@ $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse($state['doc
 <?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
 <?php foreach ($documents as $id=>$d): ?>
 <article class="card"><h3 data-i18n-skip><?= $escape($d['name']) ?></h3>
-<p><a href="https://drive.google.com/file/d/<?= $escape(rawurlencode(empty($d['archived_at'])?($d['source_id']??$id):$id)) ?>/view" target="_blank" rel="noopener noreferrer"><?= $t('receipt_file') ?></a></p>
 <?php if (!empty($d['page_number'])): ?><p><?= $t('receipt_page') ?> <?= (int)$d['page_number'] ?> / <?= (int)$d['page_count'] ?></p><?php endif; ?>
 <p><?= $t('receipt_expected') ?>: <?= $escape($d['expected_period']??'') ?></p>
 <?php if (!empty($d['issuer_name'])): ?><p data-i18n-skip><?= $escape($d['issuer_name']) ?></p><?php endif; ?>
 <p><?= $t('receipt_stage_'.$d['stage']) ?> · <?= $t($d['toconline_state']) ?></p>
 <?php if (!empty($d['issued_on'])): ?><p><?= $t('receipt_date') ?>: <?= $escape($d['issued_on']) ?> · <?= $escape($d['invoice_number']) ?></p><?php endif; ?>
 <?php if (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
+<?php if (!in_array($d['stage'],['duplicate_trashed','split_completed'],true)): ?>
+<?php
+$previewOptions=['document'=>empty($d['source_id'])?'receipt_show_document':'receipt_show_page'];
+$sourceDocument=$state['documents'][$d['source_id']??'']??null;
+if (is_array($sourceDocument) && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
+foreach ($previewOptions as $previewKind=>$previewLabel): ?>
+<div data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>">
+<button type="button" aria-expanded="false" aria-controls="preview-<?= $escape($id.'-'.$previewKind) ?>"><?= $t($previewLabel) ?></button>
+<div id="preview-<?= $escape($id.'-'.$previewKind) ?>" hidden>
+<?php if ($previewKind==='source'): ?><p><?= $t('receipt_source_warning') ?></p><?php endif; ?>
+<p role="status"></p><div data-document-content></div></div>
+</div>
+<?php endforeach; ?>
+<?php endif; ?>
 <?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><button type="submit"><?= $t('receipt_retry') ?></button></form><?php endif; ?>
 <?php if ($d['stage']==='review' && !empty($d['sha256'])): ?>
 <?php if ($canReview): ?><form method="post">
