@@ -245,3 +245,9 @@ A instalação npm terminou, mas o teste sintético de execução falhou antes d
 cópias. A versão instalada foi comparada por hash. O probe passa a classificar
 o stderr apenas em categorias fixas, sem conteúdo bruto. A recuperação fica
 vinculada ao ID400 e SHA6697ccd; qualquer falha nova mantém o bloqueio.
+
+O release401 classificou a falha como `wasm_memory` no teste anterior às cópias.
+A recuperação seguinte fica limitada ao ID401/d937695. O processo PDF usa a
+opção Node `--disable-wasm-trap-handler`, que substitui a grande reserva virtual
+por verificações de limites em linha. O teste CI com Node 22.14 e limite virtual
+de 4 GB reproduz a restrição; o probe real continua obrigatório antes de publicar.

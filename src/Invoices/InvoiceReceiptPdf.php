@@ -45,7 +45,7 @@ final class InvoiceReceiptPdf
         $process=null; $pipes=[];
         try {
             InvoiceVault::atomicWrite($dir.'/source.pdf',$bytes);
-            $process=proc_open([$node,'--max-old-space-size=512',$script],
+            $process=proc_open([$node,'--disable-wasm-trap-handler','--max-old-space-size=512',$script],
                 [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes,dirname($script));
             if (!is_resource($process)) throw new RuntimeException('receipt_split_unavailable');
             fwrite($pipes[0],json_encode(['directory'=>$dir,'operation'=>$operation,'pages'=>$pages,'format'=>$format],JSON_THROW_ON_ERROR)); fclose($pipes[0]); unset($pipes[0]);
