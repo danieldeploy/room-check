@@ -29,3 +29,18 @@ The exact envelope/rendered From handling and retained-copy behaviour must be te
 The pipe is independent of the mailbox password, but depends on the filter, hosting mail transport, executable permissions, PHP, vault and cron. Keep mailbox originals for investigation. No inbound third-party service or subscription is added. Existing IMAP remains optional and should stay disabled when this route is used. Preserve vault and queue with operational backups; deployment code backups are not complete vault backups.
 
 Matching a claimed From address is not authentication. The processor reuses the exact-identifier review policy, never promotes a receipt to accepted/existing by itself, never enables outgoing mail, and never resends an invoice. Future automatic acceptance requires independently validated sender authentication and response templates.
+
+
+## Guarded routing and existing reply recovery
+`deploy/toc_reply_route.py --apply` adds the dedicated v2 pipe without replacing
+existing filing rules. A retained-copy sender rule is required; stopped, disabled,
+ambiguous or conflicting pipe configurations fail closed. Readback must preserve
+all prior rules. The protected deploy job runs this only after release succeeds.
+
+`deploy/recover_toc_replies.php` runs privately under the invoice lock after release.
+It reads bounded recent local mail without changing flags or files, selects exact
+outstanding scan identities and uses `InvoiceTocPipe::enqueue/process`. The
+cryptographic acceptance policy in TOCONLINE_AUTHENTICATED_REPLIES.md supersedes
+the original conservative no-automatic-acceptance description above. No raw mail
+or identifiers are written to logs. Separate live acceptance must verify actual
+receipt states; successful filter creation alone is not proof of SMTP delivery.

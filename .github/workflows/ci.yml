@@ -63,6 +63,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_filters.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cloudbeds_mail_inspect.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_toc_reply_diagnostic.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_toc_reply_route.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_cloudbeds_email.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_automated_release.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_hostelworld_recovery.py -v
@@ -153,6 +154,7 @@ jobs:
           (ulimit -v 4000000; TEST_NODE_BINARY=$(command -v node) php tests/invoice-receipt-pdf.php)
           php tests/invoice-toconline.php
           php tests/invoice-toc-pipe.php
+          php tests/invoice-toc-recovery.php
           php tests/invoice-hostelworld-pipe.php
           php tests/hostelworld-bridge.php
           php tests/invoice-toc-authentication.php
@@ -212,6 +214,7 @@ jobs:
           php tests/cloudbeds-year-audit.php
           php tests/cloudbeds-manual-upload.php
           php tests/invoice-toc-pipe.php
+          php tests/invoice-toc-recovery.php
           php tests/invoice-toc-authentication.php
           python3 tests/test_toconline_diagnostic.py -v
 
@@ -294,6 +297,13 @@ jobs:
           WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: python3 deploy/cloudbeds_email.py
+
+      - name: Verify TOConline reply routing while retaining existing mailbox filing
+        if: vars.HUB_DEPLOY_ENABLED == 'true'
+        env:
+          WHM_API_TOKEN: ${{ secrets.WHM_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 deploy/toc_reply_route.py --apply
 
       - name: Report safe Hostelworld release readiness
         if: always()

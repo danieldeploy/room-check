@@ -80,5 +80,6 @@ if (($_GET['status']??'')==='1') {
 <p><a href="receipts.php?page=<?= $page ?>"><?= $t('receipt_refresh') ?></a></p>
 </section>
 <section class="card" id="receipt-status" role="status" data-url="receipts.php?status=1&amp;page=<?= $page ?>" data-state="<?= $escape($progress['state']) ?>" data-next="<?= $progress['next_at'] ?>" data-server="<?= $progress['server_time'] ?>" data-retry="<?= $t('receipt_retry_in') ?>" data-due="<?= $t('receipt_retry_due') ?>" data-unavailable="<?= $t('receipt_status_unavailable') ?>"><strong data-status-label><?= $t($progress['state']) ?></strong><span class="receipt-dots" aria-hidden="true">…</span><p data-status-warning hidden></p></section>
+<?php if (!empty($state['source_cleanup_paused'])): ?><p><?= $t('receipt_cleanup_deferred') ?></p><?php endif; ?>
 <div id="receipt-report"><?= InvoiceReceiptReport::render($report) ?></div>
 <div id="receipt-history"><?= $historyHtml ?></div></main></body></html>

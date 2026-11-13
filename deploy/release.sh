@@ -66,3 +66,8 @@ fi
 if ! /usr/local/bin/php deploy/compact_inactive_logs_once.php; then
     printf '%s\n' 'Inactive log compaction incomplete; inspect private receipt before retry' >&2
 fi
+
+# One-off retained reply recovery. Reuses the signed receiver; never sends mail.
+if ! /usr/local/bin/php deploy/recover_toc_replies.php "$DEPLOYPATH"; then
+    printf '%s\n' 'TOConline reply recovery incomplete; inspect before repeating' >&2
+fi

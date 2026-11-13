@@ -19,6 +19,21 @@ final class InvoiceReceipts
         }
         return ['documents'=>[],'requested'=>false,'error'=>''];
     }
+    /** Owner-deferred cleanup. Preserve the intake and all invoice delivery states. */
+    public static function pauseSourceCleanup(InvoiceVault $vault): void
+    {
+        if (!$vault->has(self::FILE)) return;
+        $s=$vault->read(self::FILE);$s['source_cleanup_paused']=true;
+        foreach ($s['documents'] as &$d) {
+            if (empty($d['source_id']) && !empty($d['children'])
+                && (($d['stage']??'')==='source_trashing' || (($d['stage']??'')==='failed'
+                    && ($d['resume_stage']??'')==='source_trashing'
+                    && in_array($d['error']??'',['drive_permission','drive_trash_permission'],true)))) {
+                $d['stage']='split';$d['error']='';$d['next_attempt']=0;unset($d['resume_stage']);
+            }
+        }
+        unset($d);$vault->save(self::FILE,$s);
+    }
     /** Read only a recorded document; never accept a caller-supplied Drive path. */
     public function preview(string $id, bool $original = false): array
     {
@@ -298,7 +313,7 @@ final class InvoiceReceipts
         $sendEnabled=!empty($this->toc->settings()['enabled']) && !empty($this->toc->settings()['pilot_verified']);
         $work=$s['requested'] || array_filter($s['documents'],fn($d)=>
             (($d['next_attempt']??0)<=time()) && (in_array($d['stage'],['queued','reading','ready','moving','preserving','trashing','source_trashing'],true)
-            || ($d['stage']==='split' && $this->childrenArchived($d,$s['documents']))
+            || (empty($s['source_cleanup_paused']) && $d['stage']==='split' && $this->childrenArchived($d,$s['documents']))
             || ($d['stage']==='archived' && ($d['toconline_state']==='toc_existing'
                 || ($sendEnabled && in_array($d['toconline_state'],['pending','toc_retry'],true))))));
         if (!$work) return;
@@ -310,6 +325,7 @@ final class InvoiceReceipts
         $documents=$this->status()['documents'];
         uasort($documents,static fn($a,$b)=>(int)($a['stage']==='archived')<=>(int)($b['stage']==='archived'));
         foreach ($documents as $id=>$d) {
+            if (!empty($s['source_cleanup_paused']) && in_array($d['stage'],['split','source_trashing'],true)) continue;
             if (!in_array($d['stage'],['queued','reading','ready','moving','preserving','archived','trashing','split','source_trashing'],true) || ($d['next_attempt']??0)>time()) continue;
             if ($d['stage']==='split' && !$this->childrenArchived($d,$documents)) continue;
             if ($d['stage']==='archived' && in_array($d['toconline_state'],['pending','toc_retry'],true)

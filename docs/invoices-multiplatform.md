@@ -447,3 +447,19 @@ Gemini credentials are opaque: do not infer validity from a legacy key prefix.
 Configuration checks bounded printable ASCII without whitespace/control bytes;
 the provider determines authentication. Vault storage and secret-free status
 remain unchanged.
+
+
+### Reply recovery and deferred source cleanup
+The receipt workflow reuses the portal mail sender, cryptographic reply parser and
+ledger. The guarded hosting reply filter must preserve existing mailbox filing.
+A one-off local Maildir recovery can feed retained replies through that same pipe,
+limited to exact outstanding receipt keys, bounded reads and the normal signed
+recipient/date/outcome checks. It never resubmits invoices or modifies email.
+Recovery state is encrypted and repeat-safe, including Maildir filename changes.
+
+The owner has deferred source cleanup. The private source_cleanup_paused flag
+preserves masters in temp_scan while archive and TOConline state continue. Existing
+source permission errors become retained split masters, not new active work or
+successful deletion. Genuine invoice errors remain reviewable; only confirmed
+TOConline duplicates permit retiring their newly archived invoice copy. Source
+cleanup requires a later explicit resume, not a deploy, rerun or permission change.
