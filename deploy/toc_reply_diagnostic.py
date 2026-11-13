@@ -14,6 +14,7 @@ from cpanel_api import DeploymentError, require
 MAIL_ROOT = '/home/welcome/mail/welcomehostel.pt/daniel.ciorcas'
 PIPE = 'room-check-private/cron/toconline-reply.php'
 MAX_BYTES = 262144
+READ_MAX_BYTES = 4 * 1024 * 1024
 AUTH = {'verified','unverified','unsigned','unaligned','unsupported','invalid',
         'body_mismatch','signature_mismatch','dns_unavailable','expired'}
 OUTCOMES = {'toc_accepted','toc_existing','toc_review'}
@@ -48,17 +49,25 @@ def verify_message(raw):
 
 
 def message_shape(raw, verifier=None):
-    require(len(raw)<=MAX_BYTES,'message_too_large')
+    require(len(raw)<=READ_MAX_BYTES,'message_too_large')
     m = BytesParser(policy=email.policy.default).parsebytes(raw)
     senders = email.utils.getaddresses(m.get_all('From',[]))
     if len(senders)!=1 or senders[0][1].lower()!='no_reply@toconline.pt': return None
-    text='\n'.join(p.get_content() for p in m.walk() if p.get_content_type() in ('text/plain','text/html')
+    parts=list(m.walk()); require(len(parts)<=64,'mime_parts')
+    text='\n'.join(p.get_content() for p in parts if p.get_content_type() in ('text/plain','text/html')
                    and p.get_content_disposition()!='attachment')
-    proof=(verifier or verify_message)(raw)
+    oversized=len(raw)>MAX_BYTES
+    proof={} if oversized else (verifier or verify_message)(raw)
+    filenames=re.findall(r'[a-zA-Z0-9._-]+\.(?:pdf|jpe?g)',text,re.I)
     return {'receipt_identifier':bool(re.search(r'receipt[-_][a-f0-9]{64}\.(?:pdf|jpe?g)',text,re.I)),
             'portal_identifier':bool(re.search(r'(?:booking|hostelworld|cloudbeds)[-_][a-f0-9]{64}\.pdf',text,re.I)),
-            'authentication':proof.get('authentication') if proof.get('authentication') in AUTH else 'unrecognized',
-            'outcome':proof.get('outcome') if proof.get('outcome') in OUTCOMES else 'unrecognized'}
+            'over_pipe_limit':oversized,
+            'success_subject':str(m.get('Subject','')).strip()=='Ficheiros arquivados com sucesso - Active Lines, Lda',
+            'duplicate_phrase':'por já constarem no seu arquivo' in text.lower(),
+            'other_document_name':any(not re.fullmatch(r'(?:booking|hostelworld|cloudbeds|receipt)[-_][a-f0-9]{64}\.(?:pdf|jpe?g)',n,re.I) for n in filenames),
+            'document_attachment':any(p.get_content_type() in ('application/pdf','image/jpeg') for p in parts),
+            'authentication':'not_checked_size' if oversized else proof.get('authentication') if proof.get('authentication') in AUTH else 'unrecognized',
+            'outcome':'not_checked_size' if oversized else proof.get('outcome') if proof.get('outcome') in OUTCOMES else 'unrecognized'}
 
 
 class TocMailAPI(MailAPI):
@@ -84,9 +93,9 @@ class TocMailAPI(MailAPI):
                 for entry in self.listing(directory):
                     if entry.get('type')!='file' or float(entry.get('mtime',0))<cutoff: continue
                     name=child_name(entry); size=int(entry.get('size',0))
-                    oversized |= size>MAX_BYTES
-                    if 0<size<=MAX_BYTES: candidates.append((float(entry['mtime']),directory,name,size))
-        budget=12*1024*1024; shapes=set(); scanned=0
+                    oversized |= size>READ_MAX_BYTES
+                    if 0<size<=READ_MAX_BYTES: candidates.append((float(entry['mtime']),directory,name,size))
+        budget=32*1024*1024; shapes=set(); scanned=0
         for _,directory,name,size in sorted(candidates,reverse=True)[:200]:
             if budget<size: break
             budget-=size; scanned+=1
@@ -95,7 +104,7 @@ class TocMailAPI(MailAPI):
                             from_charset='ISO-8859-1',to_charset='UTF-8',update_html_document_encoding=0)
             if isinstance(value,list) and len(value)==1: value=value[0]
             require(isinstance(value,dict) and isinstance(value.get('content'),str),'invalid_content')
-            raw=value['content'].encode('latin-1'); require(len(raw)<=MAX_BYTES,'message_too_large')
+            raw=value['content'].encode('latin-1'); require(len(raw)<=READ_MAX_BYTES,'message_too_large')
             shape=message_shape(raw)
             if shape: shapes.add(json.dumps(shape,sort_keys=True))
             del raw,value

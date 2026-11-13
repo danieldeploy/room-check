@@ -843,3 +843,9 @@ held cleanup as active work. The hold persists until explicitly resumed; deploym
 records its initial application once, without overriding a later deliberate resume.
 Local and CI regressions cover retention, exact matching, repeat recovery, mail
 preservation, filter conflicts and idempotence. Live acceptance remains separate.
+
+The read-only reply diagnostic can inspect bounded messages up to 4 MiB and
+reports fixed size, attachment and response-template flags. This distinguishes
+the receiver's 256 KiB input boundary from missing identifiers without publishing
+mail content. Oversized messages are explicitly not authenticated or accepted by
+this diagnostic; the production receiver and reconciliation policy are unchanged.

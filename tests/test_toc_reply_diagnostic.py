@@ -55,3 +55,26 @@ class Tests(unittest.TestCase):
         result=d.message_shape(m.as_bytes(), lambda raw: {'authentication':'SECRET','outcome':'PRIVATE'})
         self.assertEqual(result['authentication'],'unrecognized')
         self.assertEqual(result['outcome'],'unrecognized')
+
+    def test_large_reply_is_classified_without_claiming_authentication(self):
+        m=EmailMessage(); m['From']='no_reply@toconline.pt'
+        m['Subject']='Ficheiros arquivados com sucesso - Active Lines, Lda'
+        m.set_content('receipt-'+ 'a'*64 +'.pdf')
+        m.add_attachment(b'x'*300000,maintype='application',subtype='pdf',filename='PRIVATE.pdf')
+        with patch.object(d,'verify_message') as verify:
+            result=d.message_shape(m.as_bytes())
+        verify.assert_not_called()
+        self.assertTrue(result['over_pipe_limit'])
+        self.assertTrue(result['success_subject'])
+        self.assertTrue(result['document_attachment'])
+        self.assertEqual(result['authentication'],'not_checked_size')
+        self.assertNotIn('PRIVATE',json.dumps(result))
+
+    def test_unknown_reply_exposes_only_fixed_shape_flags(self):
+        m=EmailMessage(); m['From']='no_reply@toconline.pt'
+        m['Subject']='PRIVATE'; m.set_content('por já constarem no seu arquivo PRIVATE.pdf SECRET')
+        result=d.message_shape(m.as_bytes(),lambda raw:{'authentication':'verified','outcome':'toc_review'})
+        self.assertTrue(result['duplicate_phrase'])
+        self.assertTrue(result['other_document_name'])
+        self.assertFalse(result['success_subject'])
+        self.assertNotIn('PRIVATE',json.dumps(result))
