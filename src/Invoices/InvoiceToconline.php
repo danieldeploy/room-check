@@ -136,15 +136,34 @@ final class InvoiceToconline
             $entry=$ledger[strtolower($key)]??null;
             if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(string)$entry['document_id']]=true;
         }
+        $auth=$proof['authentication']??[];$purchase=$proof['purchase_identity']??[];$fiscalCandidate=null;
+        $signedAt=strtotime((string)($auth['signed_at']??''));
+        if (!$tokens[1] && ($proof['outcome']??'')==='toc_accepted'
+            && ($auth['verified']??false)===true && ($auth['code']??'')==='verified'
+            && ($auth['recipient']??'')===strtolower($settings['sender']) && $signedAt
+            && preg_match('/\A[125689][0-9]{8}\z/',(string)($purchase['issuer_nif']??''))
+            && ($purchase['invoice_number']??'')!=='' && $this->vault->has('receipts-workflow.enc')) {
+            $documents=$this->vault->read('receipts-workflow.enc')['documents']??[];
+            foreach ($ledger as $entry) {
+                $id=(string)$entry['document_id'];$d=$documents[substr($id,8)]??[];
+                $sentAt=strtotime((string)($entry['attempted_at']??''));
+                if (!str_starts_with($id,'receipt:') || $entry['nif']!==$settings['nif'] || $entry['sender']!==$settings['sender']
+                    || ($d['company_nif']??'')!==$settings['nif'] || ($d['issuer_nif']??'')!==$purchase['issuer_nif']
+                    || trim(preg_replace('/\s+/u',' ',(string)($d['invoice_number']??'')))!==$purchase['invoice_number']
+                    || !$sentAt || $signedAt<$sentAt-300) continue;
+                // Include terminal copies too: a replay must never be rebound to a later duplicate scan.
+                $matches[$id]=true;$fiscalCandidate=$entry;
+            }
+        }
         if (count($matches)!==1) return ['result'=>'unmatched'];
         $id=array_key_first($matches); $suggestion='toc_review';
-        $auth=$proof['authentication']??[]; $automatic='toc_review'; $applied=false;
+        $automatic='toc_review'; $applied=false;
         $uniqueTokens=array_unique(array_map('strtolower',$tokens[1]));
         $signedAt=strtotime((string)($auth['signed_at']??''));
         if (($auth['verified']??false)===true && ($auth['code']??'')==='verified'
             && ($auth['recipient']??'')===strtolower($settings['sender'])
-            && count($uniqueTokens)===1 && in_array($proof['outcome']??'',['toc_accepted','toc_existing'],true)) {
-            $candidate=$ledger[reset($uniqueTokens)]??[];
+            && (count($uniqueTokens)===1 || $fiscalCandidate!==null) && in_array($proof['outcome']??'',['toc_accepted','toc_existing'],true)) {
+            $candidate=$fiscalCandidate??($ledger[reset($uniqueTokens)]??[]);
             $sentAt=strtotime((string)($candidate['attempted_at']??''));
             if ($signedAt && $sentAt && $signedAt >= $sentAt-300) $automatic=$proof['outcome'];
         }

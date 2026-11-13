@@ -71,7 +71,7 @@ def filter_shape(filters):
 def verify_message(raw):
     program = ("require 'src/Invoices/InvoiceTocPipe.php'; $r=stream_get_contents(STDIN); "
                "$p=InvoiceTocPipe::parse($r); $a=InvoiceTocAuthentication::verify($r); "
-               "echo json_encode(['authentication'=>$a['code'],'outcome'=>$p['outcome']??'toc_review']);")
+               "echo json_encode(['authentication'=>$a['code'],'outcome'=>$p['outcome']??'toc_review','purchase_identity'=>!empty($p['purchase_identity'])]);")
     result = subprocess.run(['php','-d','display_errors=0','-r',program], input=raw,
                             stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=25,check=True)
     require(len(result.stdout)<2048,'invalid_verifier_result')
@@ -104,6 +104,7 @@ def message_shape(raw, verifier=None):
             'duplicate_phrase':'por já constarem no seu arquivo' in text.lower(),
             'other_document_name':any(not re.fullmatch(r'(?:booking|hostelworld|cloudbeds|receipt)[-_][a-f0-9]{64}\.(?:pdf|jpe?g)',n,re.I) for n in filenames),
             'document_attachment':any(p.get_content_type() in ('application/pdf','image/jpeg') for p in parts),
+            'purchase_identity':proof.get('purchase_identity') is True,
             'authentication':'not_checked_size' if oversized else proof.get('authentication') if proof.get('authentication') in AUTH else 'unrecognized',
             'outcome':'not_checked_size' if oversized else proof.get('outcome') if proof.get('outcome') in OUTCOMES else 'unrecognized'}
 

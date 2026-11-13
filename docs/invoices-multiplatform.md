@@ -475,3 +475,20 @@ not clear submission history, reset confirmed outcomes or resend queued mail.
 The budget leaves headroom for other domain mail but cannot guarantee hosting
 capacity when unrelated mail also consumes the domain quota. Mail-server
 acceptance still requires a separate authenticated TOConline acknowledgement.
+
+## QR-created purchase acknowledgements
+
+The observed successful purchase-association template has supplier NIF and fiscal
+invoice number, but no uploaded filename. Parse only its single, complete fiscal
+identity and known success wording. The existing DKIM verifier still protects
+sender, recipient, subject, date, decoding controls and complete body. Match only
+one recorded receipt submission for the configured company/sender, with exact
+supplier NIF and full invoice number and a signed date no earlier than its send
+attempt (allowing the existing clock-skew tolerance). Include terminal duplicate
+scans in the ambiguity check; never guess between copies or infer an external
+duplicate from an acceptance message. Unknown/multiple rows stay unconfirmed.
+
+The private pipe retains only these necessary structured fields, not raw mail.
+Recovery version 2 revisits bounded recent retained messages skipped by the old
+filename-only correlation, through the same verifier and receiver. It does not
+submit, delete, move or flag mail, and does not reset the outbound ledger.

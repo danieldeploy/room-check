@@ -1,6 +1,14 @@
 # Management Hub — current project state
 
-## TOConline outbound pacing (prepared)
+## TOConline acknowledgement recovery and outbound pacing (prepared)
+
+TOConline has a QR-created purchase acknowledgement that omits the uploaded
+filename and identifies the supplier NIF and fiscal invoice number instead.
+The existing authenticated receiver now accepts this observed template only
+when its signed recipient/date and complete fiscal identity match exactly one
+recorded scan submission. Conflicting or ambiguous copies remain unconfirmed.
+A versioned, bounded retained-mail recovery revisits previously skipped replies
+without re-sending invoices or changing original scan retention.
 
 The shared sender now admits at most ten attempts per rolling hour across
 portal PDFs, receipt scans and the retained diagnostic history. Ledger aliases
