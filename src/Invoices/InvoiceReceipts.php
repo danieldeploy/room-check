@@ -338,6 +338,9 @@ final class InvoiceReceipts
                     $d['resume_stage']=$d['stage'];$d['stage']='failed';$d['error']='drive_trash_permission';$d['next_attempt']=0;
                     $this->put($id,$d);break;
                 }
+                if ($e instanceof InvoiceTocWait) {
+                    $d['error']='';$d['next_attempt']=$e->retryAt;$this->put($id,$d);break;
+                }
                 if ($e instanceof InvoiceGeminiRetry) {
                     $d['error']=$e->getMessage(); $d['next_attempt']=$e->retryAt;
                     if ($e->getMessage()==='gemini_retry') {

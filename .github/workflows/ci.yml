@@ -153,6 +153,7 @@ jobs:
           php tests/invoice-azure.php
           (ulimit -v 4000000; TEST_NODE_BINARY=$(command -v node) php tests/invoice-receipt-pdf.php)
           php tests/invoice-toconline.php
+          php tests/invoice-toc-pacing.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-toc-recovery.php
           php tests/invoice-hostelworld-pipe.php

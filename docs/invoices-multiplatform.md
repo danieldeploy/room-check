@@ -463,3 +463,15 @@ source permission errors become retained split masters, not new active work or
 successful deletion. Genuine invoice errors remain reviewable; only confirmed
 TOConline duplicates permit retiring their newly archived invoice copy. Source
 cleanup requires a later explicit resume, not a deploy, rerun or permission change.
+
+## Shared outbound capacity
+
+All portal and scan deliveries share a rolling ten-attempt hourly budget,
+including uncertain attempts and explicit diagnostic sends. Duplicate ledger
+aliases do not consume extra capacity. Capacity is checked before committing
+send intent; unsent scans wait with the existing countdown and retry through
+the existing invoice cron, without failed-attempt increments. Throttling does
+not clear submission history, reset confirmed outcomes or resend queued mail.
+The budget leaves headroom for other domain mail but cannot guarantee hosting
+capacity when unrelated mail also consumes the domain quota. Mail-server
+acceptance still requires a separate authenticated TOConline acknowledgement.

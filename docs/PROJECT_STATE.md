@@ -1,5 +1,20 @@
 # Management Hub — current project state
 
+## TOConline outbound pacing (prepared)
+
+The shared sender now admits at most ten attempts per rolling hour across
+portal PDFs, receipt scans and the retained diagnostic history. Ledger aliases
+count once; uncertain attempts still consume capacity. A throttled scan keeps
+its verified archive, records a retry deadline without consuming an attempt,
+and resumes on the existing cron. Previously submitted documents are never
+requeued by this change. Hosting queue delivery and TOConline acknowledgement
+remain separate from local mail acceptance.
+
+Read-only delivery diagnosis recognizes hourly quota/deferred/discarded outcomes
+and excludes original-message headers from bounce classification; an Exim
+version must not be mistaken for an enhanced SMTP status. Required checks,
+installed release and real external confirmation remain separate acceptance.
+
 ## Cross-automation exception alerts — 2026-11-07
 
 The owner requires WhatsApp alerts for detected unexpected exceptions, execution

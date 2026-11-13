@@ -22,11 +22,14 @@ OUTCOMES = {'toc_accepted','toc_existing','toc_review'}
 
 
 def failure_shape(text):
-    value=text.lower()
+    value=re.split(r'-{3,}\s*this is a copy of the message',text,flags=re.I)[0].lower()
+    value=re.sub(r'\bexim\s+[0-9.]+','exim',value)
     markers=['spam','quota','blacklist','blocklist','rate limit','too many','max defers',
              'maximum allowed','timeout','timed out','unrouteable','relay','spf','dkim','dmarc',
              'virus','malware','message size','message rejected','retry time not reached',
-             'connection refused','greylist','recipient rejected','mailbox unavailable']
+             'connection refused','greylist','recipient rejected','mailbox unavailable',
+             'max emails per hour','reattempted later','message discarded','connection timed out',
+             'all hosts for','rate exceeded','temporarily rejected','smtp error']
     return {'smtp_codes':sorted(set(re.findall(r'\b[45][0-9]{2}\b',value))),
             'enhanced_codes':sorted(set(re.findall(r'\b[45]\.[0-9]{1,3}\.[0-9]{1,3}\b',value))),
             'markers':[word for word in markers if word in value]}

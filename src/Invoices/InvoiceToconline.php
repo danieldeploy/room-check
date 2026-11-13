@@ -2,6 +2,11 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceVault.php';
 
+final class InvoiceTocWait extends RuntimeException
+{
+    public function __construct(public readonly int $retryAt) { parent::__construct('toc_send_wait'); }
+}
+
 /** Every caller holds room_check_invoices. The encrypted ledger precedes network side effects. */
 final class InvoiceToconline
 {
@@ -209,13 +214,15 @@ final class InvoiceToconline
                 }
                 $message=self::message($pdf,$identity,$settings['sender'],$d['portal']);
             } catch (Throwable) { $this->state((int)$d['id'],'toc_retry'); continue; }
-            $this->transmit($ledger,(int)$d['id'],$identity,$content,$settings,$message,$to);
+            try { $this->transmit($ledger,(int)$d['id'],$identity,$content,$settings,$message,$to); }
+            catch (InvoiceTocWait) { break; } // Still unsent; the existing cron resumes it.
         }
     }
 
     /** Shared at-most-once email transport for portal PDFs and receipt scans. */
     private function transmit(array &$ledger,int|string $id,string $identity,string $content,array $settings,array $message,string $to): void
     {
+        $this->assertSendBudget($ledger);
         $entry=['document_id'=>$id,'nif'=>$settings['nif'],'sender'=>$settings['sender'],'state'=>'toc_sending','attempted_at'=>gmdate('c')];
         $ledger[$identity]=$entry; $ledger[$content]=$entry;
         $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,'toc_sending');
@@ -225,6 +232,24 @@ final class InvoiceToconline
         } catch (Throwable) { $entry['state']='toc_uncertain'; }
         $ledger[$identity]=$entry; $ledger[$content]=$entry;
         $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,$entry['state']);
+    }
+
+    /** Shared rolling budget leaves capacity for the domain's other mail. No sleep under the lock. */
+    private function assertSendBudget(array $ledger): void
+    {
+        $now=time();$attempts=[];
+        foreach ($ledger as $entry) {
+            $at=strtotime((string)($entry['attempted_at']??''));
+            if ($at && $at>$now-3600) $attempts[(string)$entry['document_id'].'|'.$at]=$at;
+        }
+        foreach ($this->diagnosticAttempts() as $key=>$entry) {
+            $at=strtotime((string)($entry['attempted_at']??''));
+            if ($at && $at>$now-3600) $attempts['diagnostic:'.$key]=$at;
+        }
+        if (count($attempts)>=10) {
+            sort($attempts,SORT_NUMERIC);
+            throw new InvoiceTocWait($attempts[count($attempts)-10]+3600);
+        }
     }
 
     public function submitReceipt(array $d): void
@@ -237,6 +262,7 @@ final class InvoiceToconline
         // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.
         $content=$identity; $existing=$ledger[$identity]??null;
         if ($existing) { $this->state($id,(string)$existing['document_id']===$id?$existing['state']:'toc_duplicate'); return; }
+        $this->assertSendBudget($ledger);
         $this->drive->connect(); // Receipt-only cron runs may never have entered the portal sender.
         $pdf=$this->drive->verifiedReceipt($d);
         if (strlen($pdf)!==(int)$d['size'] || strlen($pdf)>10*1024*1024
@@ -304,6 +330,7 @@ final class InvoiceToconline
             }
         }
         if ($ledger[$identity]!==$ledger[$content]) throw new RuntimeException('toc_ineligible');
+        $this->assertSendBudget($ledger);
         $this->drive->connect(); $pdf=$this->drive->verifiedPdf($d); self::assertPdf($pdf,$d);
         $message=self::message($pdf,$identity,$settings['sender']);
         $attemptId=bin2hex(random_bytes(16));
