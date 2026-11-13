@@ -849,3 +849,11 @@ reports fixed size, attachment and response-template flags. This distinguishes
 the receiver's 256 KiB input boundary from missing identifiers without publishing
 mail content. Oversized messages are explicitly not authenticated or accepted by
 this diagnostic; the production receiver and reconciliation policy are unchanged.
+
+The same protected read-only diagnostic now checks recent outbound TOConline
+delivery states through the existing EmailTrack API path and inspects relevant
+bounces in the cPanel account mailbox as well as the reply mailbox. It emits only
+fixed SMTP classifications and identifier-presence flags, never addresses,
+document identities or raw server/mail text. Mail acceptance remains distinct
+from transport delivery and provider archive confirmation. No resend or state
+mutation is performed by this diagnostic.
