@@ -66,5 +66,12 @@ try {
  $s=$flow->status();$s['documents'][$legacyId]['stage']='source_trashing';$s['documents'][$legacyId]['error']='drive_permission';$s['documents'][$legacyId]['next_attempt']=time()+3600;
  $drive->files[$legacyId]['trashed']=false;$drive->trashDenied=$legacyId;$vault->save(InvoiceReceipts::FILE,$s);$flow->run();
  gq($flow->status()['documents'][$legacyId]['error']==='drive_trash_permission' && $flow->status()['documents'][$legacyId]['stage']==='failed','legacy permission backoff becomes actionable without resending');
+ // The owner can defer source cleanup without blocking invoice confirmation.
+ InvoiceReceipts::pauseSourceCleanup($vault);$drive->trashDenied='';$sentBefore=count($sent);$flow->run();
+ $paused=$flow->status();
+ gq(!empty($paused['source_cleanup_paused']) && $paused['documents'][$legacyId]['stage']==='split' && $paused['documents'][$legacyId]['error']==='','explicit hold replaces only cleanup errors');
+ gq(!$drive->files[$legacyId]['trashed'] && count($sent)===$sentBefore,'held original is neither trashed nor resubmitted');
+ require_once dirname(__DIR__).'/src/Invoices/InvoiceReceiptReport.php';
+ gq(!InvoiceReceiptReport::progress($paused)['busy'],'retained master is not perpetual processing');
  echo "Grouped lifecycle, interrupted upload, pending preservation, source cleanup and manual resume passed\n";
 } finally { foreach(glob($dir.'/*')?:[] as $f)unlink($f);rmdir($dir); }

@@ -46,7 +46,7 @@ final class InvoiceReceiptReport
                 $at=(int)($d['next_attempt']??0);
                 if ($at>time()) $next=$next?min($next,$at):$at; else $busy=true;
             }
-            if ($stage==='split') {
+            if ($stage==='split' && empty($state['source_cleanup_paused'])) {
                 $ready=!empty($d['children']);foreach ($d['children']??[] as $child) {
                     $c=$state['documents'][$child]??[];
                     if ((empty($c['archived_at']) && empty($c['preserved_at'])) || ($c['review_reason']??'')==='receipt_grouping_required') $ready=false;

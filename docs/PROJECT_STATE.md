@@ -823,3 +823,23 @@ or credentials. The current PHP DKIM/parser handles transient reply bytes; no
 archive, resend, mail flag, queue, Drive cleanup or Hub state is changed. This
 is diagnosis, not evidence of provider acceptance. Local regression checks cover
 output privacy and read boundaries; actual routing remains to be verified.
+
+
+### TOConline reply route and retained-reply recovery
+Prepared: the guarded deployment installs a dedicated TOConline pipe filter only
+when the sender's existing filing rule retains a mailbox copy and has no stopping
+or conflicting pipe actions. It preserves every previous filter and verifies
+readback. Existing conflicting rules stop the operation for inspection.
+
+A private, bounded one-off recovery reads recent retained local replies, selects
+only exact outstanding receipt identities, and queues them through the existing
+DKIM verifier and delivery ledger. It does not resend invoices or modify mail.
+The existing worker continues future reply processing; no new scheduler or password.
+
+Owner-deferred temp_scan source cleanup is explicitly paused in the private workflow.
+Only source-cleanup permission failures become retained masters; invoice errors and
+external outcomes remain intact. Processing/report polling no longer treats the
+held cleanup as active work. The hold persists until explicitly resumed; deployment
+records its initial application once, without overriding a later deliberate resume.
+Local and CI regressions cover retention, exact matching, repeat recovery, mail
+preservation, filter conflicts and idempotence. Live acceptance remains separate.

@@ -229,6 +229,7 @@ final class InvoiceText
         'toc_receipt' => ['Verifiquei a origem da resposta e a correspondência com esta fatura; o resultado selecionado está correto.', 'I verified the reply source and its correspondence to this invoice; the selected outcome is correct.'],
         'toc_confirm' => ['Registar resultado confirmado', 'Record confirmed outcome'],
         'toc_pending' => ['Aguarda envio ou configuração de e-mail', 'Awaiting sending or email setup'],
+        'receipt_cleanup_deferred' => ['Os originais permanecem em temp_scan. A limpeza está suspensa; o arquivo e a confirmação no TOConline continuam.', 'Originals remain in temp_scan. Cleanup is paused; archiving and TOConline confirmation continue.'],
         'toc_submitted' => ['Entregue ao serviço de e-mail; aceitação TOConline por confirmar', 'Submitted to mail service; TOConline acceptance unconfirmed'],
         'toc_uncertain' => ['Envio incerto — conferir antes de qualquer reenvio', 'Uncertain submission — reconcile before any resend'],
         'toc_sending' => ['Envio em curso — não repetir', 'Sending — do not resend'],
