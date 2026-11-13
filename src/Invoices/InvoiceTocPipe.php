@@ -142,7 +142,7 @@ final class InvoiceTocPipe
             || !str_contains($text,'Fatura criada automaticamente via QRCode')) return [];
         foreach (['Fornecedor NIF:','e-Fatura:','Fatura de compra:'] as $label) if (substr_count($text,$label)!==1) return [];
         if (!preg_match('/Fornecedor NIF:\s*([125689][0-9]{8})\s*Fornecedor\s*:/u',$text,$nif)
-            || !preg_match('/e-Fatura:\s*([A-Z][A-Z0-9]{0,7}[ \t]+[A-Z0-9][A-Z0-9 ._\/-]{0,99}?)\s*Fatura de compra:/u',$text,$number)) return [];
+            || !preg_match('/e-Fatura:\s*([A-Z0-9][A-Z0-9]{0,7}[ \t]+[A-Z0-9][A-Z0-9 ._\/-]{0,99}?)\s*Fatura de compra:/u',$text,$number)) return [];
         return ['issuer_nif'=>$nif[1],'invoice_number'=>trim(preg_replace('/\s+/u',' ',$number[1]))];
     }
 

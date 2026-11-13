@@ -16,6 +16,7 @@ $html=str_replace('Content-Type: text/plain; charset=UTF-8','Content-Type: text/
 $html=str_replace($body,'<p>Ficheiros arquivados e associados automaticamente a faturas de compra:</p><table><tr><td>Fornecedor NIF:</td><td>500000000</td></tr><tr><td>Fornecedor:</td><td>Synthetic Supplier</td></tr><tr><td>e-Fatura:</td><td>FR TEST/101</td></tr><tr><td>Fatura de compra:</td><td>FC TEST/7 (*)</td></tr></table><p>(*) Fatura criada automaticamente via QRCode</p>',$html);
 purchaseCheck(InvoiceTocPipe::parse($html)['purchase_identity']===$p['purchase_identity'],'HTML table cells without source newlines retain fiscal boundaries');
 purchaseCheck((InvoiceTocPipe::parse(str_replace('Fornecedor NIF:','Fornecedor&nbsp;NIF:',$html))['purchase_identity']??[])===$p['purchase_identity'],'provider nonbreaking HTML spaces keep exact fiscal identity');
+purchaseCheck((InvoiceTocPipe::parse(str_replace('FR TEST/101','1 TEST/101',$mail))['purchase_identity']['invoice_number']??'')==='1 TEST/101','numeric fiscal series stays an exact complete identifier');
 $dir=sys_get_temp_dir().'/toc-purchase-'.bin2hex(random_bytes(8));mkdir($dir,0700);file_put_contents($dir.'/master.key',random_bytes(32));chmod($dir.'/master.key',0600);
 try {
  $v=new InvoiceVault($dir);$pdo=new PDO('sqlite::memory:');$toc=new InvoiceToconline($pdo,$v,new stdClass());
