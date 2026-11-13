@@ -10,6 +10,7 @@ import time
 from cloudbeds_mail_inspect import MailAPI, child_name
 from hostelworld_filters import FilterAPI, rows
 from cpanel_api import DeploymentError, require
+from cpanel_disk_cleanup import request_api
 
 MAIL_ROOT = '/home/welcome/mail/welcomehostel.pt/daniel.ciorcas'
 PIPE = 'room-check-private/cron/toconline-reply.php'
@@ -18,6 +19,32 @@ READ_MAX_BYTES = 4 * 1024 * 1024
 AUTH = {'verified','unverified','unsigned','unaligned','unsupported','invalid',
         'body_mismatch','signature_mismatch','dns_unavailable','expired'}
 OUTCOMES = {'toc_accepted','toc_existing','toc_review'}
+
+
+def failure_shape(text):
+    value=text.lower()
+    markers=['spam','quota','blacklist','blocklist','rate limit','too many','max defers',
+             'maximum allowed','timeout','timed out','unrouteable','relay','spf','dkim','dmarc',
+             'virus','malware','message size','message rejected','retry time not reached',
+             'connection refused','greylist','recipient rejected','mailbox unavailable']
+    return {'smtp_codes':sorted(set(re.findall(r'\b[45][0-9]{2}\b',value))),
+            'enhanced_codes':sorted(set(re.findall(r'\b[45]\.[0-9]{1,3}\.[0-9]{1,3}\b',value))),
+            'markers':[word for word in markers if word in value]}
+
+
+def delivery_shapes(records,now=None):
+    now=time.time() if now is None else now
+    require(isinstance(records,list) and len(records)<=10000,'delivery_limit')
+    shapes=set()
+    for row in records:
+        if not isinstance(row,dict): continue
+        if not re.fullmatch(r'[0-9]{9}@my\.toconline\.pt',str(row.get('recipient','')),re.I): continue
+        stamp=str(row.get('actionunixtime',''))
+        if not stamp.isdigit() or not now-3*86400<=int(stamp)<=now+300: continue
+        shape={'state':row.get('type') if row.get('type') in ('success','defer','failure','inprogress') else 'unknown',
+               **failure_shape(str(row.get('message',''))+' '+str(row.get('reason','')))}
+        shapes.add(json.dumps(shape,sort_keys=True))
+    return [json.loads(s) for s in sorted(shapes)]
 
 
 def filter_shape(filters):
@@ -52,10 +79,18 @@ def message_shape(raw, verifier=None):
     require(len(raw)<=READ_MAX_BYTES,'message_too_large')
     m = BytesParser(policy=email.policy.default).parsebytes(raw)
     senders = email.utils.getaddresses(m.get_all('From',[]))
-    if len(senders)!=1 or senders[0][1].lower()!='no_reply@toconline.pt': return None
+    if len(senders)!=1: return None
+    sender=senders[0][1].lower()
+    toc=sender=='no_reply@toconline.pt'
+    bounce=sender.split('@')[0] in ('mailer-daemon','postmaster','mailnull')
+    if not toc and not bounce: return None
     parts=list(m.walk()); require(len(parts)<=64,'mime_parts')
     text='\n'.join(p.get_content() for p in parts if p.get_content_type() in ('text/plain','text/html')
                    and p.get_content_disposition()!='attachment')
+    if bounce:
+        original=bool(re.search(r'toc-[a-f0-9]{64}@check\.welcomehostel\.pt',text+'\n'+raw.decode('latin-1'),re.I))
+        if not original and not re.search(r'[0-9]{9}@my\.toconline\.pt',text,re.I): return None
+        return {'kind':'delivery_failure','original_identifier':original,**failure_shape(text)}
     oversized=len(raw)>MAX_BYTES
     proof={} if oversized else (verifier or verify_message)(raw)
     filenames=re.findall(r'[a-zA-Z0-9._-]+\.(?:pdf|jpe?g)',text,re.I)
@@ -78,7 +113,9 @@ class TocMailAPI(MailAPI):
 
     def inspect_replies(self):
         cutoff=time.time()-3*86400
-        folders=[self.root]
+        # PHP mail's envelope failures can return to the cPanel account mailbox.
+        # Inspect only its cur/new, never other domain/account subdirectories.
+        folders=[self.root,'/home/welcome/mail']
         for row in self.listing(self.root):
             if row.get('file') in ('.','..'): continue
             name=child_name(row)
@@ -119,6 +156,10 @@ def main():
         api=FilterAPI('welcome')
         print(json.dumps({'filters':filter_shape(api.call('Email','list_filters',
                           account='daniel.ciorcas@welcomehostel.pt'))}),flush=True)
+        stage='transport'
+        result=request_api('EmailTrack','search',{'success':1,'defer':1,'failure':1,'inprogress':1},legacy=True)
+        print(json.dumps({'transport':{'overflowed':bool(result.get('metadata',{}).get('overflowed')),
+                         'shapes':delivery_shapes(result.get('data',[]))}}),flush=True)
         stage='mailbox'
         print(json.dumps({'mailbox':TocMailAPI().inspect_replies()}),flush=True)
         return 0

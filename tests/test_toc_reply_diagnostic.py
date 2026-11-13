@@ -78,3 +78,21 @@ class Tests(unittest.TestCase):
         self.assertTrue(result['other_document_name'])
         self.assertFalse(result['success_subject'])
         self.assertNotIn('PRIVATE',json.dumps(result))
+
+    def test_delivery_trace_is_filtered_and_does_not_expose_server_messages(self):
+        rows=[{'recipient':'123456789@my.toconline.pt','actionunixtime':'300000','type':'failure',
+               'message':'550 5.7.1 Message rejected as spam PRIVATE SECRET','sender':'private@example.test'},
+              {'recipient':'other@example.test','actionunixtime':'300000','type':'defer','message':'quota'},
+              {'recipient':'123456789@my.toconline.pt','actionunixtime':'1','type':'success'}]
+        result=d.delivery_shapes(rows,now=300001)
+        self.assertEqual(result,[{'state':'failure','smtp_codes':['550'],'enhanced_codes':['5.7.1'],'markers':['spam','message rejected']}])
+        for value in ('PRIVATE','SECRET','example','123456789','quota'):
+            self.assertNotIn(value,json.dumps(result))
+
+    def test_bounce_shape_finds_exact_original_identifier_without_content(self):
+        m=EmailMessage();m['From']='Mail Delivery System <mailer-daemon@example.test>'
+        m.set_content('513188118@my.toconline.pt\n550 5.7.1 spam\nMessage-ID: <toc-'+ 'a'*64 +'@check.welcomehostel.pt>\nPRIVATE')
+        result=d.message_shape(m.as_bytes())
+        self.assertEqual(result['kind'],'delivery_failure')
+        self.assertTrue(result['original_identifier'])
+        self.assertNotIn('PRIVATE',json.dumps(result))
