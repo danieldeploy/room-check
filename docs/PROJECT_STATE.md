@@ -813,3 +813,13 @@ Polling also clears resolved global connection errors instead of retaining stale
 banners after the worker recovers. Regression tests exercise preservation,
 permission recovery without resubmission, legacy denial classification and safe
 live error updates. Mobile PDF compatibility remains outside this change.
+
+
+### TOConline reply route diagnosis
+Prepared: a protected, read-only one-off workflow reuses existing WHM clients to
+inspect the configured reply mailbox filters and bounded recent mail. It emits
+only fixed classifications and booleans, never mail content, document identifiers
+or credentials. The current PHP DKIM/parser handles transient reply bytes; no
+archive, resend, mail flag, queue, Drive cleanup or Hub state is changed. This
+is diagnosis, not evidence of provider acceptance. Local regression checks cover
+output privacy and read boundaries; actual routing remains to be verified.
