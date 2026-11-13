@@ -1,5 +1,29 @@
 # Management Hub — current project state
 
+## TOConline acknowledgement recovery and outbound pacing (prepared)
+
+TOConline has a QR-created purchase acknowledgement that omits the uploaded
+filename and identifies the supplier NIF and fiscal invoice number instead.
+The existing authenticated receiver now accepts this observed template only
+when its signed recipient/date and complete fiscal identity match exactly one
+recorded scan submission. Conflicting or ambiguous copies remain unconfirmed and an authenticated reply
+for multiple scans is surfaced as reply-received/review, preserving final states.
+A versioned, bounded retained-mail recovery revisits previously skipped replies
+without re-sending invoices or changing original scan retention.
+
+The shared sender now admits at most ten attempts per rolling hour across
+portal PDFs, receipt scans and the retained diagnostic history. Ledger aliases
+count once; uncertain attempts still consume capacity. A throttled scan keeps
+its verified archive, records a retry deadline without consuming an attempt,
+and resumes on the existing cron. Previously submitted documents are never
+requeued by this change. Hosting queue delivery and TOConline acknowledgement
+remain separate from local mail acceptance.
+
+Read-only delivery diagnosis recognizes hourly quota/deferred/discarded outcomes
+and excludes original-message headers from bounce classification; an Exim
+version must not be mistaken for an enhanced SMTP status. Required checks,
+installed release and real external confirmation remain separate acceptance.
+
 ## Cross-automation exception alerts — 2026-11-07
 
 The owner requires WhatsApp alerts for detected unexpected exceptions, execution

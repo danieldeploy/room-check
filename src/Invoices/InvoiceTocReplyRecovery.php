@@ -9,12 +9,14 @@ final class InvoiceTocReplyRecovery
     {
         if (realpath($mailRoot)!==$mailRoot || !is_dir($mailRoot) || is_link($mailRoot)) throw new RuntimeException('toc_recovery_root');
         $state=$vault->has('toconline-recovery.enc')?$vault->read('toconline-recovery.enc'):['seen'=>[]];
+        if (($state['correlation_version']??1)<InvoiceTocPipe::CORRELATION_VERSION) $state=['seen'=>[],'correlation_version'=>InvoiceTocPipe::CORRELATION_VERSION];
         if (!empty($state['complete'])) return ['complete'=>true,'queued'=>0];
         $ledger=$vault->has('toconline-ledger.enc')?$vault->read('toconline-ledger.enc'):[];
         $keys=[];
         foreach ($ledger as $key=>$entry) if (preg_match('/\A[a-f0-9]{64}\z/',(string)$key)
             && str_starts_with((string)($entry['document_id']??''),'receipt:')
             && in_array($entry['state']??'',['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) $keys[$key]=true;
+        $documents=$vault->has('receipts-workflow.enc')?($vault->read('receipts-workflow.enc')['documents']??[]):[];
         $folders=[$mailRoot];$files=[];$now=time();$scanned=0;
         foreach (new DirectoryIterator($mailRoot) as $file) {
             if (!$file->isDot() && !$file->isLink() && $file->isDir() && str_starts_with($file->getFilename(),'.')) $folders[]=$file->getPathname();
@@ -43,7 +45,13 @@ final class InvoiceTocReplyRecovery
             if ($parsed!==null) {
                 preg_match_all('/booking-([a-f0-9]{64})\.pdf/',$parsed['text'],$m);
                 $tokens=array_values(array_unique($m[1]));
-                if (count($tokens)===1 && isset($keys[$tokens[0]])) {
+                $fiscal=false;$purchase=$parsed['purchase_identity']??[];
+                if (!$tokens && $purchase) foreach ($keys as $key=>$unused) {
+                    $d=$documents[substr((string)$ledger[$key]['document_id'],8)]??[];
+                    if (($d['issuer_nif']??'')===$purchase['issuer_nif']
+                        && trim(preg_replace('/\s+/u',' ',(string)($d['invoice_number']??'')))===$purchase['invoice_number']) $fiscal=true;
+                }
+                if ((count($tokens)===1 && isset($keys[$tokens[0]])) || $fiscal) {
                     $pipe->enqueue($raw);$queued++;
                 }
             }

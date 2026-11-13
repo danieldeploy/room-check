@@ -19,3 +19,27 @@ References: RFC 6376 (DKIM canonicalization, header selection, verification) and
 The private diagnostic lists missing signature coverage only as names from a fixed interpretation-header allowlist. It never includes header values.
 
 Multipart handling: the signed outer Content-Type fixes boundaries; child interpretation headers are covered by the full signed body. The parser does not consume an outer identity Content-Transfer-Encoding (7bit, 8bit, binary), so its signature is not required. Encoded outer multipart and unsigned leaf decoding headers remain manual. Diagnostic MIME facts are only a boolean and an allowlisted encoding name.
+
+## QR-created purchase acknowledgements
+
+The observed successful purchase-association template has supplier NIF and fiscal
+invoice number, but no uploaded filename. Parse only its single, complete fiscal
+identity and known success wording. The existing DKIM verifier still protects
+sender, recipient, subject, date, decoding controls and complete body. Match only
+one recorded receipt submission for the configured company/sender, with exact
+supplier NIF and full invoice number and a signed date no earlier than its send
+attempt (allowing the existing clock-skew tolerance). Include terminal duplicate
+scans in the ambiguity check; never guess between copies or infer an external
+duplicate from an acceptance message. Unknown/multiple rows stay unconfirmed.
+
+The private pipe retains only these necessary structured fields, not raw mail.
+Recovery version 2 revisits bounded recent retained messages skipped by the old
+filename-only correlation, through the same verifier and receiver. It does not
+submit, delete, move or flag mail, and does not reset the outbound ledger.
+
+Purchase association can refer to a newly created or already existing purchase;
+the optional creation footnote is not an archive-success requirement. A signed
+acknowledgement matching multiple recorded scans sets only the nonterminal
+copies to reply-received/review, retaining ambiguity evidence. It does not
+select a copy, declare a duplicate or alter any final outcome. Existing reports
+and exception alerts expose this review requirement.

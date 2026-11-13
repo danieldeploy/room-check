@@ -25,6 +25,18 @@ try {
  $state=$vault->read('toconline-recovery.enc');$state['complete']=false;$vault->save('toconline-recovery.enc',$state);
  $again=InvoiceTocReplyRecovery::run($vault,$root.'/mail');
  tr($again['queued']===0&&count(glob($root.'/vault/toc-pipe-*.enc'))===0,'recovery is idempotent after Maildir flag/name change');
+ // A completed legacy scan skipped the QR-created purchase template. Revisit only
+ // relevant retained mail through the unchanged authentication/receiver path.
+ $purchase='Ficheiros arquivados e associados automaticamente a faturas de compra: Fornecedor NIF: 500000000 Fornecedor: Synthetic e-Fatura: FT TEST/2 Fatura de compra: FC TEST/9 (*) Fatura criada automaticamente via QRCode';
+ $purchaseMail=str_replace('receipt-'.$token.'.pdf',$purchase,$mail);
+ file_put_contents($root.'/mail/cur/purchase',$purchaseMail);
+ $vault->save('receipts-workflow.enc',['documents'=>['synthetic'=>['issuer_nif'=>'500000000','invoice_number'=>'FT TEST/2']]]);
+ $vault->save('toconline-recovery.enc',['complete'=>true,'seen'=>[hash('sha256',$purchaseMail)=>time()]]);
+ $upgraded=InvoiceTocReplyRecovery::run($vault,$root.'/mail');
+ tr($upgraded['complete']&&$upgraded['queued']===2,'parser upgrade recovers matching filename and fiscal evidence only');
+ $pipe=new InvoiceTocPipe($vault);$pipe->process($toc);
+ $last=end($received);tr($last[4]['authentication']['code']==='unsigned','fiscal recovery does not bypass signature verification');
+ tr(InvoiceTocReplyRecovery::run($vault,$root.'/mail')['queued']===0,'versioned recovery remains one-off');
  echo "TOConline reply recovery safeguards passed\n";
 } finally {
  $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);

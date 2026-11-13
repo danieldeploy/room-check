@@ -7,6 +7,7 @@ require_once __DIR__.'/InvoiceTocAuthentication.php';
 final class InvoiceTocPipe
 {
     public const MAX_BYTES=262144;
+    public const CORRELATION_VERSION=2;
     public function __construct(private readonly InvoiceVault $vault) {}
 
     /** Exim's pipe transport may prepend one Unix mailbox From_ envelope line.
@@ -125,7 +126,23 @@ final class InvoiceTocPipe
             if ($duplicate && !$success) $outcome='toc_existing';
             elseif ($success && !$duplicate) $outcome='toc_accepted';
         }
-        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome];
+        $purchase=[];
+        if ($success && !$duplicate && !$tokens && !$pdfNames[0]) {
+            $purchase=self::purchaseIdentity($text);
+            if ($purchase) $outcome='toc_accepted';
+        }
+        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase];
+    }
+
+    /** Observed QR-created purchase acknowledgement omits the uploaded filename. */
+    private static function purchaseIdentity(string $text): array
+    {
+        $text=preg_replace('/[\s\x{00A0}]+/u',' ',$text)??'';
+        if (!str_contains($text,'Ficheiros arquivados e associados automaticamente a faturas de compra:')) return [];
+        foreach (['Fornecedor NIF:','e-Fatura:','Fatura de compra:'] as $label) if (substr_count($text,$label)!==1) return [];
+        if (!preg_match('/Fornecedor NIF:\s*([125689][0-9]{8})\s*Fornecedor\s*:/u',$text,$nif)
+            || !preg_match('/e-Fatura:\s*([A-Z0-9][A-Z0-9]{0,7}[ \t]+[A-Z0-9][A-Z0-9 ._\/-]{0,99}?)\s*Fatura de compra:\s*FC\s+[A-Z0-9._-]+\/[A-Z0-9._-]+/u',$text,$number)) return [];
+        return ['issuer_nif'=>$nif[1],'invoice_number'=>trim(preg_replace('/\s+/u',' ',$number[1]))];
     }
 
     public function enqueue(string $raw): bool
@@ -161,10 +178,12 @@ final class InvoiceTocPipe
             $name=basename($file); if (!preg_match('/\Atoc-pipe-([a-f0-9]{64})\.enc\z/',$name,$m)) continue;
             $receipt=$this->vault->read($name);
             if (!hash_equals($m[1],$receipt['hash']??'')) throw new RuntimeException('toc_pipe_queue');
-            if (!in_array($receipt['hash'],$status['recent'],true)) {
-                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review']);
+            // A previously unmatched filename-only parse may now carry signed fiscal evidence.
+            $event=$receipt['hash'].(!empty($receipt['purchase_identity'])?':purchase-v'.self::CORRELATION_VERSION:'');
+            if (!in_array($event,$status['recent'],true)) {
+                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[]]);
                 $status[$result['result']==='matched'?'matched':'unmatched']++;
-                $status['recent']=array_slice([...$status['recent'],$receipt['hash']],-250);
+                $status['recent']=array_slice([...$status['recent'],$event],-250);
                 $status['authentication']=$receipt['authentication']['code']??'not_checked';
                 $status['authentication_facts']=$receipt['authentication']['facts']??[];
                 $status['outcome']=$result['outcome']??'toc_review';

@@ -236,6 +236,7 @@ final class InvoiceText
         'toc_accepted' => ['Arquivo aceite no TOConline — confirmado', 'Archive accepted in TOConline — confirmed'],
         'toc_duplicate' => ['Duplicado bloqueado pelo Hub', 'Duplicate blocked by Hub'],
         'toc_retry' => ['Falha antes do envio — aguarda nova tentativa', 'Pre-send failure — awaiting retry'],
+        'toc_send_wait' => ['A aguardar disponibilidade no limite horário de e-mails. O documento ainda não foi enviado.', 'Waiting for hourly email capacity. The document has not been sent yet.'],
         'toc_invalid_settings' => ['Verifique o NIF, o remetente e a autorização de envio.', 'Check the tax number, sender and sending authorisation.'],
         'toc_pilot_required' => ['Confirme primeiro a aceitação de uma fatura com este remetente e destino.', 'First confirm acceptance of an invoice with this sender and destination.'],
         'toc_ineligible' => ['Documento não elegível para esta operação.', 'Document is not eligible for this action.'],

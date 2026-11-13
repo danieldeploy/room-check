@@ -77,4 +77,8 @@ authCheck(InvoiceTocPipe::parse($multipartRaw)['outcome']==='toc_existing','sign
 authCheck(!InvoiceTocAuthentication::verify(str_replace('Content-Transfer-Encoding: base64','Content-Transfer-Encoding: 7bit',$multipartRaw),$resolver,$now)['verified'],'changing child encoding breaks signed body integrity');
 authCheck(!InvoiceTocAuthentication::verify(str_replace('Content-Transfer-Encoding: 8bit','Content-Transfer-Encoding: base64',$multipartRaw),$resolver,$now)['verified'],'encoded outer multipart is unsupported');
 authCheck(!InvoiceTocAuthentication::verify(str_replace('boundary="synthetic-boundary"','boundary="tampered"',$multipartRaw),$resolver,$now)['verified'],'multipart boundary remains signature protected');
+$purchaseBody="Ficheiros arquivados e associados automaticamente a faturas de compra: Fornecedor NIF: 500000000 Fornecedor: Synthetic e-Fatura: FR TEST/101 Fatura de compra: FC TEST/7 (*) Fatura criada automaticamente via QRCode\r\n";
+$purchaseRaw=$sign($success,$purchaseBody);
+authCheck(InvoiceTocAuthentication::verify($purchaseRaw,$resolver,$now)['verified']&&InvoiceTocPipe::parse($purchaseRaw)['outcome']==='toc_accepted','purchase identity is covered by the same complete-body signature');
+authCheck(!InvoiceTocAuthentication::verify(str_replace('FR TEST/101','FR TEST/102',$purchaseRaw),$resolver,$now)['verified'],'tampered fiscal identity breaks signature');
 echo "TOConline cryptographic authentication tests passed\n";

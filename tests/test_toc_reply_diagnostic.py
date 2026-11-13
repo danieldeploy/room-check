@@ -96,3 +96,17 @@ class Tests(unittest.TestCase):
         self.assertEqual(result['kind'],'delivery_failure')
         self.assertTrue(result['original_identifier'])
         self.assertNotIn('PRIVATE',json.dumps(result))
+
+    def test_delivery_failure_ignores_original_headers_and_exim_version(self):
+        text=('Domain PRIVATE has exceeded the max emails per hour (22/20 (110%)) allowed. Message will be reattempted later\n'
+              '------- This is a copy of the message, including all the headers. ------\n'
+              'Received: by PRIVATE (Exim 4.100.1)\nReceived-SPF: pass\nSECRET')
+        shape=d.failure_shape(text)
+        self.assertEqual(shape['enhanced_codes'],[])
+        self.assertNotIn('spf',shape['markers'])
+        self.assertIn('max emails per hour',shape['markers'])
+        self.assertIn('reattempted later',shape['markers'])
+
+    def test_delivery_defer_has_actionable_fixed_categories(self):
+        for marker in ('connection timed out','all hosts for','retry time not reached','message discarded','max emails per hour','rate exceeded','temporarily rejected','smtp error'):
+            self.assertIn(marker,d.failure_shape('PRIVATE '+marker)['markers'])

@@ -22,11 +22,14 @@ OUTCOMES = {'toc_accepted','toc_existing','toc_review'}
 
 
 def failure_shape(text):
-    value=text.lower()
+    value=re.split(r'-{3,}\s*this is a copy of the message',text,flags=re.I)[0].lower()
+    value=re.sub(r'\bexim\s+[0-9.]+','exim',value)
     markers=['spam','quota','blacklist','blocklist','rate limit','too many','max defers',
              'maximum allowed','timeout','timed out','unrouteable','relay','spf','dkim','dmarc',
              'virus','malware','message size','message rejected','retry time not reached',
-             'connection refused','greylist','recipient rejected','mailbox unavailable']
+             'connection refused','greylist','recipient rejected','mailbox unavailable',
+             'max emails per hour','reattempted later','message discarded','connection timed out',
+             'all hosts for','rate exceeded','temporarily rejected','smtp error']
     return {'smtp_codes':sorted(set(re.findall(r'\b[45][0-9]{2}\b',value))),
             'enhanced_codes':sorted(set(re.findall(r'\b[45]\.[0-9]{1,3}\.[0-9]{1,3}\b',value))),
             'markers':[word for word in markers if word in value]}
@@ -68,7 +71,7 @@ def filter_shape(filters):
 def verify_message(raw):
     program = ("require 'src/Invoices/InvoiceTocPipe.php'; $r=stream_get_contents(STDIN); "
                "$p=InvoiceTocPipe::parse($r); $a=InvoiceTocAuthentication::verify($r); "
-               "echo json_encode(['authentication'=>$a['code'],'outcome'=>$p['outcome']??'toc_review']);")
+               "echo json_encode(['authentication'=>$a['code'],'outcome'=>$p['outcome']??'toc_review','purchase_identity'=>!empty($p['purchase_identity'])]);")
     result = subprocess.run(['php','-d','display_errors=0','-r',program], input=raw,
                             stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=25,check=True)
     require(len(result.stdout)<2048,'invalid_verifier_result')
@@ -101,6 +104,7 @@ def message_shape(raw, verifier=None):
             'duplicate_phrase':'por já constarem no seu arquivo' in text.lower(),
             'other_document_name':any(not re.fullmatch(r'(?:booking|hostelworld|cloudbeds|receipt)[-_][a-f0-9]{64}\.(?:pdf|jpe?g)',n,re.I) for n in filenames),
             'document_attachment':any(p.get_content_type() in ('application/pdf','image/jpeg') for p in parts),
+            'purchase_identity':proof.get('purchase_identity') is True,
             'authentication':'not_checked_size' if oversized else proof.get('authentication') if proof.get('authentication') in AUTH else 'unrecognized',
             'outcome':'not_checked_size' if oversized else proof.get('outcome') if proof.get('outcome') in OUTCOMES else 'unrecognized'}
 
