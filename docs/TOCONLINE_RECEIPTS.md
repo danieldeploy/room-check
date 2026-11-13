@@ -38,3 +38,10 @@ The private pipe retains only these necessary structured fields, not raw mail.
 Recovery version 2 revisits bounded recent retained messages skipped by the old
 filename-only correlation, through the same verifier and receiver. It does not
 submit, delete, move or flag mail, and does not reset the outbound ledger.
+
+Purchase association can refer to a newly created or already existing purchase;
+the optional creation footnote is not an archive-success requirement. A signed
+acknowledgement matching multiple recorded scans sets only the nonterminal
+copies to reply-received/review, retaining ambiguity evidence. It does not
+select a copy, declare a duplicate or alter any final outcome. Existing reports
+and exception alerts expose this review requirement.

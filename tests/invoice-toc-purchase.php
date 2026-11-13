@@ -11,12 +11,13 @@ purchaseCheck(($p['purchase_identity']??[])===['issuer_nif'=>'500000000','invoic
 purchaseCheck($p['outcome']==='toc_accepted'&&$p['text']==='','new template is classified without fabricating filename correlation');
 purchaseCheck(!str_contains(json_encode($p),'Synthetic Supplier'),'only necessary fields retained');
 purchaseCheck(empty(InvoiceTocPipe::parse($mail.' '.$body)['purchase_identity']),'multiple invoice rows are ambiguous');
-purchaseCheck(empty(InvoiceTocPipe::parse(str_replace('Fatura criada automaticamente via QRCode','Unknown result',$mail))['purchase_identity']),'unknown template is not guessed');
+purchaseCheck(empty(InvoiceTocPipe::parse(str_replace('Ficheiros arquivados e associados automaticamente a faturas de compra:','Unknown result',$mail))['purchase_identity']),'unknown template is not guessed');
 $html=str_replace('Content-Type: text/plain; charset=UTF-8','Content-Type: text/html; charset=UTF-8',$mail);
 $html=str_replace($body,'<p>Ficheiros arquivados e associados automaticamente a faturas de compra:</p><table><tr><td>Fornecedor NIF:</td><td>500000000</td></tr><tr><td>Fornecedor:</td><td>Synthetic Supplier</td></tr><tr><td>e-Fatura:</td><td>FR TEST/101</td></tr><tr><td>Fatura de compra:</td><td>FC TEST/7 (*)</td></tr></table><p>(*) Fatura criada automaticamente via QRCode</p>',$html);
 purchaseCheck(InvoiceTocPipe::parse($html)['purchase_identity']===$p['purchase_identity'],'HTML table cells without source newlines retain fiscal boundaries');
 purchaseCheck((InvoiceTocPipe::parse(str_replace('Fornecedor NIF:','Fornecedor&nbsp;NIF:',$html))['purchase_identity']??[])===$p['purchase_identity'],'provider nonbreaking HTML spaces keep exact fiscal identity');
 purchaseCheck((InvoiceTocPipe::parse(str_replace('FR TEST/101','1 TEST/101',$mail))['purchase_identity']['invoice_number']??'')==='1 TEST/101','numeric fiscal series stays an exact complete identifier');
+purchaseCheck((InvoiceTocPipe::parse(str_replace(' (*) (*) Fatura criada automaticamente via QRCode','',$mail))['purchase_identity']??[])===$p['purchase_identity'],'existing purchase association also confirms archival without creation footnote');
 $dir=sys_get_temp_dir().'/toc-purchase-'.bin2hex(random_bytes(8));mkdir($dir,0700);file_put_contents($dir.'/master.key',random_bytes(32));chmod($dir.'/master.key',0600);
 try {
  $v=new InvoiceVault($dir);$pdo=new PDO('sqlite::memory:');$toc=new InvoiceToconline($pdo,$v,new stdClass());
@@ -34,7 +35,7 @@ try {
  $bad=$proof;$bad['purchase_identity']['issuer_nif']='600000000';$receive($bad);purchaseCheck($state()==='toc_submitted','invoice number alone is insufficient');
  $bad=$proof;$bad['purchase_identity']['invoice_number']='FR TEST/10';$receive($bad);purchaseCheck($state()==='toc_submitted','partial invoice numbers never match');
  $v->save('toconline-ledger.enc',[$key=>$entry,str_repeat('b',64)=>array_replace($entry,['document_id'=>'receipt:copy'])]);$v->save(InvoiceReceipts::FILE,['documents'=>['synthetic'=>$doc,'copy'=>array_replace($doc,['id'=>'copy'])]]);
- $receive($proof);purchaseCheck($state()==='toc_submitted','identical scans cannot be assigned one acknowledgement arbitrarily');
+ $receive($proof);purchaseCheck($state()==='toc_review','signed reply for identical scans must request review rather than remain silently submitted');
  $v->save('toconline-ledger.enc',[$key=>$entry]);$v->save(InvoiceReceipts::FILE,['documents'=>['synthetic'=>$doc]]);
  purchaseCheck($receive($proof)['outcome']==='toc_accepted'&&$state()==='toc_accepted','signed exact unique identity confirms the real submitted scan');
  $before=$v->read('toconline-ledger.enc');$receive($proof);purchaseCheck($v->read('toconline-ledger.enc')===$before,'replay preserves final evidence');

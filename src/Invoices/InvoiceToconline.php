@@ -155,6 +155,21 @@ final class InvoiceToconline
                 $matches[$id]=true;$fiscalCandidate=$entry;
             }
         }
+        if (count($matches)>1 && $fiscalCandidate!==null) {
+            // The invoice was acknowledged, but the provider omitted which scan.
+            // Expose the ambiguity without declaring any copy accepted or duplicate.
+            $review=[];
+            foreach ($ledger as &$entry) if (isset($matches[(string)$entry['document_id']])
+                && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
+                && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
+                $entry['state']='toc_review';$entry['receipt_hash']=$receiptHash;
+                $entry['receipt_suggestion']='toc_accepted';$entry['receipt_received_at']=gmdate('c');
+                $entry['receipt_ambiguity']='multiple_scans';$review[(string)$entry['document_id']]=true;
+            }
+            unset($entry);$this->vault->save('toconline-ledger.enc',$ledger);
+            foreach (array_keys($review) as $id) $this->state($id,'toc_review');
+            return ['result'=>'matched','suggestion'=>'toc_review','outcome'=>'toc_review'];
+        }
         if (count($matches)!==1) return ['result'=>'unmatched'];
         $id=array_key_first($matches); $suggestion='toc_review';
         $automatic='toc_review'; $applied=false;

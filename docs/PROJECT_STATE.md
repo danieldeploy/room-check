@@ -6,7 +6,8 @@ TOConline has a QR-created purchase acknowledgement that omits the uploaded
 filename and identifies the supplier NIF and fiscal invoice number instead.
 The existing authenticated receiver now accepts this observed template only
 when its signed recipient/date and complete fiscal identity match exactly one
-recorded scan submission. Conflicting or ambiguous copies remain unconfirmed.
+recorded scan submission. Conflicting or ambiguous copies remain unconfirmed and an authenticated reply
+for multiple scans is surfaced as reply-received/review, preserving final states.
 A versioned, bounded retained-mail recovery revisits previously skipped replies
 without re-sending invoices or changing original scan retention.
 

@@ -138,11 +138,10 @@ final class InvoiceTocPipe
     private static function purchaseIdentity(string $text): array
     {
         $text=preg_replace('/[\s\x{00A0}]+/u',' ',$text)??'';
-        if (!str_contains($text,'Ficheiros arquivados e associados automaticamente a faturas de compra:')
-            || !str_contains($text,'Fatura criada automaticamente via QRCode')) return [];
+        if (!str_contains($text,'Ficheiros arquivados e associados automaticamente a faturas de compra:')) return [];
         foreach (['Fornecedor NIF:','e-Fatura:','Fatura de compra:'] as $label) if (substr_count($text,$label)!==1) return [];
         if (!preg_match('/Fornecedor NIF:\s*([125689][0-9]{8})\s*Fornecedor\s*:/u',$text,$nif)
-            || !preg_match('/e-Fatura:\s*([A-Z0-9][A-Z0-9]{0,7}[ \t]+[A-Z0-9][A-Z0-9 ._\/-]{0,99}?)\s*Fatura de compra:/u',$text,$number)) return [];
+            || !preg_match('/e-Fatura:\s*([A-Z0-9][A-Z0-9]{0,7}[ \t]+[A-Z0-9][A-Z0-9 ._\/-]{0,99}?)\s*Fatura de compra:\s*FC\s+[A-Z0-9._-]+\/[A-Z0-9._-]+/u',$text,$number)) return [];
         return ['issuer_nif'=>$nif[1],'invoice_number'=>trim(preg_replace('/\s+/u',' ',$number[1]))];
     }
 
