@@ -137,6 +137,7 @@ final class InvoiceTocPipe
     /** Observed QR-created purchase acknowledgement omits the uploaded filename. */
     private static function purchaseIdentity(string $text): array
     {
+        $text=preg_replace('/[\s\x{00A0}]+/u',' ',$text)??'';
         if (!str_contains($text,'Ficheiros arquivados e associados automaticamente a faturas de compra:')
             || !str_contains($text,'Fatura criada automaticamente via QRCode')) return [];
         foreach (['Fornecedor NIF:','e-Fatura:','Fatura de compra:'] as $label) if (substr_count($text,$label)!==1) return [];
