@@ -1,7 +1,12 @@
 <?php if (!isset($receiptHistoryRendering)) { http_response_code(404); exit; } ?>
 <?php if ($canHistory): ?>
 <?php $historyCounts=InvoiceReceiptReport::summary($all); ?>
-<section class="card"><h2 data-receipt-history-counts><?= $t('receipt_total') ?>: <?= $historyCounts['documents'] ?> | <?= $t('receipt_history_processed') ?>: <?= $historyCounts['processed'] ?> | <?= $t('receipt_pending') ?>: <?= $historyCounts['pending'] ?></h2>
+<section class="card"><div class="receipt-history-heading"><h2 data-receipt-history-counts><?= $t('receipt_total') ?>: <?= $historyCounts['documents'] ?> | <?= $t('receipt_history_processed') ?>: <?= $historyCounts['processed'] ?> | <?= $t('receipt_pending') ?>: <?= $historyCounts['pending'] ?></h2>
+<div class="receipt-document-filter" data-receipt-document-filter <?= $selectedRunning?'hidden':'' ?>>
+<select name="filter" form="receipt-process-form" data-receipt-filter aria-label="<?= $t('receipt_filter') ?>" <?= $selectedRunning?'disabled':'' ?>>
+<?php if ($filter==='all'): ?><option value="all" selected hidden><?= $t('receipt_filter_all') ?></option><?php endif; ?>
+<?php foreach (['success'=>'receipt_filter_success','problems'=>'receipt_filter_problems'] as $value=>$label): ?><option value="<?= $value ?>" <?= $value===$filter?'selected':'' ?>><?= $t($label) ?></option><?php endforeach; ?>
+</select></div></div>
 <?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
 <?php foreach ($documents as $id=>$d): ?>
 <?php
@@ -17,11 +22,11 @@ $buyerIssue=InvoiceReceiptAnalysis::buyerIssue($d,(string)($tocSettings['nif']??
 <p class="receipt-meta"><?php if (($d['stage']??'')==='archived' && ($d['toconline_state']??'')==='toc_accepted'): ?><?= $t('receipt_archive_confirmed') ?><?php else: ?><?= $t('receipt_stage_'.$d['stage']) ?> — <?= $t($d['toconline_state']) ?><?php endif; ?></p>
 <?php if ($reviewable): ?><p class="alert receipt-review-issues"><?= implode(' | ',array_map($t,InvoiceReceiptAnalysis::reviewIssues($d,(string)($tocSettings['nif']??'')))) ?></p>
 <?php elseif (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
-<?php if (!in_array($d['stage'],['duplicate_trashed','split_completed','discarding','discarded'],true)): ?>
+<?php $previewId=InvoiceReceiptReport::previewId($fullState['documents'],$id); if ($previewId!==null): ?>
 <?php
 $previewOptions=['document'=>'receipt_show_document'];
 $sourceDocument=$state['documents'][$d['source_id']??'']??null;
-if (($d['format']??'')==='pdf' && is_array($sourceDocument) && ($sourceDocument['format']??'')==='pdf' && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
+if ($previewId===$id && ($d['format']??'')==='pdf' && is_array($sourceDocument) && ($sourceDocument['format']??'')==='pdf' && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
 foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <details class="document-disclosure" data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>">
 <summary><?= $t($previewLabel) ?></summary>

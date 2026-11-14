@@ -6,7 +6,7 @@ function reportCheck(bool $ok,string $message): void { if (!$ok) throw new Runti
 $documents=[
     'private-master-id'=>['name'=>'SECRET-MASTER.pdf','children'=>['private-page-id'],'stage'=>'split_completed','toconline_state'=>'receipt_per_page'],
     'private-page-id'=>['source_id'=>'private-master-id','name'=>'SECRET-PAGE.pdf','stage'=>'duplicate_trashed','archived_at'=>'now','toconline_state'=>'toc_existing','issuer_name'=>'Supplier <script>bad()</script>','invoice_number'=>'FT 42','issued_on'=>'2026-10-02','drive_parent'=>'PRIVATE-PARENT'],
-    'private-normal-id'=>['name'=>'SECRET-NORMAL.jpg','stage'=>'archived','archived_at'=>'now','issued_on'=>'2026-10-01','invoice_number'=>'SECRET-NORMAL-NUMBER','issuer_name'=>'SECRET-NORMAL-COMPANY','toconline_state'=>'toc_accepted'],
+    'private-normal-id'=>['name'=>'SECRET-NORMAL.jpg','stage'=>'archived','archived_at'=>'now','issued_on'=>'2026-10-01','invoice_number'=>'SECRET-NORMAL-NUMBER','issuer_name'=>'SECRET-NORMAL-COMPANY','toconline_state'=>'toc_accepted','format'=>'jpg'],
     'private-error-id'=>['name'=>'SECRET-ERROR.jpg','stage'=>'review','sha256'=>'private-sha','format'=>'jpg','issuer_nif'=>'123456789','company_nif'=>'500000000','error'=>'receipt_review_required','toconline_state'=>'pending'],
     'private-old-duplicate'=>['name'=>'SECRET-OLD.pdf','stage'=>'duplicate_trashed','archived_at'=>'now','invoice_number'=>'FT 43','issued_on'=>'2026-09-01','toconline_state'=>'toc_existing'],
 ];
@@ -72,7 +72,7 @@ $render=static function(string $role,array $permissions,string $action='',bool $
     $code='$GLOBALS["fixture_role"]='.var_export($role,true).';$GLOBALS["fixture_permissions"]='.var_export($permissions,true).';'
         .'session_save_path('.var_export($tmp,true).');session_start();$_SESSION=["user_id"=>1,"last_activity"=>time(),"csrf_token"=>"fixture-csrf"];'
         .'$_SERVER["REQUEST_METHOD"]='.var_export($action===''?'GET':'POST',true).';$_POST='.var_export($post+['action'=>$action,'id'=>'private-error-id','csrf_token'=>'fixture-csrf'],true).';'
-        .'if('.var_export($action==='start',true).'){$_POST["year"]=1999;$_POST["months"]=["6"];}$_GET='.var_export($query,true).';$_GET["status"]='.var_export($status?'1':'',true).';'
+        .'if('.var_export($action==='start',true).'){$_POST["year"]=1999;$_POST["months"]=["6"];}$_GET='.var_export($query+['filter'=>'all'],true).';$_GET["status"]='.var_export($status?'1':'',true).';'
         .'ob_start();register_shutdown_function(static function(){echo json_encode(["status"=>http_response_code(),"html"=>ob_get_clean()]);});'
         .'require '.var_export($tmp.'/web/admin/'.($preview?'receipt-document.php':'receipts.php'),true).';';
     $process=proc_open([PHP_BINARY,'-d','display_errors=stderr','-r',$code],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
@@ -91,7 +91,8 @@ try {
     $rejected=$render('gerente',[],'start');
     reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
     reportCheck(str_contains($rejected['html'],'value="1999"') && preg_match('/name="months\[\]" value="6" checked/',$rejected['html'])===1,'Rejected selection must remain on the form');
-    $manager=$render('gerente',[]);
+    $manager=$render('gerente',[],'',false,false,['filter'=>'all']);
+    reportCheck(str_contains($manager['html'],'receipt-document.php?id=private-normal-id'),'Accepted JPEG offers final archive preview');
     $formDom=new DOMDocument();@$formDom->loadHTML($manager['html']);$formPath=new DOMXPath($formDom);
     reportCheck($formPath->query('//form[@data-receipt-review]//input[@name="buyer_confirmed"]')->length===1,'Buyer approval belongs in the same complete details form');
     reportCheck($formPath->query('//form[@data-receipt-review]//input[@name="issuer_nif"]')->length===1,'Supplier NIF is an editable mandatory field');
@@ -113,6 +114,10 @@ try {
     $dom=new DOMDocument();@$dom->loadHTML($manager['html']);$xpath=new DOMXPath($dom);
     reportCheck($xpath->query('//*[contains(@class,"receipt-process-card")]//*[@id="receipt-status"]')->length===1,'Selected status belongs to process card');
     reportCheck($xpath->query('//*[@data-receipt-refresh]')->length===1,'Exactly one manual refresh action');
+    reportCheck($xpath->query('//*[contains(@class,"receipt-process-card")]//*[@id="receipt-processing-message"]')->length===1,'Banner belongs inside process card');
+    reportCheck($xpath->query('//*[contains(@class,"receipt-history-heading")]//select[@name="filter"]')->length===1,'Document filter sits beside history counts');
+    reportCheck(!str_contains($manager['html'],InvoiceText::get('receipt_selection')) && !str_contains($manager['html'],InvoiceText::get('receipt_process_months')),'Repeated intake explanations removed');
+
     reportCheck($xpath->query('//article[contains(.,"SECRET-ERROR.jpg")]//details[contains(@data-url,"original=1")]')->length===0,'JPEG never offers a source PDF');
 
     reportCheck(str_contains($manager['html'],'123456789') && !str_contains($manager['html'],'NIF: 500000000'),'Display supplier NIF, never recipient fallback');
@@ -169,7 +174,20 @@ try {
     reportCheck($path->query('//form[@data-receipt-review]')->length===0 && $path->query('//input[@value="discard"]')->length===0,'Successful review removes the correction and delete controls');
     $poll=json_decode($render('gerente',[],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
     reportCheck(!$poll['can_start'] && $poll['processing'] && str_contains(implode(' ',$poll['process_labels']),InvoiceText::get('receipt_run_running')),'Polling agrees with Running and the global intake lock');
-    $again=$render('gerente',[],'review',false,false,[],$goodPost);
+    $runningFiltered=json_decode($render('gerente',[],'',false,true,['filter'=>'success'])['html'],true,512,JSON_THROW_ON_ERROR);
+    reportCheck($runningFiltered['selected_running'] && str_contains($runningFiltered['history'],'SECRET-ERROR.jpg'),'Running ignores a stale success filter');
+    reportCheck(str_contains($runningFiltered['processing_message'],'2026') && str_contains($runningFiltered['processing_message'],'Junho'),'Banner contains actual selected months/year');
+    $state=$vault->read(InvoiceReceipts::FILE);
+    $state['processes']['stopped']=['id'=>'stopped','requested_at'=>gmdate('c'),'year'=>2026,'months'=>[1]];
+    $vault->save(InvoiceReceipts::FILE,$state);
+    $finishedState=$state;$finishedState['documents']['private-error-id']['stage']='review';
+    $vault->save(InvoiceReceipts::FILE,$finishedState);
+    $transition=json_decode($render('gerente',[],'',false,true,['filter'=>'auto','process'=>'legacy'])['html'],true,512,JSON_THROW_ON_ERROR);
+    reportCheck(!$transition['selected_running'] && $transition['filter']==='problems','Running-to-pending selects the actionable filter');
+    $vault->save(InvoiceReceipts::FILE,$state);
+    $stopped=json_decode($render('gerente',[],'',false,true,['process'=>'stopped'])['html'],true,512,JSON_THROW_ON_ERROR);
+    reportCheck(!$stopped['selected_running'] && !$stopped['processing'] && !$stopped['can_start'],'Stopped selection has no banner despite other active work');
+    $again=$render('gerente',[],'review' ,false,false,[],$goodPost);
     reportCheck($again['status']!==303 && $vault->read(InvoiceReceipts::FILE)['documents']['private-error-id']===$saved,'A repeated confirmation cannot restart or overwrite the queued document');
     echo "Receipt report: totals, duplicate company/number/date, safe errors, actual endpoint role isolation and denied forged POSTs passed.\n";
 } finally {

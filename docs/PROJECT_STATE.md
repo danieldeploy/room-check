@@ -1,5 +1,15 @@
 # Management Hub — current project state
 
+## Receipt presentation after PR369 — 2026-11-14 (prepared)
+
+Implements owner-approved compact run banner, selected-run state/title/filter,
+content-sized selector, visible disabled checkbox ticks and uniform PDF/JPEG
+archive previews. Removed duplicates only expose an explicitly recorded equivalent
+accepted keeper. Preserves permissions, processing, retry/confirmation behavior
+and source retention. Regression coverage includes real controller projections,
+selected versus global activity, transitions with open previews, and safe JPEG/PDF
+keeper retrieval. Installed commit and authenticated UI are separate release checks.
+
 ## Bounded receipt retries and consolidated summaries — 2026-11-14 (prepared)
 
 Receipt intake now stops status polling when only human action remains or the

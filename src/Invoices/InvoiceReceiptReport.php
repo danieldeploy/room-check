@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/I18n/InvoiceText.php';
+require_once __DIR__.'/InvoiceReceiptAnalysis.php';
 
 /** Explicit projection: the operator report never contains file identities or original links. */
 final class InvoiceReceiptReport
@@ -26,6 +27,20 @@ final class InvoiceReceiptReport
         if (($d['toconline_state']??'')==='toc_accepted') return ($d['stage']??'')==='archived';
         return in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)
             && ($d['stage']??'')==='duplicate_trashed';
+    }
+    /** Preview only the recorded final copy; removed duplicates need an explicit equivalent keeper. */
+    public static function previewId(array $documents,string $id): ?string
+    {
+        $d=$documents[$id]??[];
+        if (!in_array($d['format']??'', ['pdf','jpg'],true)) return null;
+        if (($d['stage']??'')==='duplicate_trashed') {
+            $keeperId=(string)($d['duplicate_keeper']??'');$keeper=$documents[$keeperId]??[];
+            $key=InvoiceReceiptAnalysis::duplicateKey($d);
+            return $keeperId!==$id && $key!==null && InvoiceReceiptAnalysis::duplicateKey($keeper)===$key
+                && ($keeper['stage']??'')==='archived' && ($keeper['toconline_state']??'')==='toc_accepted'
+                && !empty($keeper['archived_at']) && empty($keeper['error']) ? $keeperId : null;
+        }
+        return in_array($d['stage']??'', ['split_completed','discarding','discarded','superseded'],true)?null:$id;
     }
     public static function documents(array $s,string $process,string $filter='all'): array
     {
@@ -167,13 +182,17 @@ final class InvoiceReceiptReport
         $pt=[1=>'Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
         return $date->format($folder?'m-Y':'d-m-Y').' ('.Translator::localized($pt[(int)$date->format('n')],$date->format('F')).')';
     }
-    public static function render(array $report,bool $errorDetails=true): string
+    public static function render(array $report,bool $errorDetails=true,?array $progress=null): string
     {
         $e=static fn($v)=>htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
         $t=static fn($key)=>htmlspecialchars(InvoiceText::get($key),ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
         ob_start();
         ?>
-<section class="card"><h2><?= $t('receipt_report') ?></h2>
+<section class="card"><h2><?= $t('receipt_report') ?><?php if ($progress!==null): ?> — <?php
+$running=!empty($progress['automatic']) && $progress['state']!=='receipt_worker_delayed';
+$completed=$progress['state']==='receipt_finished';
+?><span class="receipt-report-state <?= $running?'is-running':($completed?'is-completed':'is-pending') ?>"><?= $t($running?'receipt_processing':($completed?'receipt_completed_bang':($progress['state']==='receipt_no_runs'?'receipt_no_runs':'receipt_pending'))) ?><?php if ($running): ?><span class="receipt-dots" aria-hidden="true"><?php for($i=0;$i<5;$i++): ?><span>.</span><?php endfor; ?></span><?php endif; ?></span><?php endif; ?></h2>
+<?php if ($progress!==null && in_array($progress['state'],['receipt_retry_wait','receipt_quota_wait','receipt_toc_wait','receipt_worker_delayed'],true)): ?><p data-status-label><?= $t($progress['state']) ?></p><?php endif; ?>
 <p class="receipt-totals">
 <span><?= $t('receipt_files') ?>: <strong><?= $report['pdf_files'] ?></strong> pdf <?= $t('receipt_and') ?> <strong><?= $report['jpg_files'] ?></strong> jpg</span> <strong aria-hidden="true">|</strong>
 <span><?= $t('receipt_a4') ?>: <strong><?= $report['a4'] ?></strong> - <?= $t('receipt_small') ?>: <strong><?= $report['small'] ?></strong> (<?= $t('receipt_docs') ?>: <strong><?= $report['documents'] ?></strong>)</span> <strong aria-hidden="true">|</strong>
@@ -183,7 +202,7 @@ final class InvoiceReceiptReport
 <span class="<?= $report['errors']?'receipt-error-count':'' ?>"><?= $t('receipt_errors') ?>: <strong><?= count($report['errors']) ?></strong></span>
 </p><p><?= $t('receipt_processed_note') ?></p>
 <?php if ($report['duplicates']): ?>
-<h3><?= $t('receipt_duplicates_heading') ?></h3>
+<h3><?= $t('receipt_duplicates_title') ?> <span class="receipt-duplicate-instruction"><?= $t('receipt_duplicates_instruction') ?></span></h3>
 <div class="receipt-table-wrap"><table class="receipt-duplicates"><thead><tr><th><?= $t('receipt_issuer') ?></th><th><?= $t('receipt_number') ?></th><th><?= $t('receipt_date') ?></th></tr></thead><tbody>
 <?php foreach ($report['duplicates'] as $duplicate): ?><tr><td data-i18n-skip><?= $duplicate['issuer_name']!==''?$e($duplicate['issuer_name']):$t('receipt_unknown_issuer') ?></td><td data-i18n-skip><?= $duplicate['invoice_number']!==''?$e($duplicate['invoice_number']):$t('receipt_unknown_data') ?></td><td data-i18n-skip><?= $duplicate['issued_on']!==''?$e(self::displayDate($duplicate['issued_on'])):$t('receipt_unknown_data') ?></td></tr><?php endforeach; ?>
 </tbody></table></div><?php endif; ?>
