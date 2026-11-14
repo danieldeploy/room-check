@@ -50,3 +50,12 @@ test('automatic state locks all intake controls, updates run labels and removes 
   running=false;await x.tick();assert.equal(d.querySelector('[data-receipt-intake]').disabled,false);assert.equal(d.getElementById('receipt-processing-message').hidden,true);assert.equal(d.querySelector('[name="process"] option').textContent,'Run Completed');assert.equal(d.querySelector('[name="process_year"]').value,'2026');
  }finally{x.dom.window.close();}
 });
+
+test('selected-run filter and banner update even with an open preview',async()=>{
+ const x=setup({extra:'<div id="receipt-processing-message"></div>'});
+ try{const h=x.dom.window.document.getElementById('receipt-history');h.innerHTML='<div data-receipt-document-filter><select name="filter"><option value="success">Processed</option><option value="problems">Pending</option></select></div><details data-receipt-preview open><summary>Open PDF</summary></details>';
+ let running=true;x.dom.window.fetch=async()=>({ok:true,json:async()=>({...x.response({poll_at:running?x.now+5:0}),selected_running:running,processing:running,filter:'problems',processing_message:'Processing June 2026 in the background.'})});
+ await x.tick();assert.equal(h.querySelector('[data-receipt-document-filter]').hidden,true);assert.equal(x.dom.window.document.getElementById('receipt-processing-message').textContent,'Processing June 2026 in the background.');
+ running=false;await x.tick();assert.equal(h.querySelector('[data-receipt-document-filter]').hidden,false);assert.equal(h.querySelector('select').value,'problems');assert.ok(h.querySelector('details').open);
+ }finally{x.dom.window.close();}
+});

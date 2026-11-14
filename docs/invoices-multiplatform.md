@@ -806,3 +806,28 @@ raw buyer evidence, authenticated duplicate lifecycle, active/manual/provider-wa
 locks, Lisbon period boundaries, empty filters, pagination, and UI draft/viewer
 preservation. Synthetic fixtures exercise submission and cleanup; deployment QA
 must not submit or delete real invoices merely for testing.
+
+### Receipt result presentation (post-PR369, 2026-11-14)
+
+The run card sizes its selector to the longest option, bounded by its container;
+execution year/month stay right or wrap on narrow screens. Only a selected running
+run shows its actual requested months/year in the green banner. The banner and
+redundant intake/status explanations leave no blank placeholder when stopped.
+Intake locking remains global, while report/filter visibility is selection-local.
+Only the disabled selected month checkbox tick is dark gray; labels retain their
+existing typography. The report title shows green Processing with five animated
+dots (reduced-motion respected), Completed!, or Pending for stopped unresolved
+work. Retry countdowns and failed-status-read-only Refresh remain available.
+
+The history status selector sits beside counts with Processed in TOConline and
+Problems or pending. Running overrides filters to all documents on the server;
+once stopped the automatic filter shows problems if any, otherwise processed.
+Explicit historical all links remain readable. Open previews and correction drafts
+survive polling; selected filter visibility still updates. Duplicate paper-copy
+instruction is red and normal weight. Report-only roles gain no document access.
+
+PDF and JPEG use the same invoice cards and verified final Drive preview; only
+PDFs offer source-PDF context. A removed duplicate can preview only its recorded
+accepted, archived, equivalent keeper. Missing, mismatching, removed or unconfirmed
+keepers produce no preview. No guessed Drive paths, sharing changes, copy recovery,
+provider sends or stored invoice mutations are performed by this presentation.

@@ -48,7 +48,9 @@ final class InvoiceReceipts
     public function preview(string $id, bool $original = false): array
     {
         $documents=$this->status()['documents'];
-        $d=$documents[$id]??null;
+        $previewId=InvoiceReceiptReport::previewId($documents,$id);
+        if ($previewId===null || ($original && $previewId!==$id)) throw new RuntimeException('receipt_preview_unavailable');
+        $d=$documents[$previewId];
         if (!is_array($d) || !in_array($d['format']??'', ['pdf','jpg'],true)
             || in_array($d['stage']??'', ['duplicate_trashed','split_completed','discarding','discarded'],true)) throw new RuntimeException('receipt_preview_unavailable');
         if ($original) {

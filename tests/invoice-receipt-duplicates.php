@@ -26,6 +26,28 @@ try {
  $s['documents']['copy-a']['next_attempt']=0;$v->save(InvoiceReceipts::FILE,$s);$flow->run();$toc->reconcile();$flow->run();$s=$flow->status();
  dq($s['documents']['copy-a']['stage']==='duplicate_trashed' && count($drive->trashed)===1 && !isset($drive->trashed['copy-b']),'retry and ledger reconciliation preserve sole retained copy');
  dq(!$toc->receiptDuplicateConfirmed('copy-a'),'local consolidation never claims provider duplicate rejection');
+ // Read-only previews may use only the explicitly retained equivalent archive.
+ foreach (['pdf'=>'%PDF-','jpg'=>base64_decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==')] as $format=>$bytes) {
+  $previewState=$s;
+  foreach (['copy-a','copy-b'] as $copy) {
+   $previewState['documents'][$copy]['format']=$format;
+   $previewState['documents'][$copy]['size']=strlen($bytes);
+   $previewState['documents'][$copy]['sha256']=hash('sha256',$bytes);
+  }
+  $v->save(InvoiceReceipts::FILE,$previewState);
+  $previewDrive=new class($bytes) {public array $reads=[];function __construct(public string $bytes){}function connect():void{}function verifiedReceipt($d):string{$this->reads[]=$d['id'];return $this->bytes;}};
+  $previewFlow=new InvoiceReceipts($pdo,$v,$previewDrive,$toc);
+  dq($previewFlow->preview('copy-a')['bytes']===$bytes && $previewDrive->reads===['copy-b'],'Deleted PDF/JPEG preview reads retained archive only');
+  dq($previewFlow->preview('copy-b')['bytes']===$bytes,'Accepted PDF/JPEG archive available');
+  $bad=$previewState['documents'];unset($bad['copy-a']['duplicate_keeper']);
+  dq(InvoiceReceiptReport::previewId($bad,'copy-a')===null,'No keeper must not guess another archive');
+  $bad=$previewState['documents'];$bad['copy-b']['qr_fields']['G']='different';
+  dq(InvoiceReceiptReport::previewId($bad,'copy-a')===null,'Mismatched keeper cannot be opened');
+  $bad=$previewState['documents'];$bad['copy-b']['stage']='duplicate_trashed';
+  dq(InvoiceReceiptReport::previewId($bad,'copy-a')===null,'Removed keeper never produces a broken preview');
+  $bad=$previewState['documents'];$bad['copy-b']['toconline_state']='toc_submitted';
+  dq(InvoiceReceiptReport::previewId($bad,'copy-a')===null,'Unconfirmed keeper cannot be presented as retained final document');
+ }
  // A third ambiguous candidate with different fiscal contents must block automatic resolution.
  $c=$b;$c['id']='copy-c';$c['qr_fields']['O']='124.00';$v->save(InvoiceReceipts::FILE,['documents'=>$docs+['copy-c'=>$c],'requested'=>false]);
  $v->save('toconline-ledger.enc',$ledger+['c'=>$entry+['document_id'=>'receipt:copy-c']]);$toc->receive('no_reply@toconline.pt','','',hash('sha256','three copies'),$proof);
