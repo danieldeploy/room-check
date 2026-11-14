@@ -9,11 +9,13 @@ try{
   'manual'=>['process_id'=>'run','stage'=>'review','error'=>'receipt_missing_pages','name'=>'PRIVATE-INVOICE.pdf','toconline_state'=>'pending'],
   'running'=>['process_id'=>'run','stage'=>'queued','error'=>'','toconline_state'=>'pending']]];
  $v->save('receipts-workflow.enc',$s);$a=new InvoiceAlerts($p,[]);$calls=[];$send=static function($number,$values,$template)use(&$calls){ac($template==='receipt_process_summary_v1' && count($values)===5,'neutral receipt-only template contract');$calls[]=$values;return 'provider-message';};
+ $v->save('receipt-summary-probe-v1.enc',['state'=>'meta_accepted']);
  $a->receipts($v,$send);ac(!$calls,'manual issue must not notify while other invoices run');
  $s['documents']['running']['next_attempt']=$now+360;$s['documents']['running']['error']='drive_network';$v->save('receipts-workflow.enc',$s);
  $a->receipts($v,$send);ac(!$calls,'no summary for a short retry pause');
  $s['documents']['running']['stage']='failed';$s['documents']['running']['next_attempt']=0;$v->save('receipts-workflow.enc',$s);
- $a->receipts($v,$send);$a->receipts($v,$send);ac(count($calls)===1,'one consolidated summary for both problems');
+ unlink($v->path('receipt-summary-probe-v1.enc'));$a->receipts($v,$send);ac(!$calls,'summaries remain queued until dedicated template acceptance');
+ $v->save('receipt-summary-probe-v1.enc',['state'=>'meta_accepted']);$a->receipts($v,$send);$a->receipts($v,$send);ac(count($calls)===1,'one consolidated summary for both problems');
  ac(str_contains($calls[0][3],InvoiceText::TEXT['receipt_missing_pages'][0]) && str_contains($calls[0][3],InvoiceText::TEXT['drive_network'][0]),'summary includes all safe reasons');
  ac(!str_contains(json_encode($calls),'PRIVATE-INVOICE'),'no invoice contents in alert');
  $s['documents']['running']=['process_id'=>'run','stage'=>'queued','next_attempt'=>$now+86400,'retry_kind'=>'quota','quota_outcome'=>'waiting','error'=>'gemini_daily_quota','toconline_state'=>'pending'];$s['processes']['run']['notification_cycle']++;$v->save('receipts-workflow.enc',$s);

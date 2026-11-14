@@ -1,10 +1,13 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/src/Invoices/InvoiceAlerts.php';
+// Keep disabled until Meta confirms this exact template as Utility, pt_PT.
+const RECEIPT_SUMMARY_TEMPLATE_APPROVED=false;
 
 /** One owner-authorized synthetic send; no scan data changes, and no uncertain resend. */
-function verifyReceiptSummaryOnce(PDO $pdo,InvoiceVault $vault,array $config,?callable $sender=null): string
+function verifyReceiptSummaryOnce(PDO $pdo,InvoiceVault $vault,array $config,?callable $sender=null,bool $approved=RECEIPT_SUMMARY_TEMPLATE_APPROVED): string
 {
+    if (!$approved) return 'awaiting_template_approval';
     $file='receipt-summary-probe-v1.enc';
     if ($vault->has($file)) return $vault->read($file)['state']??'uncertain';
     $settings=$pdo->query('SELECT enabled,recipient_user_id FROM invoice_notification_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);

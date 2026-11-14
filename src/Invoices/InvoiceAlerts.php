@@ -96,6 +96,8 @@ final class InvoiceAlerts
             $ledger['processes'][$pid]=$old;
         }
         $vault->save($file,$ledger);
+        // Preserve summaries until the dedicated template has passed the live acceptance probe.
+        if (!$vault->has('receipt-summary-probe-v1.enc') || ($vault->read('receipt-summary-probe-v1.enc')['state']??'')!=='meta_accepted') return;
         $settings=$this->pdo->query('SELECT * FROM invoice_notification_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);
         if (!$settings || empty($settings['enabled'])) return;
         $q=$this->pdo->prepare("SELECT mobile FROM users WHERE id=? AND role='gerente' AND is_active=1");$q->execute([$settings['recipient_user_id']]);$mobile=$q->fetchColumn();if (!$mobile) return;

@@ -16,8 +16,17 @@ WhatsApp sends. The existing Meta invoice template was inspected and is unsuitab
 for success wording, so the receipt-only neutral template is separate; sender,
 configured manager and enabled notification preference are reused. See the
 invoice flow and ADR-005. Fake-clock worker, quota, confirmation, alert and UI
-regressions pass locally; required CI, installed version, Meta approval and real
-provider acceptance must be verified separately before reporting completion.
+regressions pass locally. PR366 required validate/windows-agent checks passed
+for the initial implementation. The final head, installed version and real
+provider acceptance are separate release checks.
+
+**External blocker:** Meta reclassified the new template as Marketing while it
+remains In review. Do not enable receipt sends in that category. The live probe
+is disabled by RECEIPT_SUMMARY_TEMPLATE_APPROVED=false; summaries remain queued
+until the template is approved as Utility/pt_PT and the once-only probe is
+accepted. Automatic approval review rejected rewriting the external template
+body without specific owner approval; no rewrite was performed. Existing portal
+notification settings/templates are unchanged.
 
 ## TOConline acknowledgement recovery and outbound pacing (prepared)
 

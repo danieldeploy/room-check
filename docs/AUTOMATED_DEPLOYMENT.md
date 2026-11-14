@@ -262,3 +262,9 @@ across a crash or repeated deployment. It prints only a safe acceptance state;
 never a phone number, message ID, credentials or invoice data. The labelled
 synthetic message does not submit invoices or alter process records. An
 uncertain send is not retried, and acceptance is not proof of handset delivery.
+
+The probe is currently guarded by `RECEIPT_SUMMARY_TEMPLATE_APPROVED=false`
+because Meta reclassified the template as Marketing/In review. This is not an
+application-release failure. Receipt summaries are preserved without sending
+until Utility approval is verified and the guarded probe is explicitly enabled
+in a reviewed release. An uncertain probe never enables summaries.

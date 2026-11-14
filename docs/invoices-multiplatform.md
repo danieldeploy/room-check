@@ -678,7 +678,11 @@ Consultar: https://check.welcomehostel.pt/admin/receipts.php
 Reuse the existing enabled notification setting, active manager recipient,
 WhatsApp client and protected credentials. No new recipient or credential.
 The template was submitted in the existing Active Lines Unip. Lda. account on
-2026-11-14; the initial observed status is **In review** (not approval).
+2026-11-14. Meta subsequently reclassified it as **Marketing**, still **In
+review**. Receipt sending must stay disabled until Utility/pt_PT approval is
+verified. The protected acceptance probe defaults to disabled and normal
+summaries wait for its private `meta_accepted` receipt. Auto-review rejected an
+external body rewrite without specific owner approval; no rewrite was made.
 A once-only guarded-release probe uses clearly labelled synthetic text, stores
 its private receipt before sending and never resends an uncertain result. It
 neither submits invoices nor changes their workflow state. Template approval,
