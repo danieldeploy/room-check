@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  document.getElementById('receipt-request-error')?.focus();
   document.querySelectorAll('[data-receipt-filter]').forEach(select=>select.addEventListener('change',()=>select.form.requestSubmit()));
   const status=document.getElementById('receipt-status');if(!status)return;
   const label=status.querySelector('[data-status-label]'),warning=status.querySelector('[data-status-warning]');
@@ -18,6 +19,10 @@
       offset=result.progress.server_time*1000-Date.now();label.textContent=result.label;countdown();
       const globalError=document.getElementById('receipt-global-error');
       if(globalError){globalError.textContent=result.error||'';globalError.hidden=!result.error;}
+      if(typeof result.can_start==='boolean'){
+        document.querySelectorAll('[data-receipt-start]').forEach(button=>{button.disabled=!result.can_start;});
+        document.querySelectorAll('[data-receipt-start-blocked]').forEach(notice=>{notice.hidden=result.can_start;});
+      }
       document.getElementById('receipt-report').innerHTML=result.report;
       const history=document.getElementById('receipt-history');
       if(result.history!==null && result.revision!==revision && !previewBusy() && !history.contains(document.activeElement) && !history.dataset.editing){

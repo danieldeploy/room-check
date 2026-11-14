@@ -915,3 +915,20 @@ mutation is performed by this diagnostic.
   folder through the existing named-folder lookup. Local lifecycle and required
   CI checks precede the guarded deployment; production acceptance is recorded
   separately after deployment.
+
+### 2026-11-14 — allow new receipt intake after pending execution
+- Owner clarified that active execution blocks a new run globally; stopped runs
+  with manual/provider pending outcomes allow a new intake, even for the same
+  months. This supersedes the earlier unfinished-month overlap restriction.
+- Every already-recorded Drive ID is skipped during discovery. Old pending scans
+  retain their run, state and metadata for manual resolution. Legacy recovery
+  cannot revive an older run; manual review/failure documents are excluded from
+  automatic duplicate consolidation. New files retain normal QR, invoice-date,
+  duplicate confirmation and processed-source rules.
+- The POST rejection message previously shared the polled global error element
+  and could disappear after five seconds. It now has a focused persistent alert;
+  the submitted selection is retained. Polling updates start availability from
+  global activity, independently of the viewed run.
+- Local regression covers pending same-month restart, active/retry exclusion,
+  preserved old scans during actual discovery, request error feedback and role
+  isolation. Production release and visual acceptance are checked separately.

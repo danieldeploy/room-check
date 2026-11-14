@@ -53,6 +53,13 @@ final class InvoiceReceiptReport
             'requested'=>!empty($s['requested']) && ($s['active_process']??'')===$id]);
     }
 
+    /** Waiting for human/provider resolution is pending, not an active execution. */
+    public static function canStart(array $s,bool $sendEnabled=true): bool
+    {
+        $progress=self::progress($s,$sendEnabled);
+        return !$progress['busy'] && !$progress['next_at'];
+    }
+
     public static function summary(array $documents): array
     {
         $report=['files'=>0,'documents'=>0,'processed'=>0,'pending'=>0,'duplicates'=>[],'errors'=>[]];

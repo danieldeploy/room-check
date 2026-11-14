@@ -514,8 +514,12 @@ existing invoice cron performs bounded work and reports failures normally.
 
 Each request now records its date/time, year, selected months and document
 membership. Existing history becomes one legacy run without resubmission. New
-requests reject overlap with unfinished year/month selections, while other
-months can run independently. Discovery failures can be retried within the same
+requests are blocked while an execution is processing or awaiting an automatic
+retry. Once only human/provider pending outcomes remain, any selected months can
+start a new run, including the same months. Existing Drive IDs are always skipped
+during discovery: no reassignment, reread or reset of a prior pending scan. Manual
+review/failure items are excluded from automatic duplicate consolidation; legacy
+recovery cannot revive documents belonging to an older run. Discovery failures can be retried within the same
 run. A run is complete only after invoice resolution and source movement;
 missing folders, review and unconfirmed email are not completion. The process
 selector displays Europe/Lisbon timestamps. Filters and five-second polling keep
@@ -551,3 +555,8 @@ unit tests alone do not establish production success.
 
 Exception alerts retain the process identity and selected periods, so starting a
 new run does not resend an old run's existing incident or mislabel its months.
+
+Rejected submission errors are rendered separately from polled workflow errors,
+receive focus and retain the submitted year/month selection. Five-second polling
+updates the start button from the full workflow activity, even while viewing a
+previous pending run. The advisory worker lock still protects every mutation.
