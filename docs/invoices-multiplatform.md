@@ -611,3 +611,8 @@ normal single submission and source retention across authenticated acknowledgeme
 The PHP/native PDF bridge tests cover deterministic assembly and page order.
 Production end-to-end repair requires a genuine missing scan and a real provider
 acknowledgement; synthetic fixtures do not prove those external outcomes.
+
+Receipt content is server-localized and excluded from the legacy browser partial
+translator via its existing skip boundary, including status/report refreshes.
+Navigation stays outside the boundary. This prevents English wording corruption
+without changing invoice data, permissions or processing.
