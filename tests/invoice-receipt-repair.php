@@ -69,7 +69,9 @@ try {
  $override=$seed;$override['documents']['pending-one']['company_nif']='600000000';
  $override['documents']['pending-one']['complete']=false;$override['documents']['pending-one']['error']='receipt_company_changed';
  $override['documents']['pending-one']['review_reason']='receipt_company_changed';$an->buyer='600000000';
- $v->save(InvoiceReceipts::FILE,$override);$flow->confirmBuyer('pending-one',true,9);
+ // Historical buyer approval must not transfer to the repaired file's new bytes.
+ $override['documents']['pending-one']['company_confirmation']=['nif'=>'500000000','document_id'=>'pending-one','sha256'=>$override['documents']['pending-one']['sha256'],'extracted_nif'=>'600000000','actor'=>9,'at'=>gmdate('c')];
+ $v->save(InvoiceReceipts::FILE,$override);
  $flow->requestRepair('pending-one',true,9);$flow->run();$repaired=$flow->status();
  $replacement=$repaired['documents'][$repaired['documents']['pending-one']['replacement_id']];
  rq($replacement['stage']==='preserving' && $replacement['review_reason']==='receipt_company_changed','Repair keeps wrong buyer pending on the new content');

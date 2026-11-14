@@ -81,7 +81,8 @@ try {
     rc($d['stage']==='archived' && $d['toconline_state']==='toc_submitted','manual intake completes archive and submission');
     rc($drive->folderNames===['2026','Outubro_2026','pdf'],'exact lower-case monthly layout');
     rc(count($sent)===1 && $sent[0][0]==='500000000@my.toconline.pt','existing recipient and transport');
-    $flow->retryDiscovery($flow->status()['active_process']); $flow->run(); $toc->reconcile(); $flow->run(); rc(count($sent)===1 && $drive->ocr===1,'repeated intake and cron are idempotent');
+    rr(fn()=>$flow->retryDiscovery($flow->status()['active_process']),'TOConline wait blocks another discovery');
+    $flow->run(); $toc->reconcile(); $flow->run(); rc(count($sent)===1 && $drive->ocr===1,'repeated cron is idempotent while waiting for acknowledgement');
     preg_match('/receipt-([a-f0-9]{64})\.pdf/',$sent[0][1]['body'],$key);
     $body='Foram recusados os seguintes ficheiros por já constarem no seu arquivo: receipt-'.$key[1].'.pdf';
     $toc->receive('no_reply@toconline.pt','',$body,hash('sha256','unsigned'));
@@ -93,9 +94,17 @@ try {
     $drive->add('scan-original-two','%PDF-1.4 synthetic receipt two'); $drive->text='Unreadable OCR'; $flow->retryDiscovery($flow->status()['active_process']); $flow->run();
     rc($flow->status()['documents']['scan-original-two']['stage']==='review' && count($sent)===1,'ambiguous stays in source and unsent');
     rr(fn()=>$flow->review('scan-original-two','2026-10-02','FT2',false,1),'review requires explicit company and single document confirmation');
-    $flow->review('scan-original-two','2026-09-30','FT2',true,1,'Synthetic Supplier'); $flow->confirmBuyer('scan-original-two',true,1); $drive->crashMove=true; $flow->run();
+    $flow->review('scan-original-two','30/09/2026','FT2',true,1,'Synthetic Supplier','123456789',true); $drive->crashMove=true; $flow->run();
     $s=$flow->status(); $s['documents']['scan-original-two']['next_attempt']=0; $vault->save(InvoiceReceipts::FILE,$s); $flow->run();
     rc(count($sent)===2 && $flow->status()['documents']['scan-original-two']['stage']==='archived','recover unknown move without duplicate upload');
+    $acceptDocument=static function(string $id) use($vault,$toc,$flow): void {
+        foreach($vault->read('toconline-ledger.enc') as $key=>$entry) if(($entry['document_id']??'')==='receipt:'.$id) {
+            $toc->receive('no_reply@toconline.pt','receipt-'.$key.'.pdf','',hash('sha256','accepted '.$id),['outcome'=>'toc_accepted','authentication'=>['verified'=>true,'code'=>'verified','recipient'=>'test@welcomehostel.pt','signed_at'=>gmdate('c')]]);
+            $flow->run(); return;
+        }
+        throw new RuntimeException('Missing sent receipt '.$id);
+    };
+    $acceptDocument('scan-original-two');
     $drive->add('scan-original-three','%PDF-1.4 synthetic receipt three'); $drive->crashOcr=true; $flow->retryDiscovery($flow->status()['active_process']); $flow->run();
     $s=$flow->status(); $s['documents']['scan-original-three']['next_attempt']=0; $vault->save(InvoiceReceipts::FILE,$s); $flow->run();
     rc($flow->status()['documents']['scan-original-three']['stage']==='review' && $drive->ocr===3,'unknown OCR creation never repeats');
@@ -104,10 +113,12 @@ try {
     $drive->text=str_replace('02/10/2026','30/09/2026',$text); $flow->retryDiscovery($flow->status()['active_process']); $flow->run();
     $wrong=$flow->status()['documents']['wrong-period-file'];
     rc($wrong['stage']==='archived' && $wrong['issued_on']==='2026-09-30' && in_array('Setembro_2026',$drive->folderNames,true),'source October automatically routes to September issue date');
+    $acceptDocument('wrong-period-file');
     unset($drive->files['unselected-september']);
     $drive->add('wrong-year-file','%PDF-1.4 wrong year'); $drive->text=str_replace('02/10/2026','02/10/2025',$text);
     $flow->retryDiscovery($flow->status()['active_process']); $flow->run();
     rc($flow->status()['documents']['wrong-year-file']['stage']==='archived' && in_array('Outubro_2025',$drive->folderNames,true),'source year does not override invoice year');
+    $acceptDocument('wrong-year-file');
     $jpg=base64_decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==');
     rc(InvoiceDriveClient::receiptBytesValid($jpg,'jpg') && !InvoiceDriveClient::receiptBytesValid('%PDF-1.4','jpg'),'JPEG content checked');
     rc(InvoiceDriveClient::receiptFormat(['name'=>'SCAN.JPEG','mimeType'=>'image/jpeg'])==='jpg','uppercase JPEG extension');
@@ -162,14 +173,15 @@ try {
     rc($preview['bytes']===$pages[2] && $preview['type']==='application/pdf','pending preview returns only the selected PDF page');
     rc($flow->status()===$previewState && count($sent)===$previewSent && $drive->moved===$previewMoved,'preview cannot change workflow, send or move documents');
     rr(fn()=>$flow->preview('unknown-document'),'unknown IDs cannot read arbitrary Drive files');
-    $flow->retryDiscovery($flow->status()['active_process']); $flow->run(); rc($flow->status()['documents']['multipage-master']['children']===$children,'rediscovery cannot split or resend master again');
+    rr(fn()=>$flow->retryDiscovery($flow->status()['active_process']),'A split source awaiting acknowledgements still blocks discovery');
+    $flow->run(); rc($flow->status()['documents']['multipage-master']['children']===$children,'Repeated worker cannot split or resend master again');
     preg_match('/receipt-([a-f0-9]{64})\.pdf/',$sent[$before][1]['body'],$pageKey);
     $proof['outcome']='toc_existing';
     $toc->receive('no_reply@toconline.pt','','Foram recusados os seguintes ficheiros por já constarem no seu arquivo: receipt-'.$pageKey[1].'.pdf',hash('sha256','page duplicate'),$proof);
     $flow->run(); rc($drive->files[$children[0]]['trashed'] && !$drive->files['multipage-master']['trashed'],'one confirmed duplicate removes only that page');
     // Missing private derivative is reconstructed from the unchanged master, with identical checksum.
     unlink($vault->path('receipt-page-'.hash('sha256',$pages[2]).'.pdf'));
-    $flow->review($children[2],'2026-08-15','FT3',true,1,'Synthetic Supplier'); $flow->confirmBuyer($children[2],true,1); $flow->run(); $flow->run();
+    $flow->review($children[2],'2026-08-15','FT3',true,1,'Synthetic Supplier','123456789',true); $flow->run(); $flow->run();
     rc($drive->uploads===3 && count($sent)===$before+3 && !$drive->files['multipage-master']['trashed'],'unconfirmed master is preserved');
     rc($flow->status()['documents']['multipage-master']['stage']==='split','master waits for all TOConline confirmations');
     $flow->run(); rc(count($sent)===$before+3,'finished split never resends');

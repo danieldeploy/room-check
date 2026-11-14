@@ -145,25 +145,39 @@ final class InvoiceReceipts
         }
         return count($names)===1 && !preg_match('/[\\x00-\\x1f]/',$names[0]) ? $names[0] : '';
     }
-    public function review(string $id,string $date,string $number,bool $confirmed,int $actor,string $issuerName=''): void
+    /** Accept the explicit display format without guessing month/day or changing stored ISO dates. */
+    public static function reviewDate(string $date): string
+    {
+        if (preg_match('/\A(\d{2})\/(\d{2})\/(\d{4})\z/',$date,$m)) return $m[3].'-'.$m[2].'-'.$m[1];
+        return $date;
+    }
+    public function review(string $id,string $date,string $number,bool $confirmed,int $actor,string $issuerName='',?string $issuerNif=null,bool $buyerConfirmed=false): void
     {
         $s=$this->status(); $d=$s['documents'][$id]??[];
-        if (($d['stage']??'')!=='review' || empty($d['sha256']) || !in_array($d['format']??'',['pdf','jpg'],true)
+        $date=self::reviewDate($date);$issuerNif=trim($issuerNif??(string)($d['issuer_nif']??''));
+        if (($d['stage']??'')!=='review' || empty($d['sha256']) || !empty($d['children']) || !in_array($d['format']??'',['pdf','jpg'],true)
             || !self::validDate($date) || !$confirmed || trim($number)==='' || mb_strlen($number)>128
             || preg_match('/[\x00-\x1f]/',$number)) throw new RuntimeException('receipt_review_required');
         if (mb_strlen($issuerName)>160 || preg_match('/[\x00-\x1f]/',$issuerName)) throw new RuntimeException('invalid_request');
         $missing=InvoiceReceiptAnalysis::missingPages($d);
         if (($d['review_reason']??'')==='receipt_grouping_required') throw new RuntimeException('receipt_grouping_required');
         if (!empty($d['grouping_pending'])) throw new RuntimeException('receipt_grouping_required');
-        if (($d['data_source']??'')==='qr' && (($d['issued_on']??'')!==$date || ($d['invoice_number']??'')!==trim($number))) throw new RuntimeException('receipt_qr_locked');
+        if (($d['data_source']??'')==='qr' && (($d['issued_on']??'')!==$date || ($d['invoice_number']??'')!==trim($number) || ($d['issuer_nif']??'')!==$issuerNif)) throw new RuntimeException('receipt_qr_locked');
         $settings=$this->toc->settings(); InvoiceToconline::destination($settings['nif']);
         if (!$this->toc->receiptUnsent($id) || $actor<1) throw new RuntimeException('receipt_review_required');
+        $d['issuer_name']=trim($issuerName);$d['issuer_nif']=$issuerNif;
+        $d['issued_on']=$date; $d['invoice_number']=trim($number);
+        // Missing-page recovery may save known details, but never queues a known incomplete invoice.
+        if (!$missing && InvoiceReceiptAnalysis::reviewFields($d)) throw new RuntimeException('receipt_review_required');
+        if ($buyerConfirmed && !InvoiceReceiptAnalysis::buyerAccepted($d,$settings['nif'])) {
+            $d['company_confirmation']=['nif'=>$settings['nif'],'document_id'=>$id,'sha256'=>$d['sha256'],
+                'extracted_nif'=>$d['company_nif']??'','actor'=>$actor,'at'=>gmdate('c')];
+        }
+        if (!$missing && !InvoiceReceiptAnalysis::buyerAccepted($d,$settings['nif'])) throw new RuntimeException('receipt_review_required');
+        if (isset($d['fiscal_status']) && $d['fiscal_status']!=='N') throw new RuntimeException('receipt_fiscal_review');
         if (!empty($d['ocr_id']) && empty($d['ocr_cleaned'])) {
             $this->drive->connect(); $this->drive->trashReceiptOcr($d['ocr_id'],$id); $d['ocr_cleaned']=true;
         }
-        if (isset($d['fiscal_status']) && $d['fiscal_status']!=='N') throw new RuntimeException('receipt_review_required');
-        $d['issuer_name']=trim($issuerName);
-        $d['issued_on']=$date; $d['invoice_number']=trim($number);
         $d['reviewed_by']=$actor; $d['reviewed_at']=gmdate('c'); $d['complete']=!$missing; $d['uncertain']=false;
         $d['error']=InvoiceReceiptAnalysis::reviewReason($d,$settings['nif']);$d['review_reason']=$d['error'];
         $d['stage']=$d['error']===''?'ready':'review';
@@ -180,6 +194,7 @@ final class InvoiceReceipts
         $d['company_confirmation']=['nif'=>$nif,'document_id'=>$id,'sha256'=>$d['sha256'],
             'extracted_nif'=>$d['company_nif']??'','actor'=>$actor,'at'=>gmdate('c')];
         $d['error']=InvoiceReceiptAnalysis::reviewReason($d,$nif);$d['review_reason']=$d['error'];
+        if ($d['error']!=='') throw new RuntimeException($d['error']);
         $d['stage']=$d['error']===''?'ready':'review';
         if ($d['stage']==='ready') self::beginCycle($s,$d['process_id']??'legacy');
         $s['documents'][$id]=InvoiceReceiptRetry::reset($d);$this->save($s);
@@ -189,7 +204,7 @@ final class InvoiceReceipts
     {
         $s=$this->status();$d=$s['documents'][$id]??[];
         if (!$confirmed || $actor<1 || !InvoiceReceiptAnalysis::discardable($d) || !$this->toc->receiptUnsent($id)
-            || InvoiceReceiptAnalysis::buyerIssue($d,$this->toc->settings()['nif'])==='') throw new RuntimeException('receipt_review_required');
+            || InvoiceReceiptAnalysis::buyerAccepted($d,$this->toc->settings()['nif'])) throw new RuntimeException('receipt_review_required');
         $d['discard_requested_by']=$actor;$d['discard_requested_at']=gmdate('c');
         $d['stage']='discarding';$d['error']='';
         self::beginCycle($s,$d['process_id']??'legacy');$s['documents'][$id]=InvoiceReceiptRetry::reset($d);$this->save($s);

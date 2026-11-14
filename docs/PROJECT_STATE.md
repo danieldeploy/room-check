@@ -1030,3 +1030,25 @@ The reproduced browser regression passes with the boundary. This is display only
   process isolation, pagination and role boundaries. The normal required CI,
   exact installed version and authenticated desktop acceptance follow publication.
   No invoice submissions, confirmations or document deletions are test fixtures.
+
+## 2026-11-14 — Complete receipt review and truthful run activity (prepared)
+
+- Post-PR368: one correction form exposes missing date, supplier name, invoice
+  number and supplier NIF with red placeholders. Explicit complete confirmation
+  stores buyer classification and corrections atomically, then queues the existing
+  worker. Raw buyer/QR evidence remains unchanged; supplier NIF is separate.
+- Repeated/invalid requests cannot restart or partially approve a document.
+  Confirmed buyer records no longer offer deletion. Missing-page/grouping repair,
+  existing role permissions and authenticated TOConline duplicate gates remain.
+- Automatic work (including retry and TOConline wait) locks intake year/months/
+  Start in HTML, polling and the server. Human-only pending work allows a new run.
+  The background banner stops with automatic work. Run labels reflect Running,
+  Pending or Completed; current Lisbon execution year/month filters sit on the
+  right and preserve historical links, paging and empty results.
+- PR368 compact report/count rules remain. Non-error JPEG source wrappers no
+  longer resemble extra PDF invoices; actual source failures remain actionable.
+- Validation uses synthetic lifecycle, actual controller/role and browser tests.
+  Required GitHub CI, merge, installed version and authenticated desktop checks
+  remain release gates. No real invoice is submitted/deleted for this acceptance.
+- Existing WhatsApp template approval blocker is unchanged; no new dependency,
+  credentials, source-cleanup policy or mobile PDF change.

@@ -698,7 +698,7 @@ The displayed supplier tax number continues to use `issuer_nif`; it is never
 replaced by the buyer/company setting.
 
 `receipts.review` authorizes explicit **Confirm this document belongs to our
-company**, independently of ordinary invoice-data review. This permission is
+company**, alongside the required invoice details in one correction form. This permission is
 mandatory in the CSRF-protected, locked POST handler; it is not hard-coded to a
 role. The private workflow records actor, timestamp, destination company,
 document ID, SHA-256 and the extracted buyer value. It does not rewrite
@@ -717,6 +717,8 @@ confirmation. Existing pending records are usable without a global reanalysis,
 reassignment of runs, or resetting submitted history.
 
 For a buyer-error invoice, an authorized reviewer can explicitly choose deletion.
+This choice is unavailable after valid buyer confirmation, even if another field
+still needs review in a historical record.
 The durable transition is `review → discarding → discarded`; the existing worker
 and bounded retry policy perform and verify Trash. A denied or uncertain Drive
 operation remains unresolved, with an error and retry action. Only a selected
@@ -756,3 +758,51 @@ Field captions use shared settings styles; month names beside checkboxes retain
 their existing typography. Scan/start help precedes Year, below User instructions.
 Acceptance must check all/success/problems, polled history, source failures,
 multiple runs and pagination without weakening run-only report permissions.
+
+### Complete correction and execution activity (post-PR368, 2026-11-14)
+
+The first pending form lists all missing required details together: issue date,
+supplier name, invoice number and supplier NIF. Empty inputs have red placeholders
+(`DD/MM/AAAA`, `Input company name`, `Input invoice number`, `Input NIF` in EN).
+Typed values use ordinary text styling. The date format is day/month/year and is
+validated before conversion to stored ISO; QR-derived date, number and supplier
+NIF remain locked. The supplier field is never filled with our buyer NIF.
+
+`Confirm and continue` enables only after valid required fields and explicit
+confirmations. Editing does not submit. The CSRF/permission/worker-lock protected
+POST validates the complete request again and commits corrections plus any buyer
+classification atomically. A failed request keeps the typed form but does not
+save partial buyer approval. A repeated/stale confirmation cannot restart the
+document. Existing valid historical buyer confirmations remain usable. Known
+missing pages retain the separate save-details/repair path and cannot be marked
+complete by this form; grouping and fiscal-status blockers also remain enforced.
+
+Successful review queues the invoice through the existing Drive/TOConline worker,
+including authenticated duplicate handling, verified cleanup and source-retention
+gates. The correction form disappears while automatic work continues. A new real
+failure can return a compact actionable error. The background-processing banner
+reflects remaining automatic work and disappears when it stops; a successful
+POST alone no longer creates a processing flash.
+
+Intake year, all months and Start are disabled during automatic work anywhere in
+the receipt workflow, including bounded provider retries and live TOConline reply
+waits. The server enforces the same rule. Human-only pending records permit a new
+run, including the same source months, without rediscovering recorded file IDs.
+The existing five-second active polling and scheduled retry/reply timings remain;
+no new always-on polling or service is introduced.
+
+Processing Run options show Running/Pending/Completed from actual work state.
+Execution year/month selectors sit on their right, default to the current Lisbon
+period, and survive status polling and pagination. They filter execution start,
+not invoice issue dates or scanned folder months. Explicit historical run links
+open their execution period; All years/All months includes undated legacy runs.
+An empty period shows no matching run, not another run's invoices. Intake Year is
+left of its input above Months to Process. PR368 compact counts and global styles
+remain; non-error JPEG source wrappers are not extra invoice cards/PDF controls.
+
+Acceptance covers atomic valid/invalid controller POSTs and delegated permissions,
+PDF/JPEG confirmations, missing-page repair, repeat submissions, unchanged QR and
+raw buyer evidence, authenticated duplicate lifecycle, active/manual/provider-wait
+locks, Lisbon period boundaries, empty filters, pagination, and UI draft/viewer
+preservation. Synthetic fixtures exercise submission and cleanup; deployment QA
+must not submit or delete real invoices merely for testing.

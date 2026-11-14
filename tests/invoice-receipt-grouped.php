@@ -45,7 +45,7 @@ try {
  gq(count($sent)===1 && in_array('Abril_2026',$drive->names,true),'issue month routing and one grouped submission');
  gq($s['documents'][$children[1]]['stage']==='review' && !empty($s['documents'][$children[1]]['preserved_at']),'unresolved invoice has durable separate copy');
  gq($s['documents'][$id]['stage']==='split' && !$drive->files[$id]['trashed'],'unresolved invoice keeps original in selected month');
- $flow->review($children[1],'2026-05-01','FT2',true,1,'Supplier');$flow->run();$flow->run();
+ $flow->review($children[1],'2026-05-01','FT2',true,1,'Supplier','123456789');$flow->run();$flow->run();
  gq(count($sent)===2 && in_array('Maio_2026',$drive->names,true),'manual correction resumes only unsent invoice');
  $flow->run();gq(count($sent)===2 && $flow->status()['documents'][$id]['stage']==='split','submission without acknowledgement retains original');
  $confirm=function($child)use($vault,$toc){

@@ -28,3 +28,12 @@ $s=['requested'=>true,'discovery_retry'=>['next_attempt'=>$now+360],'documents'=
 pg(InvoiceReceiptReport::progress($s,true,$now)['poll_at']===$now+360,'discovery retries share the countdown');
 $r=InvoiceReceiptReport::summary(['source'=>['children'=>['a','b'],'stage'=>'split_completed'],'a'=>$d+['source_id'=>'source'],'b'=>['stage'=>'superseded','source_id'=>'source']]);pg($r['documents']===1,'superseded pages excluded from invoice totals');
 echo "Receipt progress, real completion and retry countdown passed\n";
+
+$now=time();$s=['requested'=>false,'documents'=>['reply'=>['process_id'=>'run','stage'=>'archived','toconline_state'=>'toc_submitted','toc_deadline'=>$now+1800]],'processes'=>['run'=>['requested_at'=>'2026-04-30T23:30:00Z','year'=>2026,'months'=>[2]]]];
+pg(!InvoiceReceiptReport::canStart($s),'TOConline automatic confirmation wait blocks new intake');
+pg(InvoiceReceiptReport::processState($s,'run')==='receipt_run_running','Provider wait is Running, not Pending');
+pg(count(InvoiceReceiptReport::processesForPeriod($s,2026,5))===1 && !InvoiceReceiptReport::processesForPeriod($s,2026,2),'Run filter uses Lisbon start date, not invoice/source month');
+$s['documents']['reply']['toc_deadline']=$now-1;
+pg(InvoiceReceiptReport::canStart($s) && InvoiceReceiptReport::processState($s,'run')==='receipt_pending','Expired confirmation is manual pending and permits intake');
+$s['documents']['reply']['toconline_state']='toc_accepted';
+pg(InvoiceReceiptReport::processState($s,'run')==='receipt_finished','All confirmed means Completed');
