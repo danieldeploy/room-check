@@ -51,12 +51,19 @@ $query=http_build_query(['process'=>$processId,'filter'=>$filter]);
 $report=InvoiceReceiptReport::summary($state['documents']);
 $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse(InvoiceReceiptReport::documents($fullState,$processId,$filter),true):[]; $documents=array_slice($all,($page-1)*50,50,true);
 $progress=InvoiceReceiptReport::progress($state,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));$historyHtml='';
-$globalError=$error?:($state['error']??'')?:($fullState['error']??'');
+$requestError=(($_SERVER['REQUEST_METHOD']??'GET')==='POST')?$error:'';
+$globalError=($requestError===''?$error:'')?:($state['error']??'')?:($fullState['error']??'');
 $globalError=$globalError!==''?InvoiceText::get(isset(InvoiceText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
+$canStart=InvoiceReceiptReport::canStart($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
+$formYear=$year;$formMonths=$state['months']??[];
+if ($requestError!=='' && ($_POST['action']??'')==='start') {
+    $formYear=(int)($_POST['year']??$year);
+    $formMonths=is_array($_POST['months']??null)?array_map('intval',array_filter($_POST['months'],'is_scalar')):[];
+}
 if ($canHistory) { $receiptHistoryRendering=true; ob_start(); require __DIR__.'/receipt-history.php'; $historyHtml=(string)ob_get_clean(); }
 if (($_GET['status']??'')==='1') {
     jsonResponse(['progress'=>$progress,'label'=>InvoiceText::get($progress['state']),'report'=>InvoiceReceiptReport::render($report),
-        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'revision'=>hash('sha256',json_encode($state['documents']))]);
+        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'can_start'=>$canRun && $canStart,'revision'=>hash('sha256',json_encode($state['documents']))]);
 }
 ?>
 <!doctype html><html lang="<?= $escape(Translator::locale()) ?>"><head>
@@ -70,16 +77,17 @@ if (($_GET['status']??'')==='1') {
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
 <?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a> · <a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
 <header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1><p><?= $t('receipt_description') ?></p></div></header>
+<?php if ($requestError!==''): ?><div id="receipt-request-error" class="alert" role="alert" tabindex="-1" data-save-feedback="error"><?= $t($requestError) ?></div><?php endif; ?>
 <div id="receipt-global-error" class="alert" role="alert" <?= $globalError===''?'hidden':'' ?>><?= $escape($globalError) ?></div>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= $t($flash) ?></div><?php endif; ?>
 <section class="card"><p><?= $t('receipt_help') ?></p><p><?= $t('receipt_duplicates') ?></p>
 <?php if (!$connected): ?><div class="alert"><?= $t('receipt_connect') ?></div>
 <?php if ($manager): ?><p><?= $t('receipt_scope') ?></p><form method="post" action="invoice-drive.php"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="receipts" value="1"><button class="primary-button" type="submit"><?= $t('receipt_connect_button') ?></button></form><?php endif; ?>
 <?php elseif ($canRun): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="start">
-<label><?= $t('receipt_year') ?> <input type="number" name="year" min="2000" max="<?= (int)(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y') ?>" value="<?= $year ?>" required></label>
+<label><?= $t('receipt_year') ?> <input type="number" name="year" min="2000" max="<?= (int)(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y') ?>" value="<?= $formYear ?>" required></label>
 <fieldset><legend><?= $t('receipt_months') ?></legend><div class="form-grid">
-<?php foreach (InvoiceDriveLayout::MONTHS as $month=>$name): ?><label class="check-row"><input type="checkbox" name="months[]" value="<?= $month ?>" <?= in_array($month,$state['months']??[],true)?'checked':'' ?>> <?= $escape(SiteTranslations::text($name,$monthEnglish[$month])) ?></label> <?php endforeach; ?>
-</div></fieldset><div class="form-actions"><button class="primary-button" type="submit" <?= $fullState['requested']?'disabled':'' ?>><?= $t('receipt_start') ?></button></div></form><?php endif; ?>
+<?php foreach (InvoiceDriveLayout::MONTHS as $month=>$name): ?><label class="check-row"><input type="checkbox" name="months[]" value="<?= $month ?>" <?= in_array($month,$formMonths,true)?'checked':'' ?>> <?= $escape(SiteTranslations::text($name,$monthEnglish[$month])) ?></label> <?php endforeach; ?>
+</div></fieldset><div class="form-actions"><button class="primary-button" type="submit" data-receipt-start <?= !$canStart?'disabled':'' ?>><?= $t('receipt_start') ?></button></div><p data-receipt-start-blocked role="status" <?= $canStart?'hidden':'' ?>><?= $t('receipt_process_running') ?></p></form><?php endif; ?>
 <?php if (!empty($state['months'])): ?><p><?= $t('receipt_selection') ?>: <?= $year ?> · <?= $escape(implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$state['months']))) ?></p><?php endif; ?>
 <?php if ($canRun && (!empty($state['missing_periods']) || !empty($state['error']))): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="retry_process"><input type="hidden" name="process" value="<?= $escape($processId) ?>"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></form><?php endif; ?>
 <?php if (!empty($state['missing_periods'])): ?><p class="alert"><?= $t('receipt_missing_month') ?>: <?= $escape(implode(', ',$state['missing_periods'])) ?></p><?php endif; ?>

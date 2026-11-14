@@ -33,7 +33,7 @@ copy($root.'/admin/receipts.php',$tmp.'/web/admin/receipts.php');
 copy($root.'/admin/receipt-history.php',$tmp.'/web/admin/receipt-history.php');
 copy($root.'/admin/receipt-document.php',$tmp.'/web/admin/receipt-document.php');
 file_put_contents($tmp.'/vault/master.key',random_bytes(32)); chmod($tmp.'/vault/master.key',0600);
-$vault=new InvoiceVault($tmp.'/vault'); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'year'=>2026,'months'=>[10]]);
+$vault=new InvoiceVault($tmp.'/vault'); $vault->save('drive-oauth.enc',['scope'=>'https://www.googleapis.com/auth/drive']); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'year'=>2026,'months'=>[10]]);
 file_put_contents($tmp.'/web/config.php','<?php return '.var_export(['invoices'=>['private_dir'=>$tmp.'/vault']],true).';');
 $lib=<<<'PHP'
 <?php
@@ -43,6 +43,8 @@ function database(): PDO {
     static $pdo;
     if ($pdo) return $pdo;
     $pdo=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+    $pdo->sqliteCreateFunction('GET_LOCK',static fn($name,$timeout)=>1,2);
+    $pdo->sqliteCreateFunction('RELEASE_LOCK',static fn($name)=>1,1);
     $pdo->exec("CREATE TABLE users(id INTEGER,username TEXT,display_name TEXT,role TEXT,is_active INTEGER,last_login_at TEXT,preferred_language TEXT);
         CREATE TABLE role_permissions(role TEXT,permission TEXT);
         INSERT INTO users VALUES(1,'fixture','Fixture User','".$GLOBALS['fixture_role']."',1,NULL,'pt');");
@@ -55,7 +57,7 @@ $render=static function(string $role,array $permissions,string $action='',bool $
     $code='$GLOBALS["fixture_role"]='.var_export($role,true).';$GLOBALS["fixture_permissions"]='.var_export($permissions,true).';'
         .'session_save_path('.var_export($tmp,true).');session_start();$_SESSION=["user_id"=>1,"last_activity"=>time(),"csrf_token"=>"fixture-csrf"];'
         .'$_SERVER["REQUEST_METHOD"]='.var_export($action===''?'GET':'POST',true).';$_POST=["action"=>'.var_export($action,true).',"id"=>"private-error-id","csrf_token"=>"fixture-csrf"];'
-        .'$_GET["status"]='.var_export($status?'1':'',true).';'
+        .'if('.var_export($action==='start',true).'){$_POST["year"]=1999;$_POST["months"]=["6"];}$_GET["status"]='.var_export($status?'1':'',true).';'
         .'ob_start();register_shutdown_function(static function(){echo json_encode(["status"=>http_response_code(),"html"=>ob_get_clean()]);});'
         .'require '.var_export($tmp.'/web/admin/'.($preview?'receipt-document.php':'receipts.php'),true).';';
     $process=proc_open([PHP_BINARY,'-d','display_errors=stderr','-r',$code],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
@@ -71,6 +73,9 @@ try {
     reportCheck($status['history']===null && !str_contains(json_encode($status),'SECRET-') && !str_contains(json_encode($status),'private-page-id'),'Polling report never exposes documents');
     foreach (['review','retry','regroup'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
     reportCheck($render('governanta',[])['status']===403 && $render('governanta',['receipts.view'])['status']===403,'No/legacy-only access must fail closed');
+    $rejected=$render('gerente',[],'start');
+    reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
+    reportCheck(str_contains($rejected['html'],'value="1999"') && preg_match('/name="months\[\]" value="6" checked/',$rejected['html'])===1,'Rejected selection must remain on the form');
     $manager=$render('gerente',[]);
     reportCheck(str_contains($manager['html'],'SECRET-NORMAL-NUMBER') && str_contains($manager['html'],'receipt-document.php?id=') && str_contains($manager['html'],'name="confirmed"'),'Manager detailed history/review regressed: '.json_encode([str_contains($manager['html'],'SECRET-NORMAL-NUMBER'),str_contains($manager['html'],'receipt-document.php?id='),str_contains($manager['html'],'name="confirmed"')]));
     reportCheck($render('governanta',['receipts.run'],'',true)['status']===403,'Actual document endpoint denies run-only operator');

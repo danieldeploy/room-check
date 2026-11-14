@@ -83,13 +83,11 @@ final class InvoiceReceipts
         if (!$this->drive->receiptsAuthorized()) throw new RuntimeException('receipt_connect');
         $s=$this->status();
         if ($s['requested']) {
-            if (($s['year']??null)!==$year || ($s['months']??[])!==$months) throw new RuntimeException('worker_busy');
+            if (($s['year']??null)!==$year || ($s['months']??[])!==$months) throw new RuntimeException('receipt_process_running');
             return;
         }
-        foreach ($s['processes'] as $pid=>$process) {
-            if ((int)$process['year']===$year && array_intersect($process['months'],$months)
-                && InvoiceReceiptReport::processPending($s,(string)$pid)) throw new RuntimeException('receipt_process_overlap');
-        }
+        $tocSettings=$this->toc->settings();
+        if (!InvoiceReceiptReport::canStart($s,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']))) throw new RuntimeException('receipt_process_running');
         $pid=bin2hex(random_bytes(12));$s['active_process']=$pid;
         $s['processes'][$pid]=['id'=>$pid,'year'=>$year,'months'=>$months,'requested_at'=>gmdate('c'),'error'=>'','missing_periods'=>[]];
         $s['requested']=true; $s['requested_by']=$actor; $s['requested_at']=gmdate('c');
@@ -192,26 +190,15 @@ final class InvoiceReceipts
         }
         foreach ($files as $f) {
             $id=$f['id']; InvoiceDriveClient::assertId($id);
-            $old=$s['documents'][$id]??null;
-            if ($old) {
-                // Explicit reselection can recover a wrongly filed, still-unsent scan.
-                // Replacing bytes on the same ID requires a new scan, never stale OCR reuse.
-                if (($old['md5Checksum']??'')!==($f['md5Checksum']??'')) continue;
-                if ($old['stage']!=='review' || $old['toconline_state']!=='pending' || !empty($old['drive_parent'])
-                    || (($old['expected_period']??'')===$f['expected_period'] && ($old['source_parent']??'')===($f['parents'][0]??'')
-                        && ($old['md5Checksum']??'')===($f['md5Checksum']??''))) continue;
-            }
-            if (!$old && count($s['documents'])>=2000) throw new RuntimeException('receipt_limit');
+            // A new intake never retries, reassigns or reinterprets a recorded scan.
+            // Pending originals remain in their prior run for explicit manual action.
+            if (isset($s['documents'][$id])) continue;
+            if (count($s['documents'])>=2000) throw new RuntimeException('receipt_limit');
             $format=InvoiceDriveClient::receiptFormat($f);
             $valid=$format!==null && (int)($f['size']??0)>=5 && (int)$f['size']<=10*1024*1024 && !empty($f['md5Checksum']);
             $s['documents'][$id]=$f+['format'=>$format,'source_parent'=>$f['parents'][0]??'', 'root'=>$root,'source'=>$source,
                 'stage'=>$valid?'queued':'review','error'=>$valid?'':'receipt_format_required','toconline_state'=>'pending',
                 'process_id'=>$s['active_process'],'requested_by'=>$s['requested_by'],'created_at'=>gmdate('c'),'attempts'=>0];
-            if ($old && !empty($old['ocr_creating']) && empty($old['ocr_cleaned'])) {
-                // Never lose an unresolved temporary copy when the owner corrects the folder.
-                $s['documents'][$id]['ocr_creating']=true;
-                $s['documents'][$id]['ocr_id']=$old['ocr_id']??null;
-            }
         }
         $s['processes'][$s['active_process']]['missing_periods']=$s['missing_periods'];
         $s['processes'][$s['active_process']]['error']='';
@@ -243,6 +230,7 @@ final class InvoiceReceipts
     {
         $s=$this->status(); if (($s['analysis_version']??0)>=InvoiceReceiptAnalysis::VERSION) return;
         foreach ($s['documents'] as $id=>$d) {
+            if (($d['process_id']??'legacy')!==($s['active_process']??'legacy')) continue;
             if (!empty($d['source_id']) || !empty($d['analysis_version']) || in_array($d['stage'],['split_completed','duplicate_trashed'],true)) continue;
             $ids=$d['children']??[$id]; $safe=true;
             foreach ($ids as $child) if (!$this->toc->receiptUnsent($child) || !in_array($s['documents'][$child]['toconline_state']??'pending',['pending','toc_retry','receipt_per_page'],true)) $safe=false;
@@ -325,7 +313,7 @@ final class InvoiceReceipts
             if (($d['error']??'')==='drive_permission' && empty($d['trash_capability_recheck']) && in_array($d['stage'],['source_trashing','trashing'],true)) {
                 $d['next_attempt']=0;$d['trash_capability_recheck']=true;
             }
-            if (!$this->analysis && $d['stage']==='review' && $d['toconline_state']==='pending' && empty($d['drive_parent'])) {
+            if (!$this->analysis && ($d['process_id']??'legacy')===($s['active_process']??'legacy') && $d['stage']==='review' && $d['toconline_state']==='pending' && empty($d['drive_parent'])) {
                 if (($d['format']??'')==='pdf' && empty($d['pdf_pages_checked'])) {
                     $d['stage']='queued';
                     if (!empty($d['ocr_cleaned'])) unset($d['ocr_id'],$d['ocr_creating'],$d['ocr_cleaned']);
@@ -392,6 +380,7 @@ final class InvoiceReceipts
     {
         $s=$this->status();$sets=[];
         foreach ($s['documents'] as $id=>$d) {
+            if (in_array($d['stage']??'',['review','failed'],true)) continue;
             $key=InvoiceReceiptAnalysis::duplicateKey($d);
             if ($key && !empty($d['source_id']) && ($d['stage']??'')!=='duplicate_trashed') $sets[$key][]=$id;
         }
