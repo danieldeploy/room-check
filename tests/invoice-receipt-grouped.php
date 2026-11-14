@@ -58,7 +58,7 @@ try {
  InvoiceReceipts::enableProcessedSources($vault);$drive->moveCrash=true;$flow->run();$s=$flow->status();
  gq($s['documents'][$id]['stage']==='source_moving','uncertain move retains persisted destination');
  $s['documents'][$id]['next_attempt']=0;$vault->save(InvoiceReceipts::FILE,$s);$flow->run();$s=$flow->status();
- gq($s['documents'][$id]['stage']==='source_processed' && !$drive->files[$id]['trashed'] && in_array('tempo_scan_processed',$drive->names,true),'fully confirmed original moves, never trashed');
+ gq($s['documents'][$id]['stage']==='source_processed' && !$drive->files[$id]['trashed'] && in_array('temp_scan_processed',$drive->names,true),'fully confirmed original moves, never trashed');
  gq($flow->preview($children[1],true)['bytes']===$source,'full original preview remains available after movement');
  gq($flow->preview($children[1])['bytes']==='%PDF-1.4 pages 3','invoice preview remains available after movement');
  $flow->run();gq(count($sent)===2,'cleanup does not resend');

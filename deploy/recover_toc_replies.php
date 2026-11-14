@@ -24,7 +24,7 @@ try {
         $pipe=new InvoiceTocPipe($vault);
         for ($i=0;$i<4 && $pipe->status()['pending']>0;$i++) $pipe->process($toc);
         if (!$result['complete'] || $pipe->status()['pending']>0) throw new RuntimeException('recovery_pending');
-        echo "TOConline retained reply recovery completed through existing verifier; completed sources move to tempo_scan_processed.\n";
+        echo "TOConline retained reply recovery completed through existing verifier; completed sources move to temp_scan_processed.\n";
     } finally {$pdo->query("SELECT RELEASE_LOCK('room_check_invoices')");}
 } catch (Throwable $e) {
     $allowed=['configuration','busy','recovery_pending','toc_recovery_root','toc_recovery_limit','toc_pipe_queue'];

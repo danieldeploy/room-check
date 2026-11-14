@@ -503,7 +503,7 @@ and exception alerts expose this review requirement.
 ## Independent receipt runs and completed-source retention (2026-11-14)
 
 Owner-authorized policy supersedes the source-cleanup hold and original-trashing
-rules above: move the unchanged original to the sibling `tempo_scan_processed`
+rules above: move the unchanged original to the sibling `temp_scan_processed`
 folder only after every grouped invoice is resolved. Unconfirmed, incomplete or
 failed invoices keep their original in its selected `temp_scan` month. Verify
 retained invoice bytes again before moving; persist the destination before the
