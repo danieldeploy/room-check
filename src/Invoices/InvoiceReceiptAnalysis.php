@@ -28,6 +28,16 @@ final class InvoiceReceiptAnalysis
     }
     private static function identity(array $q): string
     { return implode('|',[$q['issuer_nif'],$q['invoice_number'],$q['issued_on'],$q['company_nif'],$q['total']]); }
+    /** Only complete, unambiguous copies qualify; QR agreement alone does not prove completeness. */
+    public static function duplicateKey(array $d): ?string
+    {
+        if (empty($d['complete']) || !empty($d['uncertain']) || !empty($d['review_reason']) || !empty($d['children'])
+            || ($d['stage']??'')==='superseded') return null;
+        foreach (['issuer_nif','company_nif','invoice_number','issued_on','total'] as $k) if (empty($d[$k])) return null;
+        if (!empty($d['qr_fields'])) { $q=$d['qr_fields'];ksort($q);return hash('sha256',json_encode($q,JSON_THROW_ON_ERROR)); }
+        // Without a QR, only byte-identical complete scans are automatically consolidated.
+        return !empty($d['sha256'])?hash('sha256',self::identity($d).'|'.$d['sha256']):null;
+    }
     private static function clean(mixed $v,int $max=160): string
     { return is_string($v) && mb_strlen($v)<=$max && !preg_match('/[\x00-\x1f]/',$v)?trim($v):''; }
     public function analyse(string $bytes,string $format,string $nif,?array $manual=null): array
@@ -76,6 +86,7 @@ final class InvoiceReceiptAnalysis
             $g=['pages'=>$pages,'issuer_name'=>self::clean($item['issuer_name']??''),'issuer_nif'=>self::clean($item['issuer_nif']??''),
                 'company_nif'=>self::clean($item['company_nif']??''),'invoice_number'=>self::clean($item['invoice_number']??'',128),
                 'issued_on'=>self::clean($item['issued_on']??''),'total'=>self::clean($item['total']??''),'data_source'=>'gemini',
+                'legibility'=>is_int($item['legibility']??null)?max(0,min(100,$item['legibility'])):0,
                 'complete'=>($item['complete']??false)===true,'uncertain'=>($item['uncertain']??true)!==false,'review_reason'=>''];
             if (count($identities)===1) $g=array_merge($g,array_values($identities)[0]);
             if ($badQr || count($identities)>1) $g['review_reason']='receipt_grouping_required';

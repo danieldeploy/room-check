@@ -16,12 +16,12 @@ $previewOptions=['document'=>!empty($d['analysis_version']) || empty($d['source_
 $sourceDocument=$state['documents'][$d['source_id']??'']??null;
 if (is_array($sourceDocument) && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
 foreach ($previewOptions as $previewKind=>$previewLabel): ?>
-<div data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>">
-<div class="form-actions"><button class="primary-button" type="button" aria-expanded="false" aria-controls="preview-<?= $escape($id.'-'.$previewKind) ?>"><?= $t($previewLabel) ?></button></div>
-<div id="preview-<?= $escape($id.'-'.$previewKind) ?>" hidden>
+<details class="document-disclosure" data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>">
+<summary><?= $t($previewLabel) ?></summary>
+<div id="preview-<?= $escape($id.'-'.$previewKind) ?>" data-preview-panel>
 <?php if ($previewKind==='source'): ?><p><?= $t('receipt_source_warning') ?></p><?php endif; ?>
 <p role="status"></p><div data-document-content></div></div>
-</div>
+</details>
 <?php endforeach; ?>
 <?php endif; ?>
 <?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></div></form><?php endif; ?>
@@ -35,7 +35,7 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <label><input type="checkbox" name="confirmed" value="1" required> <?= $t('receipt_confirm') ?></label>
 <div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_approve') ?></button></div>
 </form><?php else: ?><p><?= $t('receipt_wait') ?></p><?php endif; ?>
-<?php endif; ?><?php if ($canReview && empty($d['source_id']) && ($d['format']??'')==='pdf' && !in_array($d['stage'],['split_completed','source_trashing'],true) && (!empty($d['children']) || !empty($d['grouping_pending']))): ?>
+<?php endif; ?><?php if ($canReview && empty($d['source_id']) && ($d['format']??'')==='pdf' && !in_array($d['stage'],['split_completed','source_trashing','source_moving','source_processed'],true) && (!empty($d['children']) || !empty($d['grouping_pending']))): ?>
 <details><summary><?= $t('receipt_groups') ?></summary><p><?= $t('receipt_groups_help') ?></p>
 <form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="regroup"><input type="hidden" name="id" value="<?= $escape($id) ?>">
 <label><?= $t('receipt_groups') ?><textarea name="page_groups" required maxlength="400" rows="4"></textarea></label>
@@ -44,5 +44,5 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <?php endif; ?>
 </article>
 <?php endforeach; ?>
-<nav><?php if ($page>1): ?><a href="?page=<?= $page-1 ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?page=<?= $page+1 ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
+<nav><?php if ($page>1): ?><a href="?<?= $escape(http_build_query(['process'=>$processId,'filter'=>$filter,'page'=>$page-1])) ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?<?= $escape(http_build_query(['process'=>$processId,'filter'=>$filter,'page'=>$page+1])) ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
 </section><?php endif; ?>

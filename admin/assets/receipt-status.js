@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  document.querySelectorAll('[data-receipt-filter]').forEach(select=>select.addEventListener('change',()=>select.form.requestSubmit()));
   const status=document.getElementById('receipt-status');if(!status)return;
   const label=status.querySelector('[data-status-label]'),warning=status.querySelector('[data-status-warning]');
   let offset=Number(status.dataset.server)*1000-Date.now(),revision='',failures=0;
@@ -8,7 +9,7 @@
     const seconds=Math.max(0,Math.ceil((Number(status.dataset.next)*1000-Date.now()-offset)/1000));
     label.textContent=seconds?status.dataset.retry.replace('{seconds}',String(seconds)):status.dataset.due;
   };
-  const previewBusy=()=>document.querySelector('[data-receipt-preview] button[aria-expanded="true"]');
+  const previewBusy=()=>document.querySelector('[data-receipt-preview][open], [data-receipt-preview] button[aria-expanded="true"]');
   async function poll(){
     try{
       const response=await fetch(status.dataset.url,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
