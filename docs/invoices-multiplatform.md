@@ -560,3 +560,54 @@ Rejected submission errors are rendered separately from polled workflow errors,
 receive focus and retain the submitted year/month selection. Five-second polling
 updates the start button from the full workflow activity, even while viewing a
 previous pending run. The advisory worker lock still protects every mutation.
+
+## Compact receipt review and targeted missing-page recovery (2026-11-14)
+
+The module is A4 Invoices and Small Receipts / Faturas A4 e pequenos talões.
+The selected process's status and read-only Refresh share the process/filter card;
+automatic five-second updates preserve open viewers and unsaved edits. New-run
+eligibility remains global. Date formatting changes presentation only: dd-mm-yyyy
+with the localized month name, and mm-yyyy for the original intake folder.
+The review displays issuer_nif, never the configured recipient NIF as a supplier.
+Recipient matching and fiscal QR precedence remain mandatory.
+
+Reports distinguish PDF/JPG originals from invoice groups. A multi-page invoice
+counts once. Processed means a resolved invoice: confirmed TOConline acceptance
+and archive, or confirmed duplicate and completed removal. Pending is the remaining
+invoice count; awaiting a reply alone is not an error. Source retirement is checked
+separately by overall process completion. The duplicate count and repeated manager
+error list are removed; safe duplicate details remain, and run-only operators keep
+safe error details in a disclosure without gaining individual history or previews.
+
+A receipts.review user can request missing-page verification for an unsent pending
+PDF invoice. This queues `repairing` under the existing shared lock/cron. Intake
+and discovery retries cannot run concurrently with this work. Only unrecorded
+files from that invoice's original source month are examined (at most 19 new files,
+20 assembled parts, 10 MiB total and 50 pages). Existing documents never change
+process merely because a new intake selects their month again.
+
+Each candidate must identify the same issuer, recipient, full invoice number and
+issue date, with no conflicting total/QR. A candidate containing other invoices is
+not claimed. The combined analysis must confirm exactly one complete invoice and
+an unambiguous printed page sequence. The installed pdf-lib runtime preserves page
+content/dimensions/rotation and restores printed order. Unreadable, mismatching,
+repeated or incomplete pages remain pending with a translated reason. A checked
+box is only a request to verify, never evidence that the invoice is complete.
+
+The replacement gets one durable ID and reuses normal Drive/archive/TOConline
+submission and authenticated reply handling. Original and additional sources share
+that replacement child in the encrypted history; the old derivative is superseded,
+retained until confirmed replacement, and cannot be submitted. Other pending
+invoices remain untouched. Additional sources move to temp_scan_processed only
+when their children resolve; a mixed original stays while any other invoice is
+pending. Cache reconstruction uses pinned source references and the saved page
+order. Already submitted invoices cannot be repaired through this operation.
+Saving edited details on a known incomplete invoice keeps it pending; it cannot
+bypass missing-page verification. No new provider, credential, service or cron.
+
+Acceptance: repair lifecycle tests cover mismatch, duplicate/mixed candidates,
+no new scan, concurrent discovery, submitted-history immutability, cache loss,
+normal single submission and source retention across authenticated acknowledgement.
+The PHP/native PDF bridge tests cover deterministic assembly and page order.
+Production end-to-end repair requires a genuine missing scan and a real provider
+acknowledgement; synthetic fixtures do not prove those external outcomes.

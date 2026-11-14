@@ -147,6 +147,7 @@ jobs:
           php tests/invoice-gemini.php
           php tests/invoice-receipt-analysis.php
           php tests/invoice-receipt-grouped.php
+          php tests/invoice-receipt-repair.php
           php tests/invoice-receipt-processes.php
           php tests/invoice-receipt-duplicates.php
           php tests/invoice-receipt-progress.php

@@ -932,3 +932,27 @@ mutation is performed by this diagnostic.
 - Local regression covers pending same-month restart, active/retry exclusion,
   preserved old scans during actual discovery, request error feedback and role
   isolation. Production release and visual acceptance are checked separately.
+
+## 2026-11-14 — agreed receipt presentation and targeted repair
+
+Prepared for guarded publication (not a claim of installed version): compact A4
+Invoices and Small Receipts module, global-style rounded controls, compact desktop
+month row with unchanged label typography, instructions disclosure, selected-run
+Status/Refresh in the process/filter card, localized display-only dates and issuer
+NIF. JPEG records no longer offer a complete source PDF. Resolved invoice counts
+replace archive-only counts; duplicate details remain without a duplicate total,
+and run-only users retain safe errors without individual history.
+
+Targeted missing-page requests run through the existing locked invoice worker,
+using local PDF assembly plus the already configured analysis provider. New scans
+must identify the same complete invoice and its printed page sequence. Atomic
+source claims/replacement lineage prevent later intake from resending those pages;
+other pending items and submitted history are preserved. Missing/ambiguous pages
+stay pending; manual data edits cannot declare a known incomplete invoice complete.
+Sources retire through the existing confirmed-source movement gate.
+
+Local acceptance covers receipt lifecycle, recovery/duplicates, report/permissions,
+read-only polling, PHP/native PDF assembly and PT/EN contracts. Required CI and
+installed release verification follow the normal PR/deploy flow. No live invoice
+was created or submitted merely to test presentation; real repair acceptance needs
+the owner's actual missing page in the original month folder.

@@ -58,6 +58,7 @@ final class InvoiceReceiptAnalysis
         return $manifest;
     }
     public function extract(string $bytes,array $pages): array { return $this->pdf->extract($bytes,$pages); }
+    public function assemble(array $parts,array $order=[]): array { return $this->pdf->assemble($parts,$order); }
     public static function validate(array $result,array $local,string $nif): array
     {
         $count=$local['count']??0; $input=$result['groups']??null;

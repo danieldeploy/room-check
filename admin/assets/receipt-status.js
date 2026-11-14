@@ -4,6 +4,8 @@
   document.querySelectorAll('[data-receipt-filter]').forEach(select=>select.addEventListener('change',()=>select.form.requestSubmit()));
   const status=document.getElementById('receipt-status');if(!status)return;
   const label=status.querySelector('[data-status-label]'),warning=status.querySelector('[data-status-warning]');
+  let timer=null,inFlight=false;
+  const refreshButtons=document.querySelectorAll('[data-receipt-refresh]');
   let offset=Number(status.dataset.server)*1000-Date.now(),revision='',failures=0;
   const countdown=()=>{
     if(status.dataset.state!=='receipt_retry_wait')return;
@@ -12,6 +14,7 @@
   };
   const previewBusy=()=>document.querySelector('[data-receipt-preview][open], [data-receipt-preview] button[aria-expanded="true"]');
   async function poll(){
+    if(inFlight)return;inFlight=true;window.clearTimeout(timer);refreshButtons.forEach(b=>{b.disabled=true;});
     try{
       const response=await fetch(status.dataset.url,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
       if(!response.ok)throw new Error('status');const result=await response.json();
@@ -30,8 +33,9 @@
       }
       failures=0;warning.hidden=true;
     }catch{if(++failures>=3){warning.textContent=status.dataset.unavailable;warning.hidden=false;}}
-    finally{window.setTimeout(poll,5000);}
+    finally{inFlight=false;refreshButtons.forEach(b=>{b.disabled=false;});timer=window.setTimeout(poll,5000);}
   }
   document.getElementById('receipt-history')?.addEventListener('input',event=>{if(event.target.closest('form'))document.getElementById('receipt-history').dataset.editing='true';});
-  window.setInterval(countdown,1000);countdown();window.setTimeout(poll,5000);
+  refreshButtons.forEach(button=>button.addEventListener('click',poll));
+  window.setInterval(countdown,1000);countdown();timer=window.setTimeout(poll,5000);
 })();
