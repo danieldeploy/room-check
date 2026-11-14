@@ -491,7 +491,7 @@ final class InvoiceReceipts
                 }
             }
             if (empty($d['processed_parent'])) {
-                $d['processed_parent']=(new InvoiceDrive($this->pdo,$this->vault,$this->drive))->folder($d['root'],['tempo_scan_processed']);
+                $d['processed_parent']=(new InvoiceDrive($this->pdo,$this->vault,$this->drive))->folder($d['root'],['temp_scan_processed']);
             }
             $d['stage']='source_moving'; $this->put($id,$d);
             $move=array_merge($d,['source_parent'=>$d['original_parent']??$d['source_parent'],'drive_parent'=>$d['processed_parent']]);

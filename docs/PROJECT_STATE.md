@@ -895,10 +895,23 @@ mutation is performed by this diagnostic.
   uncertain invoices never qualify; no matching subset of an ambiguous reply is
   accepted. Existing portal delivery and shared rate limits remain unchanged.
 - The authorized source policy now moves fully resolved originals to sibling
-  `tempo_scan_processed`; no source trashing or ownership/sharing changes. An
+  `temp_scan_processed`; no source trashing or ownership/sharing changes. An
   incomplete source stays in its original selected month. The existing deployment
   recovery hook applies the policy once and the existing worker continues it.
 - Local regressions cover grouping, signed duplicate evidence, interrupted remote
   operations, source preservation, process isolation and role-safe rendering.
-  Production installation and authenticated functional acceptance remain pending
-  until the guarded deployment is checked; no readiness inferred from these tests.
+  Production deployment 410 (`d02567c`) was confirmed after PR #361. Desktop
+  acceptance verified one-, two- and four-page disclosures and outcome filters.
+  Four resolved originals were moved; one incomplete invoice remains pending.
+  New live batch creation was not exercised; process isolation passed automated
+  tests. The mobile PDF limitation remains deferred.
+
+### 2026-11-14 — processed-source folder spelling
+- Owner corrected the destination name to `temp_scan_processed`. The existing
+  Drive folder was renamed in place, retaining its ID, parent, contents and
+  permissions. Runtime lookup, PT/EN labels, release message and lifecycle
+  expectation use the corrected name; no processing or cleanup rules change.
+- Existing recorded destination IDs remain valid. New lookups reuse the renamed
+  folder through the existing named-folder lookup. Local lifecycle and required
+  CI checks precede the guarded deployment; production acceptance is recorded
+  separately after deployment.
