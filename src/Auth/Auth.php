@@ -28,9 +28,9 @@ final class Auth
     public const PERMISSION_VERIFICATION_CATEGORIES_MANAGE = 'verification_categories.manage';
 
     public const PERMISSIONS = [
-        self::PERMISSION_RECEIPTS_VIEW => ['group'=>'Faturas A4 e pequenos talões','label'=>'Consultar talões'],
-        self::PERMISSION_RECEIPTS_RUN => ['group'=>'Faturas A4 e pequenos talões','label'=>'Iniciar arquivo e consultar relatório'],
-        self::PERMISSION_RECEIPTS_REVIEW => ['group'=>'Faturas A4 e pequenos talões','label'=>'Rever talões e corrigir dados'],
+        self::PERMISSION_RECEIPTS_VIEW => ['group'=>'Faturas em papel — A4 e formatos pequenos','label'=>'Consultar talões'],
+        self::PERMISSION_RECEIPTS_RUN => ['group'=>'Faturas em papel — A4 e formatos pequenos','label'=>'Iniciar arquivo e consultar relatório'],
+        self::PERMISSION_RECEIPTS_REVIEW => ['group'=>'Faturas em papel — A4 e formatos pequenos','label'=>'Rever talões e corrigir dados'],
         self::PERMISSION_INVOICES_VIEW => ['group' => 'Faturas e Portais', 'label' => 'Consultar faturas'],
         self::PERMISSION_INVOICES_RUN => ['group' => 'Faturas e Portais', 'label' => 'Recolher faturas'],
         self::PERMISSION_ROOM_CHECK_VIEW => ['group' => 'Gestão de Quartos', 'label' => 'Consultar quartos'],

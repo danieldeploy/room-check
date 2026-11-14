@@ -740,3 +740,19 @@ retention, one send per ID, changed-content/destination invalidation, denied Tra
 repeated worker ticks, mixed-master retention/completion, repaired replacement
 reconfirmation, and real endpoint role isolation are covered in receipt tests.
 No real new invoice submission is part of deployment verification for this change.
+
+### Paper invoice presentation and history counts (2026-11-14)
+
+The module label is **Paper Invoices — A4 and Small Formats** (PT: **Faturas em
+papel — A4 e formatos pequenos**). History's Documents below / Processed / Pending
+counts use the same `summary` and `resolved` rules as the processing report, on
+all records matching the selected run and status filter before pagination.
+Original PDFs with extracted children do not add invoices. Their source cards
+remain accessible as labeled disclosures, including grouping and failed-source
+retry actions; source problems still keep the process pending even if invoice
+counts are resolved. No workflow state or stored date is changed by presentation.
+The duplicate table's paper-copy instruction does not delete anything digitally.
+Field captions use shared settings styles; month names beside checkboxes retain
+their existing typography. Scan/start help precedes Year, below User instructions.
+Acceptance must check all/success/problems, polled history, source failures,
+multiple runs and pagination without weakening run-only report permissions.

@@ -66,11 +66,11 @@ function database(): PDO {
 }
 PHP;
 file_put_contents($tmp.'/web/lib.php',$lib);
-$render=static function(string $role,array $permissions,string $action='',bool $preview=false,bool $status=false) use ($tmp): array {
+$render=static function(string $role,array $permissions,string $action='',bool $preview=false,bool $status=false,array $query=[]) use ($tmp): array {
     $code='$GLOBALS["fixture_role"]='.var_export($role,true).';$GLOBALS["fixture_permissions"]='.var_export($permissions,true).';'
         .'session_save_path('.var_export($tmp,true).');session_start();$_SESSION=["user_id"=>1,"last_activity"=>time(),"csrf_token"=>"fixture-csrf"];'
         .'$_SERVER["REQUEST_METHOD"]='.var_export($action===''?'GET':'POST',true).';$_POST=["action"=>'.var_export($action,true).',"id"=>"private-error-id","csrf_token"=>"fixture-csrf"];'
-        .'if('.var_export($action==='start',true).'){$_POST["year"]=1999;$_POST["months"]=["6"];}$_GET["status"]='.var_export($status?'1':'',true).';'
+        .'if('.var_export($action==='start',true).'){$_POST["year"]=1999;$_POST["months"]=["6"];}$_GET='.var_export($query,true).';$_GET["status"]='.var_export($status?'1':'',true).';'
         .'ob_start();register_shutdown_function(static function(){echo json_encode(["status"=>http_response_code(),"html"=>ob_get_clean()]);});'
         .'require '.var_export($tmp.'/web/admin/'.($preview?'receipt-document.php':'receipts.php'),true).';';
     $process=proc_open([PHP_BINARY,'-d','display_errors=stderr','-r',$code],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
@@ -90,6 +90,18 @@ try {
     reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
     reportCheck(str_contains($rejected['html'],'value="1999"') && preg_match('/name="months\[\]" value="6" checked/',$rejected['html'])===1,'Rejected selection must remain on the form');
     $manager=$render('gerente',[]);
+    $counts=static function(string $html,array $expected): void {
+        $dom=new DOMDocument();@$dom->loadHTML($html);$xpath=new DOMXPath($dom);
+        $heading=$xpath->query('//*[@data-receipt-history-counts]')->item(0);
+        reportCheck($heading!==null,'History must identify its filtered invoice counters');
+        preg_match_all('/\d+/', $heading->textContent,$numbers);
+        reportCheck(array_map('intval',$numbers[0])===$expected,'History counts must exclude sources and use resolved work');
+    };
+    $counts($manager['html'],[4,3,1]);
+    $counts($render('gerente',[],'',false,false,['filter'=>'success'])['html'],[3,3,0]);
+    $counts($render('gerente',[],'',false,false,['filter'=>'problems'])['html'],[1,0,1]);
+    $polled=json_decode($render('gerente',[],'',false,true,['filter'=>'problems'])['html'],true,512,JSON_THROW_ON_ERROR);
+    $counts($polled['history'],[1,0,1]);
     $dom=new DOMDocument();@$dom->loadHTML($manager['html']);$xpath=new DOMXPath($dom);
     reportCheck($xpath->query('//*[contains(@class,"receipt-process-card")]//*[@id="receipt-status"]')->length===1,'Selected status belongs to process card');
     reportCheck($xpath->query('//*[@data-receipt-refresh]')->length===1,'Exactly one manual refresh action');
@@ -106,6 +118,24 @@ try {
     reportCheck(str_contains($review['html'],'name="buyer_confirmed"') && str_contains($review['html'],'value="discard"'),'Delegated review permits buyer confirmation and scoped deletion');
     reportCheck(!str_contains($review['html'],'value="repair"'),'Wrong NIF alone must not offer missing-page repair');
     reportCheck(str_contains($review['html'],'name="confirmed"'),'Future explicit review permission not usable');
+    // A failed source still needs its retry/grouping controls, without counting
+    // the original again as an invoice or changing the worker's pending state.
+    $state=$vault->read(InvoiceReceipts::FILE);
+    $state['documents']['private-master-id']['stage']='failed';
+    $state['documents']['private-master-id']['error']='drive_permission';
+    $vault->save(InvoiceReceipts::FILE,$state);
+    $problems=$render('gerente',[],'',false,false,['filter'=>'problems']);
+    $counts($problems['html'],[1,0,1]);
+    reportCheck(str_contains($problems['html'],'private-master-id') && str_contains($problems['html'],'value="retry"'),'Source error action remains accessible');
+    $state=InvoiceReceiptReport::withProcesses($state);
+    reportCheck(InvoiceReceiptReport::processPending($state,'legacy'),'Presentation must not hide pending source cleanup from processing');
+    $state['processes']['another']=['id'=>'another','requested_at'=>'2026-11-14T12:00:00Z','year'=>2026,'months'=>[11]];
+    for($i=0;$i<55;$i++) $state['documents']['extra-'.$i]=array_merge($documents['private-normal-id'],['process_id'=>'another']);
+    $vault->save(InvoiceReceipts::FILE,$state);
+    $counts($render('gerente',[],'',false,false,['process'=>'legacy'])['html'],[4,3,1]);
+    $second=$render('gerente',[],'',false,false,['process'=>'another','page'=>2]);
+    $counts($second['html'],[55,55,0]);
+    reportCheck(substr_count($second['html'],'<article class="card receipt-invoice"')===5,'Pagination retains matching documents and total counts across pages');
     echo "Receipt report: totals, duplicate company/number/date, safe errors, actual endpoint role isolation and denied forged POSTs passed.\n";
 } finally {
     foreach (glob($tmp.'/sess_*')?:[] as $sessionFile) unlink($sessionFile);
