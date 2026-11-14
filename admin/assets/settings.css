@@ -110,3 +110,6 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .receipt-duplicates th, .receipt-duplicates td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #dce6e5; }
 .receipt-duplicates th { color: #486581; }
 @media (min-width: 1200px) { .receipt-month-row { justify-content: space-between; column-gap: 5px; flex-wrap: nowrap; } }
+
+.receipt-page [hidden] { display:none !important; }
+#receipt-status[data-status-failed] .receipt-dots { display:none; }

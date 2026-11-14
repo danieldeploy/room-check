@@ -119,9 +119,9 @@ final class InvoiceRunner
         $vault = new InvoiceVault((string) ($this->config['private_dir'] ?? ''));
         $drive=new InvoiceDriveClient($vault);
         $toc=new InvoiceToconline($this->pdo,$vault,$drive);
-        $toc->reconcile();
         (new InvoiceTocPipe($vault))->process($toc);
         (new InvoiceTocMailbox($vault,$toc))->poll();
+        $toc->reconcile(); // Process authenticated arrivals before expiring receipt confirmation windows.
         (new InvoiceDrive($this->pdo,$vault,$drive))->run();
         $toc->run();
         $pdf=new InvoiceReceiptPdf($vault,$this->config);

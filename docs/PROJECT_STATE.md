@@ -1,5 +1,24 @@
 # Management Hub — current project state
 
+## Bounded receipt retries and consolidated summaries — 2026-11-14 (prepared)
+
+Receipt intake now stops status polling when only human action remains or the
+process is complete. Active work updates every five seconds; scheduled waits
+use a countdown, TOConline waits sixty-second status reads. Refresh appears
+only after a failed status read and disappears on successful recovery.
+Temporary Drive/Gemini failures have at most five retries in thirty minutes;
+daily quota gets one 24-hour probe; receipt confirmation gets six checks in
+thirty minutes without resubmission. Portal timing and invoice data are unchanged.
+
+Private process summaries combine all reasons and outcomes, baseline historical
+stopped runs, distinguish explicit manual cycles and never retry uncertain
+WhatsApp sends. The existing Meta invoice template was inspected and is unsuitable
+for success wording, so the receipt-only neutral template is separate; sender,
+configured manager and enabled notification preference are reused. See the
+invoice flow and ADR-005. Fake-clock worker, quota, confirmation, alert and UI
+regressions pass locally; required CI, installed version, Meta approval and real
+provider acceptance must be verified separately before reporting completion.
+
 ## TOConline acknowledgement recovery and outbound pacing (prepared)
 
 TOConline has a QR-created purchase acknowledgement that omits the uploaded

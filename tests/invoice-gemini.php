@@ -31,5 +31,25 @@ try {
  try {$client->analyse('%PDF-1.4 fourth','pdf',$local);throw new LogicException('daily budget ignored');} catch(InvoiceGeminiRetry){}
  gc(count($calls)===2,'daily safety budget reserves capacity');
  gc(!str_contains(json_encode($client->status()),'AIza'),'status cannot expose key');
+ // Daily quota and its one next-day probe survive a calendar boundary/restart.
+ $now=strtotime('2026-11-14T22:00:00Z');$dailyCalls=0;
+ $vault->save(InvoiceGemini::BUDGET,[]);
+ $dailyReply=['status'=>429,'body'=>['error'=>['details'=>[['violations'=>[['quotaId'=>'GenerateRequestsPerDay']]]]]]];
+ $daily=new InvoiceGemini($vault,static function()use(&$dailyCalls,&$dailyReply){$dailyCalls++;return $dailyReply;},static function()use(&$now){return $now;});
+ try {$daily->analyse('%PDF-1.4 daily','pdf',$local);gc(false,'daily quota must wait');} catch(InvoiceGeminiRetry $e){gc($e->getMessage()==='gemini_daily_quota' && $e->retryAt===$now+86400,'daily quota has one exact 24-hour wait');}
+ $now+=86399;
+ try {$daily->analyse('%PDF-1.4 daily','pdf',$local);} catch(InvoiceGeminiRetry $e){gc($e->getMessage()==='gemini_daily_quota','daily wait persists across budget day');}
+ gc($dailyCalls===1,'no daily probe before 24 hours');$now++;
+ try {$daily->analyse('%PDF-1.4 daily','pdf',$local);gc(false,'second daily failure must stop');} catch(RuntimeException $e){gc($e->getMessage()==='gemini_quota_probe_failed','failed daily probe requires intervention');}
+ $now+=86400;try{$daily->analyse('%PDF-1.4 daily','pdf',$local);}catch(RuntimeException $e){gc($e->getMessage()==='gemini_quota_probe_failed','no endless daily retry');}
+ gc($dailyCalls===2,'only one automatic next-day probe');
+ InvoiceGemini::resetDailyQuota($vault);$now+=10;
+ try{$daily->analyse('%PDF-1.4 recover','pdf',$local);}catch(InvoiceGeminiRetry){}
+ $now+=86400;$dailyReply=['status'=>200,'body'=>['candidates'=>[['finishReason'=>'STOP','content'=>['parts'=>[['text'=>'{"groups":[{"pages":[1]}]}']]]]]]];
+ $daily->analyse('%PDF-1.4 recover','pdf',$local);
+ gc(($daily->status()['daily_quota']['state']??'')==='recovered','successful real provider result records quota recovery');
+ $b=$daily->status();unset($b['configured'],$b['model']);$b['requests']=400;$b['daily_quota']=['state'=>'waiting','started_at'=>$now-86400,'retry_at'=>$now];$b['next_at']=0;$vault->save(InvoiceGemini::BUDGET,$b);$before=$dailyCalls;
+ try{$daily->analyse('%PDF-1.4 local-cap-probe','pdf',$local);gc(false,'local cap must stop probe');}catch(RuntimeException $e){gc($e->getMessage()==='gemini_quota_probe_failed','local daily cap stops one probe');}
+ gc($dailyCalls===$before && $daily->status()['daily_quota']['state']==='failed','local cap cannot bypass or repeat the next-day probe');
  echo "Gemini cache, limits, retry and secret boundaries passed\n";
 } finally {foreach(glob($dir.'/*')?:[] as $f)unlink($f);rmdir($dir);}

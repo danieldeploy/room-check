@@ -60,3 +60,19 @@ A process cannot reliably report its own complete host/network outage. Missed
 executions need an independent observer, reusing existing monitoring where
 available; keep uncovered failures explicit. This rule does not guarantee
 detection of every possible future failure or introduce a new daemon/service.
+
+## Receipt-module clarification — 2026-11-14
+
+The owner chose one consolidated summary at each stopped/completed receipt
+processing cycle, including success, all safe failure reasons and required
+manual action. Do not emit separate per-invoice or per-retry messages. A daily
+Gemini quota pause and its single 24-hour probe outcome are distinct reportable
+results. Deduplicate the process/cycle/result durably; an uncertain WhatsApp
+send is not retried automatically. This specializes receipt notifications only,
+without changing portal, room-check or server-alert behavior.
+
+Use a neutral receipt template, `receipt_process_summary_v1` / `pt_PT` / five
+body parameters, as documented in the invoice flow. The existing active invoice
+failure template explicitly demands intervention and cannot describe success.
+Reuse the existing manager and sender. A historical stopped process is not a
+new incident merely because code was deployed.

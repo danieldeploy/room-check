@@ -251,3 +251,14 @@ A recuperação seguinte fica limitada ao ID401/d937695. O processo PDF usa a
 opção Node `--disable-wasm-trap-handler`, que substitui a grande reserva virtual
 por verificações de limites em linha. O teste CI com Node 22.14 e limite virtual
 de 4 GB reproduz a restrição; o probe real continua obrigatório antes de publicar.
+
+## Receipt summary acceptance probe (2026-11-14)
+
+`deploy/verify_receipt_summary_once.php` runs after the normal guarded release.
+It uses the existing enabled invoice notification setting, active manager and
+protected WhatsApp credentials with the neutral receipt template described in
+the invoice flow. A private encrypted pre-send receipt makes it once-only even
+across a crash or repeated deployment. It prints only a safe acceptance state;
+never a phone number, message ID, credentials or invoice data. The labelled
+synthetic message does not submit invoices or alter process records. An
+uncertain send is not retried, and acceptance is not proof of handset delivery.

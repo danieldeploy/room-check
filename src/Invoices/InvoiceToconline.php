@@ -83,11 +83,11 @@ final class InvoiceToconline
         return ['subject'=>'Management Hub - '.$label.' - '.substr($key,0,16),'headers'=>$headers,'body'=>$body];
     }
 
-    private function state(int|string $id, string $state): void
+    private function state(int|string $id, string $state,array $timing=[]): void
     {
         if (str_starts_with((string)$id,'receipt:')) {
             require_once __DIR__.'/InvoiceReceipts.php';
-            InvoiceReceipts::deliveryState($this->vault,substr((string)$id,8),$state); return;
+            InvoiceReceipts::deliveryState($this->vault,substr((string)$id,8),$state,$timing); return;
         }
         $this->pdo->prepare('UPDATE invoice_document_delivery SET toconline_state=? WHERE document_id=?')->execute([$state,$id]);
     }
@@ -117,12 +117,31 @@ final class InvoiceToconline
         $now??=time(); $ledger=$this->ledger();
         foreach ($ledger as &$entry) {
             if ($entry['state']==='toc_sending') $entry['state']='toc_uncertain';
-            if ($entry['state']==='toc_submitted' && !empty($entry['attempted_at'])
+            if (str_starts_with((string)$entry['document_id'],'receipt:')) {
+                $sent=strtotime((string)($entry['attempted_at']??''));
+                if ($sent && in_array($entry['state'],['toc_submitted','toc_uncertain'],true)) {
+                    $entry['receipt_checks']??=0;$entry['receipt_next_check']??=$sent+300;
+                    if ($now>=(int)$entry['receipt_next_check']) {
+                        $entry['receipt_checks']=min(6,$entry['receipt_checks']+1);
+                        // A delayed worker does not invent missed checks or replay them in a burst.
+                        $entry['receipt_next_check']=$sent+(intdiv(max(0,$now-$sent),300)+1)*300;
+                        if ($now>=$sent+1800) $entry['state']='toc_no_confirmation';
+                    }
+                }
+            } elseif ($entry['state']==='toc_submitted' && !empty($entry['attempted_at'])
                 && strtotime($entry['attempted_at']) <= $now-72*3600) $entry['state']='toc_no_confirmation';
         } unset($entry);
         $this->vault->save('toconline-ledger.enc',$ledger);
         $nif=$this->settings()['nif']??'';
-        foreach ($ledger as $entry) if ($entry['nif']===$nif) $this->state($entry['document_id'],$entry['state']);
+        foreach ($ledger as $entry) if ($entry['nif']===$nif) $this->state($entry['document_id'],$entry['state'],self::receiptTiming($entry));
+    }
+
+    private static function receiptTiming(array $entry): array
+    {
+        $sent=strtotime((string)($entry['attempted_at']??''));
+        $waiting=$sent && in_array($entry['state']??'',['toc_sending','toc_submitted','toc_uncertain'],true);
+        return ['toc_next_check'=>$waiting?(int)($entry['receipt_next_check']??$sent+300):0,
+            'toc_deadline'=>$waiting?$sent+1800:0,'toc_checks'=>(int)($entry['receipt_checks']??0)];
     }
 
     /** Mail headers/body are untrusted evidence. Exact correlation only; no automatic acceptance. */
@@ -195,7 +214,7 @@ final class InvoiceToconline
             $entry['receipt_suggestion']=$suggestion; $entry['receipt_received_at']=gmdate('c');
         }
         unset($entry); $this->vault->save('toconline-ledger.enc',$ledger);
-        foreach ($ledger as $entry) if ((string)$entry['document_id']===(string)$id && $entry['nif']===$settings['nif']) { $this->state($id,$entry['state']); break; }
+        foreach ($ledger as $entry) if ((string)$entry['document_id']===(string)$id && $entry['nif']===$settings['nif']) { $this->state($id,$entry['state'],self::receiptTiming($entry)); break; }
         if ($applied && $automatic==='toc_accepted') {
             $settings['pilot_verified']=true; $this->vault->save('toconline-settings.enc',$settings);
         }
@@ -259,13 +278,13 @@ final class InvoiceToconline
         $this->assertSendBudget($ledger);
         $entry=['document_id'=>$id,'nif'=>$settings['nif'],'sender'=>$settings['sender'],'state'=>'toc_sending','attempted_at'=>gmdate('c')];
         $ledger[$identity]=$entry; $ledger[$content]=$entry;
-        $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,'toc_sending');
+        $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,'toc_sending',self::receiptTiming($entry));
         try {
             $ok=$this->transport ? ($this->transport)($to,$message) : @mail($to,$message['subject'],$message['body'],implode("\r\n",$message['headers']));
             $entry['state']=$ok?'toc_submitted':'toc_uncertain';
         } catch (Throwable) { $entry['state']='toc_uncertain'; }
         $ledger[$identity]=$entry; $ledger[$content]=$entry;
-        $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,$entry['state']);
+        $this->vault->save('toconline-ledger.enc',$ledger); $this->state($id,$entry['state'],self::receiptTiming($entry));
     }
 
     /** Shared rolling budget leaves capacity for the domain's other mail. No sleep under the lock. */
