@@ -24,6 +24,7 @@ $defaultMy2NSecretsFile = $serverHome === ''
     : $serverHome . '/room-check-private/my2n-secrets.json';
 $defaultWhatsAppSecretsFile = $serverHome === '' ? '' : $serverHome . '/room-check-private/whatsapp-secrets.json';
 $defaultTranslationSecretsFile = $serverHome === '' ? '' : $serverHome . '/room-check-private/google-translation.json';
+$defaultCloudbedsAccessConfigFile = $serverHome === '' ? '' : $serverHome . '/room-check-private/cloudbeds-zkaccess.json';
 
 return [
     'db' => [
@@ -49,6 +50,8 @@ return [
         'timezone' => 'Europe/Lisbon',
         'private_config_file' => (string) ($localConfig['zkaccess']['private_config_file'] ?? getenv('ZKACCESS_PRIVATE_CONFIG_FILE') ?: ''),
         'runner_status_file' => (string) ($localConfig['zkaccess']['runner_status_file'] ?? getenv('ZKACCESS_RUNNER_STATUS_FILE') ?: ''),
+        'cloudbeds_access_config_file' => (string) ($localConfig['zkaccess']['cloudbeds_access_config_file']
+            ?? getenv('CLOUDBEDS_ZKACCESS_CONFIG_FILE') ?: $defaultCloudbedsAccessConfigFile),
     ],
     'my2n' => [
         'company_id' => (int) ($localConfig['my2n']['company_id'] ?? getenv('MY2N_COMPANY_ID') ?: 70728),
