@@ -6,6 +6,7 @@ require_once __DIR__.'/../I18n/InvoiceText.php';
 
 final class InvoiceAlerts
 {
+    public const RECEIPT_TEMPLATE='receipt_process_summary_v1';
     public function __construct(private readonly PDO $pdo, private readonly array $config) {}
 
     public function queue(array $job, string $code): void
@@ -55,51 +56,88 @@ final class InvoiceAlerts
         }
     }
 
-    /** Same approved invoice template/recipient, with a private durable deduplication ledger. */
+    /** One durable summary per stopped/blocked receipt cycle, never one alert per document. */
     public function receipts(InvoiceVault $vault,?callable $sender=null): void
     {
         if (!$vault->has('receipts-workflow.enc')) return;
         require_once __DIR__.'/InvoiceReceiptReport.php';
-        $state=InvoiceReceiptReport::withProcesses($vault->read('receipts-workflow.enc'));$codes=[];
-        if (!empty($state['error'])) $codes[$state['active_process']??'legacy'][]=$state['error'];
+        $state=InvoiceReceiptReport::withProcesses($vault->read('receipts-workflow.enc'));
+        $file='receipt-summaries.enc';$ledger=$vault->has($file)?$vault->read($file):['processes'=>[]];
+        $toc=$vault->has('toconline-settings.enc')?$vault->read('toconline-settings.enc'):[];
+        $sendEnabled=!empty($toc['enabled']) && !empty($toc['pilot_verified']);
         foreach ($state['processes'] as $pid=>$process) {
-            if (!empty($process['error'])) $codes[$pid][]=$process['error'];
-            if (!empty($process['missing_periods'])) $codes[$pid][]='receipt_missing_month';
-        }
-        foreach ($state['documents']??[] as $d) {
-            $pid=$d['process_id']??'legacy';
-            if (in_array($d['stage']??'',['failed','review'],true)) $codes[$pid][]=$d['error']?:'receipt_review_required';
-            if (in_array($d['toconline_state']??'',['toc_uncertain','toc_rejected','toc_review','toc_no_confirmation'],true)) $codes[$pid][]=$d['toconline_state'];
-        }
-        $name='receipt-alerts.enc';$ledger=$vault->has($name)?$vault->read($name):[];
-        foreach ($codes as $pid=>$issues) {
-            $process=$state['processes'][$pid]??$state;
-            $period=implode(', ',array_map(static fn($m)=>sprintf('%04d-%02d',(int)($process['year']??0),(int)$m),$process['months']??[]));
-            foreach (array_unique($issues) as $code) {
-                $code=isset(InvoiceText::TEXT[$code])?$code:'receipt_failed';
-                $scope=$pid==='legacy'?($process['requested_at']??'legacy'):$pid;
-                $key=hash('sha256',$scope.'|'.$code);
-                if (!isset($ledger[$key])) $ledger[$key]=['code'=>$code,'period'=>$period,'state'=>'pending','created_at'=>gmdate('c')];
+            $selected=InvoiceReceiptReport::selected($state,(string)$pid);
+            $progress=InvoiceReceiptReport::progress($selected,$sendEnabled);
+            if (!$progress['settled']) { $ledger['processes'][$pid]['seen_work']=true;continue; }
+            $report=InvoiceReceiptReport::summary($selected['documents']);
+            $codes=$report['errors'];$recovered=0;
+            foreach ($selected['documents'] as $d) {
+                if (($d['stage']??'')==='superseded') continue;
+                if (($d['quota_outcome']??'')==='recovered') $codes[]='gemini_quota_recovered';
+                if (($d['quota_outcome']??'')==='failed' && !empty($d['quota_reason'])) $codes[]=$d['quota_reason'];
+                $recovered+=(int)($d['recovered_failures']??0);
+                if (in_array($d['toconline_state']??'',['toc_submitted','toc_uncertain','toc_sending'],true)) $codes[]='toc_no_confirmation';
             }
+            if (!empty($selected['error'])) $codes[]=$selected['error'];
+            if (!empty($selected['missing_periods'])) $codes[]='receipt_missing_month';
+            if ($progress['state']==='receipt_worker_delayed') $codes[]='receipt_worker_delayed';
+            $codes=array_values(array_unique(array_map(static fn($code)=>isset(InvoiceText::TEXT[$code])?$code:'receipt_failed',$codes)));sort($codes);
+            $summary=['state'=>$progress['state'],'processed'=>$report['processed'],'pending'=>$report['pending'],'total'=>$report['documents'],
+                'reasons'=>$codes,'next_at'=>$progress['state']==='receipt_quota_wait'?$progress['next_at']:0,
+                'cycle'=>(int)($process['notification_cycle']??0),'recovered'=>$recovered];
+            $signature=hash('sha256',json_encode($summary,JSON_THROW_ON_ERROR));
+            $old=$ledger['processes'][$pid]??[];
+            if (($old['last']??'')===$signature) continue;
+            // Installing the policy is not an event in every historical completed run.
+            $baseline=!$old && !$summary['cycle'];
+            foreach ($old['events']??[] as $key=>$event) if (($event['state_delivery']??'')==='pending') $old['events'][$key]['state_delivery']='superseded';
+            $old['last']=$signature;
+            if (!isset($old['events'][$signature])) $old['events'][$signature]=$summary+['state_delivery'=>$baseline?'baseline':'pending','created_at'=>gmdate('c')];
+            $ledger['processes'][$pid]=$old;
         }
-        $vault->save($name,$ledger);
+        $vault->save($file,$ledger);
+        // Preserve summaries until the dedicated template has passed the live acceptance probe.
+        if (!$vault->has('receipt-summary-probe-v1.enc') || ($vault->read('receipt-summary-probe-v1.enc')['state']??'')!=='meta_accepted') return;
         $settings=$this->pdo->query('SELECT * FROM invoice_notification_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);
-        if (!$settings || empty($settings['enabled']) || !preg_match('/\A[a-z0-9_]{1,100}\z/',$settings['template_name']??'')) return;
+        if (!$settings || empty($settings['enabled'])) return;
         $q=$this->pdo->prepare("SELECT mobile FROM users WHERE id=? AND role='gerente' AND is_active=1");$q->execute([$settings['recipient_user_id']]);$mobile=$q->fetchColumn();if (!$mobile) return;
-        foreach ($ledger as $key=>$entry) {
-            if ($entry['state']==='sending') { $ledger[$key]['state']='uncertain';$vault->save($name,$ledger);continue; }
-            if ($entry['state']!=='pending') continue;
-            $code=$entry['code'];$at=(new DateTimeImmutable($entry['created_at']))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d/m/Y H:i');
-            $values=['Faturas A4 e pequenos talões','Management Hub',$entry['period'], $at.' — '.(InvoiceText::TEXT[$code][0]??InvoiceText::TEXT['receipt_failed'][0]),
-                'Abra Faturas A4 e pequenos talões no Management Hub e consulte os erros e documentos pendentes.'];
-            $ledger[$key]['state']='sending';$vault->save($name,$ledger);
+        foreach ($ledger['processes'] as $pid=>$record) {
+            $key=$record['last']??'';$entry=$record['events'][$key]??[];
+            if (($entry['state_delivery']??'')==='sending') {
+                $ledger['processes'][$pid]['events'][$key]['state_delivery']='uncertain';$vault->save($file,$ledger);continue;
+            }
+            if (($entry['state_delivery']??'')!=='pending') continue;
+            // A resumed process must not dispatch a queued, already stale stopped-state summary.
+            if (!InvoiceReceiptReport::progress(InvoiceReceiptReport::selected($state,(string)$pid),$sendEnabled)['settled']) continue;
+            $values=self::receiptSummaryValues($state['processes'][$pid],(string)$pid,$entry);
+            $ledger['processes'][$pid]['events'][$key]['state_delivery']='sending';$vault->save($file,$ledger);
             try {
-                if ($sender) $sender($mobile,$values,$settings['template_name']);
-                else (new WhatsAppCloudClient($this->config))->sendTemplate($mobile,$values,'pt_PT',$settings['template_name']);
-                $ledger[$key]['state']='sent';$ledger[$key]['sent_at']=gmdate('c');
-            } catch (Throwable) { $ledger[$key]['state']='uncertain'; }
-            $vault->save($name,$ledger);break;
+                $message=$sender?$sender($mobile,$values,self::RECEIPT_TEMPLATE):(new WhatsAppCloudClient($this->config))->sendTemplate($mobile,$values,'pt_PT',self::RECEIPT_TEMPLATE);
+                $ledger['processes'][$pid]['events'][$key]['state_delivery']='sent';
+                $ledger['processes'][$pid]['events'][$key]['sent_at']=gmdate('c');
+                $ledger['processes'][$pid]['events'][$key]['message_id']=$message;
+            } catch (Throwable) { $ledger['processes'][$pid]['events'][$key]['state_delivery']='uncertain'; }
+            $vault->save($file,$ledger);break;
         }
+    }
+
+    private static function receiptSummaryValues(array $process,string $pid,array $entry): array
+    {
+        $date=static fn(string $at)=>(new DateTimeImmutable($at))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d-m-Y H:i');
+        $period=implode(', ',array_map(static fn($m)=>sprintf('%02d-%04d',(int)$m,(int)($process['year']??0)),$process['months']??[]));
+        $complete=$entry['state']==='receipt_finished';
+        $label=$complete?'Concluído':($entry['state']==='receipt_quota_wait'?'Pausado — quota diária':'Pendente — intervenção necessária');
+        // The dedicated summary template describes both success and blocked outcomes neutrally.
+        $text=($complete?'Sem problemas. ':'').'Estado: '.$label.'. Tratados: '.$entry['processed'].'/'.$entry['total'].'. Pendentes: '.$entry['pending'].'.';
+        if ($entry['recovered']) $text.=' Falhas temporárias recuperadas: '.$entry['recovered'].'.';
+        foreach ($entry['reasons'] as $code) {
+            $reason=InvoiceText::TEXT[$code][0];
+            if (mb_strlen($text.' '.$reason)>620) { $text.=' Mais detalhes no Hub.';break; }
+            $text.=' '.$reason;
+        }
+        $action=$complete?'Nenhuma ação necessária.':($entry['next_at']?'Nova tentativa em '.$date('@'.$entry['next_at']).'. Consulte as outras pendências no Hub.':'Consulte os motivos e resolva as pendências no Management Hub. Não reenvie documentos sem confirmação.');
+        $when=!empty($process['requested_at'])?$date($process['requested_at']):$date($entry['created_at']);
+        return ['Faturas A4 e pequenos talões','Processo '.$when.' / '.substr($pid,0,8),$period,$text,$action];
     }
 
     public static function reason(string $code): string

@@ -42,6 +42,13 @@ $technicalLiterals = array_fill_keys([
 // Exact server-only exceptions. These are not website UI: they are transport
 // diagnostics or the PT branch of a message that already has an explicit EN branch.
 $technicalExceptions = [
+    // Fixed pt_PT receipt-summary template parameters, never website copy.
+    'src/Invoices/InvoiceAlerts.php' => [
+        'Pendente — intervenção necessária',
+        'Sem problemas.',
+        'Nenhuma ação necessária.',
+        'Consulte os motivos e resolva as pendências no Management Hub. Não reenvie documentos sem confirmação.',
+    ],
     // Exact provider protocol text matched on the server, never website copy.
     'src/Invoices/InvoiceTocPipe.php' => [
         'Ficheiros arquivados e associados automaticamente a faturas de compra:',

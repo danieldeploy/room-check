@@ -94,31 +94,49 @@ final class InvoiceReceiptReport
         return $report;
     }
 
-    public static function progress(array $state,bool $sendEnabled=true): array
+    public static function progress(array $state,bool $sendEnabled=true,?int $now=null): array
     {
-        $busy=!empty($state['requested']);$failed=!empty($state['error']);$pending=false;$next=0;
+        $now??=time();$busy=false;$failed=!empty($state['error']);$pending=false;$next=0;$shortRetry=false;$replyPoll=0;
+        $wait=static function(int $at,bool $quota=false)use(&$next,&$shortRetry):void {
+            $next=$next?min($next,$at):$at;if (!$quota) $shortRetry=true;
+        };
+        if (!empty($state['requested'])) {
+            $at=(int)($state['discovery_retry']['next_attempt']??0);
+            if ($at>$now) $wait($at);else $busy=true;
+        }
         foreach ($state['documents']??[] as $d) {
             $stage=$d['stage']??'';if ($stage==='superseded') continue;
             if ($stage==='failed') $failed=true;
-            if (in_array($stage,['repairing','queued','reading','ready','moving','preserving','trashing','source_trashing','source_moving'],true)
+            $cleanup=in_array($stage,['source_trashing','source_moving'],true) && empty($state['source_cleanup_paused']);
+            if ($cleanup || in_array($stage,['repairing','queued','reading','ready','moving','preserving','trashing'],true)
                 || ($stage==='archived' && (in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true) || ($sendEnabled && empty($d['duplicate_keeper']) && in_array($d['toconline_state']??'',['pending','toc_retry'],true))))) {
                 $at=(int)($d['next_attempt']??0);
-                if ($at>time()) $next=$next?min($next,$at):$at; else $busy=true;
+                if ($at>$now) $wait($at,($d['retry_kind']??'')==='quota');else $busy=true;
+            }
+            if ($stage==='archived' && in_array($d['toconline_state']??'',['toc_sending','toc_submitted','toc_uncertain'],true)
+                && ($d['toc_deadline']??0)>$now) {
+                $at=min($now+60,(int)$d['toc_deadline']);$replyPoll=$replyPoll?min($replyPoll,$at):$at;
             }
             if ($stage==='split' && empty($state['source_cleanup_paused'])) {
                 $ready=!empty($d['children']);foreach ($d['children']??[] as $child) {
-                    $c=$state['documents'][$child]??[];
-                    if (!self::resolved($c)) $ready=false;
+                    if (!self::resolved($state['documents'][$child]??[])) $ready=false;
                 }
-                if ($ready) $busy=true;
+                if ($ready) {
+                    $at=(int)($d['next_attempt']??0);
+                    if ($at>$now) $wait($at);else $busy=true;
+                }
             }
             if (empty($d['children']) && !self::resolved($d)) $pending=true;
             if (!empty($d['children']) && !in_array($stage,['source_processed','split_completed'],true)) $pending=true;
         }
         if (!empty($state['missing_periods'])) $pending=true;
-        $key=$busy?'receipt_processing':($next?'receipt_retry_wait':($failed?'receipt_interrupted':($pending?'receipt_finished_pending':'receipt_finished')));
-        if ($busy && !empty($state['worker_seen_at']) && time()-(int)$state['worker_seen_at']>600) $key='receipt_worker_delayed';
-        return ['state'=>$key,'next_at'=>$next,'server_time'=>time(),'busy'=>$busy];
+        $key=$busy?'receipt_processing':($shortRetry?'receipt_retry_wait':($replyPoll?'receipt_toc_wait':($next?'receipt_quota_wait':($failed?'receipt_interrupted':($pending?'receipt_finished_pending':'receipt_finished')))));
+        $poll=$busy?$now+5:($next && $replyPoll?min($next,$replyPoll):($next?:$replyPoll));
+        $settled=!$busy && !$shortRetry && !$replyPoll;
+        if ($busy && !empty($state['worker_seen_at']) && $now-(int)$state['worker_seen_at']>600) {
+            $key='receipt_worker_delayed';$poll=0;$settled=true;
+        }
+        return ['state'=>$key,'next_at'=>$next,'server_time'=>$now,'busy'=>$busy,'poll_at'=>$poll,'settled'=>$settled];
     }
 
     /** Presentation only: never write formatted dates back to the workflow. */

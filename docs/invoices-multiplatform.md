@@ -616,3 +616,75 @@ Receipt content is server-localized and excluded from the legacy browser partial
 translator via its existing skip boundary, including status/report refreshes.
 Navigation stays outside the boundary. This prevents English wording corruption
 without changing invoice data, permissions or processing.
+
+## Receipt retries, status reads and process summaries — 2026-11-14
+
+This rule applies to **A4 invoices and small receipts**, not portal collection.
+Existing invoice identity, fiscal QR precedence, grouping, role permissions and
+`temp_scan_processed` retention are unchanged.
+
+- Temporary Drive/Gemini failures persist an initial failure and at most five
+  further attempts in six-minute slots within thirty minutes. A delayed cron
+  skips missed slots; it cannot extend the deadline or invent attempts. Provider
+  minimum delays are respected; a delay beyond the window requires intervention.
+  Auth, permission, storage, configuration and document-review errors stop.
+  Discovery/global connection failures use the same policy as individual scans.
+- Gemini daily quota is distinguished from short throttling. Persist a full
+  24-hour pause across midnight/restarts and allow one provider probe. A failed
+  probe blocks until explicit human retry; success records recovery. Normal
+  model pacing consumes no failure attempt. Existing safety usage counts remain.
+- Receipt TOConline submissions get six additional state checks, due at 5, 10,
+  15, 20, 25 and 30 minutes. Use the existing authenticated asynchronous email
+  receiver, never resend to obtain a reply. Replies already received are handled
+  before expiry; a later valid signed reply can still resolve the record. Other
+  portals retain their established 72-hour policy and shared mailbox handling.
+- Status GETs do not execute processing or consume attempts. Poll every five
+  seconds while any selected work is runnable (including mixed manual/automatic
+  records); display a local countdown and query when a retry is due. Awaiting
+  TOConline polls at sixty seconds only until its deadline. Manual-only,
+  completed and stopped-worker states stop polling. Global start availability
+  remains synchronized when viewing an older run while another run is active.
+  Any failed/timed-out status GET stops automatic reads and reveals **Status
+  check failed.** plus **Refresh**. A successful manual read hides both and
+  applies the returned schedule. Open document previews and drafts remain intact.
+- Receipt WhatsApp uses one private consolidated summary per process outcome,
+  after other active work, short retries and confirmation waits have stopped.
+  Include process/time/months, totals, safe reasons, recovered failures and next
+  action. A daily quota pause gets one summary; the next-day result is a new
+  outcome. Human continuation has a cycle identifier, so another failure with
+  identical counts is not lost. Repeated observations do not resend. Historical
+  stopped processes are baselined, not replayed at deployment. A send interrupted
+  after starting is uncertain and never blindly retried. Meta acceptance does
+  not prove handset delivery.
+
+### Receipt WhatsApp template contract
+
+Meta UI inspection found the existing `invoice_collection_failed_v1` active,
+Utility, `pt_PT`, five parameters, but fixed wording **É necessária a sua
+intervenção** and a portal-specific URL. It must remain for portal errors and
+must not be reused for successful receipt summaries. The receipt summary uses
+`receipt_process_summary_v1`, Utility, `pt_PT`, exactly five body parameters:
+
+```text
+Management Hub - Resumo do processamento
+Módulo: {{1}}
+Processo: {{2}}
+Meses: {{3}}
+Resultado: {{4}}
+Próximo passo: {{5}}
+Consultar: https://check.welcomehostel.pt/admin/receipts.php
+```
+
+Reuse the existing enabled notification setting, active manager recipient,
+WhatsApp client and protected credentials. No new recipient or credential.
+The template was submitted in the existing Active Lines Unip. Lda. account on
+2026-11-14. Meta subsequently reclassified it as **Marketing**, still **In
+review**. Receipt sending must stay disabled until Utility/pt_PT approval is
+verified. The protected acceptance probe defaults to disabled and normal
+summaries wait for its private `meta_accepted` receipt. Auto-review rejected an
+external body rewrite without specific owner approval; no rewrite was made.
+A once-only guarded-release probe uses clearly labelled synthetic text, stores
+its private receipt before sending and never resends an uncertain result. It
+neither submits invoices nor changes their workflow state. Template approval,
+provider acceptance, handset delivery and the real next-day event remain
+separate acceptance evidence.

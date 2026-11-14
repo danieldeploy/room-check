@@ -71,3 +71,9 @@ fi
 if ! /usr/local/bin/php deploy/recover_toc_replies.php "$DEPLOYPATH"; then
     printf '%s\n' 'TOConline reply recovery incomplete; inspect before repeating' >&2
 fi
+
+# Existing manager only: one labelled receipt-summary test, no invoice mutations.
+# A private pre-send receipt prevents repeating an uncertain external operation.
+if ! /usr/local/bin/php deploy/verify_receipt_summary_once.php "$DEPLOYPATH"; then
+    printf '%s\n' 'Receipt summary verification incomplete; inspect private receipt before any retry' >&2
+fi

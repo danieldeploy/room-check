@@ -56,6 +56,8 @@ $requestError=(($_SERVER['REQUEST_METHOD']??'GET')==='POST')?$error:'';
 $globalError=($requestError===''?$error:'')?:($state['error']??'')?:($fullState['error']??'');
 $globalError=$globalError!==''?InvoiceText::get(isset(InvoiceText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
 $canStart=InvoiceReceiptReport::canStart($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
+$globalProgress=InvoiceReceiptReport::progress($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
+if (!$canStart && $globalProgress['poll_at']>0) $progress['poll_at']=$progress['poll_at']?min($progress['poll_at'],$globalProgress['poll_at']):$globalProgress['poll_at'];
 $formYear=$year;$formMonths=$state['months']??[];
 if ($requestError!=='' && ($_POST['action']??'')==='start') {
     $formYear=(int)($_POST['year']??$year);
@@ -111,7 +113,7 @@ $at=$process['requested_at']!==''?(new DateTimeImmutable($process['requested_at'
 <?php foreach (['all'=>'receipt_filter_all','success'=>'receipt_filter_success','problems'=>'receipt_filter_problems'] as $value=>$label): ?><option value="<?= $value ?>" <?= $value===$filter?'selected':'' ?>><?= $t($label) ?></option><?php endforeach; ?></select></label><?php endif; ?>
 <noscript><button class="primary-button" type="submit"><?= $t('receipt_refresh') ?></button></noscript></form>
 <?php endif; ?>
-<div class="receipt-status-line" id="receipt-status" role="status" data-url="receipts.php?status=1&amp;<?= $escape($query) ?>&amp;page=<?= $page ?>" data-state="<?= $escape($progress['state']) ?>" data-next="<?= $progress['next_at'] ?>" data-server="<?= $progress['server_time'] ?>" data-retry="<?= $t('receipt_retry_in') ?>" data-due="<?= $t('receipt_retry_due') ?>" data-unavailable="<?= $t('receipt_status_unavailable') ?>"><span><?= $t('receipt_status') ?>: <strong data-status-label><?= $t($progress['state']) ?></strong><span class="receipt-dots" aria-hidden="true">…</span></span><button type="button" class="primary-button" data-receipt-refresh><?= $t('receipt_refresh') ?></button><p data-status-warning hidden></p></div></section>
+<div class="receipt-status-line" id="receipt-status" role="status" data-url="receipts.php?status=1&amp;<?= $escape($query) ?>&amp;page=<?= $page ?>" data-state="<?= $escape($progress['state']) ?>" data-poll="<?= $progress['poll_at'] ?>" data-next="<?= $progress['next_at'] ?>" data-server="<?= $progress['server_time'] ?>" data-retry="<?= $t('receipt_retry_in') ?>" data-due="<?= $t('receipt_retry_due') ?>" data-unavailable="<?= $t('receipt_status_unavailable') ?>"><span><?= $t('receipt_status') ?>: <strong data-status-label><?= $t($progress['state']) ?></strong><span class="receipt-dots" aria-hidden="true">…</span></span><button type="button" class="primary-button" data-receipt-refresh hidden><?= $t('receipt_refresh') ?></button><p data-status-warning hidden></p></div></section>
 <?php if (!empty($state['source_cleanup_paused'])): ?><p><?= $t('receipt_cleanup_deferred') ?></p><?php endif; ?>
 <div id="receipt-report"><?= InvoiceReceiptReport::render($report,!$canHistory) ?></div>
 <div id="receipt-history"><?= $historyHtml ?></div></div></main></body></html>

@@ -1,5 +1,33 @@
 # Management Hub — current project state
 
+## Bounded receipt retries and consolidated summaries — 2026-11-14 (prepared)
+
+Receipt intake now stops status polling when only human action remains or the
+process is complete. Active work updates every five seconds; scheduled waits
+use a countdown, TOConline waits sixty-second status reads. Refresh appears
+only after a failed status read and disappears on successful recovery.
+Temporary Drive/Gemini failures have at most five retries in thirty minutes;
+daily quota gets one 24-hour probe; receipt confirmation gets six checks in
+thirty minutes without resubmission. Portal timing and invoice data are unchanged.
+
+Private process summaries combine all reasons and outcomes, baseline historical
+stopped runs, distinguish explicit manual cycles and never retry uncertain
+WhatsApp sends. The existing Meta invoice template was inspected and is unsuitable
+for success wording, so the receipt-only neutral template is separate; sender,
+configured manager and enabled notification preference are reused. See the
+invoice flow and ADR-005. Fake-clock worker, quota, confirmation, alert and UI
+regressions pass locally. PR366 required validate/windows-agent checks passed
+for the initial implementation. The final head, installed version and real
+provider acceptance are separate release checks.
+
+**External blocker:** Meta reclassified the new template as Marketing while it
+remains In review. Do not enable receipt sends in that category. The live probe
+is disabled by RECEIPT_SUMMARY_TEMPLATE_APPROVED=false; summaries remain queued
+until the template is approved as Utility/pt_PT and the once-only probe is
+accepted. Automatic approval review rejected rewriting the external template
+body without specific owner approval; no rewrite was performed. Existing portal
+notification settings/templates are unchanged.
+
 ## TOConline acknowledgement recovery and outbound pacing (prepared)
 
 TOConline has a QR-created purchase acknowledgement that omits the uploaded
