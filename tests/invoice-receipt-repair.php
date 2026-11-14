@@ -22,11 +22,11 @@ try {
  $v->save('toconline-settings.enc',['nif'=>'500000000','sender'=>'test@welcomehostel.pt','enabled'=>true,'pilot_verified'=>true]);$sent=[];
  $toc=new InvoiceToconline($pdo,$v,$drive,static function($to,$mail)use(&$sent){$sent[]=$mail;return true;});
  $an=new class($v){
-  public bool $wrong=false,$duplicate=false,$mixed=false;
+  public bool $wrong=false,$duplicate=false,$mixed=false;public string $buyer='';
   function __construct(private InvoiceVault $v){}function configured():bool{return true;}
   function analyse($bytes,$format,$nif):array{
    $joined=str_contains($bytes,'joined');
-   $g=['pages'=>$joined?[1,2]:[1],'issuer_nif'=>$this->wrong?'999999999':'123456789','company_nif'=>$nif,'issuer_name'=>'Synthetic Supplier','invoice_number'=>'FT TEST/1','issued_on'=>'2026-04-02','total'=>'10.00','data_source'=>'qr','complete'=>$joined&&!$this->duplicate,'uncertain'=>false,'review_reason'=>$joined&&!$this->duplicate?'':'receipt_missing_pages',
+   $g=['pages'=>$joined?[1,2]:[1],'issuer_nif'=>$this->wrong?'999999999':'123456789','company_nif'=>$this->buyer?:$nif,'issuer_name'=>'Synthetic Supplier','invoice_number'=>'FT TEST/1','issued_on'=>'2026-04-02','total'=>'10.00','data_source'=>'qr','complete'=>$joined&&!$this->duplicate,'uncertain'=>false,'review_reason'=>$joined&&!$this->duplicate?'':'receipt_missing_pages',
      'page_evidence'=>$joined?[['source_page'=>1,'printed_page'=>2,'total_pages'=>2],['source_page'=>2,'printed_page'=>1,'total_pages'=>2]]:[['source_page'=>1,'printed_page'=>1,'total_pages'=>2]]];
    return ['page_count'=>$joined?2:1,'groups'=>$this->mixed?[$g,$g]:[$g]];
   }
@@ -66,6 +66,14 @@ try {
   rq($s['documents']['pending-one']['stage']==='review' && !empty($s['documents']['pending-one']['error']),'Uncertain repair stays pending: '.$mode);
   rq(!isset($s['documents']['new-scan']),'Unresolved candidates are not consumed: '.$mode);$an->$mode=false;
  }
+ $override=$seed;$override['documents']['pending-one']['company_nif']='600000000';
+ $override['documents']['pending-one']['complete']=false;$override['documents']['pending-one']['error']='receipt_company_changed';
+ $override['documents']['pending-one']['review_reason']='receipt_company_changed';$an->buyer='600000000';
+ $v->save(InvoiceReceipts::FILE,$override);$flow->confirmBuyer('pending-one',true,9);
+ $flow->requestRepair('pending-one',true,9);$flow->run();$repaired=$flow->status();
+ $replacement=$repaired['documents'][$repaired['documents']['pending-one']['replacement_id']];
+ rq($replacement['stage']==='preserving' && $replacement['review_reason']==='receipt_company_changed','Repair keeps wrong buyer pending on the new content');
+ rq(!isset($replacement['company_confirmation']),'Old approval cannot authorize different bytes');$an->buyer='';
  $v->save(InvoiceReceipts::FILE,$seed);$drive->newFiles=[];
  $flow->requestRepair('pending-one',true,1);$flow->run();
  rq($flow->status()['documents']['pending-one']['error']==='receipt_repair_not_found','No matching new scan gives actionable pending reason');

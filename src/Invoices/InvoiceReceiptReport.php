@@ -22,6 +22,7 @@ final class InvoiceReceiptReport
     public static function resolved(array $d): bool
     {
         if (!empty($d['error']) || ($d['stage']??'')==='failed') return false;
+        if (($d['stage']??'')==='discarded') return !empty($d['discarded_at']) && !empty($d['discard_requested_by']) && ($d['toconline_state']??'')==='receipt_not_submitted';
         if (($d['toconline_state']??'')==='toc_accepted') return ($d['stage']??'')==='archived';
         return in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)
             && ($d['stage']??'')==='duplicate_trashed';
@@ -32,7 +33,7 @@ final class InvoiceReceiptReport
             if (($d['stage']??'')==='superseded' || ($d['process_id']??'legacy')!==$process) return false;
             if ($filter==='all') return true;
             if (!empty($d['children'])) return $filter==='problems' && (!empty($d['error']) || ($d['stage']??'')==='failed');
-            return $filter==='success'?self::resolved($d):!self::resolved($d);
+            return $filter==='success'?(self::resolved($d) && ($d['stage']??'')!=='discarded'):!self::resolved($d);
         });
     }
     public static function processPending(array $s,string $id): bool
@@ -62,7 +63,7 @@ final class InvoiceReceiptReport
 
     public static function summary(array $documents): array
     {
-        $report=['files'=>0,'pdf_files'=>0,'jpg_files'=>0,'a4'=>0,'small'=>0,'documents'=>0,'processed'=>0,'pending'=>0,'duplicates'=>[],'errors'=>[]];
+        $report=['files'=>0,'pdf_files'=>0,'jpg_files'=>0,'a4'=>0,'small'=>0,'documents'=>0,'processed'=>0,'pending'=>0,'discarded'=>0,'duplicates'=>[],'errors'=>[]];
         foreach ($documents as $document) {
             if (($document['stage']??'')==='superseded') continue;
             if (empty($document['source_id'])) {
@@ -74,6 +75,7 @@ final class InvoiceReceiptReport
             if (!$master) {
                 $report['documents']++;
                 if (($document['format']??'')==='jpg') $report['small']++; else $report['a4']++;
+                if (($document['stage']??'')==='discarded' && self::resolved($document)) $report['discarded']++;
                 if (self::resolved($document)) $report['processed']++; else $report['pending']++;
                 if (in_array($document['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)) {
                     $report['duplicates'][]=[
@@ -108,7 +110,7 @@ final class InvoiceReceiptReport
             $stage=$d['stage']??'';if ($stage==='superseded') continue;
             if ($stage==='failed') $failed=true;
             $cleanup=in_array($stage,['source_trashing','source_moving'],true) && empty($state['source_cleanup_paused']);
-            if ($cleanup || in_array($stage,['repairing','queued','reading','ready','moving','preserving','trashing'],true)
+            if ($cleanup || in_array($stage,['repairing','queued','reading','ready','moving','preserving','trashing','discarding'],true)
                 || ($stage==='archived' && (in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true) || ($sendEnabled && empty($d['duplicate_keeper']) && in_array($d['toconline_state']??'',['pending','toc_retry'],true))))) {
                 $at=(int)($d['next_attempt']??0);
                 if ($at>$now) $wait($at,($d['retry_kind']??'')==='quota');else $busy=true;
@@ -159,6 +161,7 @@ final class InvoiceReceiptReport
 <span><?= $t('receipt_files') ?>: <strong><?= $report['pdf_files'] ?></strong> pdf <?= $t('receipt_and') ?> <strong><?= $report['jpg_files'] ?></strong> jpg</span> <strong aria-hidden="true">|</strong>
 <span><?= $t('receipt_a4') ?>: <strong><?= $report['a4'] ?></strong> - <?= $t('receipt_small') ?>: <strong><?= $report['small'] ?></strong> (<?= $t('receipt_docs') ?>: <strong><?= $report['documents'] ?></strong>)</span> <strong aria-hidden="true">|</strong>
 <span><?= $t('receipt_processed') ?> <strong><?= $report['processed'] ?></strong></span> <strong aria-hidden="true">|</strong>
+<?php if (!empty($report['discarded'])): ?><span><?= $t('receipt_deleted') ?>: <strong><?= $report['discarded'] ?></strong></span> <strong aria-hidden="true">|</strong><?php endif; ?>
 <span><?= $t('receipt_pending') ?>: <strong><?= $report['pending'] ?></strong></span> <strong aria-hidden="true">|</strong>
 <span class="<?= $report['errors']?'receipt-error-count':'' ?>"><?= $t('receipt_errors') ?>: <strong><?= count($report['errors']) ?></strong></span>
 </p><p><?= $t('receipt_processed_note') ?></p>

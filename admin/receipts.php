@@ -20,13 +20,15 @@ try {
     if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
         Csrf::validate($_POST['csrf_token']??null);
         $action=(string)($_POST['action']??'');
-        if (!((in_array($action,['start','retry_process'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair'],true) && $canReview))) throw new RuntimeException('forbidden',403);
+        if (!((in_array($action,['start','retry_process'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
         if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
         try {
             $action=(string)($_POST['action']??''); $id=(string)($_POST['id']??'');
             if ($action==='start' && $canRun) $receipts->request((int)$user['id'],(int)($_POST['year']??0),is_array($_POST['months']??null)?$_POST['months']:[]);
             elseif ($action==='retry_process' && $canRun) $receipts->retryDiscovery((string)($_POST['process']??''));
             elseif ($action==='retry' && $canRun && $canHistory) $receipts->retry($id);
+            elseif ($action==='confirm_buyer' && $canReview) $receipts->confirmBuyer($id,($_POST['buyer_confirmed']??'')==='1',(int)$user['id']);
+            elseif ($action==='discard' && $canReview) $receipts->requestDiscard($id,($_POST['discard_confirmed']??'')==='1',(int)$user['id']);
             elseif ($action==='repair' && $canReview) $receipts->requestRepair($id,($_POST['missing_added']??'')==='1',(int)$user['id']);
             elseif ($action==='regroup' && $canReview) $receipts->regroup($id,(string)($_POST['page_groups']??''),($_POST['confirmed']??'')==='1',(int)$user['id']);
             elseif ($action==='review' && $canReview) $receipts->review($id,(string)($_POST['issued_on']??''),(string)($_POST['invoice_number']??''),($_POST['confirmed']??'')==='1',(int)$user['id'],(string)($_POST['issuer_name']??''));

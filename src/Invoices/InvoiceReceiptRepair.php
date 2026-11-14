@@ -26,7 +26,7 @@ final class InvoiceReceiptRepair
     {
         $d=$s['documents'][$id];
         if (($d['fiscal_status']??'N')!=='N') throw new RuntimeException('receipt_repair_ambiguous');
-        if (($d['company_nif']??'')!==$nif) throw new RuntimeException('receipt_company_changed');
+        if (!InvoiceReceiptAnalysis::buyerAccepted($d,$nif)) throw new RuntimeException(InvoiceReceiptAnalysis::buyerIssue($d,$nif) ?: 'receipt_company_changed');
         $parts=[['bytes'=>$read($d),'format'=>$d['format']]];$sources=[];$total=strlen($parts[0]['bytes']);
         $files=array_values(array_filter($this->drive->scanFiles($d['source_month']),static fn($f)=>!isset($s['documents'][$f['id']])));
         if (count($files)>19) throw new RuntimeException('receipt_repair_limit');
@@ -40,7 +40,7 @@ final class InvoiceReceiptRepair
             if (count($manifest['groups'])!==1) continue;
             $g=$manifest['groups'][0];
             if (!self::sameInvoice($d,$g) || !empty($g['uncertain'])
-                || in_array($g['review_reason']??'',['receipt_grouping_required','receipt_company_changed'],true)) continue;
+                || ($g['review_reason']??'')==='receipt_grouping_required') continue;
             $total+=strlen($bytes);if ($total>10*1024*1024) throw new RuntimeException('receipt_repair_limit');
             $f['sha256']=hash('sha256',$bytes);$sources[]=$f;$parts[]=['bytes'=>$bytes,'format'=>$format];
         }
@@ -52,7 +52,8 @@ final class InvoiceReceiptRepair
         $manifest=$this->analysis->analyse($bytes,'pdf',$nif);
         if (count($manifest['groups'])!==1) throw new RuntimeException('receipt_repair_ambiguous');
         $g=$manifest['groups'][0];
-        if (!self::sameInvoice($d,$g) || empty($g['complete']) || !empty($g['uncertain']) || !empty($g['review_reason'])
+        if (!self::sameInvoice($d,$g) || empty($g['complete']) || !empty($g['uncertain'])
+            || !in_array($g['review_reason']??'',['','receipt_company_changed','receipt_buyer_missing','receipt_buyer_consumer'],true)
             || $g['pages']!==range(1,$manifest['page_count'])) throw new RuntimeException('receipt_repair_ambiguous');
         // New pages cannot reinterpret the target's authoritative QR fields.
         if (!empty($d['qr_fields']) && !empty($g['qr_fields'])) {
@@ -73,8 +74,11 @@ final class InvoiceReceiptRepair
             'pages'=>range(1,$manifest['page_count']),'page_number'=>1,'page_count'=>$manifest['page_count'],'pdf_pages_checked'=>true,
             'repair_parts'=>array_merge([['id'=>$id]],array_map(static fn($f)=>['id'=>$f['id']],$sources)),
             'repair_order'=>$order,'replaces'=>$id,'created_at'=>gmdate('c'),'attempts'=>0,'next_attempt'=>0]);
-        foreach (['drive_parent','pending_parent','preserved_at','archived_at','original_parent','ocr_id','ocr_cleaned','ocr_creating','duplicate_keeper','resume_stage','repair_original_error'] as $key) unset($replacement[$key]);
+        foreach (['drive_parent','pending_parent','preserved_at','archived_at','original_parent','ocr_id','ocr_cleaned','ocr_creating','duplicate_keeper','resume_stage','repair_original_error','company_confirmation','reviewed_at','reviewed_by'] as $key) unset($replacement[$key]);
         if (($d['data_source']??'')==='qr') foreach (['data_source','qr_fields','fiscal_status','document_type','atcud','issuer_nif','company_nif','invoice_number','issued_on','total'] as $key) if (isset($d[$key])) $replacement[$key]=$d[$key];
+        // The replacement has new bytes: prior buyer approval cannot silently transfer to it.
+        $replacement['review_reason']=InvoiceReceiptAnalysis::reviewReason($replacement,$nif);
+        if ($replacement['review_reason']!=='') $replacement['stage']='preserving';
         $s['documents'][$new]=$replacement;
         $s['documents'][$id]['stage']='superseded';$s['documents'][$id]['error']='';$s['documents'][$id]['replacement_id']=$new;
         $parent=$d['source_id'];

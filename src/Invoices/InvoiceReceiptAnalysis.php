@@ -9,6 +9,47 @@ final class InvoiceReceiptAnalysis
     public const VERSION=2;
     public function __construct(private readonly InvoiceReceiptPdf $pdf,private readonly InvoiceGemini $gemini) {}
     public function configured(): bool { return $this->gemini->configured(); }
+    /** Extracted buyer data stays immutable; a review is a separate classification. */
+    public static function buyerIssue(array $d,string $nif): string
+    {
+        $buyer=trim((string)($d['company_nif']??''));
+        if ($buyer==='999999990' || preg_match('/\A(?:consumidor final|final consumer|consumer final)\z/iu',$buyer)) return 'receipt_buyer_consumer';
+        if ($buyer==='' || !preg_match('/\A\d{9}\z/',$buyer)) return 'receipt_buyer_missing';
+        return $buyer===$nif?'':'receipt_company_changed';
+    }
+    public static function buyerAccepted(array $d,string $nif): bool
+    {
+        if ($nif==='' || !preg_match('/\A\d{9}\z/',$nif)) return false;
+        if (self::buyerIssue($d,$nif)==='') return true;
+        $c=$d['company_confirmation']??[];
+        return ($c['nif']??'')===$nif && !empty($d['sha256']) && ($c['sha256']??'')===$d['sha256']
+            && ($c['document_id']??'')===($d['id']??null) && ($c['extracted_nif']??null)===($d['company_nif']??'')
+            && ($c['actor']??0)>0 && !empty($c['at']);
+    }
+    public static function missingPages(array $d): bool
+    {
+        return (array_key_exists('complete',$d) && $d['complete']===false)
+            || in_array('receipt_missing_pages',[$d['review_reason']??'',$d['error']??'',$d['repair_original_error']??''],true);
+    }
+    public static function discardable(array $d): bool
+    {
+        if (($d['stage']??'')!=='review' || empty($d['sha256']) || !empty($d['children']) || !empty($d['grouping_pending'])
+            || ($d['review_reason']??'')==='receipt_grouping_required') return false;
+        return ($d['format']??'')==='jpg' || (($d['format']??'')==='pdf'
+            && (!empty($d['source_id']) || (!empty($d['pdf_pages_checked']) && ($d['page_count']??0)===1)));
+    }
+    /** Re-evaluate independent blockers; buyer approval never approves document content. */
+    public static function reviewReason(array $d,string $nif): string
+    {
+        if (!empty($d['grouping_pending']) || ($d['review_reason']??'')==='receipt_grouping_required') return 'receipt_grouping_required';
+        if (!self::buyerAccepted($d,$nif)) return self::buyerIssue($d,$nif) ?: 'receipt_company_changed';
+        if (self::missingPages($d)) return 'receipt_missing_pages';
+        if (!InvoiceReceipts::validDate($d['issued_on']??'') || empty($d['invoice_number']) || empty($d['issuer_name'])
+            || (isset($d['fiscal_status']) && $d['fiscal_status']!=='N')) return 'receipt_review_required';
+        if (empty($d['reviewed_at']) && (!empty($d['uncertain'])
+            || !preg_match('/\A\d{9}\z/',$d['issuer_nif']??'') || !preg_match('/\A\d{1,10}\.\d{2}\z/',$d['total']??''))) return 'receipt_review_required';
+        return '';
+    }
     public static function qr(string $raw): ?array
     {
         if (strlen($raw)>4096 || preg_match('/[\x00-\x1f]/',$raw)) return null;
@@ -32,7 +73,7 @@ final class InvoiceReceiptAnalysis
     public static function duplicateKey(array $d): ?string
     {
         if (empty($d['complete']) || !empty($d['uncertain']) || !empty($d['review_reason']) || !empty($d['children'])
-            || ($d['stage']??'')==='superseded') return null;
+            || in_array($d['stage']??'',['superseded','discarding','discarded'],true)) return null;
         foreach (['issuer_nif','company_nif','invoice_number','issued_on','total'] as $k) if (empty($d[$k])) return null;
         if (!empty($d['qr_fields'])) { $q=$d['qr_fields'];ksort($q);return hash('sha256',json_encode($q,JSON_THROW_ON_ERROR)); }
         // Without a QR, only byte-identical complete scans are automatically consolidated.
@@ -91,7 +132,7 @@ final class InvoiceReceiptAnalysis
                 'complete'=>($item['complete']??false)===true,'uncertain'=>($item['uncertain']??true)!==false,'review_reason'=>''];
             if (count($identities)===1) $g=array_merge($g,array_values($identities)[0]);
             if ($badQr || count($identities)>1) $g['review_reason']='receipt_grouping_required';
-            elseif ($g['company_nif']!==$nif) $g['review_reason']='receipt_company_changed';
+            elseif (self::buyerIssue($g,$nif)!=='') $g['review_reason']=self::buyerIssue($g,$nif);
             elseif (!$g['complete']) $g['review_reason']='receipt_missing_pages';
             elseif ($g['uncertain'] || !InvoiceReceipts::validDate($g['issued_on']) || $g['invoice_number']==='' || $g['issuer_name']===''
                 || !preg_match('/\A\d{9}\z/',$g['issuer_nif']) || !preg_match('/\A\d{1,10}\.\d{2}\z/',$g['total'])
@@ -107,6 +148,7 @@ final class InvoiceReceiptAnalysis
                 if (count($totals)!==1 || count($pages)!==$total || $printed!==range(1,$total)) { $g['complete']=false;if(!in_array($g['review_reason'],['receipt_grouping_required','receipt_company_changed'],true))$g['review_reason']='receipt_missing_pages'; }
             } elseif ($carry || ($printed && max($printed)>count($pages))) { $g['complete']=false;if(!in_array($g['review_reason'],['receipt_grouping_required','receipt_company_changed'],true))$g['review_reason']='receipt_missing_pages'; }
             $g['page_evidence']=array_values(array_intersect_key($evidence,array_flip($pages)));
+            $g['review_reason']=self::reviewReason($g,$nif);
             $duplicate=$item['duplicate_of']??0;
             if (is_int($duplicate) && $duplicate>0 && $duplicate<=$i && self::identity($g)===self::identity($groups[$duplicate-1])) $g['duplicate_of']=$duplicate;
             $groups[]=$g;
