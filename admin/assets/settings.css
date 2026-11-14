@@ -97,6 +97,7 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .receipt-year input { width: 100%; }
 .receipt-intake { border: 0; padding: 0; margin: 0; min-width: 0; }
 .receipt-intake:disabled label { cursor: not-allowed; }
+.receipt-intake:disabled label:not(.receipt-month), .receipt-intake:disabled .receipt-month > span { opacity: .65; }
 .receipt-process-filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
 .receipt-run-select { min-width: 0; width: var(--receipt-run-width, auto); max-width: 100%; flex: 0 1 auto; }
 .receipt-run-period { display: flex; flex-wrap: wrap; gap: 12px; margin-left: auto; max-width: 100%; }
