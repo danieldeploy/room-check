@@ -137,7 +137,7 @@ final class InvoiceAlerts
         }
         $action=$complete?'Nenhuma ação necessária.':($entry['next_at']?'Nova tentativa em '.$date('@'.$entry['next_at']).'. Consulte as outras pendências no Hub.':'Consulte os motivos e resolva as pendências no Management Hub. Não reenvie documentos sem confirmação.');
         $when=!empty($process['requested_at'])?$date($process['requested_at']):$date($entry['created_at']);
-        return ['Faturas A4 e pequenos talões','Processo '.$when.' / '.substr($pid,0,8),$period,$text,$action];
+        return ['Faturas em papel — A4 e formatos pequenos','Processo '.$when.' / '.substr($pid,0,8),$period,$text,$action];
     }
 
     public static function reason(string $code): string

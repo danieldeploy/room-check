@@ -82,18 +82,19 @@ if (($_GET['status']??'')==='1') {
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
 <div id="receipt-content" data-i18n-skip>
 <?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a> · <a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
-<header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1><p><?= $t('receipt_description') ?></p></div></header>
+<header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1></div></header>
 <?php if ($requestError!==''): ?><div id="receipt-request-error" class="alert" role="alert" tabindex="-1" data-save-feedback="error"><?= $t($requestError) ?></div><?php endif; ?>
 <div id="receipt-global-error" class="alert" role="alert" <?= $globalError===''?'hidden':'' ?>><?= $escape($globalError) ?></div>
 <?php if ($flash): ?><div class="success" role="status" data-save-feedback="success"><?= $t($flash) ?></div><?php endif; ?>
 <section class="card"><details class="document-disclosure"><summary><?= $t('receipt_instructions') ?></summary><div class="receipt-instructions">
 <?php foreach (['scan','start','review','missing','done'] as $instruction): ?><p><?= $t('receipt_instruction_'.$instruction) ?></p><?php endforeach; ?>
 </div></details>
+<p class="receipt-start-help"><?= $t('receipt_description') ?></p>
 <?php if (!$connected): ?><div class="alert"><?= $t('receipt_connect') ?></div>
 <?php if ($manager): ?><p><?= $t('receipt_scope') ?></p><form method="post" action="invoice-drive.php"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="receipts" value="1"><button class="primary-button" type="submit"><?= $t('receipt_connect_button') ?></button></form><?php endif; ?>
 <?php elseif ($canRun): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="start">
-<label><?= $t('receipt_year') ?> <input type="number" name="year" min="2000" max="<?= (int)(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y') ?>" value="<?= $formYear ?>" required></label>
-<fieldset class="receipt-months"><legend><?= $t('receipt_months') ?></legend><div class="receipt-month-row">
+<label class="field receipt-year"><span><?= $t('receipt_year') ?></span><input type="number" name="year" min="2000" max="<?= (int)(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y') ?>" value="<?= $formYear ?>" required></label>
+<fieldset class="receipt-months"><legend class="field-label"><?= $t('receipt_months') ?></legend><div class="receipt-month-row">
 <?php foreach (InvoiceDriveLayout::MONTHS as $month=>$name): ?><label class="receipt-month"><input type="checkbox" name="months[]" value="<?= $month ?>" <?= in_array($month,$formMonths,true)?'checked':'' ?>> <?= $escape(SiteTranslations::text($name,$monthEnglish[$month])) ?></label> <?php endforeach; ?>
 </div></fieldset><div class="form-actions"><button class="primary-button" type="submit" data-receipt-start <?= !$canStart?'disabled':'' ?>><?= $t('receipt_start') ?></button></div><p data-receipt-start-blocked role="status" <?= $canStart?'hidden':'' ?>><?= $t('receipt_process_running') ?></p></form><?php endif; ?>
 <?php if (!empty($state['months'])): ?><p><?= $t('receipt_selection') ?>: <?= $year ?> · <?= $escape(implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$state['months']))) ?></p><?php endif; ?>
@@ -106,12 +107,12 @@ if (($_GET['status']??'')==='1') {
 </section>
 <section class="card receipt-process-card">
 <?php if ($fullState['processes']): ?><form method="get" class="form-grid">
-<label><?= $t('receipt_process') ?><select name="process" data-receipt-filter>
+<label class="field"><span><?= $t('receipt_process') ?></span><select name="process" data-receipt-filter>
 <?php foreach (array_reverse($fullState['processes'],true) as $pid=>$process):
 $at=$process['requested_at']!==''?(new DateTimeImmutable($process['requested_at']))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d-m-Y H:i:s'):'—'; ?>
 <option value="<?= $escape($pid) ?>" <?= $pid===$processId?'selected':'' ?>><?= $escape($at.' · '.$process['year'].' · '.implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$process['months']))) ?> · <?= $t(InvoiceReceiptReport::processPending($fullState,(string)$pid)?'receipt_pending':'receipt_finished') ?></option>
 <?php endforeach; ?></select></label>
-<?php if ($canHistory): ?><label><?= $t('receipt_filter') ?><select name="filter" data-receipt-filter>
+<?php if ($canHistory): ?><label class="field"><span><?= $t('receipt_filter') ?></span><select name="filter" data-receipt-filter>
 <?php foreach (['all'=>'receipt_filter_all','success'=>'receipt_filter_success','problems'=>'receipt_filter_problems'] as $value=>$label): ?><option value="<?= $value ?>" <?= $value===$filter?'selected':'' ?>><?= $t($label) ?></option><?php endforeach; ?></select></label><?php endif; ?>
 <noscript><button class="primary-button" type="submit"><?= $t('receipt_refresh') ?></button></noscript></form>
 <?php endif; ?>

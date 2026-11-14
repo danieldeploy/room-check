@@ -1010,3 +1010,23 @@ The reproduced browser regression passes with the boundary. This is display only
   test fixtures in this release; the owner will test subsequent submissions.
 - Existing WhatsApp summary-template activation blocker remains separate and
   unchanged. No permissions, external credentials or source cleanup policy changed.
+
+## 2026-11-14 — Paper invoice presentation follow-up (prepared)
+
+- The module is named **Paper Invoices — A4 and Small Formats**, with its PT
+  equivalent, across the portal, receipt screen, permission groups and receipt
+  summary notifications. Permission identifiers and notification gating are unchanged.
+- History displays **Documents below / Processed / Pending** for the selected
+  process and filter, across its pages. It reuses the existing summary/resolution
+  rules: source PDFs with child invoices are not extra invoices, and Drive
+  archiving alone is not completed processing. Source cards are labeled disclosures;
+  their preview, grouping and error/retry actions remain available.
+- Duplicate details have a heading with the instruction to remove physical paper
+  copies; it is not a new Drive deletion action. Existing localized dates remain.
+- Form captions reuse the shared settings field typography, including the month
+  legend. Month checkbox text remains unchanged. The short scan/start instruction
+  sits below User instructions and above Year.
+- Local endpoint acceptance covers filtered/polled counts, source failures,
+  process isolation, pagination and role boundaries. The normal required CI,
+  exact installed version and authenticated desktop acceptance follow publication.
+  No invoice submissions, confirmations or document deletions are test fixtures.

@@ -1,8 +1,10 @@
 <?php if (!isset($receiptHistoryRendering)) { http_response_code(404); exit; } ?>
 <?php if ($canHistory): ?>
-<section class="card"><h2><?= $t('receipt_total') ?>: <?= count($all) ?></h2>
+<?php $historyCounts=InvoiceReceiptReport::summary($all); ?>
+<section class="card"><h2 data-receipt-history-counts><?= $t('receipt_total') ?>: <?= $historyCounts['documents'] ?> | <?= $t('receipt_history_processed') ?>: <?= $historyCounts['processed'] ?> | <?= $t('receipt_pending') ?>: <?= $historyCounts['pending'] ?></h2>
 <?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
 <?php foreach ($documents as $id=>$d): ?>
+<?php if (!empty($d['children'])): ?><details class="document-disclosure receipt-source"><summary><?= $t('receipt_source_pdf') ?>: <span data-i18n-skip><?= $escape($d['name']) ?></span><?php if (!empty($d['error']) || ($d['stage']??'')==='failed'): ?> — <?= $t('receipt_stage_failed') ?><?php endif; ?></summary><?php endif; ?>
 <article class="card receipt-invoice"><h3 data-i18n-skip><?= $escape($d['name']) ?></h3>
 <p class="receipt-meta"><?php if (!empty($d['page_number'])): ?><?= $t('receipt_page') ?> <?= $escape(implode(', ',$d['pages']??[(int)$d['page_number']])) ?> / <?= (int)$d['page_count'] ?> | <?php endif; ?><?= $t('receipt_expected') ?>: <span data-i18n-skip><?= $escape(InvoiceReceiptReport::displayDate($d['expected_period']??'',true)) ?></span></p>
 <p class="receipt-meta"><?= $t('receipt_company') ?> : <span data-i18n-skip><?= $escape($d['issuer_name']??'') ?: $t('receipt_unknown_issuer') ?></span> | <?= $t('receipt_number_date') ?>: <span data-i18n-skip><?= $escape($d['invoice_number']??'') ?> <?= !empty($d['issued_on'])?'('.$escape(str_replace([' (',')'],[' ',''],InvoiceReceiptReport::displayDate($d['issued_on']))).')':'' ?></span></p>
@@ -52,9 +54,9 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <?php if ($d['stage']==='review' && !empty($d['sha256']) && empty($d['grouping_pending']) && ($d['review_reason']??'')!=='receipt_grouping_required'): ?>
 <?php if ($canReview): ?><form method="post" class="receipt-review-form">
 <input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="review">
-<label><?= $t('receipt_date') ?> <input type="date" name="issued_on" value="<?= $escape($d['issued_on']??'') ?>" <?= ($d['data_source']??'')==='qr'?'readonly':'' ?> required></label>
-<label><?= $t('receipt_issuer') ?> <input type="text" name="issuer_name" maxlength="160" value="<?= $escape($d['issuer_name']??'') ?>"></label>
-<label><?= $t('receipt_number') ?> <input type="text" name="invoice_number" maxlength="128" value="<?= $escape($d['invoice_number']??'') ?>" <?= ($d['data_source']??'')==='qr'?'readonly':'' ?> required></label>
+<label class="field"><span><?= $t('receipt_date') ?></span><input type="date" name="issued_on" value="<?= $escape($d['issued_on']??'') ?>" <?= ($d['data_source']??'')==='qr'?'readonly':'' ?> required></label>
+<label class="field"><span><?= $t('receipt_issuer') ?></span><input type="text" name="issuer_name" maxlength="160" value="<?= $escape($d['issuer_name']??'') ?>"></label>
+<label class="field"><span><?= $t('receipt_number') ?></span><input type="text" name="invoice_number" maxlength="128" value="<?= $escape($d['invoice_number']??'') ?>" <?= ($d['data_source']??'')==='qr'?'readonly':'' ?> required></label>
 <p><?= $t('receipt_issuer_nif') ?>: <span data-i18n-skip><?= $escape($d['issuer_nif']??'') ?: $t('receipt_unknown_data') ?></span></p>
 <?php $missing=InvoiceReceiptAnalysis::missingPages($d);$buyerPending=!InvoiceReceiptAnalysis::buyerAccepted($d,(string)($tocSettings['nif']??'')); ?>
 <?php if ($missing): ?><input type="hidden" name="confirmed" value="1"><?php else: ?><label><input type="checkbox" name="confirmed" value="1" required> <?= $t('receipt_confirm') ?></label><?php endif; ?>
@@ -63,11 +65,12 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <?php endif; ?><?php if ($canReview && empty($d['source_id']) && ($d['format']??'')==='pdf' && !in_array($d['stage'],['split_completed','source_trashing','source_moving','source_processed'],true) && (!empty($d['children']) || !empty($d['grouping_pending']))): ?>
 <details><summary><?= $t('receipt_groups') ?></summary><p><?= $t('receipt_groups_help') ?></p>
 <form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="regroup"><input type="hidden" name="id" value="<?= $escape($id) ?>">
-<label><?= $t('receipt_groups') ?><textarea name="page_groups" required maxlength="400" rows="4"></textarea></label>
+<label class="field"><span><?= $t('receipt_groups') ?></span><textarea name="page_groups" required maxlength="400" rows="4"></textarea></label>
 <label class="check-row"><input type="checkbox" name="confirmed" value="1" required><?= $t('receipt_groups_confirm') ?></label>
 <div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_approve') ?></button></div></form></details>
 <?php endif; ?>
 </article>
+<?php if (!empty($d['children'])): ?></details><?php endif; ?>
 <?php endforeach; ?>
 <nav><?php if ($page>1): ?><a href="?<?= $escape(http_build_query(['process'=>$processId,'filter'=>$filter,'page'=>$page-1])) ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?<?= $escape(http_build_query(['process'=>$processId,'filter'=>$filter,'page'=>$page+1])) ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
 </section><?php endif; ?>

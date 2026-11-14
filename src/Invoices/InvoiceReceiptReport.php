@@ -166,6 +166,7 @@ final class InvoiceReceiptReport
 <span class="<?= $report['errors']?'receipt-error-count':'' ?>"><?= $t('receipt_errors') ?>: <strong><?= count($report['errors']) ?></strong></span>
 </p><p><?= $t('receipt_processed_note') ?></p>
 <?php if ($report['duplicates']): ?>
+<h3><?= $t('receipt_duplicates_heading') ?></h3>
 <div class="receipt-table-wrap"><table class="receipt-duplicates"><thead><tr><th><?= $t('receipt_issuer') ?></th><th><?= $t('receipt_number') ?></th><th><?= $t('receipt_date') ?></th></tr></thead><tbody>
 <?php foreach ($report['duplicates'] as $duplicate): ?><tr><td data-i18n-skip><?= $duplicate['issuer_name']!==''?$e($duplicate['issuer_name']):$t('receipt_unknown_issuer') ?></td><td data-i18n-skip><?= $duplicate['invoice_number']!==''?$e($duplicate['invoice_number']):$t('receipt_unknown_data') ?></td><td data-i18n-skip><?= $duplicate['issued_on']!==''?$e(self::displayDate($duplicate['issued_on'])):$t('receipt_unknown_data') ?></td></tr><?php endforeach; ?>
 </tbody></table></div><?php endif; ?>
