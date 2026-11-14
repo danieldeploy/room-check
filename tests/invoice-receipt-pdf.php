@@ -19,6 +19,9 @@ try {
     try { $splitter->split('%PDF-1.4 invalid'); throw new LogicException('malformed PDF accepted'); } catch (RuntimeException $e) { pdfAssert($e->getMessage()==='receipt_split_failed','safe malformed failure'); }
     pdfAssert(!glob($directory.'/receipt-split-*'),'failed extraction cleans its workspace');
     try { (new InvoiceReceiptPdf(new InvoiceVault($directory),$config+[]))->split('not a PDF'); throw new LogicException('non PDF accepted'); } catch (RuntimeException $e) { pdfAssert($e->getMessage()==='receipt_split_failed','reject non PDF'); }
+    $assembly=$splitter->assemble([['bytes'=>receiptSplitProbePdf(),'format'=>'pdf']], [2,1]);
+    pdfAssert($assembly['count']===2 && $assembly['pages']===[2,1],'private assembly bridge preserves requested page order');
+    pdfAssert($assembly===$splitter->assemble([['bytes'=>receiptSplitProbePdf(),'format'=>'pdf']], [2,1]),'assembly byte identity survives restart');
     $config['node_binary']='/missing-node';
     try { verifyReceiptSplit($config); throw new LogicException('release ignored missing runtime'); } catch (RuntimeException $e) { pdfAssert($e->getMessage()==='receipt_split_unavailable','release fails before copies'); }
     echo "Receipt PDF bridge and release probe passed\n";

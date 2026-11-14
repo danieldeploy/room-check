@@ -47,3 +47,14 @@ test('start control follows global activity even when viewing an older pending r
   }
  }finally{dom.window.close();}
 });
+
+test('manual refresh reads immediately without submitting or losing edits',async()=>{
+ const {dom,calls}=setup('<button type="button" data-receipt-refresh>Refresh</button>');try{
+  const input=dom.window.document.querySelector('#receipt-history input');
+  input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  dom.window.document.querySelector('[data-receipt-refresh]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,1);assert.equal(calls[0][1].method,undefined);
+  assert.equal(dom.window.document.querySelector('#receipt-history input').value,'unsaved');
+ }finally{dom.window.close();}
+});

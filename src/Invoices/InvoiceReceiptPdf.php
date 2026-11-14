@@ -19,6 +19,7 @@ final class InvoiceReceiptPdf
     { return $this->execute($bytes,$publish,'split'); }
     public function inspect(string $bytes,string $format): array { return $this->execute($bytes,false,'inspect',[],$format); }
     public function extract(string $bytes,array $pages): array { return $this->execute($bytes,true,'extract',$pages); }
+    public function assemble(array $parts,array $order=[]): array { return $this->execute('%PDF-',true,'assemble',$order,'pdf',$parts); }
     public static function diagnosticCode(string $stderr): string
     {
         if ($stderr==='') return 'none';
@@ -30,7 +31,7 @@ final class InvoiceReceiptPdf
         if (preg_match('/EACCES|Permission denied/i',$stderr)) return 'permission';
         return 'unclassified';
     }
-    private function execute(string $bytes,bool $publish,string $operation,array $pages=[],string $format='pdf'): array
+    private function execute(string $bytes,bool $publish,string $operation,array $pages=[],string $format='pdf',array $parts=[]): array
     {
         $node='';
         foreach (self::nodeCandidates($this->config) as $candidate) {
@@ -45,10 +46,19 @@ final class InvoiceReceiptPdf
         $process=null; $pipes=[];
         try {
             InvoiceVault::atomicWrite($dir.'/source.pdf',$bytes);
+            if ($operation==='assemble') {
+                if (!$parts || count($parts)>20) throw new RuntimeException('receipt_split_limit');
+                $total=0;
+                foreach ($parts as $i=>$part) {
+                    $total+=strlen($part['bytes']);
+                    if ($total>10*1024*1024 || !in_array($part['format'],['pdf','jpg'],true)) throw new RuntimeException('receipt_split_limit');
+                    InvoiceVault::atomicWrite($dir.'/part-'.$i,$part['bytes']);
+                }
+            }
             $process=proc_open([$node,'--disable-wasm-trap-handler','--max-old-space-size=512',$script],
                 [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes,dirname($script));
             if (!is_resource($process)) throw new RuntimeException('receipt_split_unavailable');
-            fwrite($pipes[0],json_encode(['directory'=>$dir,'operation'=>$operation,'pages'=>$pages,'format'=>$format],JSON_THROW_ON_ERROR)); fclose($pipes[0]); unset($pipes[0]);
+            fwrite($pipes[0],json_encode(['directory'=>$dir,'operation'=>$operation,'pages'=>$pages,'format'=>$format,'parts'=>array_column($parts,'format')],JSON_THROW_ON_ERROR)); fclose($pipes[0]); unset($pipes[0]);
             stream_set_blocking($pipes[1],false);stream_set_blocking($pipes[2],false); $out='';$err=''; $end=microtime(true)+($operation==='inspect'?120:30);
             do {
                 $out.=stream_get_contents($pipes[1]);$err=substr($err.stream_get_contents($pipes[2]),0,16384); $status=proc_get_status($process);
@@ -75,7 +85,8 @@ final class InvoiceReceiptPdf
                 }
                 return $result;
             }
-            if ($operation==='extract') {
+            if (in_array($operation,['extract','assemble'],true)) {
+                if ($operation==='assemble' && !$pages) $pages=range(1,(int)($result['count']??0));
                 $file=$dir.'/document.pdf'; $size=is_file($file)?filesize($file):0;
                 if (($result['pages']??[])!==$pages || $size<5 || $size>10*1024*1024 || $size!==($result['size']??0) || is_link($file)
                     || !hash_equals(hash_file('sha256',$file),(string)($result['sha256']??''))

@@ -90,8 +90,8 @@ final class InvoiceAlerts
             if ($entry['state']==='sending') { $ledger[$key]['state']='uncertain';$vault->save($name,$ledger);continue; }
             if ($entry['state']!=='pending') continue;
             $code=$entry['code'];$at=(new DateTimeImmutable($entry['created_at']))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d/m/Y H:i');
-            $values=['Talões e PDFs','Management Hub',$entry['period'], $at.' — '.(InvoiceText::TEXT[$code][0]??InvoiceText::TEXT['receipt_failed'][0]),
-                'Abra Talões e PDFs no Management Hub e consulte os erros e documentos pendentes.'];
+            $values=['Faturas A4 e pequenos talões','Management Hub',$entry['period'], $at.' — '.(InvoiceText::TEXT[$code][0]??InvoiceText::TEXT['receipt_failed'][0]),
+                'Abra Faturas A4 e pequenos talões no Management Hub e consulte os erros e documentos pendentes.'];
             $ledger[$key]['state']='sending';$vault->save($name,$ledger);
             try {
                 if ($sender) $sender($mobile,$values,$settings['template_name']);

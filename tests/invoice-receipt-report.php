@@ -7,15 +7,28 @@ $documents=[
     'private-master-id'=>['name'=>'SECRET-MASTER.pdf','children'=>['private-page-id'],'stage'=>'split_completed','toconline_state'=>'receipt_per_page'],
     'private-page-id'=>['source_id'=>'private-master-id','name'=>'SECRET-PAGE.pdf','stage'=>'duplicate_trashed','archived_at'=>'now','toconline_state'=>'toc_existing','issuer_name'=>'Supplier <script>bad()</script>','invoice_number'=>'FT 42','issued_on'=>'2026-10-02','drive_parent'=>'PRIVATE-PARENT'],
     'private-normal-id'=>['name'=>'SECRET-NORMAL.jpg','stage'=>'archived','archived_at'=>'now','issued_on'=>'2026-10-01','invoice_number'=>'SECRET-NORMAL-NUMBER','issuer_name'=>'SECRET-NORMAL-COMPANY','toconline_state'=>'toc_accepted'],
-    'private-error-id'=>['name'=>'SECRET-ERROR.jpg','stage'=>'review','sha256'=>'private-sha','format'=>'jpg','error'=>'receipt_review_required','toconline_state'=>'pending'],
+    'private-error-id'=>['name'=>'SECRET-ERROR.jpg','stage'=>'review','sha256'=>'private-sha','format'=>'jpg','issuer_nif'=>'123456789','company_nif'=>'500000000','error'=>'receipt_review_required','toconline_state'=>'pending'],
     'private-old-duplicate'=>['name'=>'SECRET-OLD.pdf','stage'=>'duplicate_trashed','archived_at'=>'now','invoice_number'=>'FT 43','issued_on'=>'2026-09-01','toconline_state'=>'toc_existing'],
 ];
 $summary=InvoiceReceiptReport::summary($documents);
 reportCheck($summary['files']===4 && $summary['documents']===4 && $summary['processed']===3,'Split masters must not double-count invoices');
 reportCheck(count($summary['duplicates'])===2 && count($summary['errors'])===1,'Duplicate/error totals');
+$pending=InvoiceReceiptReport::summary([
+ ['format'=>'pdf','stage'=>'archived','archived_at'=>'now','toconline_state'=>'toc_submitted'],
+ ['format'=>'jpg','stage'=>'trashing','archived_at'=>'now','toconline_state'=>'toc_existing'],
+ ['format'=>'pdf','stage'=>'archived','toconline_state'=>'toc_accepted'],
+]);
+reportCheck($pending['processed']===1 && $pending['pending']===2,'Archive alone and duplicate awaiting cleanup are not processed');
+reportCheck($pending['pdf_files']===2 && $pending['jpg_files']===1 && $pending['a4']===2 && $pending['small']===1,'Format counts distinguish originals and invoices');
+reportCheck(InvoiceReceiptReport::displayDate('2026-09-04')==='04-09-2026 (Setembro)','Format never swaps the real day and month');
+reportCheck(InvoiceReceiptReport::displayDate('2026-04',true)==='04-2026 (Abril)','Original folder date format');
+$zeroHtml=InvoiceReceiptReport::render(InvoiceReceiptReport::summary([]));
+reportCheck(!str_contains($zeroHtml,'class="receipt-error-count"'),'Zero errors must not be red');
+reportCheck(str_contains(InvoiceReceiptReport::render($summary,false),'class="receipt-error-count"'),'Nonzero errors highlighted');
+reportCheck(!str_contains(InvoiceReceiptReport::render($summary,false),InvoiceText::get('receipt_review_required')),'Manager does not get a duplicate general error list');
 $html=InvoiceReceiptReport::render($summary);
 foreach (['SECRET-','private-','PRIVATE-PARENT','drive.google.com','type="date"','name="id"','name="action"','<script>bad()'] as $private) reportCheck(!str_contains($html,$private),'Operator report leaked private document data');
-foreach (['FT 42','2026-10-02','FT 43','2026-09-01','Supplier &lt;script&gt;','Empresa não identificada',InvoiceText::get('receipt_review_required')] as $public) reportCheck(str_contains($html,$public),'Required duplicate/date/error detail missing');
+foreach (['FT 42','02-10-2026','FT 43','01-09-2026','Supplier &lt;script&gt;','Empresa não identificada'] as $public) reportCheck(str_contains($html,$public),'Required duplicate/date/error detail missing');
 reportCheck(InvoiceReceipts::issuerName("Fornecedor: Empresa ABC\nCliente: Active Lines\nFornecedor: Not the supplier") === 'Empresa ABC','Do not mistake customer-section content for supplier');
 reportCheck(InvoiceReceipts::issuerName("Loja Exemplo, Lda.\nNIF: 123456789\nCliente: Active Lines") === 'Loja Exemplo, Lda.', 'Recognize unique legal supplier heading');
 reportCheck(InvoiceReceipts::issuerName("Cliente\nActive Lines, Lda.") === '', 'Bare customer heading must never become supplier');
@@ -67,16 +80,22 @@ $render=static function(string $role,array $permissions,string $action='',bool $
 };
 try {
     $operator=$render('governanta',['receipts.run','receipts.view']);
-    reportCheck($operator['status']!==403 && str_contains($operator['html'],'FT 42') && str_contains($operator['html'],'2026-10-02'),'Existing operator must see reduced report');
+    reportCheck($operator['status']!==403 && str_contains($operator['html'],'FT 42') && str_contains($operator['html'],'02-10-2026'),'Existing operator must see reduced report');
     foreach (['SECRET-','private-master-id','private-page-id','PRIVATE-PARENT','receipt-document.php?id=','name="issuer_name"','name="confirmed"','value="review"','value="retry"'] as $private) reportCheck(!str_contains($operator['html'],$private),'Actual operator HTML leaked individual history/corrections');
     $status=json_decode($render('governanta',['receipts.run'],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
     reportCheck($status['history']===null && !str_contains(json_encode($status),'SECRET-') && !str_contains(json_encode($status),'private-page-id'),'Polling report never exposes documents');
-    foreach (['review','retry','regroup'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
+    foreach (['review','retry','regroup','repair'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
     reportCheck($render('governanta',[])['status']===403 && $render('governanta',['receipts.view'])['status']===403,'No/legacy-only access must fail closed');
     $rejected=$render('gerente',[],'start');
     reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
     reportCheck(str_contains($rejected['html'],'value="1999"') && preg_match('/name="months\[\]" value="6" checked/',$rejected['html'])===1,'Rejected selection must remain on the form');
     $manager=$render('gerente',[]);
+    $dom=new DOMDocument();@$dom->loadHTML($manager['html']);$xpath=new DOMXPath($dom);
+    reportCheck($xpath->query('//*[contains(@class,"receipt-process-card")]//*[@id="receipt-status"]')->length===1,'Selected status belongs to process card');
+    reportCheck($xpath->query('//*[@data-receipt-refresh]')->length===1,'Exactly one manual refresh action');
+    reportCheck($xpath->query('//article[contains(.,"SECRET-ERROR.jpg")]//details[contains(@data-url,"original=1")]')->length===0,'JPEG never offers a source PDF');
+
+    reportCheck(str_contains($manager['html'],'123456789') && !str_contains($manager['html'],'NIF: 500000000'),'Display supplier NIF, never recipient fallback');
     reportCheck(str_contains($manager['html'],'SECRET-NORMAL-NUMBER') && str_contains($manager['html'],'receipt-document.php?id=') && str_contains($manager['html'],'name="confirmed"'),'Manager detailed history/review regressed: '.json_encode([str_contains($manager['html'],'SECRET-NORMAL-NUMBER'),str_contains($manager['html'],'receipt-document.php?id='),str_contains($manager['html'],'name="confirmed"')]));
     reportCheck($render('governanta',['receipts.run'],'',true)['status']===403,'Actual document endpoint denies run-only operator');
     reportCheck($render('gerente',[],'',true)['status']===422,'Actual document endpoint rejects missing document ID');

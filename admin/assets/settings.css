@@ -79,3 +79,34 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .document-disclosure > summary:hover { background: var(--surface-soft, #f2f8f8); }
 .document-disclosure > summary:focus-visible { outline: 3px solid var(--brand, #0c7771); outline-offset: -3px; }
 .document-disclosure [data-preview-panel] { padding: 0 1rem 1rem; }
+
+/* Receipt controls use the Hub's rounded field design; month-label typography stays unchanged. */
+.receipt-page select, .receipt-page input[type="date"], .receipt-page input[type="number"], .receipt-page textarea {
+    min-height: 42px; padding: 8px 14px; border: 1px solid #cbd9d7; border-radius: 12px; color: #17313a; background: #fff; font: inherit;
+}
+.receipt-page select { width: 100%; padding-right: 38px; cursor: pointer; }
+.receipt-page label:not(.receipt-month) > select { display: block; margin-top: 6px; }
+.receipt-page input[type="checkbox"] { width: 18px; height: 18px; accent-color: #0f766e; vertical-align: middle; }
+.receipt-months { border: 0; padding: 0; margin: 14px 0; min-width: 0; }
+.receipt-month-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.receipt-month { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.receipt-month input { margin: 0; }
+.receipt-invoice { padding: 16px; margin-top: 12px; }
+.receipt-invoice h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
+.receipt-invoice .receipt-meta { margin: 3px 0; line-height: 1.4; }
+.receipt-invoice .document-disclosure { margin: 8px 0; }
+.receipt-invoice .document-disclosure > summary { padding: 10px 14px; }
+.receipt-review-form { display: grid; gap: 10px; margin-top: 12px; }
+.receipt-review-form > p, .receipt-review-form .form-actions { margin: 0; }
+.receipt-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.receipt-status-line .primary-button { min-height: 36px; padding: 7px 14px; }
+.receipt-status-line [data-status-warning] { flex-basis: 100%; margin: 0; }
+.receipt-process-card .form-grid { margin-top: 0; }
+.receipt-instructions { padding: 0 14px 12px; }
+.receipt-instructions p { margin: 8px 0; line-height: 1.45; }
+.receipt-error-count { color: #b91c1c; }
+.receipt-table-wrap { overflow-x: auto; margin-top: 12px; }
+.receipt-duplicates { width: 100%; border-collapse: collapse; font-size: .94rem; }
+.receipt-duplicates th, .receipt-duplicates td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #dce6e5; }
+.receipt-duplicates th { color: #486581; }
+@media (min-width: 1200px) { .receipt-month-row { justify-content: space-between; column-gap: 5px; flex-wrap: nowrap; } }
