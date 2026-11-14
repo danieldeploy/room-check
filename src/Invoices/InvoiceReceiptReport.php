@@ -54,11 +54,28 @@ final class InvoiceReceiptReport
             'requested'=>!empty($s['requested']) && ($s['active_process']??'')===$id]);
     }
 
-    /** Waiting for human/provider resolution is pending, not an active execution. */
+    /** Automatic retries and live TOConline confirmation waits also reserve the intake. */
     public static function canStart(array $s,bool $sendEnabled=true): bool
     {
         $progress=self::progress($s,$sendEnabled);
-        return !$progress['busy'] && !$progress['next_at'];
+        return !$progress['automatic'];
+    }
+    public static function processState(array $s,string $id,bool $sendEnabled=true): string
+    {
+        $p=self::progress(self::selected($s,$id),$sendEnabled);
+        if ($p['automatic'] && $p['state']!=='receipt_worker_delayed') return 'receipt_run_running';
+        return self::processPending($s,$id)?'receipt_pending':'receipt_finished';
+    }
+    /** Filter by execution start in Lisbon, never by scanned folder or invoice date. */
+    public static function processesForPeriod(array $s,int $year,int $month): array
+    {
+        return array_filter($s['processes']??[],static function(array $p)use($year,$month):bool {
+            if (!$year && !$month) return true;
+            if (empty($p['requested_at'])) return false;
+            try {$at=(new DateTimeImmutable($p['requested_at']))->setTimezone(new DateTimeZone('Europe/Lisbon'));}
+            catch (Exception) {return false;}
+            return (!$year || (int)$at->format('Y')===$year) && (!$month || (int)$at->format('n')===$month);
+        });
     }
 
     public static function summary(array $documents): array
@@ -138,7 +155,7 @@ final class InvoiceReceiptReport
         if ($busy && !empty($state['worker_seen_at']) && $now-(int)$state['worker_seen_at']>600) {
             $key='receipt_worker_delayed';$poll=0;$settled=true;
         }
-        return ['state'=>$key,'next_at'=>$next,'server_time'=>$now,'busy'=>$busy,'poll_at'=>$poll,'settled'=>$settled];
+        return ['state'=>$key,'next_at'=>$next,'server_time'=>$now,'busy'=>$busy,'poll_at'=>$poll,'settled'=>$settled,'automatic'=>$busy || $next>0 || $replyPoll>0];
     }
 
     /** Presentation only: never write formatted dates back to the workflow. */

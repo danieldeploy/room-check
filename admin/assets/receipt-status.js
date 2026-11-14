@@ -1,7 +1,10 @@
 (() => {
   'use strict';
   document.getElementById('receipt-request-error')?.focus();
-  document.querySelectorAll('[data-receipt-filter]').forEach(select=>select.addEventListener('change',()=>select.form.requestSubmit()));
+  document.querySelectorAll('[data-receipt-filter]').forEach(select=>select.addEventListener('change',()=>{
+    if(select.hasAttribute('data-receipt-period')){const process=select.form.elements.namedItem('process');if(process)process.disabled=true;}
+    select.form.requestSubmit();
+  }));
   const status=document.getElementById('receipt-status');if(!status)return;
   const label=status.querySelector('[data-status-label]'),warning=status.querySelector('[data-status-warning]');
   let timer=null,countdownTimer=null,inFlight=false;
@@ -31,8 +34,17 @@
       const globalError=document.getElementById('receipt-global-error');
       if(globalError){globalError.textContent=result.error||'';globalError.hidden=!result.error;}
       if(typeof result.can_start==='boolean'){
+        document.querySelectorAll('[data-receipt-intake]').forEach(fieldset=>{fieldset.disabled=!result.can_start;});
         document.querySelectorAll('[data-receipt-start]').forEach(button=>{button.disabled=!result.can_start;});
         document.querySelectorAll('[data-receipt-start-blocked]').forEach(notice=>{notice.hidden=result.can_start;});
+      }
+      if(typeof result.processing==='boolean'){
+        const message=document.getElementById('receipt-processing-message');if(message)message.hidden=!result.processing;
+      }
+      if(result.process_labels && typeof result.process_labels==='object'){
+        document.querySelectorAll('select[name="process"] option').forEach(option=>{
+          if(typeof result.process_labels[option.value]==='string')option.textContent=result.process_labels[option.value];
+        });
       }
       document.getElementById('receipt-report').innerHTML=result.report;
       const history=document.getElementById('receipt-history');

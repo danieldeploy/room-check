@@ -4,12 +4,19 @@
 <section class="card"><h2 data-receipt-history-counts><?= $t('receipt_total') ?>: <?= $historyCounts['documents'] ?> | <?= $t('receipt_history_processed') ?>: <?= $historyCounts['processed'] ?> | <?= $t('receipt_pending') ?>: <?= $historyCounts['pending'] ?></h2>
 <?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
 <?php foreach ($documents as $id=>$d): ?>
-<?php if (!empty($d['children'])): ?><details class="document-disclosure receipt-source"><summary><?= $t('receipt_source_pdf') ?>: <span data-i18n-skip><?= $escape($d['name']) ?></span><?php if (!empty($d['error']) || ($d['stage']??'')==='failed'): ?> — <?= $t('receipt_stage_failed') ?><?php endif; ?></summary><?php endif; ?>
+<?php
+if (!empty($d['children']) && ($d['format']??'')==='jpg' && empty($d['error']) && ($d['stage']??'')!=='failed') continue;
+$reviewable=$d['stage']==='review' && empty($d['children']) && !empty($d['sha256']);
+$buyerAccepted=InvoiceReceiptAnalysis::buyerAccepted($d,(string)($tocSettings['nif']??''));
+$buyerIssue=InvoiceReceiptAnalysis::buyerIssue($d,(string)($tocSettings['nif']??''));
+?>
+<?php if (!empty($d['children'])): ?><details class="document-disclosure receipt-source"><summary><?= $t(($d['format']??'')==='pdf'?'receipt_source_pdf':'receipt_source_file') ?>: <span data-i18n-skip><?= $escape($d['name']) ?></span><?php if (!empty($d['error']) || ($d['stage']??'')==='failed'): ?> — <?= $t('receipt_stage_failed') ?><?php endif; ?></summary><?php endif; ?>
 <article class="card receipt-invoice"><h3 data-i18n-skip><?= $escape($d['name']) ?></h3>
 <p class="receipt-meta"><?php if (!empty($d['page_number'])): ?><?= $t('receipt_page') ?> <?= $escape(implode(', ',$d['pages']??[(int)$d['page_number']])) ?> / <?= (int)$d['page_count'] ?> | <?php endif; ?><?= $t('receipt_expected') ?>: <span data-i18n-skip><?= $escape(InvoiceReceiptReport::displayDate($d['expected_period']??'',true)) ?></span></p>
 <p class="receipt-meta"><?= $t('receipt_company') ?> : <span data-i18n-skip><?= $escape($d['issuer_name']??'') ?: $t('receipt_unknown_issuer') ?></span> | <?= $t('receipt_number_date') ?>: <span data-i18n-skip><?= $escape($d['invoice_number']??'') ?> <?= !empty($d['issued_on'])?'('.$escape(str_replace([' (',')'],[' ',''],InvoiceReceiptReport::displayDate($d['issued_on']))).')':'' ?></span></p>
 <p class="receipt-meta"><?php if (($d['stage']??'')==='archived' && ($d['toconline_state']??'')==='toc_accepted'): ?><?= $t('receipt_archive_confirmed') ?><?php else: ?><?= $t('receipt_stage_'.$d['stage']) ?> — <?= $t($d['toconline_state']) ?><?php endif; ?></p>
-<?php if (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
+<?php if ($reviewable): ?><p class="alert receipt-review-issues"><?= implode(' | ',array_map($t,InvoiceReceiptAnalysis::reviewIssues($d,(string)($tocSettings['nif']??'')))) ?></p>
+<?php elseif (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
 <?php if (!in_array($d['stage'],['duplicate_trashed','split_completed','discarding','discarded'],true)): ?>
 <?php
 $previewOptions=['document'=>'receipt_show_document'];
@@ -25,19 +32,11 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <?php endforeach; ?>
 <?php endif; ?>
 <?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></div></form><?php endif; ?>
-<?php if ($canHistory && $d['stage']==='review' && empty($d['children']) && !empty($d['sha256'])): ?>
-<?php $buyerIssue=InvoiceReceiptAnalysis::buyerIssue($d,(string)($tocSettings['nif']??''));$buyerAccepted=InvoiceReceiptAnalysis::buyerAccepted($d,(string)($tocSettings['nif']??'')); ?>
+<?php if ($reviewable): ?>
 <?php if ($buyerIssue!==''): ?>
 <p><?= $t('receipt_buyer_nif') ?>: <span data-i18n-skip><?= $escape($d['company_nif']??'') ?: $t('receipt_unknown_data') ?></span></p>
-<?php if ($buyerAccepted): ?><p><?= $t('receipt_buyer_confirmed') ?></p><?php else: ?>
-<?php if (($d['error']??'')!==$buyerIssue): ?><p class="alert"><?= $t($buyerIssue) ?></p><?php endif; ?>
-<?php if ($canReview): ?><form method="post" class="receipt-review-form">
-<input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="confirm_buyer">
-<label><input type="checkbox" name="buyer_confirmed" value="1" required> <?= $t('receipt_buyer_confirm') ?></label>
-<p><?= $t('receipt_buyer_confirm_help') ?></p>
-<div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_approve') ?></button></div>
-</form><?php endif; ?><?php endif; ?>
-<?php if ($canReview && InvoiceReceiptAnalysis::discardable($d)): ?>
+<?php if ($buyerAccepted): ?><p><?= $t('receipt_buyer_confirmed') ?></p><?php endif; ?>
+<?php if ($canReview && !$buyerAccepted && InvoiceReceiptAnalysis::discardable($d)): ?>
 <details class="document-disclosure"><summary><?= $t('receipt_delete') ?></summary>
 <form method="post" class="receipt-review-form">
 <input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="discard">
@@ -51,16 +50,28 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <label><input type="checkbox" name="missing_added" value="1" required> <?= $t('receipt_missing_added') ?></label>
 <div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_check_continue') ?></button></div>
 </form><?php endif; ?>
-<?php if ($d['stage']==='review' && !empty($d['sha256']) && empty($d['grouping_pending']) && ($d['review_reason']??'')!=='receipt_grouping_required'): ?>
-<?php if ($canReview): ?><form method="post" class="receipt-review-form">
+<?php if ($reviewable && empty($d['grouping_pending']) && ($d['review_reason']??'')!=='receipt_grouping_required'): ?>
+<?php
+$formData=$d;
+if ($requestError!=='' && in_array($_POST['action']??'',['review','confirm_buyer'],true) && ($_POST['id']??'')===$id) {
+    foreach (['issued_on','issuer_name','invoice_number','issuer_nif'] as $field) if (is_string($_POST[$field]??null)) $formData[$field]=$_POST[$field];
+}
+$inputDate=(string)($formData['issued_on']??'');
+if (preg_match('/\A(\d{4})-(\d{2})-(\d{2})\z/',$inputDate,$dateParts)) $inputDate=$dateParts[3].'/'.$dateParts[2].'/'.$dateParts[1];
+$missing=InvoiceReceiptAnalysis::missingPages($d);$qr=($d['data_source']??'')==='qr';
+$fiscalBlocked=isset($d['fiscal_status']) && $d['fiscal_status']!=='N';
+?>
+<?php if ($canReview): ?><form method="post" class="receipt-review-form" data-receipt-review data-date-max="<?= $escape((new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y-m-d')) ?>" data-blocked="<?= $fiscalBlocked?'true':'false' ?>">
 <input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="review">
-<label class="field"><span><?= $t('receipt_date') ?></span><input type="date" name="issued_on" value="<?= $escape($d['issued_on']??'') ?>" <?= ($d['data_source']??'')==='qr'?'readonly':'' ?> required></label>
-<label class="field"><span><?= $t('receipt_issuer') ?></span><input type="text" name="issuer_name" maxlength="160" value="<?= $escape($d['issuer_name']??'') ?>"></label>
-<label class="field"><span><?= $t('receipt_number') ?></span><input type="text" name="invoice_number" maxlength="128" value="<?= $escape($d['invoice_number']??'') ?>" <?= ($d['data_source']??'')==='qr'?'readonly':'' ?> required></label>
-<p><?= $t('receipt_issuer_nif') ?>: <span data-i18n-skip><?= $escape($d['issuer_nif']??'') ?: $t('receipt_unknown_data') ?></span></p>
-<?php $missing=InvoiceReceiptAnalysis::missingPages($d);$buyerPending=!InvoiceReceiptAnalysis::buyerAccepted($d,(string)($tocSettings['nif']??'')); ?>
+<div class="receipt-review-fields">
+<label class="field"><span><?= $t('receipt_date') ?></span><input type="text" inputmode="numeric" name="issued_on" maxlength="10" placeholder="DD/MM/AAAA" data-review-date value="<?= $escape($inputDate) ?>" <?= $qr?'readonly':'' ?> required></label>
+<label class="field"><span><?= $t('receipt_issuer') ?></span><input type="text" name="issuer_name" maxlength="160" placeholder="<?= $t('receipt_input_company') ?>" value="<?= $escape($formData['issuer_name']??'') ?>" required></label>
+<label class="field"><span><?= $t('receipt_number') ?></span><input type="text" name="invoice_number" maxlength="128" placeholder="<?= $t('receipt_input_number') ?>" value="<?= $escape($formData['invoice_number']??'') ?>" <?= $qr?'readonly':'' ?> required></label>
+<label class="field"><span><?= $t('receipt_issuer_nif') ?></span><input type="text" inputmode="numeric" name="issuer_nif" maxlength="9" pattern="[0-9]{9}" placeholder="<?= $t('receipt_input_nif') ?>" value="<?= $escape($formData['issuer_nif']??'') ?>" <?= $qr?'readonly':'' ?> required></label>
+</div>
+<?php if (!$buyerAccepted): ?><label><input type="checkbox" name="buyer_confirmed" value="1" required> <?= $t('receipt_buyer_confirm') ?> (<?= $escape($tocSettings['nif']??'') ?>)</label><?php endif; ?>
 <?php if ($missing): ?><input type="hidden" name="confirmed" value="1"><?php else: ?><label><input type="checkbox" name="confirmed" value="1" required> <?= $t('receipt_confirm') ?></label><?php endif; ?>
-<div class="form-actions"><button class="primary-button" type="submit"><?= $t(($missing || $buyerPending)?'receipt_save_details':'receipt_approve') ?></button></div>
+<div class="form-actions"><button class="primary-button" type="submit" data-review-submit disabled><?= $t($missing?'receipt_save_details':'receipt_approve') ?></button></div>
 </form><?php else: ?><p><?= $t('receipt_wait') ?></p><?php endif; ?>
 <?php endif; ?><?php if ($canReview && empty($d['source_id']) && ($d['format']??'')==='pdf' && !in_array($d['stage'],['split_completed','source_trashing','source_moving','source_processed'],true) && (!empty($d['children']) || !empty($d['grouping_pending']))): ?>
 <details><summary><?= $t('receipt_groups') ?></summary><p><?= $t('receipt_groups_help') ?></p>
@@ -72,5 +83,5 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 </article>
 <?php if (!empty($d['children'])): ?></details><?php endif; ?>
 <?php endforeach; ?>
-<nav><?php if ($page>1): ?><a href="?<?= $escape(http_build_query(['process'=>$processId,'filter'=>$filter,'page'=>$page-1])) ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?<?= $escape(http_build_query(['process'=>$processId,'filter'=>$filter,'page'=>$page+1])) ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
+<nav><?php if ($page>1): ?><a href="?<?= $escape(http_build_query($selectionQuery+['page'=>$page-1])) ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?<?= $escape(http_build_query($selectionQuery+['page'=>$page+1])) ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
 </section><?php endif; ?>

@@ -46,7 +46,7 @@ copy($root.'/admin/receipts.php',$tmp.'/web/admin/receipts.php');
 copy($root.'/admin/receipt-history.php',$tmp.'/web/admin/receipt-history.php');
 copy($root.'/admin/receipt-document.php',$tmp.'/web/admin/receipt-document.php');
 file_put_contents($tmp.'/vault/master.key',random_bytes(32)); chmod($tmp.'/vault/master.key',0600);
-$vault=new InvoiceVault($tmp.'/vault'); $vault->save('toconline-settings.enc',['nif'=>'600000000','enabled'=>false]); $vault->save('drive-oauth.enc',['scope'=>'https://www.googleapis.com/auth/drive']); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'year'=>2026,'months'=>[10]]);
+$vault=new InvoiceVault($tmp.'/vault'); $vault->save('toconline-settings.enc',['nif'=>'600000000','enabled'=>false]); $vault->save('drive-oauth.enc',['scope'=>'https://www.googleapis.com/auth/drive']); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'requested_at'=>gmdate('c'),'year'=>2026,'months'=>[10]]);
 file_put_contents($tmp.'/web/config.php','<?php return '.var_export(['invoices'=>['private_dir'=>$tmp.'/vault']],true).';');
 $lib=<<<'PHP'
 <?php
@@ -60,16 +60,18 @@ function database(): PDO {
     $pdo->sqliteCreateFunction('RELEASE_LOCK',static fn($name)=>1,1);
     $pdo->exec("CREATE TABLE users(id INTEGER,username TEXT,display_name TEXT,role TEXT,is_active INTEGER,last_login_at TEXT,preferred_language TEXT);
         CREATE TABLE role_permissions(role TEXT,permission TEXT);
+        CREATE TABLE invoice_document_delivery(document_id INTEGER,toconline_state TEXT);
+        CREATE TABLE auth_audit_log(actor_user_id INTEGER,action TEXT,details_json TEXT,ip_key TEXT);
         INSERT INTO users VALUES(1,'fixture','Fixture User','".$GLOBALS['fixture_role']."',1,NULL,'pt');");
     foreach ($GLOBALS['fixture_permissions'] as $permission) $pdo->prepare('INSERT INTO role_permissions VALUES(?,?)')->execute([$GLOBALS['fixture_role'],$permission]);
     return $pdo;
 }
 PHP;
 file_put_contents($tmp.'/web/lib.php',$lib);
-$render=static function(string $role,array $permissions,string $action='',bool $preview=false,bool $status=false,array $query=[]) use ($tmp): array {
+$render=static function(string $role,array $permissions,string $action='',bool $preview=false,bool $status=false,array $query=[],array $post=[]) use ($tmp): array {
     $code='$GLOBALS["fixture_role"]='.var_export($role,true).';$GLOBALS["fixture_permissions"]='.var_export($permissions,true).';'
         .'session_save_path('.var_export($tmp,true).');session_start();$_SESSION=["user_id"=>1,"last_activity"=>time(),"csrf_token"=>"fixture-csrf"];'
-        .'$_SERVER["REQUEST_METHOD"]='.var_export($action===''?'GET':'POST',true).';$_POST=["action"=>'.var_export($action,true).',"id"=>"private-error-id","csrf_token"=>"fixture-csrf"];'
+        .'$_SERVER["REQUEST_METHOD"]='.var_export($action===''?'GET':'POST',true).';$_POST='.var_export($post+['action'=>$action,'id'=>'private-error-id','csrf_token'=>'fixture-csrf'],true).';'
         .'if('.var_export($action==='start',true).'){$_POST["year"]=1999;$_POST["months"]=["6"];}$_GET='.var_export($query,true).';$_GET["status"]='.var_export($status?'1':'',true).';'
         .'ob_start();register_shutdown_function(static function(){echo json_encode(["status"=>http_response_code(),"html"=>ob_get_clean()]);});'
         .'require '.var_export($tmp.'/web/admin/'.($preview?'receipt-document.php':'receipts.php'),true).';';
@@ -90,6 +92,12 @@ try {
     reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
     reportCheck(str_contains($rejected['html'],'value="1999"') && preg_match('/name="months\[\]" value="6" checked/',$rejected['html'])===1,'Rejected selection must remain on the form');
     $manager=$render('gerente',[]);
+    $formDom=new DOMDocument();@$formDom->loadHTML($manager['html']);$formPath=new DOMXPath($formDom);
+    reportCheck($formPath->query('//form[@data-receipt-review]//input[@name="buyer_confirmed"]')->length===1,'Buyer approval belongs in the same complete details form');
+    reportCheck($formPath->query('//form[@data-receipt-review]//input[@name="issuer_nif"]')->length===1,'Supplier NIF is an editable mandatory field');
+    reportCheck($formPath->query('//form[@data-receipt-review]//input[@name="issued_on" and @placeholder="DD/MM/AAAA"]')->length===1,'Date has the explicit requested placeholder');
+    reportCheck($formPath->query('//input[@value="confirm_buyer"]')->length===0,'No separate partial buyer-only submit');
+    reportCheck($formPath->query('//select[@name="process_year"]')->length===1 && $formPath->query('//select[@name="process_month"]')->length===1,'Execution period filters are available');
     $counts=static function(string $html,array $expected): void {
         $dom=new DOMDocument();@$dom->loadHTML($html);$xpath=new DOMXPath($dom);
         $heading=$xpath->query('//*[@data-receipt-history-counts]')->item(0);
@@ -136,6 +144,33 @@ try {
     $second=$render('gerente',[],'',false,false,['process'=>'another','page'=>2]);
     $counts($second['html'],[55,55,0]);
     reportCheck(substr_count($second['html'],'<article class="card receipt-invoice"')===5,'Pagination retains matching documents and total counts across pages');
+    reportCheck(str_contains($second['html'],'process_year=2026') && str_contains($second['html'],'process_month=11'),'Pagination retains execution period filters');
+    $empty=$render('gerente',[],'',false,false,['process_year'=>2025,'process_month'=>1]);
+    reportCheck(!str_contains($empty['html'],'SECRET-NORMAL-NUMBER') && str_contains($empty['html'],InvoiceText::get('receipt_no_runs')),'An empty period never falls back to another execution');
+
+    // Real controller POST: all corrections and buyer approval commit together;
+    // no external request is needed until the separate worker runs.
+    $vault->save('toconline-settings.enc',['nif'=>'500000000','enabled'=>false]);
+    $state=['documents'=>['private-error-id'=>array_merge($documents['private-error-id'],['id'=>'private-error-id','company_nif'=>'600000000'])],'requested'=>false,'requested_at'=>gmdate('c'),'year'=>2026,'months'=>[6]];
+    $vault->save(InvoiceReceipts::FILE,$state);
+    $badPost=['issued_on'=>'02/04/2026','invoice_number'=>'FT 7','issuer_name'=>'Synthetic supplier','issuer_nif'=>'','confirmed'=>'1','buyer_confirmed'=>'1'];
+    $bad=$render('gerente',[],'review',false,false,[],$badPost);
+    reportCheck(str_contains($bad['html'],'id="receipt-request-error"') && !isset($vault->read(InvoiceReceipts::FILE)['documents']['private-error-id']['company_confirmation']),'Missing supplier NIF cannot partially save buyer confirmation');
+    $goodPost=array_replace($badPost,['issuer_nif'=>'123456789']);
+    $submitted=$render('governanta',['receipts.review'],'review',false,false,[],$goodPost);
+    preg_match('/id="receipt-request-error"[^>]*>(.*?)<\/div>/s',$submitted['html'],$submitError);
+    reportCheck($submitted['status']===303,'Delegated review accepts the complete explicit confirmation: '.($submitError[1]??'status '.json_encode($submitted['status'])));
+    $saved=$vault->read(InvoiceReceipts::FILE)['documents']['private-error-id'];
+    reportCheck($saved['stage']==='ready' && $saved['issued_on']==='2026-04-02' && $saved['company_nif']==='600000000' && $saved['company_confirmation']['nif']==='500000000','Controller queues once, preserves raw buyer NIF and stores configured confirmation separately');
+    $queued=$render('gerente',[]);
+    $dom=new DOMDocument();@$dom->loadHTML($queued['html']);$path=new DOMXPath($dom);
+    reportCheck($path->query('//*[@data-receipt-intake and @disabled]')->length===1,'Year, months and start are locked during automatic work');
+    reportCheck($path->query('//*[@id="receipt-processing-message" and not(@hidden)]')->length===1,'Background notice is visible only while automatic work exists');
+    reportCheck($path->query('//form[@data-receipt-review]')->length===0 && $path->query('//input[@value="discard"]')->length===0,'Successful review removes the correction and delete controls');
+    $poll=json_decode($render('gerente',[],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
+    reportCheck(!$poll['can_start'] && $poll['processing'] && str_contains(implode(' ',$poll['process_labels']),InvoiceText::get('receipt_run_running')),'Polling agrees with Running and the global intake lock');
+    $again=$render('gerente',[],'review',false,false,[],$goodPost);
+    reportCheck($again['status']!==303 && $vault->read(InvoiceReceipts::FILE)['documents']['private-error-id']===$saved,'A repeated confirmation cannot restart or overwrite the queued document');
     echo "Receipt report: totals, duplicate company/number/date, safe errors, actual endpoint role isolation and denied forged POSTs passed.\n";
 } finally {
     foreach (glob($tmp.'/sess_*')?:[] as $sessionFile) unlink($sessionFile);

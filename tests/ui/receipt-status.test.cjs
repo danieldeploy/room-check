@@ -42,3 +42,11 @@ test('status errors and request errors remain distinct; no unsafe HTML is insert
 test('a hung status read times out once, exposes Refresh and never overlaps requests',async()=>{
  const x=setup();try{let calls=0;x.dom.window.fetch=async(_url,{signal})=>{calls++;return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('timeout'))));};const pending=x.tick();await Promise.resolve();x.button.dispatchEvent(new x.dom.window.Event('click'));assert.equal(calls,1);const timeout=[...x.timers.values()].find(v=>v[1]===15000);assert.ok(timeout);timeout[0]();await pending;assert.equal(x.button.hidden,false);assert.equal(x.timers.size,0);}finally{x.dom.window.close();}
 });
+
+test('automatic state locks all intake controls, updates run labels and removes the banner at stop',async()=>{
+ const x=setup({extra:'<div id="receipt-processing-message"></div><fieldset data-receipt-intake><input name="year"><input type="checkbox" name="months[]"><button data-receipt-start>Start</button></fieldset><select name="process"><option value="run">Old Pending</option></select><select name="process_year"><option value="2026" selected>2026</option></select>'});
+ try{let running=true;x.dom.window.fetch=async()=>({ok:true,json:async()=>({...x.response({state:running?'receipt_toc_wait':'receipt_finished',poll_at:running?x.now+60:0}),can_start:!running,processing:running,process_labels:{run:running?'Run Running':'Run Completed'}})});
+  await x.tick();const d=x.dom.window.document;assert.equal(d.querySelector('[data-receipt-intake]').disabled,true);assert.equal(d.getElementById('receipt-processing-message').hidden,false);assert.equal(d.querySelector('[name="process"] option').textContent,'Run Running');
+  running=false;await x.tick();assert.equal(d.querySelector('[data-receipt-intake]').disabled,false);assert.equal(d.getElementById('receipt-processing-message').hidden,true);assert.equal(d.querySelector('[name="process"] option').textContent,'Run Completed');assert.equal(d.querySelector('[name="process_year"]').value,'2026');
+ }finally{x.dom.window.close();}
+});

@@ -38,6 +38,29 @@ final class InvoiceReceiptAnalysis
         return ($d['format']??'')==='jpg' || (($d['format']??'')==='pdf'
             && (!empty($d['source_id']) || (!empty($d['pdf_pages_checked']) && ($d['page_count']??0)===1)));
     }
+    /** All invalid mandatory fields, so the first review never hides a second missing input. */
+    public static function reviewFields(array $d): array
+    {
+        $fields=[];
+        if (!InvoiceReceipts::validDate((string)($d['issued_on']??''))) $fields['issued_on']='receipt_need_date';
+        foreach (['issuer_name'=>160,'invoice_number'=>128] as $field=>$limit) {
+            $value=trim((string)($d[$field]??''));
+            if ($value==='' || mb_strlen($value)>$limit || preg_match('/[\x00-\x1f]/',$value)) $fields[$field]=$field==='issuer_name'?'receipt_need_company':'receipt_need_number';
+        }
+        if (!preg_match('/\A\d{9}\z/',(string)($d['issuer_nif']??''))) $fields['issuer_nif']='receipt_need_supplier_nif';
+        return $fields;
+    }
+    public static function reviewIssues(array $d,string $nif): array
+    {
+        $issues=array_values(self::reviewFields($d));
+        if (!self::buyerAccepted($d,$nif)) $issues[]=self::buyerIssue($d,$nif) ?: 'receipt_company_changed';
+        if (self::missingPages($d)) $issues[]='receipt_missing_pages';
+        if (!empty($d['grouping_pending']) || ($d['review_reason']??'')==='receipt_grouping_required') $issues[]='receipt_grouping_required';
+        if (isset($d['fiscal_status']) && $d['fiscal_status']!=='N') $issues[]='receipt_fiscal_review';
+        $error=(string)($d['error']??'');
+        if ($error!=='' && !in_array($error,['receipt_review_required','receipt_buyer_missing','receipt_buyer_consumer','receipt_company_changed'],true)) $issues[]=$error;
+        return array_values(array_unique($issues ?: ['receipt_check_details']));
+    }
     /** Re-evaluate independent blockers; buyer approval never approves document content. */
     public static function reviewReason(array $d,string $nif): string
     {
