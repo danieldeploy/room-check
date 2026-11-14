@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/InvoiceReceiptAnalysis.php';
 require_once __DIR__.'/InvoiceVault.php';
 
 final class InvoiceTocWait extends RuntimeException
@@ -167,7 +168,7 @@ final class InvoiceToconline
                 $id=(string)$entry['document_id'];$d=$documents[substr($id,8)]??[];
                 $sentAt=strtotime((string)($entry['attempted_at']??''));
                 if (!str_starts_with($id,'receipt:') || $entry['nif']!==$settings['nif'] || $entry['sender']!==$settings['sender']
-                    || ($d['company_nif']??'')!==$settings['nif'] || ($d['issuer_nif']??'')!==$purchase['issuer_nif']
+                    || !InvoiceReceiptAnalysis::buyerAccepted($d,$settings['nif']) || ($d['issuer_nif']??'')!==$purchase['issuer_nif']
                     || trim(preg_replace('/\s+/u',' ',(string)($d['invoice_number']??'')))!==$purchase['invoice_number']
                     || !$sentAt || $signedAt<$sentAt-300) continue;
                 // Include terminal copies too: a replay must never be rebound to a later duplicate scan.
@@ -309,7 +310,7 @@ final class InvoiceToconline
     {
         $settings=$this->settings();
         if (empty($settings['enabled']) || empty($settings['pilot_verified'])) return;
-        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('toc_ineligible');
+        if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || !InvoiceReceiptAnalysis::buyerAccepted($d,$settings['nif'])) throw new RuntimeException('toc_ineligible');
         $id='receipt:'.$d['id']; $ledger=$this->ledger();
         $identity=hash('sha256',$settings['nif']."\0receipt\0".$d['id']."\0".$d['sha256']);
         // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.

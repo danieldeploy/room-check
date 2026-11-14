@@ -50,7 +50,7 @@ final class InvoiceReceipts
         $documents=$this->status()['documents'];
         $d=$documents[$id]??null;
         if (!is_array($d) || !in_array($d['format']??'', ['pdf','jpg'],true)
-            || in_array($d['stage']??'', ['duplicate_trashed','split_completed'],true)) throw new RuntimeException('receipt_preview_unavailable');
+            || in_array($d['stage']??'', ['duplicate_trashed','split_completed','discarding','discarded'],true)) throw new RuntimeException('receipt_preview_unavailable');
         if ($original) {
             $parent=$documents[$d['source_id']??'']??null;
             if (!is_array($parent) || ($parent['format']??'')!=='pdf' || !in_array($id,$parent['children']??[],true)
@@ -152,27 +152,53 @@ final class InvoiceReceipts
             || !self::validDate($date) || !$confirmed || trim($number)==='' || mb_strlen($number)>128
             || preg_match('/[\x00-\x1f]/',$number)) throw new RuntimeException('receipt_review_required');
         if (mb_strlen($issuerName)>160 || preg_match('/[\x00-\x1f]/',$issuerName)) throw new RuntimeException('invalid_request');
-        $missing=($d['review_reason']??'')==='receipt_missing_pages';
+        $missing=InvoiceReceiptAnalysis::missingPages($d);
         if (($d['review_reason']??'')==='receipt_grouping_required') throw new RuntimeException('receipt_grouping_required');
         if (!empty($d['grouping_pending'])) throw new RuntimeException('receipt_grouping_required');
         if (($d['data_source']??'')==='qr' && (($d['issued_on']??'')!==$date || ($d['invoice_number']??'')!==trim($number))) throw new RuntimeException('receipt_qr_locked');
         $settings=$this->toc->settings(); InvoiceToconline::destination($settings['nif']);
-        if (($d['data_source']??'')==='qr' && ($d['company_nif']??'')!==$settings['nif']) throw new RuntimeException('receipt_company_changed');
+        if (!$this->toc->receiptUnsent($id) || $actor<1) throw new RuntimeException('receipt_review_required');
         if (!empty($d['ocr_id']) && empty($d['ocr_cleaned'])) {
             $this->drive->connect(); $this->drive->trashReceiptOcr($d['ocr_id'],$id); $d['ocr_cleaned']=true;
         }
         if (isset($d['fiscal_status']) && $d['fiscal_status']!=='N') throw new RuntimeException('receipt_review_required');
         $d['issuer_name']=trim($issuerName);
-        $d['issued_on']=$date; $d['invoice_number']=trim($number); $d['company_nif']=$settings['nif'];
-        $d['reviewed_by']=$actor; $d['reviewed_at']=gmdate('c'); $d['stage']=$missing?'review':'ready'; $d['error']=$missing?'receipt_missing_pages':''; $d['attempts']=0; $d['next_attempt']=0; $d['review_reason']=$d['error']; $d['complete']=!$missing;
-        if (!$missing) self::beginCycle($s,$d['process_id']??'legacy');
+        $d['issued_on']=$date; $d['invoice_number']=trim($number);
+        $d['reviewed_by']=$actor; $d['reviewed_at']=gmdate('c'); $d['complete']=!$missing; $d['uncertain']=false;
+        $d['error']=InvoiceReceiptAnalysis::reviewReason($d,$settings['nif']);$d['review_reason']=$d['error'];
+        $d['stage']=$d['error']===''?'ready':'review';
+        if ($d['stage']==='ready') self::beginCycle($s,$d['process_id']??'legacy');
         $s['documents'][$id]=InvoiceReceiptRetry::reset($d);$this->save($s);
+    }
+    public function confirmBuyer(string $id,bool $confirmed,int $actor): void
+    {
+        $s=$this->status();$d=$s['documents'][$id]??[];$nif=$this->toc->settings()['nif'];
+        InvoiceToconline::destination($nif);
+        if (!$confirmed || $actor<1 || ($d['stage']??'')!=='review' || empty($d['sha256'])
+            || !in_array($d['format']??'',['pdf','jpg'],true) || !empty($d['children'])
+            || !$this->toc->receiptUnsent($id) || InvoiceReceiptAnalysis::buyerAccepted($d,$nif)) throw new RuntimeException('receipt_review_required');
+        $d['company_confirmation']=['nif'=>$nif,'document_id'=>$id,'sha256'=>$d['sha256'],
+            'extracted_nif'=>$d['company_nif']??'','actor'=>$actor,'at'=>gmdate('c')];
+        $d['error']=InvoiceReceiptAnalysis::reviewReason($d,$nif);$d['review_reason']=$d['error'];
+        $d['stage']=$d['error']===''?'ready':'review';
+        if ($d['stage']==='ready') self::beginCycle($s,$d['process_id']??'legacy');
+        $s['documents'][$id]=InvoiceReceiptRetry::reset($d);$this->save($s);
+    }
+    /** Persist the invoice-only discard intent. The existing worker handles Drive retries. */
+    public function requestDiscard(string $id,bool $confirmed,int $actor): void
+    {
+        $s=$this->status();$d=$s['documents'][$id]??[];
+        if (!$confirmed || $actor<1 || !InvoiceReceiptAnalysis::discardable($d) || !$this->toc->receiptUnsent($id)
+            || InvoiceReceiptAnalysis::buyerIssue($d,$this->toc->settings()['nif'])==='') throw new RuntimeException('receipt_review_required');
+        $d['discard_requested_by']=$actor;$d['discard_requested_at']=gmdate('c');
+        $d['stage']='discarding';$d['error']='';
+        self::beginCycle($s,$d['process_id']??'legacy');$s['documents'][$id]=InvoiceReceiptRetry::reset($d);$this->save($s);
     }
     public function requestRepair(string $id,bool $confirmed,int $actor): void
     {
         $s=$this->status();$d=$s['documents'][$id]??[];
         if (!$confirmed || ($d['stage']??'')!=='review' || ($d['format']??'')!=='pdf' || empty($d['source_id'])
-            || empty($d['sha256']) || !isset($s['documents'][$d['source_id']]) || !$this->toc->receiptUnsent($id)) throw new RuntimeException('receipt_review_required');
+            || empty($d['sha256']) || !InvoiceReceiptAnalysis::missingPages($d) || !isset($s['documents'][$d['source_id']]) || !$this->toc->receiptUnsent($id)) throw new RuntimeException('receipt_review_required');
         $settings=$this->toc->settings();
         if (!InvoiceReceiptReport::canStart($s,!empty($settings['enabled']) && !empty($settings['pilot_verified']))) throw new RuntimeException('worker_busy');
         $d['repair_original_error']=$d['error']??'';$d['error']='';$d['stage']='repairing';
@@ -244,7 +270,7 @@ final class InvoiceReceipts
             $groups[]=$pages;
         }
         // Actual page count is checked again by the local parser on the original bytes.
-        foreach ($d['children']??[$id] as $child) if (!$this->toc->receiptUnsent($child)) throw new RuntimeException('receipt_legacy_submitted');
+        foreach ($d['children']??[$id] as $child) if (in_array($s['documents'][$child]['stage']??'',['discarding','discarded'],true) || !$this->toc->receiptUnsent($child)) throw new RuntimeException('receipt_legacy_submitted');
         $d['legacy_children']=array_values(array_unique(array_merge($d['legacy_children']??[],$d['children']??[])));
         foreach ($d['children']??[] as $child) { $s['documents'][$child]['stage']='superseded';$s['documents'][$child]['error']=''; }
         unset($d['children'],$d['analysis_version'],$d['manifest'],$d['grouping_pending']);
@@ -266,7 +292,7 @@ final class InvoiceReceipts
     }
     private static function runnable(array $d,array $documents,bool $sendEnabled,bool $cleanupPaused): bool
     {
-        if (in_array($d['stage']??'',['repairing','queued','reading','ready','moving','preserving','trashing'],true)) return true;
+        if (in_array($d['stage']??'',['repairing','queued','reading','ready','moving','preserving','trashing','discarding'],true)) return true;
         if (in_array($d['stage']??'',['source_trashing','source_moving'],true)) return !$cleanupPaused;
         if (($d['stage']??'')==='archived') return in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)
             || ($sendEnabled && empty($d['duplicate_keeper']) && in_array($d['toconline_state']??'',['pending','toc_retry'],true));
@@ -280,7 +306,7 @@ final class InvoiceReceipts
         $s=$this->status(); if (($s['analysis_version']??0)>=InvoiceReceiptAnalysis::VERSION) return;
         foreach ($s['documents'] as $id=>$d) {
             if (($d['process_id']??'legacy')!==($s['active_process']??'legacy')) continue;
-            if (!empty($d['source_id']) || !empty($d['analysis_version']) || in_array($d['stage'],['split_completed','duplicate_trashed'],true)) continue;
+            if (!empty($d['source_id']) || !empty($d['analysis_version']) || in_array($d['stage'],['split_completed','duplicate_trashed','discarding','discarded'],true)) continue;
             $ids=$d['children']??[$id]; $safe=true;
             foreach ($ids as $child) if (!$this->toc->receiptUnsent($child) || !in_array($s['documents'][$child]['toconline_state']??'pending',['pending','toc_retry','receipt_per_page'],true)) $safe=false;
             if (!$safe) {
@@ -418,7 +444,7 @@ final class InvoiceReceipts
         uasort($documents,static fn($a,$b)=>(int)($a['stage']==='archived')<=>(int)($b['stage']==='archived'));
         foreach ($documents as $id=>$d) {
             if (!empty($s['source_cleanup_paused']) && in_array($d['stage'],['split','source_trashing','source_moving'],true)) continue;
-            if (!in_array($d['stage'],['repairing','queued','reading','ready','moving','preserving','archived','trashing','split','source_trashing','source_moving'],true) || ($d['next_attempt']??0)>$now) continue;
+            if (!in_array($d['stage'],['repairing','queued','reading','ready','moving','preserving','archived','trashing','discarding','split','source_trashing','source_moving'],true) || ($d['next_attempt']??0)>$now) continue;
             if ($d['stage']==='split' && !$this->childrenArchived($d,$documents)) continue;
             if ($d['stage']==='archived' && in_array($d['toconline_state'],['pending','toc_retry'],true)
                 && (empty($this->toc->settings()['enabled']) || empty($this->toc->settings()['pilot_verified']))) continue;
@@ -441,8 +467,8 @@ final class InvoiceReceipts
                 if ($e instanceof InvoiceTocWait) {
                     $d['error']='';$d['next_attempt']=$e->retryAt;$d['retry_kind']='pacing';$this->put($id,$d);break;
                 }
-                if (in_array($e->getMessage(),['receipt_grouping_required','receipt_company_changed','receipt_missing_pages','receipt_repair_not_found','receipt_repair_ambiguous','receipt_repair_limit','gemini_response'],true)) {
-                    $d['stage']='review'; $d['error']=$e->getMessage(); $d['grouping_pending']=empty($d['source_id']); $this->put($id,$d); break;
+                if (in_array($e->getMessage(),['receipt_grouping_required','receipt_company_changed','receipt_buyer_missing','receipt_buyer_consumer','receipt_missing_pages','receipt_repair_not_found','receipt_repair_ambiguous','receipt_repair_limit','gemini_response'],true)) {
+                    $d['stage']='review'; $d['error']=$e->getMessage(); $d['grouping_pending']=!empty($d['grouping_pending']) || (empty($d['source_id']) && !in_array($e->getMessage(),['receipt_company_changed','receipt_buyer_missing','receipt_buyer_consumer'],true)); $this->put($id,$d); break;
                 }
                 $d=self::failedAttempt($d,$e,$now);
                 if (($d['quota_outcome']??'')==='failed' && $this->vault->has(InvoiceGemini::BUDGET)) $d['quota_reason']=$this->vault->read(InvoiceGemini::BUDGET)['daily_quota']['reason']??'gemini_quota_probe_failed';
@@ -456,7 +482,7 @@ final class InvoiceReceipts
     {
         $s=$this->status();$sets=[];
         foreach ($s['documents'] as $id=>$d) {
-            if (in_array($d['stage']??'',['review','failed'],true)) continue;
+            if (in_array($d['stage']??'',['review','failed','discarding','discarded'],true)) continue;
             $key=InvoiceReceiptAnalysis::duplicateKey($d);
             if ($key && !empty($d['source_id']) && ($d['stage']??'')!=='duplicate_trashed') $sets[$key][]=$id;
         }
@@ -542,12 +568,27 @@ final class InvoiceReceipts
     {
         if (empty($d['source_id'])) return;
         foreach ($this->status()['documents'] as $other) {
-            if (($other['stage']??'')!=='superseded' && !empty($other['source_id']) && empty($other['archived_at']) && ($other['sha256']??'')===$d['sha256']) return;
+            if (!in_array($other['stage']??'',['superseded','discarded'],true) && !empty($other['source_id']) && empty($other['archived_at']) && ($other['sha256']??'')===$d['sha256']) return;
         }
         $path=$this->pagePath($d); if (is_file($path)) unlink($path);
     }
     private function process(string $id,array $d): void
     {
+        if ($d['stage']==='discarding') {
+            if (!$this->toc->receiptUnsent($id) || empty($d['discard_requested_by']) || !empty($d['children'])) throw new RuntimeException('receipt_review_required');
+            if (!empty($d['ocr_creating']) && empty($d['ocr_id']) && empty($d['ocr_cleaned'])) {
+                $d['ocr_id']=$this->drive->findReceiptOcr($id,$d['source']);$this->put($id,$d);
+            }
+            if (!empty($d['ocr_id']) && empty($d['ocr_cleaned'])) {
+                $this->drive->trashReceiptOcr($d['ocr_id'],$id);$d['ocr_cleaned']=true;$this->put($id,$d);
+            }
+            if (!empty($d['drive_parent']) || empty($d['source_id'])) {
+                $trash=$d;$trash['drive_parent']??=$d['source_parent'];
+                $this->drive->trashReceiptFile($trash);
+            }
+            $d['stage']='discarded';$d['discarded_at']=gmdate('c');$d['toconline_state']='receipt_not_submitted';
+            $d['error']='';$d['review_reason']='';$this->put($id,$d);$this->clearPageCache($d);return;
+        }
         if ($d['stage']==='repairing') {
             if (!$this->analysis || !$this->toc->receiptUnsent($id)) throw new RuntimeException('receipt_review_required');
             $state=(new InvoiceReceiptRepair($this->vault,$this->drive,$this->analysis))->prepare(
@@ -559,6 +600,7 @@ final class InvoiceReceipts
             if (!$this->childrenArchived($d,$documents)) throw new RuntimeException('drive_verify');
             foreach ($d['children'] as $childId) {
                 $child=$documents[$childId];
+                if (($child['stage']??'')==='discarded' && InvoiceReceiptReport::resolved($child)) continue;
                 if ($child['stage']==='duplicate_trashed' && ($this->toc->receiptDuplicateConfirmed($childId) || $this->localDuplicateSafe($child,$documents))) continue;
                 $this->drive->verifiedReceipt($child); // Fresh content verification before retiring the master.
             }
@@ -643,7 +685,7 @@ final class InvoiceReceipts
                 $d['stage']='duplicate_trashed';$d['duplicate_skipped_at']=gmdate('c');$d['error']='';$this->put($id,$d);return;
             }
             if (!self::validDate($d['issued_on']??'')) throw new RuntimeException('receipt_review_required');
-            if ($d['company_nif']!==$this->toc->settings()['nif']) throw new RuntimeException('receipt_company_changed');
+            if (!InvoiceReceiptAnalysis::buyerAccepted($d,$this->toc->settings()['nif'])) throw new RuntimeException(InvoiceReceiptAnalysis::buyerIssue($d,$this->toc->settings()['nif']) ?: 'receipt_company_changed');
             if (!empty($d['pending_parent']) && $d['drive_parent']===$d['pending_parent']) {
                 $d['source_parent']=$d['pending_parent']; unset($d['drive_parent']);
             }

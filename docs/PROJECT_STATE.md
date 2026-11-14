@@ -989,3 +989,24 @@ Live follow-up to release 413: the receipt UI's existing browser translator was
 rewriting already-localized English fragments. A scoped data-i18n-skip boundary
 protects receipt content and polling output; navigation remains outside it.
 The reproduced browser regression passes with the boundary. This is display only.
+
+## 2026-11-14 — Receipt buyer NIF review (prepared)
+
+- Branch `agent/receipt-buyer-nif`: PDF/JPEG buyer missing, final-consumer and
+  mismatched-NIF cases remain pending. `receipts.review` separately confirms
+  company ownership, audited against exact content and destination. Raw QR/NIF
+  remain unchanged; supplier NIF remains the supplier's value.
+- Ordinary details review does not approve buyer ownership. Buyer confirmation
+  cannot dismiss grouping, missing pages, other uncertain metadata or fiscal
+  status. A repaired replacement requires its own confirmation when applicable.
+- Reviewer-only invoice discard uses existing locked worker/Drive trash and
+  retry handling; preserves combined originals and sibling invoices, retains
+  tombstones, and never counts deletion as TOConline acceptance. Originals still
+  move to `temp_scan_processed` only after all children resolve.
+- Validation: targeted synthetic workflow and real-endpoint permission tests;
+  local non-MySQL PHP suite and 46 UI tests pass. Required GitHub CI, merge,
+  installed version and live authenticated acceptance remain release checks.
+- No new real invoice submissions or real document deletions are authorized as
+  test fixtures in this release; the owner will test subsequent submissions.
+- Existing WhatsApp summary-template activation blocker remains separate and
+  unchanged. No permissions, external credentials or source cleanup policy changed.

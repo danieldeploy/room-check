@@ -688,3 +688,55 @@ its private receipt before sending and never resends an uncertain result. It
 neither submits invoices nor changes their workflow state. Template approval,
 provider acceptance, handset delivery and the real next-day event remain
 separate acceptance evidence.
+
+### Buyer tax-number review and invoice-only discard (2026-11-14)
+
+PDF and JPG/JPEG intake applies the same buyer rule. A missing/unreadable buyer
+NIF, final-consumer designation (including `999999990`), or a NIF different from
+the configured company remains in review with a specific translated reason.
+The displayed supplier tax number continues to use `issuer_nif`; it is never
+replaced by the buyer/company setting.
+
+`receipts.review` authorizes explicit **Confirm this document belongs to our
+company**, independently of ordinary invoice-data review. This permission is
+mandatory in the CSRF-protected, locked POST handler; it is not hard-coded to a
+role. The private workflow records actor, timestamp, destination company,
+document ID, SHA-256 and the extracted buyer value. It does not rewrite
+`company_nif`, fiscal QR fields or document bytes. The same classification gate
+is used before Drive filing, TOConline submission and signed purchase-response
+correlation. It classifies the document in the Hub; it does not correct the
+supplier's invoice or promise TOConline acceptance.
+
+Buyer confirmation re-evaluates independent blockers: grouping, known missing
+pages, uncertain identity/details and fiscal status. It cannot mark an incomplete
+invoice complete. Ordinary date/number review cannot implicitly override the
+buyer. The missing-page action is offered/accepted only for an actual missing-page
+condition. Repair keeps exact invoice identity/page evidence; a replacement with
+new bytes does not inherit the old buyer confirmation and may require a fresh
+confirmation. Existing pending records are usable without a global reanalysis,
+reassignment of runs, or resetting submitted history.
+
+For a buyer-error invoice, an authorized reviewer can explicitly choose deletion.
+The durable transition is `review → discarding → discarded`; the existing worker
+and bounded retry policy perform and verify Trash. A denied or uncertain Drive
+operation remains unresolved, with an error and retry action. Only a selected
+single-invoice copy is eligible: a mixed or ungrouped original cannot be deleted.
+The original combined PDF and other invoices remain intact. Once every child is
+resolved, the existing original-retention policy moves the whole source unchanged
+to `temp_scan_processed`. Private cached copies are cleaned only when no unresolved
+invoice shares them. A tombstone remains in history; discovery and regrouping
+cannot silently resurrect a deleted invoice. Nothing already submitted can be
+manually discarded through this action.
+
+Deleted invoices count as completed local work and have a separate deleted count.
+They say **Not sent to TOConline**, are excluded from the TOConline-confirmed
+filter, cannot be previewed again through their discarded ID, and do not imply
+external acceptance. Report-only users receive totals, not individual review or
+delete actions. Polling is active during deletion/retries and stops on human-only
+pending work as before.
+
+Acceptance: synthetic PDF/JPEG buyer cases, independent blockers, raw evidence
+retention, one send per ID, changed-content/destination invalidation, denied Trash,
+repeated worker ticks, mixed-master retention/completion, repaired replacement
+reconfirmation, and real endpoint role isolation are covered in receipt tests.
+No real new invoice submission is part of deployment verification for this change.

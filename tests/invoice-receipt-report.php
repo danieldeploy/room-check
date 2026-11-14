@@ -46,7 +46,7 @@ copy($root.'/admin/receipts.php',$tmp.'/web/admin/receipts.php');
 copy($root.'/admin/receipt-history.php',$tmp.'/web/admin/receipt-history.php');
 copy($root.'/admin/receipt-document.php',$tmp.'/web/admin/receipt-document.php');
 file_put_contents($tmp.'/vault/master.key',random_bytes(32)); chmod($tmp.'/vault/master.key',0600);
-$vault=new InvoiceVault($tmp.'/vault'); $vault->save('drive-oauth.enc',['scope'=>'https://www.googleapis.com/auth/drive']); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'year'=>2026,'months'=>[10]]);
+$vault=new InvoiceVault($tmp.'/vault'); $vault->save('toconline-settings.enc',['nif'=>'600000000','enabled'=>false]); $vault->save('drive-oauth.enc',['scope'=>'https://www.googleapis.com/auth/drive']); $vault->save(InvoiceReceipts::FILE,['documents'=>$documents,'requested'=>false,'year'=>2026,'months'=>[10]]);
 file_put_contents($tmp.'/web/config.php','<?php return '.var_export(['invoices'=>['private_dir'=>$tmp.'/vault']],true).';');
 $lib=<<<'PHP'
 <?php
@@ -84,7 +84,7 @@ try {
     foreach (['SECRET-','private-master-id','private-page-id','PRIVATE-PARENT','receipt-document.php?id=','name="issuer_name"','name="confirmed"','value="review"','value="retry"'] as $private) reportCheck(!str_contains($operator['html'],$private),'Actual operator HTML leaked individual history/corrections');
     $status=json_decode($render('governanta',['receipts.run'],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
     reportCheck($status['history']===null && !str_contains(json_encode($status),'SECRET-') && !str_contains(json_encode($status),'private-page-id'),'Polling report never exposes documents');
-    foreach (['review','retry','regroup','repair'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
+    foreach (['review','retry','regroup','repair','confirm_buyer','discard'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
     reportCheck($render('governanta',[])['status']===403 && $render('governanta',['receipts.view'])['status']===403,'No/legacy-only access must fail closed');
     $rejected=$render('gerente',[],'start');
     reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
@@ -101,7 +101,10 @@ try {
     reportCheck($render('gerente',[],'',true)['status']===422,'Actual document endpoint rejects missing document ID');
     $history=$render('governanta',['receipts.history']);
     reportCheck(str_contains($history['html'],'SECRET-NORMAL-NUMBER') && !str_contains($history['html'],'name="confirmed"'),'Future history permission must not imply corrections');
+    reportCheck(!str_contains($history['html'],'name="buyer_confirmed"') && !str_contains($history['html'],'value="discard"'),'History alone cannot confirm buyer or delete');
     $review=$render('governanta',['receipts.review']);
+    reportCheck(str_contains($review['html'],'name="buyer_confirmed"') && str_contains($review['html'],'value="discard"'),'Delegated review permits buyer confirmation and scoped deletion');
+    reportCheck(!str_contains($review['html'],'value="repair"'),'Wrong NIF alone must not offer missing-page repair');
     reportCheck(str_contains($review['html'],'name="confirmed"'),'Future explicit review permission not usable');
     echo "Receipt report: totals, duplicate company/number/date, safe errors, actual endpoint role isolation and denied forged POSTs passed.\n";
 } finally {

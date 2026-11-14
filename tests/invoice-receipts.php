@@ -93,7 +93,7 @@ try {
     $drive->add('scan-original-two','%PDF-1.4 synthetic receipt two'); $drive->text='Unreadable OCR'; $flow->retryDiscovery($flow->status()['active_process']); $flow->run();
     rc($flow->status()['documents']['scan-original-two']['stage']==='review' && count($sent)===1,'ambiguous stays in source and unsent');
     rr(fn()=>$flow->review('scan-original-two','2026-10-02','FT2',false,1),'review requires explicit company and single document confirmation');
-    $flow->review('scan-original-two','2026-09-30','FT2',true,1); $drive->crashMove=true; $flow->run();
+    $flow->review('scan-original-two','2026-09-30','FT2',true,1,'Synthetic Supplier'); $flow->confirmBuyer('scan-original-two',true,1); $drive->crashMove=true; $flow->run();
     $s=$flow->status(); $s['documents']['scan-original-two']['next_attempt']=0; $vault->save(InvoiceReceipts::FILE,$s); $flow->run();
     rc(count($sent)===2 && $flow->status()['documents']['scan-original-two']['stage']==='archived','recover unknown move without duplicate upload');
     $drive->add('scan-original-three','%PDF-1.4 synthetic receipt three'); $drive->crashOcr=true; $flow->retryDiscovery($flow->status()['active_process']); $flow->run();
@@ -169,7 +169,7 @@ try {
     $flow->run(); rc($drive->files[$children[0]]['trashed'] && !$drive->files['multipage-master']['trashed'],'one confirmed duplicate removes only that page');
     // Missing private derivative is reconstructed from the unchanged master, with identical checksum.
     unlink($vault->path('receipt-page-'.hash('sha256',$pages[2]).'.pdf'));
-    $flow->review($children[2],'2026-08-15','FT3',true,1); $flow->run(); $flow->run();
+    $flow->review($children[2],'2026-08-15','FT3',true,1,'Synthetic Supplier'); $flow->confirmBuyer($children[2],true,1); $flow->run(); $flow->run();
     rc($drive->uploads===3 && count($sent)===$before+3 && !$drive->files['multipage-master']['trashed'],'unconfirmed master is preserved');
     rc($flow->status()['documents']['multipage-master']['stage']==='split','master waits for all TOConline confirmations');
     $flow->run(); rc(count($sent)===$before+3,'finished split never resends');
