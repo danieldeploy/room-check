@@ -4,8 +4,8 @@ function initializeReceiptPreviews(){
   for(const [root,close] of receiptPreviewClosers)if(!root.isConnected){close();receiptPreviewClosers.delete(root);}
   document.querySelectorAll('[data-receipt-preview]').forEach((root) => {
   if(receiptPreviewClosers.has(root))return;
-  const button = root.querySelector('button');
-  const panel = root.querySelector('[hidden]');
+  const button = root.querySelector('summary');
+  const panel = root.querySelector('[data-preview-panel]');
   const status = panel.querySelector('[role="status"]');
   const content = panel.querySelector('[data-document-content]');
   let controller = null;
@@ -16,15 +16,10 @@ function initializeReceiptPreviews(){
     content.replaceChildren();
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = null;
-    panel.hidden = true;
-    button.textContent = root.dataset.show;
-    button.setAttribute('aria-expanded', 'false');
+    status.textContent = '';
   }
-  button.addEventListener('click', async () => {
-    if (!panel.hidden) { close(); return; }
-    panel.hidden = false;
-    button.textContent = root.dataset.close;
-    button.setAttribute('aria-expanded', 'true');
+  root.addEventListener('toggle', async () => {
+    if (!root.open) { close(); return; }
     status.textContent = root.dataset.loading;
     const pending = new AbortController();
     controller = pending;

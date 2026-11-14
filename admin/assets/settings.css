@@ -72,3 +72,10 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 #receipt-status[data-state="receipt_processing"] .receipt-dots { display:inline-block; animation:receipt-processing 1.2s ease-in-out infinite alternate; }
 @keyframes receipt-processing { from { opacity:.25; transform:translateX(-.12em); } to { opacity:1; transform:translateX(.12em); } }
 @media (prefers-reduced-motion:reduce) { #receipt-status .receipt-dots { animation:none; } }
+
+/* Same disclosure behavior as document sections throughout the Hub. */
+.document-disclosure { border: 1px solid var(--border-color, #d8e2ed); border-radius: 14px; margin: 1rem 0; overflow: hidden; }
+.document-disclosure > summary { cursor: pointer; padding: 1rem; color: var(--brand-dark, #0c7771); font-weight: 800; }
+.document-disclosure > summary:hover { background: var(--surface-soft, #f2f8f8); }
+.document-disclosure > summary:focus-visible { outline: 3px solid var(--brand, #0c7771); outline-offset: -3px; }
+.document-disclosure [data-preview-panel] { padding: 0 1rem 1rem; }

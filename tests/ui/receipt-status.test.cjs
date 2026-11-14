@@ -17,7 +17,7 @@ test('five second polling is read-only and displays persisted countdown then fin
 test('report refresh never discards an edited form or an open document',async()=>{
  for(const editing of [true,false]){const {dom,timeouts}=setup();try{
   const h=dom.window.document.getElementById('receipt-history');
-  if(editing)h.querySelector('input').dispatchEvent(new dom.window.Event('input',{bubbles:true}));else h.insertAdjacentHTML('beforeend','<div data-receipt-preview><button aria-expanded="true"></button></div>');
+  if(editing)h.querySelector('input').dispatchEvent(new dom.window.Event('input',{bubbles:true}));else h.insertAdjacentHTML('beforeend','<details data-receipt-preview open><summary>PDF</summary></details>');
   await timeouts.shift()[0]();assert.ok(h.querySelector('input'));assert.equal(h.querySelector('input').value,'unsaved');assert.equal(dom.window.document.getElementById('receipt-report').textContent,'25');
  }finally{dom.window.close();}}
 });

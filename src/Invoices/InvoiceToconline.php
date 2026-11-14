@@ -318,6 +318,60 @@ final class InvoiceToconline
         return false;
     }
 
+    /** Consolidate only fully equivalent scans; retain the signed acknowledgement as invoice-level evidence. */
+    public function confirmEquivalentReceipts(array $ids,string $keeper): bool
+    {
+        $documents=$this->vault->read(InvoiceReceipts::FILE)['documents']??[];
+        $key=InvoiceReceiptAnalysis::duplicateKey($documents[$keeper]??[]);
+        if (!$key || count($ids)<2 || !in_array($keeper,$ids,true)) return false;
+        foreach ($ids as $id) if (InvoiceReceiptAnalysis::duplicateKey($documents[$id]??[])!==$key) return false;
+        $ledger=$this->ledger();$settings=$this->settings();$evidence=null;$ambiguous=[];
+        foreach ($ledger as $e) {
+            if (!in_array(substr((string)$e['document_id'],8),$ids,true) || !str_starts_with((string)$e['document_id'],'receipt:')
+                || $e['nif']!==$settings['nif'] || $e['sender']!==$settings['sender']) continue;
+            if (in_array($e['state'],['toc_accepted','toc_existing'],true) && ($e['confirmation_source']??'')==='dkim_toconline') $evidence=$e;
+            if ($e['state']==='toc_review' && ($e['receipt_ambiguity']??'')==='multiple_scans'
+                && ($e['receipt_suggestion']??'')==='toc_accepted' && !empty($e['receipt_hash'])) $ambiguous[$e['document_id']]=$e;
+        }
+        if (!$evidence && count($ambiguous)===count($ids)) {
+            $hashes=array_unique(array_column($ambiguous,'receipt_hash'));
+            if (count($hashes)===1) {
+                $outside=false;
+                foreach ($ledger as $e) if (($e['receipt_hash']??'')===reset($hashes) && ($e['receipt_ambiguity']??'')==='multiple_scans'
+                    && !in_array(substr((string)$e['document_id'],8),$ids,true)) $outside=true;
+                if (!$outside) $evidence=reset($ambiguous);
+            }
+        }
+        if (!$evidence) return false;
+        $accepted=$evidence['state']!=='toc_existing';
+        foreach ($ids as $id) {
+            $state=$id===$keeper?($accepted?'toc_accepted':'toc_existing'):'toc_duplicate_local';
+            $found=false;
+            foreach ($ledger as &$e) if ((string)$e['document_id']==='receipt:'.$id && $e['nif']===$settings['nif'] && $e['sender']===$settings['sender']) {
+                $e['state']=$state;$e['confirmed_at']??=gmdate('c');$e['confirmation_source']='dkim_toconline';
+                $e['equivalent_keeper']=$keeper;$e['receipt_hash']=$evidence['receipt_hash']??'';$found=true;
+            }
+            unset($e);
+            // An unsent equivalent needs a durable terminal entry so reconciliation never resurrects it.
+            if (!$found) {
+                $d=$documents[$id];$identity=hash('sha256',$settings['nif']."\0receipt\0".$id."\0".$d['sha256']);
+                $ledger[$identity]=['document_id'=>'receipt:'.$id,'nif'=>$settings['nif'],'sender'=>$settings['sender'],
+                    'state'=>$state,'confirmation_source'=>'dkim_toconline','confirmed_at'=>gmdate('c'),
+                    'equivalent_keeper'=>$keeper,'receipt_hash'=>$evidence['receipt_hash']??''];
+            }
+        }
+        $this->vault->save('toconline-ledger.enc',$ledger);
+        foreach ($ids as $id) $this->state('receipt:'.$id,$id===$keeper?($accepted?'toc_accepted':'toc_existing'):'toc_duplicate_local');
+        return true;
+    }
+    public function receiptAccepted(string $id): bool
+    {
+        foreach ($this->ledger() as $e) if ((string)$e['document_id']==='receipt:'.$id
+            && $e['nif']===($this->settings()['nif']??'') && $e['sender']===($this->settings()['sender']??'')
+            && in_array($e['state'],['toc_accepted','toc_existing'],true) && ($e['confirmation_source']??'')==='dkim_toconline') return true;
+        return false;
+    }
+
     private function diagnosticAttempts(): array
     {
         $attempts=$this->vault->has('toconline-diagnostic-attempts.enc') ? $this->vault->read('toconline-diagnostic-attempts.enc') : [];

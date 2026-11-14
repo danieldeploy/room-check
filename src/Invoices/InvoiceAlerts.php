@@ -59,18 +59,28 @@ final class InvoiceAlerts
     public function receipts(InvoiceVault $vault,?callable $sender=null): void
     {
         if (!$vault->has('receipts-workflow.enc')) return;
-        $state=$vault->read('receipts-workflow.enc');$codes=[];
-        if (!empty($state['error'])) $codes[]=$state['error'];
+        require_once __DIR__.'/InvoiceReceiptReport.php';
+        $state=InvoiceReceiptReport::withProcesses($vault->read('receipts-workflow.enc'));$codes=[];
+        if (!empty($state['error'])) $codes[$state['active_process']??'legacy'][]=$state['error'];
+        foreach ($state['processes'] as $pid=>$process) {
+            if (!empty($process['error'])) $codes[$pid][]=$process['error'];
+            if (!empty($process['missing_periods'])) $codes[$pid][]='receipt_missing_month';
+        }
         foreach ($state['documents']??[] as $d) {
-            if (in_array($d['stage']??'',['failed','review'],true)) $codes[]=$d['error']?:'receipt_review_required';
-            if (in_array($d['toconline_state']??'',['toc_uncertain','toc_rejected','toc_review','toc_no_confirmation'],true)) $codes[]=$d['toconline_state'];
+            $pid=$d['process_id']??'legacy';
+            if (in_array($d['stage']??'',['failed','review'],true)) $codes[$pid][]=$d['error']?:'receipt_review_required';
+            if (in_array($d['toconline_state']??'',['toc_uncertain','toc_rejected','toc_review','toc_no_confirmation'],true)) $codes[$pid][]=$d['toconline_state'];
         }
         $name='receipt-alerts.enc';$ledger=$vault->has($name)?$vault->read($name):[];
-        $period=implode(', ',array_map(static fn($m)=>sprintf('%04d-%02d',(int)($state['year']??0),(int)$m),$state['months']??[]));
-        foreach (array_unique($codes) as $code) {
-            $code=isset(InvoiceText::TEXT[$code])?$code:'receipt_failed';
-            $key=hash('sha256',($state['requested_at']??'legacy').'|'.$code);
-            if (!isset($ledger[$key])) $ledger[$key]=['code'=>$code,'period'=>$period,'state'=>'pending','created_at'=>gmdate('c')];
+        foreach ($codes as $pid=>$issues) {
+            $process=$state['processes'][$pid]??$state;
+            $period=implode(', ',array_map(static fn($m)=>sprintf('%04d-%02d',(int)($process['year']??0),(int)$m),$process['months']??[]));
+            foreach (array_unique($issues) as $code) {
+                $code=isset(InvoiceText::TEXT[$code])?$code:'receipt_failed';
+                $scope=$pid==='legacy'?($process['requested_at']??'legacy'):$pid;
+                $key=hash('sha256',$scope.'|'.$code);
+                if (!isset($ledger[$key])) $ledger[$key]=['code'=>$code,'period'=>$period,'state'=>'pending','created_at'=>gmdate('c')];
+            }
         }
         $vault->save($name,$ledger);
         $settings=$this->pdo->query('SELECT * FROM invoice_notification_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);

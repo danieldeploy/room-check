@@ -881,3 +881,24 @@ fixed SMTP classifications and identifier-presence flags, never addresses,
 document identities or raw server/mail text. Mail acceptance remains distinct
 from transport delivery and provider archive confirmation. No resend or state
 mutation is performed by this diagnostic.
+
+### 2026-11-14 — receipt processes, duplicate consolidation and source retention
+- Owner authorized independent dated runs for nonoverlapping pending year/months,
+  outcome filters and expandable invoice/full-source previews in the Hub design.
+- Existing encrypted history migrates in place without resubmission. Completion
+  requires every invoice resolved and original movement confirmed; pending review
+  and ambiguous/missing acknowledgements remain pending. Discovery retry retains
+  the original process membership.
+- Complete identical fiscal QR copies can be consolidated after signed invoice
+  acceptance, retaining a confirmed/readable copy and durable evidence. The local
+  outcome is separate from the provider's existing-document response. Partial or
+  uncertain invoices never qualify; no matching subset of an ambiguous reply is
+  accepted. Existing portal delivery and shared rate limits remain unchanged.
+- The authorized source policy now moves fully resolved originals to sibling
+  `tempo_scan_processed`; no source trashing or ownership/sharing changes. An
+  incomplete source stays in its original selected month. The existing deployment
+  recovery hook applies the policy once and the existing worker continues it.
+- Local regressions cover grouping, signed duplicate evidence, interrupted remote
+  operations, source preservation, process isolation and role-safe rendering.
+  Production installation and authenticated functional acceptance remain pending
+  until the guarded deployment is checked; no readiness inferred from these tests.

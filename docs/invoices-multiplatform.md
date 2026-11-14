@@ -499,3 +499,55 @@ acknowledgement matching multiple recorded scans sets only the nonterminal
 copies to reply-received/review, retaining ambiguity evidence. It does not
 select a copy, declare a duplicate or alter any final outcome. Existing reports
 and exception alerts expose this review requirement.
+
+## Independent receipt runs and completed-source retention (2026-11-14)
+
+Owner-authorized policy supersedes the source-cleanup hold and original-trashing
+rules above: move the unchanged original to the sibling `tempo_scan_processed`
+folder only after every grouped invoice is resolved. Unconfirmed, incomplete or
+failed invoices keep their original in its selected `temp_scan` month. Verify
+retained invoice bytes again before moving; persist the destination before the
+Drive mutation and reconcile an uncertain move using the existing ID/checksums.
+Keep full-source previews available after movement. Do not change ownership or
+sharing. The existing deploy hook applies this authorized policy once; the
+existing invoice cron performs bounded work and reports failures normally.
+
+Each request now records its date/time, year, selected months and document
+membership. Existing history becomes one legacy run without resubmission. New
+requests reject overlap with unfinished year/month selections, while other
+months can run independently. Discovery failures can be retried within the same
+run. A run is complete only after invoice resolution and source movement;
+missing folders, review and unconfirmed email are not completion. The process
+selector displays Europe/Lisbon timestamps. Filters and five-second polling keep
+the selected run and distinguish all documents, TOConline-confirmed outcomes,
+and problems/pending documents. Existing operator/history/review permission
+boundaries remain unchanged, including the preview endpoint.
+
+Complete, unambiguous copies with identical decoded QR fields (or identical
+bytes and fiscal identity without QR) can be consolidated. QR identity never
+proves completeness. Prefer a confirmed retained copy; otherwise use the model's
+bounded legibility score and stable source order. Uncertain or complementary
+pages are excluded. Pending equivalent copies are not resent. Authenticated
+acceptance of the fiscal invoice is required before removal. A previously
+ambiguous signed reply can resolve a set only if every candidate in that reply
+is equivalent; a matching subset is insufficient. Keep the acknowledgement and
+submission history. Record local consolidation separately as
+`toc_duplicate_local`, never as a provider duplicate rejection. Verified
+`toc_existing` replies still authorize removing only the duplicate final copy.
+Retire a local duplicate only after freshly verifying the retained copy (or a
+confirmed existing TOConline archive). Originals follow the move policy above.
+
+Invoice and full-source previews use native expandable disclosures with the
+Hub styling. Closing aborts outstanding retrieval and releases blob URLs;
+polling preserves open previews and unsaved corrections. Mobile PDF rendering
+remains the previously deferred browser limitation.
+
+Acceptance covers legacy migration, run isolation, overlap rejection, missing
+folder retries, permissions, complete versus incomplete copies, exact QR
+comparison, signed ambiguous acknowledgements, readability selection, duplicate
+cleanup recovery, retained original previews and uncertain source movement.
+Live Drive movement and authenticated UI acceptance are verified after deployment;
+unit tests alone do not establish production success.
+
+Exception alerts retain the process identity and selected periods, so starting a
+new run does not resend an old run's existing incident or mislabel its months.
