@@ -956,3 +956,8 @@ read-only polling, PHP/native PDF assembly and PT/EN contracts. Required CI and
 installed release verification follow the normal PR/deploy flow. No live invoice
 was created or submitted merely to test presentation; real repair acceptance needs
 the owner's actual missing page in the original month folder.
+
+Live follow-up to release 413: the receipt UI's existing browser translator was
+rewriting already-localized English fragments. A scoped data-i18n-skip boundary
+protects receipt content and polling output; navigation remains outside it.
+The reproduced browser regression passes with the boundary. This is display only.

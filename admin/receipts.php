@@ -76,6 +76,7 @@ if (($_GET['status']??'')==='1') {
 <script src="assets/receipt-preview.js?v=<?= (int)filemtime(__DIR__.'/assets/receipt-preview.js') ?>" defer></script>
 </head><body class="receipt-page"><main class="settings-shell">
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
+<div id="receipt-content" data-i18n-skip>
 <?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a> · <a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
 <header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1><p><?= $t('receipt_description') ?></p></div></header>
 <?php if ($requestError!==''): ?><div id="receipt-request-error" class="alert" role="alert" tabindex="-1" data-save-feedback="error"><?= $t($requestError) ?></div><?php endif; ?>
@@ -113,4 +114,4 @@ $at=$process['requested_at']!==''?(new DateTimeImmutable($process['requested_at'
 <div class="receipt-status-line" id="receipt-status" role="status" data-url="receipts.php?status=1&amp;<?= $escape($query) ?>&amp;page=<?= $page ?>" data-state="<?= $escape($progress['state']) ?>" data-next="<?= $progress['next_at'] ?>" data-server="<?= $progress['server_time'] ?>" data-retry="<?= $t('receipt_retry_in') ?>" data-due="<?= $t('receipt_retry_due') ?>" data-unavailable="<?= $t('receipt_status_unavailable') ?>"><span><?= $t('receipt_status') ?>: <strong data-status-label><?= $t($progress['state']) ?></strong><span class="receipt-dots" aria-hidden="true">…</span></span><button type="button" class="primary-button" data-receipt-refresh><?= $t('receipt_refresh') ?></button><p data-status-warning hidden></p></div></section>
 <?php if (!empty($state['source_cleanup_paused'])): ?><p><?= $t('receipt_cleanup_deferred') ?></p><?php endif; ?>
 <div id="receipt-report"><?= InvoiceReceiptReport::render($report,!$canHistory) ?></div>
-<div id="receipt-history"><?= $historyHtml ?></div></main></body></html>
+<div id="receipt-history"><?= $historyHtml ?></div></div></main></body></html>

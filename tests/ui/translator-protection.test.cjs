@@ -74,3 +74,15 @@ test('alerts and confirmations preserve quoted technical literals', t => {
     assert.deepEqual(alerts, ['Save "ZKTeco"']);
     assert.deepEqual(confirmations, ['Delete “My2N”?']);
 });
+
+test('server-localized receipts keep their English through initial and polled DOM translation',async t=>{
+ const source=readFileSync(join(__dirname,'../../admin/receipts.php'),'utf8');
+ const opening=source.match(/<div[^>]*id="receipt-content"[^>]*>/)?.[0]||'<div id="receipt-content">';
+ const copy='You can start a new run when processing stops.';
+ const script=runtimeMatch[1].replace('__DICTIONARY__',JSON.stringify({' a ':' to ',Sair:'Sign out'})).replace('__TECHNICAL_LITERAL_PATTERN__',JSON.stringify(literalPattern));
+ const dom=new JSDOM(`<html><body><nav>Sair</nav>${opening}<p>${copy}</p></div>${script}</body></html>`,{runScripts:'dangerously'});t.after(()=>dom.window.close());
+ assert.equal(dom.window.document.querySelector('#receipt-content p').textContent,copy);
+ assert.equal(dom.window.document.querySelector('nav').textContent,'Sign out');
+ dom.window.document.querySelector('#receipt-content').insertAdjacentHTML('beforeend',`<p id="polled">${copy}</p>`);
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(dom.window.document.querySelector('#polled').textContent,copy);
+});
