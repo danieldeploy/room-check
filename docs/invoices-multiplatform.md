@@ -868,7 +868,12 @@ Only newly discovered PDFs in the production analysis workflow receive the categ
 check marker. Recorded history is not migrated/reprocessed by deployment. Extract
 one actual PDF page into a private temporary directory; Gemini returns a4, taloes
 or uncertain without seeing the expected folder. Reuse the established pacing,
-quotas, retry windows and separate content cache. A receipt scanned on A4 remains
+quotas, retry windows and separate content cache. Classification explicitly uses
+minimal thinking and a 1,024-token combined
+thinking/output cap; the former 128-token cap risked truncation before the JSON.
+This follows the [provider token-limit contract](https://ai.google.dev/gemini-api/docs/generate-content/thinking)
+and does not change the one-page/request scope or full fiscal-analysis configuration.
+The cap is a bound, not a guarantee of visual accuracy. A receipt scanned on A4 remains
 taloes. The folder, not the model, determines destination. Hold mismatches/uncertainty
 at the source, before allocating invoice children or sending anything. Confirmed
 category flows to every child and the report's A4/receipt counts. Fiscal analysis
