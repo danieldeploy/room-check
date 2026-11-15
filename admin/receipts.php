@@ -17,10 +17,22 @@ $state=['documents'=>[],'requested'=>false]; $error=''; $connected=false; $tocSe
 try {
     $vault=new InvoiceVault($config['invoices']['private_dir']); $drive=new InvoiceDriveClient($vault);
     $toc=new InvoiceToconline($pdo,$vault,$drive); $receipts=new InvoiceReceipts($pdo,$vault,$drive,$toc);
+    if (isset($_GET['correction_files'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            if (!$canReview) throw new RuntimeException('forbidden',403);
+            $files=$receipts->correctionCandidates((string)$_GET['correction_files']);
+            echo json_encode(['files'=>$files],JSON_THROW_ON_ERROR);
+        } catch (Throwable $e) {
+            http_response_code($e->getCode()===403?403:409);
+            echo json_encode(['error'=>InvoiceText::get(isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed')],JSON_THROW_ON_ERROR);
+        }
+        exit;
+    }
     if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
         Csrf::validate($_POST['csrf_token']??null);
         $action=(string)($_POST['action']??'');
-        if (!((in_array($action,['start','retry_process'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
+        if (!((in_array($action,['start','retry_process'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','replace_source','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
         if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
         try {
             $action=(string)($_POST['action']??''); $id=(string)($_POST['id']??'');
@@ -28,7 +40,8 @@ try {
             elseif ($action==='retry_process' && $canRun) $receipts->retryDiscovery((string)($_POST['process']??''));
             elseif ($action==='retry' && $canRun && $canHistory) $receipts->retry($id);
             elseif ($action==='discard' && $canReview) $receipts->requestDiscard($id,($_POST['discard_confirmed']??'')==='1',(int)$user['id']);
-            elseif ($action==='repair' && $canReview) $receipts->requestRepair($id,($_POST['missing_added']??'')==='1',(int)$user['id']);
+            elseif ($action==='repair' && $canReview) $receipts->requestRepair($id,($_POST['missing_added']??'')==='1',(int)$user['id'],is_array($_POST['selected_files']??null)?$_POST['selected_files']:[]);
+            elseif ($action==='replace_source' && $canReview) $receipts->requestReplacement($id,is_array($_POST['selected_files']??null)?$_POST['selected_files']:[],($_POST['replacement_added']??'')==='1',(int)$user['id']);
             elseif ($action==='regroup' && $canReview) $receipts->regroup($id,(string)($_POST['page_groups']??''),($_POST['confirmed']??'')==='1',(int)$user['id']);
             elseif (in_array($action,['review','confirm_buyer'],true) && $canReview) $receipts->review($id,(string)($_POST['issued_on']??''),(string)($_POST['invoice_number']??''),($_POST['confirmed']??'')==='1',(int)$user['id'],(string)($_POST['issuer_name']??''),(string)($_POST['issuer_nif']??''),($_POST['buyer_confirmed']??'')==='1');
             else throw new RuntimeException('forbidden',403);
@@ -147,3 +160,5 @@ if (($_GET['status']??'')==='1') {
 <?php if (!empty($state['source_cleanup_paused'])): ?><p><?= $t('receipt_cleanup_deferred') ?></p><?php endif; ?>
 <div id="receipt-report"><?= InvoiceReceiptReport::render($report,!$canHistory,$progress) ?></div>
 <div id="receipt-history"><?= $historyHtml ?></div></div></main></body></html>
+
+<script src="assets/receipt-correction.js?v=<?= (int)filemtime(__DIR__.'/assets/receipt-correction.js') ?>" defer></script>

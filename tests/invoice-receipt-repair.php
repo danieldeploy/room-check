@@ -44,7 +44,7 @@ try {
  $flow->review('pending-one','2026-04-02','FT TEST/1',true,1,'Synthetic Supplier');
  rq($flow->status()['documents']['pending-one']['stage']==='review','Saving details cannot approve a known missing page');
  $v->save(InvoiceReceipts::FILE,$seed);
- $flow->requestRepair('pending-one',true,1);rq($flow->status()['documents']['pending-one']['stage']==='repairing','Explicit action queues verification');
+ $flow->requestRepair('pending-one',true,1,[InvoiceReceiptSelection::token($f)]);rq($flow->status()['documents']['pending-one']['stage']==='repairing','Explicit action queues verification');
  rq(!InvoiceReceiptReport::canStart($flow->status()),'Intake cannot steal repair candidates');
  try{$flow->retryDiscovery('legacy');throw new LogicException('discovery raced repair');}catch(RuntimeException $e){rq($e->getMessage()==='worker_busy','Discovery retry respects active repair');}
  $flow->run();$s=$flow->status();$new=$s['documents']['pending-one']['replacement_id'];
@@ -62,7 +62,7 @@ try {
  rq($flow->status()['documents']['source-one']['stage']==='split','Other pending invoice still preserves original');
  foreach(['wrong','duplicate','mixed'] as $mode){
   $v->save(InvoiceReceipts::FILE,$seed);$an->$mode=true;
-  $flow->requestRepair('pending-one',true,1);$flow->run();$s=$flow->status();
+  $flow->requestRepair('pending-one',true,1,[InvoiceReceiptSelection::token($f)]);$flow->run();$s=$flow->status();
   rq($s['documents']['pending-one']['stage']==='review' && !empty($s['documents']['pending-one']['error']),'Uncertain repair stays pending: '.$mode);
   rq(!isset($s['documents']['new-scan']),'Unresolved candidates are not consumed: '.$mode);$an->$mode=false;
  }
@@ -72,15 +72,14 @@ try {
  // Historical buyer approval must not transfer to the repaired file's new bytes.
  $override['documents']['pending-one']['company_confirmation']=['nif'=>'500000000','document_id'=>'pending-one','sha256'=>$override['documents']['pending-one']['sha256'],'extracted_nif'=>'600000000','actor'=>9,'at'=>gmdate('c')];
  $v->save(InvoiceReceipts::FILE,$override);
- $flow->requestRepair('pending-one',true,9);$flow->run();$repaired=$flow->status();
+ $flow->requestRepair('pending-one',true,9,[InvoiceReceiptSelection::token($f)]);$flow->run();$repaired=$flow->status();
  $replacement=$repaired['documents'][$repaired['documents']['pending-one']['replacement_id']];
  rq($replacement['stage']==='preserving' && $replacement['review_reason']==='receipt_company_changed','Repair keeps wrong buyer pending on the new content');
  rq(!isset($replacement['company_confirmation']),'Old approval cannot authorize different bytes');$an->buyer='';
  $v->save(InvoiceReceipts::FILE,$seed);$drive->newFiles=[];
- $flow->requestRepair('pending-one',true,1);$flow->run();
- rq($flow->status()['documents']['pending-one']['error']==='receipt_repair_not_found','No matching new scan gives actionable pending reason');
+ try {$flow->requestRepair('pending-one',true,1,[InvoiceReceiptSelection::token($f)]);throw new LogicException('Missing selection accepted');}catch(RuntimeException $e){rq($e->getMessage()==='receipt_selection_changed','Missing selected scan is actionable');}
  $v->save(InvoiceReceipts::FILE,$seed);$drive->newFiles=[$f];
  $v->save('toconline-ledger.enc',['sent-fixture'=>['document_id'=>'receipt:pending-one','state'=>'toc_submitted','status'=>'sent']]);
- try{$flow->requestRepair('pending-one',true,1);throw new LogicException('submitted invoice was editable');}catch(RuntimeException $e){rq($e->getMessage()==='receipt_review_required','Sent history immutable');}
+ try{$flow->requestRepair('pending-one',true,1,[InvoiceReceiptSelection::token($f)]);throw new LogicException('submitted invoice was editable');}catch(RuntimeException $e){rq($e->getMessage()==='receipt_review_required','Sent history immutable');}
  echo "Targeted repair, identity/completeness gates, source ownership and single submission passed\n";
 }finally{foreach(glob($dir.'/*')?:[]as$f)unlink($f);rmdir($dir);}

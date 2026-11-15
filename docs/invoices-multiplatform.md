@@ -853,3 +853,46 @@ Desktop PDFs keep the native iframe regardless of viewport width. JPEGs retain
 the existing image preview on all devices, including archived/retained copies.
 Verify current Android Chrome with a real authorized invoice and source PDF,
 then desktop PDF/JPEG; automated routing alone is not visual acceptance.
+
+
+## Folder category verification and explicit correction (2026-11-15)
+
+This supersedes format-only PDF routing and automatic missing-page candidate search.
+Use temp_scan/<month>/A4 or temp_scan/<month>/Talões (taloes alias accepted).
+The existing bounded descendant listing carries category and relative path. Unknown
+subfolders inherit their category; nested A4/Talões conflicts are invalid. Files
+straight under the old month folder default to A4. JPEG still routes to taloes and
+uses its existing interpretation; no JPEG category call is added.
+
+Only newly discovered PDFs in the production analysis workflow receive the category
+check marker. Recorded history is not migrated/reprocessed by deployment. Extract
+one actual PDF page into a private temporary directory; Gemini returns a4, taloes
+or uncertain without seeing the expected folder. Reuse the established pacing,
+quotas, retry windows and separate content cache. A receipt scanned on A4 remains
+taloes. The folder, not the model, determines destination. Hold mismatches/uncertainty
+at the source, before allocating invoice children or sending anything. Confirmed
+category flows to every child and the report's A4/receipt counts. Fiscal analysis
+and QR precedence are unchanged.
+
+Corrections become available only when the global processing run settles. A review
+user loads a bounded original-month list, selects exact path/name, confirms the
+checkbox and submits Process again for this document only. Server POST validates
+review permission, CSRF and shared worker lock. Selection tokens bind ID/checksum/
+parent/category; worker validates again before claiming content. Files already
+claimed by another document/run cannot be selected. A moved original may retain
+its ID; a different replacement is associated with the superseded original in the
+same run, before normal classification/grouping. Historical copies and receipts
+are retained. No automatic move based on a Gemini suggestion.
+
+Missing-page repair now accepts only explicitly selected files (up to 19), validates
+all selected files belong to the same fiscal identity, rejects mixed/conflicting
+files, then reuses complete pagination, order, QR and submission protections.
+Older queued repairs without selections return for explicit selection. There is
+no fallback scanning/claiming of unselected files. Stale/missing selections stay
+pending. Moving or replacing bytes after selection requires selecting again.
+
+Tests cover real first-page extraction, separate cache and shared quotas, folder
+routing/JPEG preservation, document isolation, exact selected sources, moved and
+replacement IDs, stale selection, idle/review/CSRF boundaries, UI escaping and
+selection/checkbox requirements. Live Gemini accuracy is a separate acceptance
+check; tests never imply error-free visual recognition.

@@ -106,7 +106,7 @@ final class InvoiceReceiptReport
             $master=!empty($document['children']);
             if (!$master) {
                 $report['documents']++;
-                if (($document['format']??'')==='jpg') $report['small']++; else $report['a4']++;
+                if (($document['format']??'')==='jpg' || ($document['source_category']??'')==='taloes') $report['small']++; else $report['a4']++;
                 if (($document['stage']??'')==='discarded' && self::resolved($document)) $report['discarded']++;
                 if (self::resolved($document)) $report['processed']++; else $report['pending']++;
                 if (in_array($document['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)) {
@@ -142,7 +142,7 @@ final class InvoiceReceiptReport
             $stage=$d['stage']??'';if ($stage==='superseded') continue;
             if ($stage==='failed') $failed=true;
             $cleanup=in_array($stage,['source_trashing','source_moving'],true) && empty($state['source_cleanup_paused']);
-            if ($cleanup || in_array($stage,['repairing','queued','reading','ready','moving','preserving','trashing','discarding'],true)
+            if ($cleanup || in_array($stage,['correcting','repairing','queued','reading','ready','moving','preserving','trashing','discarding'],true)
                 || ($stage==='archived' && (in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true) || ($sendEnabled && empty($d['duplicate_keeper']) && in_array($d['toconline_state']??'',['pending','toc_retry'],true))))) {
                 $at=(int)($d['next_attempt']??0);
                 if ($at>$now) $wait($at,($d['retry_kind']??'')==='quota');else $busy=true;
