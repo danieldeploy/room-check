@@ -268,3 +268,23 @@ because Meta reclassified the template as Marketing/In review. This is not an
 application-release failure. Receipt summaries are preserved without sending
 until Utility approval is verified and the guarded probe is explicitly enabled
 in a reviewed release. An uncertain probe never enables summaries.
+
+## Mobile PDF assets and invoice experiment retirement (2026-11-15)
+
+After the ordinary release backup and pinned receipt dependency preparation,
+prepare_receipt_viewer.php copies only PDF.js 6.4.299 browser files, worker,
+cmaps/fonts/wasm and license to the versioned public asset directory. It rejects
+links, mismatched versions and failed copies/hashes. No private Node tree is
+exposed. The published .htaccess supplies JavaScript/wasm MIME types.
+
+After code copies, retire_invoice_diagnostics.php removes the exact old Azure
+page/class still left by cp -R, plus azure-document-intelligence.enc,
+azure-receipt-tests.enc and azure-diagnostics.lock from the configured vault.
+Every removed file first receives a hash-verified 0600 recovery copy inside
+0700 room-check-backups/retired-invoice-diagnostics-v1. Links/path escapes,
+concurrent diagnostics and mismatching existing recovery copies stop cleanup.
+Unfinished/uncertain Azure tests retain all private files. Only aggregate counts
+and completion state reach release logs; result.json remains private. Shared
+keys, invoice history, invoices, backups and current providers are preserved.
+The old deployment-400 diagnostic workflow is removed; current release probes
+and protected deployment gates stay active. No Azure cloud resource is deleted.

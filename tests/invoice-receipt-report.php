@@ -116,7 +116,7 @@ try {
     reportCheck($xpath->query('//*[@data-receipt-refresh]')->length===1,'Exactly one manual refresh action');
     reportCheck($xpath->query('//*[contains(@class,"receipt-process-card")]//*[@id="receipt-processing-message"]')->length===1,'Banner belongs inside process card');
     reportCheck($xpath->query('//*[contains(@class,"receipt-history-heading")]//select[@name="filter"]')->length===1,'Document filter sits beside history counts');
-    reportCheck(!str_contains($manager['html'],InvoiceText::get('receipt_selection')) && !str_contains($manager['html'],InvoiceText::get('receipt_process_months')),'Repeated intake explanations removed');
+    reportCheck(!str_contains($manager['html'],'Last request selection') && !str_contains($manager['html'],'You can start a new run when processing stops.'),'Repeated intake explanations removed');
 
     reportCheck($xpath->query('//article[contains(.,"SECRET-ERROR.jpg")]//details[contains(@data-url,"original=1")]')->length===0,'JPEG never offers a source PDF');
 

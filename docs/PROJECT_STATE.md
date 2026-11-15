@@ -1,5 +1,28 @@
 # Management Hub — current project state
 
+## Mobile PDF preview and retired invoice experiments — 2026-11-15 (prepared)
+
+Owner approved in-page mobile PDF navigation/zoom and targeted removal of unused
+invoice experiments. PDF.js 6.4.299 is reused from the pinned receipt runtime;
+matched browser assets are served locally and loaded only for mobile PDFs.
+Desktop PDFs keep their iframe; JPEGs remain images. Original documents,
+processing, permissions and TOConline states are unchanged.
+
+Azure's manager diagnostic page/client, its 41 translations and dedicated tests
+are retired, together with 15 unused receipt UI strings and the deployment-400
+PDF diagnostic workflow. Current QR/Gemini/Drive/TOConline dependencies, dynamic
+status translations, legacy receipt recovery and required release probes remain.
+Release cleanup removes only the two installed Azure PHP files and three exact
+private Azure files after verified private recovery copies. Unfinished Azure
+operations retain their private state; counts are printed without contents.
+The external Microsoft resource has not been inventoried or deleted.
+
+Local UI tests cover mobile/desktop/JPEG routing, lazy load cancellation,
+page/zoom rendering, limits and teardown. CI adds synthetic cleanup and asset
+packaging tests. Deployment and real-device acceptance remain unverified until
+recorded after release. See the 2026-11-15 implementation plan.
+
+
 ## Receipt visual alignment — 2026-11-15
 
 The report heading adds a black Status/Estado label before the existing colored
@@ -756,7 +779,7 @@ Regression fixtures cover customer-only OCR and separate supplier/customer names
 
 ## Azure invoice diagnostics — 2026-11-12
 
-Prepared manager-only encrypted connection and synchronous UI initiation/asynchronous Azure result checks. Existing owner-created North Europe F0 resource; actual key, connection acceptance and two real PDF tests pending deployment. No existing receipt/Drive/TOConline state is changed by diagnostics. Uncertain submissions are retained and not replayed. See `docs/azure-receipt-tests.md`.
+Prepared manager-only encrypted connection and synchronous UI initiation/asynchronous Azure result checks. Existing owner-created North Europe F0 resource; actual key, connection acceptance and two real PDF tests pending deployment. No existing receipt/Drive/TOConline state is changed by diagnostics. Uncertain submissions are retained and not replayed. This historical preparation was retired on 2026-11-15; see the current retirement entry above.
 
 ## Inline receipt preview — 2026-11-12
 
@@ -799,7 +822,7 @@ remains explicitly deferred by the owner.
 This change replaces automatic per-page Google Docs OCR with local fiscal QR
 precedence and bounded Gemini structure/field interpretation. The existing
 `gemini-3.5-flash-lite` free-tier project/key is the intended configuration;
-`admin/invoice-gemini.php` stores it in InvoiceVault. Azure stays manager diagnostics,
+`admin/invoice-gemini.php` stores it in InvoiceVault. Azure was restricted to manager diagnostics (retired 2026-11-15),
 not a second automatic read. QR fields override all printed/model conflicts.
 Scanned PDFs without a usable text layer have unknown structure even if QR reads;
 Gemini must return printed pagination evidence, checked independently in PHP.

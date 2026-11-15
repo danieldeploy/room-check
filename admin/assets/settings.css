@@ -144,3 +144,10 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 @media (min-width: 1200px) { .receipt-month-row { justify-content: space-between; column-gap: 5px; flex-wrap: nowrap; } }
 
 .receipt-page [hidden] { display:none !important; }
+
+/* Bounded in-page PDF viewer for mobile devices. */
+.receipt-pdf{min-width:0;max-width:100%}
+.receipt-pdf-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.75rem 0}
+.receipt-pdf-toolbar .primary-button{margin:0;min-height:2.75rem}
+.receipt-pdf-viewport{max-width:100%;overflow:auto;max-height:75vh;background:#edf1f5}
+.receipt-pdf-viewport canvas{display:block;background:#fff}

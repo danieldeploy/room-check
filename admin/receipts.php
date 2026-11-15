@@ -108,7 +108,7 @@ if (($_GET['status']??'')==='1') {
 </head><body class="receipt-page"><main class="settings-shell">
 <?php SessionBar::render($user,'..',Auth::hasPermission($pdo,$user,Auth::PERMISSION_USERS_MANAGE),Auth::hasPermission($pdo,$user,Auth::PERMISSION_PERMISSIONS_MANAGE)); ?>
 <div id="receipt-content" data-i18n-skip>
-<?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a> · <a href="invoice-azure.php"><?= $t('azure_title') ?></a></p><?php endif; ?>
+<?php if ($manager): ?><p><a href="invoice-gemini.php"><?= $t('gemini_title') ?></a></p><?php endif; ?>
 <header class="page-header compact-page-header"><div><h1 class="page-title"><?= $t('receipt_title') ?></h1></div></header>
 <?php if ($requestError!==''): ?><div id="receipt-request-error" class="alert" role="alert" tabindex="-1" data-save-feedback="error"><?= $t($requestError) ?></div><?php endif; ?>
 <div id="receipt-global-error" class="alert" role="alert" <?= $globalError===''?'hidden':'' ?>><?= $escape($globalError) ?></div>

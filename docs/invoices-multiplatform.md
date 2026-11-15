@@ -347,9 +347,15 @@ Supplier boundary clarification: customer labels need not contain a colon and
 include Bill to/recipient variants. Legal-heading fallback is used only before
 an identified customer section; customer-only/unknown layout stays unidentified.
 
-### Azure diagnostics (2026-11-12)
+### Azure experiment retired (2026-11-15)
 
-Manager-only `admin/invoice-azure.php` configures the existing North Europe F0 resource in InvoiceVault and analyzes owner-selected 1–2-page PDF/JPEG tests (4 MiB). Async operations and allowlisted extracted fields/page evidence are encrypted privately. No Drive mutations, email sending or automatic grouping/deletion. InvoiceReceiptPdf supports nonpublishing inspection for this test path. Authentication, CSRF, upload validation, operation URL allowlist, no redirects, TLS and uncertain-POST replay prevention are mandatory. Future QR-first rules: use readable fiscal QR data; send unreadable and ambiguous duplicate/continuation groups together to Azure; group true continuations and preserve source files until all related invoices finish. Current production pipeline is not switched by this diagnostic addition. See `azure-receipt-tests.md`.
+The owner retired the unused manager-only Azure diagnostic. Its page, client,
+UI translations and dedicated tests are removed. It was never the automatic
+receipt provider. Deployment removes the two stale installed PHP files and the
+exact private Azure configuration/history/lock files after verified recovery
+copies; unfinished operations retain private state. No shared vault key,
+receipt ledger, document, Drive permission or current provider is removed.
+External Microsoft resource retirement requires its own verified inventory.
 
 ### Authenticated inline receipt preview
 
@@ -833,3 +839,17 @@ PDFs offer source-PDF context. A removed duplicate can preview only its recorded
 accepted, archived, equivalent keeper. Missing, mismatching, removed or unconfirmed
 keepers produce no preview. No guessed Drive paths, sharing changes, copy recovery,
 provider sends or stored invoice mutations are performed by this presentation.
+
+### Mobile PDF presentation (2026-11-15)
+
+Mobile PDF disclosures use a lazy canvas viewer from the existing PDF.js 6.4.299
+package. The authenticated byte endpoint and permission checks are unchanged;
+bytes go directly to the same-origin worker. No external viewer/CDN or document
+upload. Serve matched module/worker/cmaps/fonts/wasm with the library license.
+One page at a time, previous/next, fit-width and bounded zoom; at most 50 pages
+and 8 million canvas pixels. Closing, aborts, replaced history and page exit
+release the worker and canvas; loading/render failures remain retryable.
+Desktop PDFs keep the native iframe regardless of viewport width. JPEGs retain
+the existing image preview on all devices, including archived/retained copies.
+Verify current Android Chrome with a real authorized invoice and source PDF,
+then desktop PDF/JPEG; automated routing alone is not visual acceptance.

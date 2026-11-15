@@ -157,7 +157,8 @@ jobs:
           php tests/invoice-receipt-progress.php
           php tests/invoice-receipts.php
           php tests/invoice-receipt-report.php
-          php tests/invoice-azure.php
+          php tests/invoice-diagnostic-retirement.php
+          php tests/receipt-viewer-assets.php
           (ulimit -v 4000000; TEST_NODE_BINARY=$(command -v node) php tests/invoice-receipt-pdf.php)
           php tests/invoice-toconline.php
           php tests/invoice-toc-pacing.php
