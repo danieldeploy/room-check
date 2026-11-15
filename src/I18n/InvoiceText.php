@@ -5,6 +5,9 @@ require_once __DIR__ . '/Translator.php';
 final class InvoiceText
 {
     public const TEXT = [
+        'receipt_review_permission' => ['Rever talões e corrigir dados','Review receipts and correct data'],
+        'receipt_view_permission' => ['Consultar talões','View receipts'],
+        'receipt_run_permission' => ['Iniciar arquivo e consultar relatório','Start archiving and view report'],
         'receipt_pdf_previous' => ['Anterior','Previous'],
         'receipt_pdf_next' => ['Seguinte','Next'],
         'receipt_pdf_page' => ['Página {page} de {pages}','Page {page} of {pages}'],

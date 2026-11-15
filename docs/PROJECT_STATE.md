@@ -9,7 +9,7 @@ Desktop PDFs keep their iframe; JPEGs remain images. Original documents,
 processing, permissions and TOConline states are unchanged.
 
 Azure's manager diagnostic page/client, its 41 translations and dedicated tests
-are retired, together with 15 unused receipt UI strings and the deployment-400
+are retired, together with 12 unused receipt UI strings and the deployment-400
 PDF diagnostic workflow. Current QR/Gemini/Drive/TOConline dependencies, dynamic
 status translations, legacy receipt recovery and required release probes remain.
 Release cleanup removes only the two installed Azure PHP files and three exact
