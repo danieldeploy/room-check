@@ -175,7 +175,6 @@ final class SiteTranslations
             'Campainha' => 'Bell',
             'Campainhas' => 'Bells',
             'Disponível' => 'Available',
-            'Ainda não está pronto' => 'Not Ready',
             'Desligada' => 'Disabled',
             'Por configurar' => 'Not configured',
             'Ativa · dry-run' => 'Active · dry-run',
