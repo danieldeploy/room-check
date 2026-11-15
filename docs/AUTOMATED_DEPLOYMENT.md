@@ -49,6 +49,10 @@ autenticado e de uma publicação real verificada.
   credencial GitHub no checkout. A credencial WHM só entra nos passos protegidos
   de inspeção e publicação.
 - Existe uma única fila de publicação, sem cancelar um deployment em execução.
+- O primeiro passo protegido usa o diagnóstico de leitura existente para
+  confirmar o acesso autenticado antes da inspeção/reparação do clone. Recusas
+  HTTP 401/403 aparecem como códigos fixos, sem mensagens do servidor ou segredos.
+  Qualquer falha impede os passos seguintes; as garantias de publicação mantêm-se.
 - Antes de alterar o alojamento, o cliente confirma o HEAD remoto, a origem Git,
   a branch, o estado das tarefas e que o avanço é fast-forward. Volta a confirmar
   antes de publicar. Um commit ultrapassado por outro não é publicado por este fluxo.

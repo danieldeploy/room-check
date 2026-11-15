@@ -109,6 +109,17 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn('hostelworld_filters.py', readiness)
         self.assertNotIn('--expected-commit', readiness)
 
+    def test_authenticated_diagnostic_precedes_every_staging_operation(self):
+        text = Path(__file__).parents[1].joinpath('.github/workflows/ci.yml').read_text()
+        job = text.split('\n  deploy:', 1)[1].split('\n  windows-agent:', 1)[0]
+        diagnostic = job.split('      - name: Diagnose protected hosting access without changes', 1)[1].split('      - name:', 1)[0]
+        self.assertIn("if: vars.HUB_DEPLOY_ENABLED == 'true'", diagnostic)
+        self.assertIn('run: python3 deploy/automated_release.py --diagnostic', diagnostic)
+        self.assertNotIn('continue-on-error', diagnostic)
+        self.assertNotIn('GITHUB_TOKEN', diagnostic)
+        self.assertLess(job.index('automated_release.py --diagnostic'),
+                        job.index('cpanel_git_tracked_repair.py inspect'))
+
     def test_deployment_summary_optional_branch_keeps_sha_and_conflict_checks(self):
         row = {'last_deployment': {'repository_state': {'identifier': OLD}}}
         self.assertEqual(release.deployed_commit(row), OLD)
