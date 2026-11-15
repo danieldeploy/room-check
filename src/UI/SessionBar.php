@@ -34,6 +34,7 @@ final class SessionBar
         ?>
         <nav class="session-bar" aria-label="Sessão e navegação principal">
             <div class="session-navigation">
+                <span class="session-brand"><?= self::escape(PortalBrand::name()) ?></span>
                 <div class="session-links">
                     <a href="<?= self::escape($prefix . 'index.php') ?>">Portal</a>
                     <?php if ($role === 'empregada_andares'): ?><a href="<?= self::escape($prefix . 'tasks.php') ?>">Minha agenda</a><?php endif; ?>

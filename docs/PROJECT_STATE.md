@@ -5,7 +5,8 @@
 Owner-approved presentation: Paper Invoices shows green Available; Space
 Management and My2N show blue Not Ready. These are readiness labels, not live
 health checks or access restrictions. The shared navigation keeps Portal and
-removes its duplicate Management Hub link. Module access and permissions remain.
+shows the Management Hub name and existing AL emblem as noninteractive branding.
+Only Portal links to the homepage. Module access and permissions remain.
 
 
 ## Mobile PDF preview and retired invoice experiments — 2026-11-15 (deployed; viewer acceptance correction)
