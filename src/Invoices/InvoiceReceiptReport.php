@@ -191,7 +191,7 @@ final class InvoiceReceiptReport
 <section class="card"><h2><?= $t('receipt_report') ?><?php if ($progress!==null): ?> — <?php
 $running=!empty($progress['automatic']) && $progress['state']!=='receipt_worker_delayed';
 $completed=$progress['state']==='receipt_finished';
-?><span class="receipt-report-state <?= $running?'is-running':($completed?'is-completed':'is-pending') ?>"><?= $t($running?'receipt_processing':($completed?'receipt_completed_bang':($progress['state']==='receipt_no_runs'?'receipt_no_runs':'receipt_pending'))) ?><?php if ($running): ?><span class="receipt-dots" aria-hidden="true"><?php for($i=0;$i<5;$i++): ?><span>.</span><?php endfor; ?></span><?php endif; ?></span><?php endif; ?></h2>
+?><span class="receipt-report-label"><?= $t('receipt_status') ?></span> <span class="receipt-report-state <?= $running?'is-running':($completed?'is-completed':'is-pending') ?>"><?= $t($running?'receipt_processing':($completed?'receipt_completed_bang':($progress['state']==='receipt_no_runs'?'receipt_no_runs':'receipt_pending'))) ?><?php if ($running): ?><span class="receipt-dots" aria-hidden="true"><?php for($i=0;$i<5;$i++): ?><span>.</span><?php endfor; ?></span><?php endif; ?></span><?php endif; ?></h2>
 <?php if ($progress!==null && in_array($progress['state'],['receipt_retry_wait','receipt_quota_wait','receipt_toc_wait','receipt_worker_delayed'],true)): ?><p data-status-label><?= $t($progress['state']) ?></p><?php endif; ?>
 <p class="receipt-totals">
 <span><?= $t('receipt_files') ?>: <strong><?= $report['pdf_files'] ?></strong> pdf <?= $t('receipt_and') ?> <strong><?= $report['jpg_files'] ?></strong> jpg</span> <strong aria-hidden="true">|</strong>
@@ -202,7 +202,7 @@ $completed=$progress['state']==='receipt_finished';
 <span class="<?= $report['errors']?'receipt-error-count':'' ?>"><?= $t('receipt_errors') ?>: <strong><?= count($report['errors']) ?></strong></span>
 </p><p><?= $t('receipt_processed_note') ?></p>
 <?php if ($report['duplicates']): ?>
-<h3><?= $t('receipt_duplicates_title') ?> <span class="receipt-duplicate-instruction"><?= $t('receipt_duplicates_instruction') ?></span></h3>
+<h3><?= $t('receipt_duplicates_title') ?> <span class="receipt-duplicate-instruction"><?= strtr($t('receipt_duplicates_instruction'), ['{paper_copies}'=>'<strong>'.$t('receipt_paper_copies').'</strong>']) ?></span></h3>
 <div class="receipt-table-wrap"><table class="receipt-duplicates"><thead><tr><th><?= $t('receipt_issuer') ?></th><th><?= $t('receipt_number') ?></th><th><?= $t('receipt_date') ?></th></tr></thead><tbody>
 <?php foreach ($report['duplicates'] as $duplicate): ?><tr><td data-i18n-skip><?= $duplicate['issuer_name']!==''?$e($duplicate['issuer_name']):$t('receipt_unknown_issuer') ?></td><td data-i18n-skip><?= $duplicate['invoice_number']!==''?$e($duplicate['invoice_number']):$t('receipt_unknown_data') ?></td><td data-i18n-skip><?= $duplicate['issued_on']!==''?$e(self::displayDate($duplicate['issued_on'])):$t('receipt_unknown_data') ?></td></tr><?php endforeach; ?>
 </tbody></table></div><?php endif; ?>

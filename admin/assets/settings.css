@@ -68,6 +68,7 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 }
 
 .receipt-totals { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35rem; }
+.receipt-report-label { color: #000; }
 .receipt-report-state.is-running, .receipt-report-state.is-completed { color: #16803c; }
 .receipt-report-state.is-pending { color: #a65c00; }
 .receipt-dots { display: inline-flex; margin-inline-start: .1em; }
@@ -100,9 +101,9 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .receipt-intake:disabled label:not(.receipt-month), .receipt-intake:disabled .receipt-month > span { opacity: .65; }
 .receipt-process-filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
 .receipt-run-select { min-width: 0; width: var(--receipt-run-width, auto); max-width: 100%; flex: 0 1 auto; }
-.receipt-run-period { display: flex; flex-wrap: wrap; gap: 12px; margin-left: auto; max-width: 100%; }
+.receipt-run-period { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; max-width: 100%; }
 .receipt-run-period .field { min-width: 135px; }
-.receipt-document-filter { width: 290px; max-width: 100%; margin-left: auto; }
+.receipt-document-filter { width: 290px; max-width: 100%; }
 .receipt-history-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
 .receipt-history-heading h2 { margin: 0; }
 .receipt-process-card .success { margin: 16px 0 0; }
@@ -111,7 +112,7 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .receipt-review-fields { display: grid; grid-template-columns: minmax(150px,1fr) minmax(0,2fr); gap: 12px; }
 .receipt-review-fields input::placeholder { color: #b91c1c; opacity: 1; }
 .receipt-invoice .receipt-review-issues { padding: 8px 12px; margin: 8px 0; color: #9f231b; font-size: .92rem; }
-@media(max-width: 820px) { .receipt-process-filters, .receipt-review-fields { grid-template-columns: 1fr; } .receipt-run-period { justify-content: flex-end; } }
+@media(max-width: 820px) { .receipt-review-fields { grid-template-columns: 1fr; } }
 .card > .receipt-start-help { margin: 0 0 14px; }
 .receipt-page input[type="checkbox"] { width: 18px; height: 18px; accent-color: #0f766e; vertical-align: middle; }
 .receipt-months { border: 0; padding: 0; margin: 14px 0; min-width: 0; }
