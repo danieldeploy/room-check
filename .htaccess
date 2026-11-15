@@ -1,6 +1,11 @@
 Options -Indexes
 DirectoryIndex index.php
 
+<IfModule mime_module>
+    AddType text/javascript .mjs
+    AddType application/wasm .wasm
+</IfModule>
+
 <FilesMatch "^(config\.local\.php|database\.sql|README\.md|\.cpanel\.yml|my2n-secrets\.json|\.env)$">
     Require all denied
 </FilesMatch>
