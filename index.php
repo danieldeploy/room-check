@@ -33,7 +33,7 @@ $modules = [
         'eyebrow'=>InvoiceText::get('receipt_title'),
         'title'=>InvoiceText::get('receipt_title'),
         'description'=>InvoiceText::get('receipt_description'),
-        'href'=>'admin/receipts.php','status'=>'Abrir módulo','tone'=>'blue',
+        'href'=>'admin/receipts.php','status'=>'Disponível','tone'=>'green',
     ],
     [
         'permission' => Auth::PERMISSION_INVOICES_VIEW,
@@ -59,8 +59,8 @@ $modules = [
         'title' => 'Gestão dos Espaços',
         'description' => 'Verificação dos espaços dos alojamentos e respetivas listas.',
         'href' => 'rooms.php',
-        'status' => 'Disponível',
-        'tone' => 'green',
+        'status' => SiteTranslations::text('Ainda não está pronto', 'Not Ready'),
+        'tone' => 'blue',
     ],
     [
         'permission' => Auth::PERMISSION_TASK_VIEW_OWN,
@@ -77,7 +77,7 @@ $modules = [
         'title' => 'My2N',
         'description' => 'Estado dos telemóveis e configuração dos destinatários da Welcome Bell.',
         'href' => 'admin/my2n.php',
-        'status' => 'Consulta read-only',
+        'status' => SiteTranslations::text('Ainda não está pronto', 'Not Ready'),
         'tone' => 'blue',
     ],
 ];
