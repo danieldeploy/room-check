@@ -148,7 +148,7 @@ jobs:
           php tests/invoice-receipt-confirmation.php
           php tests/invoice-receipt-summary-probe.php
           php tests/invoice-gemini.php
-          php tests/invoice-source-classification.php
+          TEST_NODE_BINARY=$(command -v node) php tests/invoice-source-classification.php
           php tests/invoice-source-category.php
           php tests/invoice-receipt-selection.php
           php tests/invoice-source-correction.php
