@@ -1,5 +1,13 @@
 # Management Hub — current project state
 
+## Receipt visual alignment — 2026-11-15
+
+The report heading adds a black Status/Estado label before the existing colored
+state and retains five animated Processing dots. Run, year and month selectors
+stay grouped on the left with their labels above; the document filter follows
+its counters with a small gap. The red duplicate instruction emphasizes only
+paper copies (and its localized equivalent). Processing and permissions are unchanged.
+
 ## Receipt presentation after PR369 — 2026-11-14 (prepared)
 
 Implements owner-approved compact run banner, selected-run state/title/filter,

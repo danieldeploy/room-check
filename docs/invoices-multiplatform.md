@@ -810,21 +810,23 @@ must not submit or delete real invoices merely for testing.
 ### Receipt result presentation (post-PR369, 2026-11-14)
 
 The run card sizes its selector to the longest option, bounded by its container;
-execution year/month stay right or wrap on narrow screens. Only a selected running
+execution year/month follow on the left with a small gap and wrap on narrow screens.
+Each label aligns above its selector. Only a selected running
 run shows its actual requested months/year in the green banner. The banner and
 redundant intake/status explanations leave no blank placeholder when stopped.
 Intake locking remains global, while report/filter visibility is selection-local.
 Only the disabled selected month checkbox tick is dark gray; labels retain their
-existing typography. The report title shows green Processing with five animated
+existing typography. The report title adds a black Status/Estado label, then shows green Processing with five animated
 dots (reduced-motion respected), Completed!, or Pending for stopped unresolved
 work. Retry countdowns and failed-status-read-only Refresh remain available.
 
-The history status selector sits beside counts with Processed in TOConline and
+The history status selector follows the counts on the left with a small gap, with Processed in TOConline and
 Problems or pending. Running overrides filters to all documents on the server;
 once stopped the automatic filter shows problems if any, otherwise processed.
 Explicit historical all links remain readable. Open previews and correction drafts
 survive polling; selected filter visibility still updates. Duplicate paper-copy
-instruction is red and normal weight. Report-only roles gain no document access.
+instruction is red, with only paper copies (or its localized equivalent) bold.
+Report-only roles gain no document access.
 
 PDF and JPEG use the same invoice cards and verified final Drive preview; only
 PDFs offer source-PDF context. A removed duplicate can preview only its recorded
