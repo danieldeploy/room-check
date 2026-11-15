@@ -1,6 +1,6 @@
 # Management Hub — current project state
 
-## Mobile PDF preview and retired invoice experiments — 2026-11-15 (prepared)
+## Mobile PDF preview and retired invoice experiments — 2026-11-15 (integrated; deployment blocked)
 
 Owner approved in-page mobile PDF navigation/zoom and targeted removal of unused
 invoice experiments. PDF.js 6.4.299 is reused from the pinned receipt runtime;
@@ -21,6 +21,14 @@ Local UI tests cover mobile/desktop/JPEG routing, lazy load cancellation,
 page/zoom rendering, limits and teardown. CI adds synthetic cleanup and asset
 packaging tests. Deployment and real-device acceptance remain unverified until
 recorded after release. See the 2026-11-15 implementation plan.
+
+PR372 passed validate/windows-agent and merged as b5b83ad. Production run
+43742385864 stopped at the first read-only staging inspection, before update or
+deployment. Other administrative reads failed without a specific error; public
+HTTPS remained reachable. The release now runs its existing authenticated
+read-only diagnostic first so an access refusal is actionable without exposing
+server responses or bypassing any guard. Server cleanup and device acceptance
+remain pending; no external Azure resource has been removed.
 
 
 ## Receipt visual alignment — 2026-11-15
