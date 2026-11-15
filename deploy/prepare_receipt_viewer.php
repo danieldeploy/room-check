@@ -10,8 +10,10 @@ function prepareReceiptViewer(string $package,string $assets): int
     $check(($metadata['version']??'')==='6.4.299');
     $target=$assets.'/pdfjs';$check(!is_link($target));
     if(!is_dir($target))$check(mkdir($target,0755));
+    $check(chmod($target,0755)); // release.sh uses umask 077; Apache must traverse.
     $target.='/6.4.299';$check(!is_link($target));
     if(!is_dir($target))$check(mkdir($target,0755));
+    $check(chmod($target,0755));
     $files=['LICENSE','build/pdf.mjs','build/pdf.worker.mjs'];
     foreach(['cmaps','standard_fonts','wasm'] as $directory) {
         $source=$package.'/'.$directory;$check(is_dir($source) && !is_link($source));
@@ -26,6 +28,7 @@ function prepareReceiptViewer(string $package,string $assets): int
         $check(!is_link($parent) && !is_link($destination));
         if(!is_dir($parent))$check(mkdir($parent,0755));
         $check(realpath($parent)===$parent);
+        $check(chmod($parent,0755));
         $check(copy($source,$destination) && chmod($destination,0644));
         $check(hash_equals(hash_file('sha256',$source),hash_file('sha256',$destination)));
     }
