@@ -49,6 +49,10 @@ autenticado e de uma publicação real verificada.
   credencial GitHub no checkout. A credencial WHM só entra nos passos protegidos
   de inspeção e publicação.
 - Existe uma única fila de publicação, sem cancelar um deployment em execução.
+- As pastas públicas do leitor PDF.js recebem explicitamente permissões 0755;
+  os ficheiros recebem 0644. O teste de preparação usa a mesma umask 077 da
+  publicação, incluindo a reparação de pastas já existentes. Isto não altera
+  as permissões do armazenamento privado.
 - O primeiro passo protegido usa o diagnóstico de leitura existente para
   confirmar o acesso autenticado antes da inspeção/reparação do clone. Recusas
   HTTP 401/403 aparecem como códigos fixos, sem mensagens do servidor ou segredos.

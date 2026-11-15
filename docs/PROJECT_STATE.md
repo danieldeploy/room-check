@@ -1,6 +1,6 @@
 # Management Hub — current project state
 
-## Mobile PDF preview and retired invoice experiments — 2026-11-15 (integrated; deployment blocked)
+## Mobile PDF preview and retired invoice experiments — 2026-11-15 (deployed; viewer acceptance correction)
 
 Owner approved in-page mobile PDF navigation/zoom and targeted removal of unused
 invoice experiments. PDF.js 6.4.299 is reused from the pinned receipt runtime;
@@ -29,6 +29,15 @@ HTTPS remained reachable. The release now runs its existing authenticated
 read-only diagnostic first so an access refusal is actionable without exposing
 server responses or bypassing any guard. Server cleanup and device acceptance
 remain pending; no external Azure resource has been removed.
+
+The authenticated preflight subsequently passed and deployment421 installed
+5702d33 with its backup gate. Android loaded the new viewer module but both
+PDF.js modules returned HTTP404. The packaging helper created directories under
+release.sh's umask077 without restoring traversal permissions. It now sets0755
+explicitly on the exact public PDF.js directories (including existing ones),
+while keeping private storage unchanged. A synthetic regression runs under
+umask077 and verifies fresh packaging plus repair of existing0700 directories.
+Repeat real-device acceptance after publishing this correction.
 
 
 ## Receipt visual alignment — 2026-11-15
