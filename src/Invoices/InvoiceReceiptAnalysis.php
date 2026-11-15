@@ -9,6 +9,9 @@ final class InvoiceReceiptAnalysis
     public const VERSION=2;
     public function __construct(private readonly InvoiceReceiptPdf $pdf,private readonly InvoiceGemini $gemini) {}
     public function configured(): bool { return $this->gemini->configured(); }
+    /** Source layout classification is independent from fiscal analysis and folder expectations. */
+    public function classifySource(string $bytes): array
+    { return $this->gemini->classify($this->pdf->firstPageBytes($bytes)); }
     /** Extracted buyer data stays immutable; a review is a separate classification. */
     public static function buyerIssue(array $d,string $nif): string
     {

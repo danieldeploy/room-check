@@ -86,8 +86,9 @@ try {
     foreach (['SECRET-','private-master-id','private-page-id','PRIVATE-PARENT','receipt-document.php?id=','name="issuer_name"','name="confirmed"','value="review"','value="retry"'] as $private) reportCheck(!str_contains($operator['html'],$private),'Actual operator HTML leaked individual history/corrections');
     $status=json_decode($render('governanta',['receipts.run'],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
     reportCheck($status['history']===null && !str_contains(json_encode($status),'SECRET-') && !str_contains(json_encode($status),'private-page-id'),'Polling report never exposes documents');
-    foreach (['review','retry','regroup','repair','confirm_buyer','discard'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
+    foreach (['review','retry','regroup','repair','replace_source','confirm_buyer','discard'] as $action) reportCheck($render('governanta',['receipts.run'],$action)['status']===403,'Operator forged individual action was not rejected');
     reportCheck($render('governanta',[])['status']===403 && $render('governanta',['receipts.view'])['status']===403,'No/legacy-only access must fail closed');
+    reportCheck($render('governanta',['receipts.run'],'',false,false,['correction_files'=>'private-error-id'])['status']===403,'Operator cannot list correction files');
     $rejected=$render('gerente',[],'start');
     reportCheck(str_contains($rejected['html'],'id="receipt-request-error"') && str_contains($rejected['html'],InvoiceText::get('receipt_select_periods')),'Rejected request must have a persistent dedicated error');
     reportCheck(str_contains($rejected['html'],'value="1999"') && preg_match('/name="months\[\]" value="6" checked/',$rejected['html'])===1,'Rejected selection must remain on the form');

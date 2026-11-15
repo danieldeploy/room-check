@@ -42,6 +42,8 @@ $technicalLiterals = array_fill_keys([
 // Exact server-only exceptions. These are not website UI: they are transport
 // diagnostics or the PT branch of a message that already has an explicit EN branch.
 $technicalExceptions = [
+    // Owner-defined Drive folder name used for parsing, never translated on disk.
+    'src/Invoices/InvoiceDriveClient.php' => ['talões'],
     // Fixed pt_PT receipt-summary template parameters, never website copy.
     'src/Invoices/InvoiceAlerts.php' => [
         'Pendente — intervenção necessária',

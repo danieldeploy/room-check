@@ -19,6 +19,9 @@ final class InvoiceReceiptPdf
     { return $this->execute($bytes,$publish,'split'); }
     public function inspect(string $bytes,string $format): array { return $this->execute($bytes,false,'inspect',[],$format); }
     public function extract(string $bytes,array $pages): array { return $this->execute($bytes,true,'extract',$pages); }
+    /** Extract into the existing private temporary workspace without publishing reusable page files. */
+    public function firstPageBytes(string $bytes): string
+    { return $this->execute($bytes,false,'extract',[1])['bytes']; }
     public function assemble(array $parts,array $order=[]): array { return $this->execute('%PDF-',true,'assemble',$order,'pdf',$parts); }
     public static function diagnosticCode(string $stderr): string
     {
@@ -91,6 +94,7 @@ final class InvoiceReceiptPdf
                 if (($result['pages']??[])!==$pages || $size<5 || $size>10*1024*1024 || $size!==($result['size']??0) || is_link($file)
                     || !hash_equals(hash_file('sha256',$file),(string)($result['sha256']??''))
                     || !hash_equals(hash_file('md5',$file),(string)($result['md5Checksum']??''))) throw new RuntimeException('receipt_split_failed');
+                if (!$publish) return $result+['bytes'=>(string)file_get_contents($file)];
                 InvoiceVault::atomicWrite($this->vault->path('receipt-page-'.$result['sha256'].'.pdf'),(string)file_get_contents($file));
                 return $result;
             }

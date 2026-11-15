@@ -28,7 +28,7 @@ final class InvoiceReceiptRepair
         if (($d['fiscal_status']??'N')!=='N') throw new RuntimeException('receipt_repair_ambiguous');
         if (!InvoiceReceiptAnalysis::buyerAccepted($d,$nif)) throw new RuntimeException(InvoiceReceiptAnalysis::buyerIssue($d,$nif) ?: 'receipt_company_changed');
         $parts=[['bytes'=>$read($d),'format'=>$d['format']]];$sources=[];$total=strlen($parts[0]['bytes']);
-        $files=array_values(array_filter($this->drive->scanFiles($d['source_month']),static fn($f)=>!isset($s['documents'][$f['id']])));
+        $files=InvoiceReceiptSelection::choose($this->drive->scanFiles($d['source_month']),$d['repair_files']??[],$s['documents']);
         if (count($files)>19) throw new RuntimeException('receipt_repair_limit');
         foreach ($files as $f) {
             $format=InvoiceDriveClient::receiptFormat($f);
@@ -37,10 +37,10 @@ final class InvoiceReceiptRepair
             $bytes=$this->drive->scanDocument($f);
             $manifest=$this->analysis->analyse($bytes,$format,$nif);
             // A mixed original must not be claimed: unrelated pages still need normal intake.
-            if (count($manifest['groups'])!==1) continue;
+            if (count($manifest['groups'])!==1) throw new RuntimeException('receipt_repair_ambiguous');
             $g=$manifest['groups'][0];
             if (!self::sameInvoice($d,$g) || !empty($g['uncertain'])
-                || ($g['review_reason']??'')==='receipt_grouping_required') continue;
+                || ($g['review_reason']??'')==='receipt_grouping_required') throw new RuntimeException('receipt_repair_ambiguous');
             $total+=strlen($bytes);if ($total>10*1024*1024) throw new RuntimeException('receipt_repair_limit');
             $f['sha256']=hash('sha256',$bytes);$sources[]=$f;$parts[]=['bytes'=>$bytes,'format'=>$format];
         }

@@ -272,20 +272,31 @@ final class InvoiceDriveClient
         return in_array('https://www.googleapis.com/auth/drive',explode(' ',(string)($c['scope']??'')),true);
     }
 
+    public static function scanCategory(string $name,string $parent=''): string
+    {
+        $next=match(mb_strtolower(trim($name))) {'a4'=>'a4','talões','taloes'=>'taloes',default=>$parent};
+        return $parent!=='' && $next!==$parent ? 'invalid' : $next;
+    }
     /** Bounded snapshot, including only real descendants; never follow shortcuts. */
     public function scanFiles(string $root): array
     {
-        self::assertId($root); $folders=[$root]; $seen=[]; $files=[];
+        self::assertId($root); $folders=[[$root,'','']]; $seen=[]; $files=[];
         while ($folders) {
-            $parent=array_shift($folders);
+            [$parent,$category,$path]=array_shift($folders);
             if (isset($seen[$parent]) || count($seen)>=40) throw new RuntimeException('receipt_limit');
             $seen[$parent]=true; $page='';
             do {
                 $r=$this->api('GET','files?'.http_build_query(['q'=>"'".$parent."' in parents and trashed=false",'pageSize'=>100,
                     'fields'=>'nextPageToken,files(id,name,mimeType,size,md5Checksum,parents,appProperties)','pageToken'=>$page,'spaces'=>'drive']));
                 foreach ($r['files']??[] as $f) {
-                    if (($f['mimeType']??'')==='application/vnd.google-apps.folder') $folders[]=$f['id'];
-                    elseif (empty($f['appProperties']['hubReceiptOcr'])) $files[]=$f;
+                    if (($f['mimeType']??'')==='application/vnd.google-apps.folder') {
+                        $next=self::scanCategory($f['name']??'',$category);
+                        $folders[]=[$f['id'],$next,$path.'/'.$f['name']];
+                    } elseif (empty($f['appProperties']['hubReceiptOcr'])) {
+                        $f['source_category']=$category ?: 'a4';
+                        $f['source_path']=$path ?: '/';
+                        $files[]=$f;
+                    }
                     if (count($files)>500) throw new RuntimeException('receipt_limit');
                 }
                 $page=$r['nextPageToken']??'';

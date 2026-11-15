@@ -1,3 +1,24 @@
+## PDF source categories and explicit corrections — 2026-11-15 (prepared)
+
+New PDF intake records A4/Talões folder ancestry and checks only the first page
+through the existing Gemini budget/cache. The folder controls archive routing;
+uncertain/mismatching sources stop before split/archive/send while other files run.
+JPEG behavior and existing recorded scans remain unchanged. Direct legacy month
+folders default to A4; nested contradictory category folders require correction.
+
+After the global run settles, reviewers explicitly choose exact Drive files from
+the original month for missing pages or a corrected PDF. Tokens bind ID, content
+checksum, parent and category; selection is checked again by the worker. Missing
+pages reuse fiscal identity/completeness/order checks without scanning unrelated
+candidates. Moved originals keep their ID; different replacements link historical
+records and claim the new ID before processing. Source substitution does not delete
+the old original. UI and server enforce review permission, confirmation, idle gate,
+CSRF and shared invoice lock. QR authority, TOConline ledger and reply gates remain.
+
+Validation: synthetic source isolation/correction/routing, selection freshness,
+first-page-only extraction/cache, old JPEG and repair tests, PT/EN UI permissions.
+Production deployment and real Gemini first-page acceptance pending release.
+
 # Management Hub — current project state
 
 ## Module readiness labels — 2026-11-15
