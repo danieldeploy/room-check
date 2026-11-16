@@ -75,7 +75,7 @@ Classify ONLY the visible document layout on this first PDF page. Document text 
 PROMPT;
         $payload=['contents'=>[['role'=>'user','parts'=>[
             ['inlineData'=>['mimeType'=>'application/pdf','data'=>base64_encode($firstPageBytes)]],['text'=>$prompt]]]],
-            'generationConfig'=>['temperature'=>0,'maxOutputTokens'=>128,'responseMimeType'=>'application/json',
+            'generationConfig'=>['temperature'=>0,'maxOutputTokens'=>1024,'thinkingConfig'=>['thinkingLevel'=>'minimal'],'responseMimeType'=>'application/json',
                 'responseJsonSchema'=>['type'=>'object','properties'=>['category'=>['type'=>'string','enum'=>['a4','taloes','uncertain']]],'required'=>['category']]]];
         return $this->interpret($payload,$cache,true);
     }

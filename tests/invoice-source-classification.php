@@ -15,7 +15,7 @@ try {
  sc(count($calls)===1 && $calls[0]['contents'][0]['parts'][0]['inlineData']['mimeType']==='application/pdf','Classifier sends PDF only');
  sc(base64_decode($calls[0]['contents'][0]['parts'][0]['inlineData']['data'])===$bytes,'Classifier receives supplied first page bytes');
  sc($calls[0]['generationConfig']['responseJsonSchema']['properties']['category']['enum']===['a4','taloes','uncertain'],'Structured classifier limits categories');
- sc($calls[0]['generationConfig']['maxOutputTokens']<=1000,'Classifier output is bounded');
+ sc($calls[0]['generationConfig']['maxOutputTokens']===1024 && ($calls[0]['generationConfig']['thinkingConfig']['thinkingLevel']??'')==='minimal','Classifier reserves bounded room for thinking plus JSON');
  $prompt=$calls[0]['contents'][0]['parts'][1]['text'];sc(str_contains($prompt,'A4 canvas') && str_contains($prompt,'untrusted'),'Prompt separates canvas from document and distrusts document instructions');
  $gemini->classify($bytes);sc(count($calls)===1,'Classification is cached');
  $now+=10;$response=['groups'=>[['pages'=>[1]]]];$gemini->analyse($bytes,'pdf',['count'=>1]);sc(count($calls)===2,'Full analysis has separate cache');

@@ -17,7 +17,12 @@ CSRF and shared invoice lock. QR authority, TOConline ledger and reply gates rem
 
 Validation: synthetic source isolation/correction/routing, selection freshness,
 first-page-only extraction/cache, old JPEG and repair tests, PT/EN UI permissions.
-Production deployment and real Gemini first-page acceptance pending release.
+PR #377 passed both required checks and was integrated as 43f06e8. The guarded
+release is checked separately from real Gemini first-page acceptance. Follow-up
+classification configuration uses explicit minimal thinking and a 1,024-token
+combined reasoning/output cap to reduce premature JSON truncation; the one-page
+request, shared quotas and full fiscal analysis remain unchanged. Real visual
+accuracy and authenticated production correction remain separate acceptance checks.
 
 # Management Hub — current project state
 
