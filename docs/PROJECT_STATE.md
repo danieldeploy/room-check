@@ -51,6 +51,8 @@ processing or new Drive permissions are introduced.
 Accepted archived invoices whose issue year/month differs from the scan folder
 show the requested red paper-filing reminder, with only “paper invoice” bold.
 Same-month, unknown-date, pending and removed-duplicate documents do not show it.
+Live inspection caught the generic card paragraph color overriding the reminder;
+the scoped invoice selector now preserves its red color.
 Tests cover independent form submission, fresh analysis, PDF/JPEG, changed/claimed
 selection, sibling preservation, cleanup retry, sent-history rejection, PT/EN and
 month/year boundaries. Installed version and live functional acceptance remain

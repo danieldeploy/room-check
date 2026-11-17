@@ -43,6 +43,7 @@ foreach(['pt','en'] as $locale){
  cu(str_contains($render(['source'=>$category]),'data-max="1"'),'Replacement permits exactly one file');
  cu(str_contains($render(['child'=>$missing],true,true),InvoiceText::get('receipt_correction_wait')),'Busy repair gives translated wait instruction');
 }
+cu(str_contains(file_get_contents(dirname(__DIR__).'/admin/assets/settings.css'),'.receipt-invoice .receipt-duplicate-instruction { color: #b91c1c;'),'Paper reminder overrides generic card paragraph color');
 $endpoint=file_get_contents(dirname(__DIR__).'/admin/receipt-document.php');
 cu(str_contains($endpoint,'PERMISSION_RECEIPTS_REVIEW') && str_contains($endpoint,'correctionPreview'),'Candidate bytes require review permission in addition to history');
 echo "Receipt correction render, permissions, busy gates and PT/EN passed\n";
