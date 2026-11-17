@@ -39,6 +39,15 @@ deployment and client tool discovery/actual run consultation remain separate
 acceptance checks. Tests exercise exact-run isolation, redaction, unchanged vault
 files, scope/role refusal, malformed inputs, pagination and missing history.
 
+Client discovery now lists the new operation. The first live call returned
+`receipt_history_missing`; code inspection found that its ledger validator
+incorrectly rejected integer document IDs written by the shared portal delivery
+path. The scoped repair accepts the existing integer/string contract, excludes
+non-receipt entries and preserves refusal of malformed IDs. Mixed-ledger tests
+exercise read-only behavior and selected-run matching. Live diagnosis must be
+repeated after the guarded release; this error is not evidence of lost history
+or of the original run's Gemini/email failure.
+
 ## Standing owner permission to consult the Hub — 2026-11-17
 
 The owner authorized read-only consultation of all historical and future
