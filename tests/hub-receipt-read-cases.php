@@ -29,7 +29,11 @@ function hubReceiptReadCases(PDO $pdo,array $identity): void
         $vault->save('gemini-receipts.enc',['key'=>'SECRET_API_KEY']);
         $vault->save('gemini-receipts-budget.enc',['day'=>'2026-11-17','requests'=>19,'failures'=>7,'next_at'=>$now+600,'unexpected'=>'SECRET_BUDGET']);
         $vault->save('toconline-settings.enc',['enabled'=>true,'pilot_verified'=>true,'sender'=>'private@example.invalid','nif'=>'SECRET_NIF']);
-        $vault->save('toconline-ledger.enc',['alias'=>['document_id'=>'receipt:drive-ready-private','state'=>'toc_submitted',
+        $vault->save('toconline-ledger.enc',[
+            // Portal delivery persists integer IDs in the same ledger as receipt string IDs.
+            'portal-numeric'=>['document_id'=>123,'state'=>'toc_accepted','message'=>'PRIVATE_PORTAL_BODY'],
+            'portal-string'=>['document_id'=>'124','state'=>'toc_submitted'],
+            'alias'=>['document_id'=>'receipt:drive-ready-private','state'=>'toc_submitted',
             'attempted_at'=>'2026-11-17T17:01:00+00:00','message'=>'PRIVATE_EMAIL_BODY']]);
         $before=$snapshot();
         $result=$mcp->call('hub_get_receipt_run',['process_id'=>$run],$identity);
@@ -42,10 +46,18 @@ function hubReceiptReadCases(PDO $pdo,array $identity): void
         hubCheck($sent['delivery']['state']==='toc_submitted','Submission is not acceptance');
         hubCheck($result['gemini']['requests']===19 && $result['gemini']['next_at']===$now+600,'Shared Gemini pacing visible');
         $encoded=json_encode($result);
-        foreach(['PRIVATE_OCR_TEXT','SECRET_API_KEY','SECRET_BUDGET','SECRET_NIF','PRIVATE_EMAIL_BODY','private@example.invalid','drive-source-private','other-run-secret.pdf'] as $secret)
+        foreach(['PRIVATE_OCR_TEXT','SECRET_API_KEY','SECRET_BUDGET','SECRET_NIF','PRIVATE_EMAIL_BODY','PRIVATE_PORTAL_BODY','private@example.invalid','drive-source-private','other-run-secret.pdf'] as $secret)
             hubCheck(!str_contains($encoded,$secret),'Diagnostic output excludes private payloads and unrelated run');
         $mcp->call('hub_get_receipt_run',['process_id'=>$run],$identity);
         hubCheck($snapshot()===$before,'Repeated reads do not mutate encrypted files');
+        $validLedger=$vault->read('toconline-ledger.enc');
+        foreach([null,true,1.5,[]] as $invalidId) {
+            $vault->save('toconline-ledger.enc',$validLedger+['invalid'=>['document_id'=>$invalidId]]);
+            $invalidBefore=$snapshot();
+            hubReject(fn()=>$mcp->call('hub_get_receipt_run',['process_id'=>$run],$identity),'receipt_history_missing');
+            hubCheck($snapshot()===$invalidBefore,'Malformed ledger refusal remains read-only');
+        }
+        $vault->save('toconline-ledger.enc',$validLedger);
         foreach([['process_id'=>'../master.key'],['process_id'=>$run,'offset'=>-1],['process_id'=>$run,'offset'=>'0'],
                  ['process_id'=>$run,'path'=>'/tmp/elsewhere'],[]] as $args)
             hubReject(fn()=>$mcp->call('hub_get_receipt_run',$args,$identity),'invalid_request');
