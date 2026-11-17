@@ -51,5 +51,13 @@ try {
  $b=$daily->status();unset($b['configured'],$b['model']);$b['requests']=400;$b['daily_quota']=['state'=>'waiting','started_at'=>$now-86400,'retry_at'=>$now];$b['next_at']=0;$vault->save(InvoiceGemini::BUDGET,$b);$before=$dailyCalls;
  try{$daily->analyse('%PDF-1.4 local-cap-probe','pdf',$local);gc(false,'local cap must stop probe');}catch(RuntimeException $e){gc($e->getMessage()==='gemini_quota_probe_failed','local daily cap stops one probe');}
  gc($dailyCalls===$before && $daily->status()['daily_quota']['state']==='failed','local cap cannot bypass or repeat the next-day probe');
+ foreach ([[0,28,'gemini_timeout'],[503,0,'gemini_http']] as [$http,$errno,$reason]) {
+  $vault->save(InvoiceGemini::BUDGET,[]);
+  $reply=['status'=>$http,'http_status'=>$http,'errno'=>$errno,'duration_ms'=>3100,'body'=>[]];
+  try {$client->analyse('%PDF-1.4 transport '.$http,'pdf',$local);gc(false,'transport error must be reported');}
+  catch (InvoiceGeminiRetry $e) {
+   gc($e->facts['reason']===$reason && $e->facts['http_status']===$http && $e->facts['curl_errno']===$errno && $e->facts['duration_ms']===3100,'exact transport facts survive '.$reason);
+  }
+ }
  echo "Gemini cache, limits, retry and secret boundaries passed\n";
 } finally {foreach(glob($dir.'/*')?:[] as $f)unlink($f);rmdir($dir);}

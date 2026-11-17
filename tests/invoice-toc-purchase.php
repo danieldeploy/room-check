@@ -12,6 +12,9 @@ purchaseCheck($p['outcome']==='toc_accepted'&&$p['text']==='','new template is c
 purchaseCheck(!str_contains(json_encode($p),'Synthetic Supplier'),'only necessary fields retained');
 purchaseCheck(empty(InvoiceTocPipe::parse($mail.' '.$body)['purchase_identity']),'multiple invoice rows are ambiguous');
 purchaseCheck(empty(InvoiceTocPipe::parse(str_replace('Ficheiros arquivados e associados automaticamente a faturas de compra:','Unknown result',$mail))['purchase_identity']),'unknown template is not guessed');
+$several=InvoiceTocPipe::parse($mail.' '.substr(str_replace('TEST/101','TEST/102',$body),strpos($body,'Fornecedor NIF:')));
+purchaseCheck(array_column($several['purchase_identities'],'invoice_number')===['FR TEST/101','FR TEST/102'],'distinct rows keep their own supplier and fiscal numbers');
+purchaseCheck(empty(InvoiceTocPipe::parse($mail.' Fornecedor NIF: missing')['purchase_identities']),'an incomplete fiscal row prevents implicit acceptance');
 $html=str_replace('Content-Type: text/plain; charset=UTF-8','Content-Type: text/html; charset=UTF-8',$mail);
 $html=str_replace($body,'<p>Ficheiros arquivados e associados automaticamente a faturas de compra:</p><table><tr><td>Fornecedor NIF:</td><td>500000000</td></tr><tr><td>Fornecedor:</td><td>Synthetic Supplier</td></tr><tr><td>e-Fatura:</td><td>FR TEST/101</td></tr><tr><td>Fatura de compra:</td><td>FC TEST/7 (*)</td></tr></table><p>(*) Fatura criada automaticamente via QRCode</p>',$html);
 purchaseCheck(InvoiceTocPipe::parse($html)['purchase_identity']===$p['purchase_identity'],'HTML table cells without source newlines retain fiscal boundaries');
@@ -44,5 +47,10 @@ try {
  $receiver=new class {public int $calls=0;public function receive(...$args):array{$this->calls++;purchaseCheck($args[4]['purchase_identity']['invoice_number']==='FR TEST/101','queue forwards only parsed identity');return ['result'=>'unmatched'];}};
  $pipe->process($receiver);$pipe->enqueue($mail);$pipe->process($receiver);
  purchaseCheck($receiver->calls===1,'upgraded correlation revisits a previously unmatched parse exactly once');
+ $other=array_replace($doc,['id'=>'second','invoice_number'=>'FR TEST/102']);
+ $v->save(InvoiceReceipts::FILE,['documents'=>['synthetic'=>$doc,'second'=>$other]]);
+ $v->save('toconline-ledger.enc',[$key=>$entry,str_repeat('b',64)=>array_replace($entry,['document_id'=>'receipt:second'])]);
+ $toc->receive($several['from'],'','',$several['hash'],$several+['authentication'=>$auth]);
+ foreach ($v->read(InvoiceReceipts::FILE)['documents'] as $item) purchaseCheck($item['toconline_state']==='toc_accepted','verified multi-row purchase reply confirms each fiscal identity');
  echo "TOConline automatic purchase acknowledgement OK\n";
 }finally{foreach(glob($dir.'/*')?:[]as$f)unlink($f);rmdir($dir);}

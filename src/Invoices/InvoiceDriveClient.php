@@ -2,6 +2,22 @@
 declare(strict_types=1);
 require_once __DIR__ . '/InvoiceVault.php';
 
+final class InvoiceDriveFailure extends RuntimeException
+{
+    public readonly array $facts;
+    public function __construct(string $code,int $http,int $errno,int $ms)
+    {
+        $this->facts=['phase'=>'receipt_drive_request','reason'=>$errno?'drive_transfer_error':'drive_http_error',
+            'http_status'=>$http,'curl_errno'=>$errno,'duration_ms'=>$ms];
+        parent::__construct($code);
+    }
+
+    public static function fromHandle(string $code,$handle): self
+    {
+        return new self($code,(int)curl_getinfo($handle,CURLINFO_HTTP_CODE),curl_errno($handle),
+            (int)round(1000*curl_getinfo($handle,CURLINFO_TOTAL_TIME)));
+    }
+}
 /** OAuth credentials stay in the private encrypted vault. No arbitrary request hosts. */
 final class InvoiceDriveClient
 {
@@ -169,9 +185,10 @@ final class InvoiceDriveClient
                         }]);
                     $result = curl_exec($h);
                     $status = (int)curl_getinfo($h, CURLINFO_HTTP_CODE);
+                    $failure=InvoiceDriveFailure::fromHandle('drive_network',$h);
                     curl_close($h);
                     if ($result === false || !in_array($status, [200, 201, 308], true)) {
-                        throw new RuntimeException('drive_network');
+                        throw $failure;
                     }
                     if ($status === 308) {
                         $range = (string)($responseHeaders['range'] ?? '');
@@ -226,7 +243,8 @@ final class InvoiceDriveClient
                 }]);
             $ok = curl_exec($h);
             $status = (int)curl_getinfo($h, CURLINFO_HTTP_CODE);
-            if ($ok === false || $status !== 200 || $received !== $expectedBytes) {
+            if ($ok === false || $status !== 200) throw InvoiceDriveFailure::fromHandle('drive_verify',$h);
+            if ($received !== $expectedBytes) {
                 throw new RuntimeException('drive_verify');
             }
         } catch (Throwable $e) {
@@ -260,8 +278,10 @@ final class InvoiceDriveClient
             CURLOPT_WRITEFUNCTION=>static function($h,string $chunk) use (&$pdf,$size): int {
                 if (strlen($pdf)+strlen($chunk)>$size) return 0; $pdf.=$chunk; return strlen($chunk);
             }]);
-        $ok=curl_exec($h); $status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE); curl_close($h);
-        if ($ok===false || $status!==200 || strlen($pdf)!==$size || !str_starts_with($pdf,'%PDF-')
+        $ok=curl_exec($h); $status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE);
+        $failure=InvoiceDriveFailure::fromHandle($status===403?'drive_permission':'drive_network',$h);curl_close($h);
+        if ($ok===false || $status!==200) throw $failure;
+        if (strlen($pdf)!==$size || !str_starts_with($pdf,'%PDF-')
             || !hash_equals((string)$d['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
         return $pdf;
     }
@@ -412,8 +432,9 @@ final class InvoiceDriveClient
             CURLOPT_WRITEFUNCTION=>static function($h,string $chunk) use (&$data,$limit): int {
                 if (strlen($data)+strlen($chunk)>$limit) return 0; $data.=$chunk; return strlen($chunk);
             }]);
-        $ok=curl_exec($h); $status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE); curl_close($h);
-        if ($ok===false || $status!==200) throw new RuntimeException($status===403?'drive_permission':'drive_network');
+        $ok=curl_exec($h); $status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE);
+        $failure=InvoiceDriveFailure::fromHandle($status===403?'drive_permission':'drive_network',$h);curl_close($h);
+        if ($ok===false || $status!==200) throw $failure;
         return $data;
     }
 
@@ -433,8 +454,9 @@ final class InvoiceDriveClient
                 return strlen($line);
             }]);
         if ($body !== null) curl_setopt($h, CURLOPT_POSTFIELDS, $body);
-        $raw = curl_exec($h); $status = (int) curl_getinfo($h, CURLINFO_HTTP_CODE); curl_close($h);
-        if ($raw === false) throw new RuntimeException('drive_network');
+        $raw = curl_exec($h); $status = (int) curl_getinfo($h, CURLINFO_HTTP_CODE);
+        $errno=curl_errno($h);$ms=(int)round(1000*curl_getinfo($h,CURLINFO_TOTAL_TIME));curl_close($h);
+        if ($raw === false) throw new InvoiceDriveFailure('drive_network',$status,$errno,$ms);
         $result = json_decode($raw, true);
         if ($status < 200 || $status >= 300) {
             $reason = is_array($result['error'] ?? null) ? ($result['error']['errors'][0]['reason'] ?? '') : '';
@@ -447,7 +469,7 @@ final class InvoiceDriveClient
                 $status === 403 => 'drive_permission', $status === 429 || $status >= 500 => 'drive_network',
                 default => 'drive_upload'
             };
-            throw new RuntimeException($code);
+            throw new InvoiceDriveFailure($code,$status,$errno,$ms);
         }
         return is_array($result) ? $result : [];
     }

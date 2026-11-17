@@ -258,9 +258,9 @@ if ($isGerente && $vault) {
     try { $agentStatus=(new InvoiceRemoteAgent($pdo,$config['invoices']))->status(); }
     catch (Throwable) { $agentStatus=['mode'=>'paused','paired'=>false]; }
 }
-$tocSettings=[]; $tocMailbox=[]; $tocDiagnosticStatus='unavailable'; $tocDiagnosticRequest=$isGerente?bin2hex(random_bytes(16)):'';
+$tocSettings=[]; $tocProblems=[]; $tocMailbox=[]; $tocDiagnosticStatus='unavailable'; $tocDiagnosticRequest=$isGerente?bin2hex(random_bytes(16)):'';
 if ($vault) {
-    try { $tocService=new InvoiceToconline($pdo,$vault,new InvoiceDriveClient($vault)); $tocSettings=$tocService->settings(); if ($isGerente) $tocDiagnosticStatus=$tocService->diagnosticStatus(InvoiceToconline::DIAGNOSTIC_DOCUMENT_ID); if ($isGerente) $tocMailbox=(new InvoiceTocMailbox($vault,$tocService))->status(); }
+    try { $tocService=new InvoiceToconline($pdo,$vault,new InvoiceDriveClient($vault)); $tocSettings=$tocService->settings(); if ($isGerente && $tab==='documents') $tocProblems=$tocService->deliveryProblems(); if ($isGerente) $tocDiagnosticStatus=$tocService->diagnosticStatus(InvoiceToconline::DIAGNOSTIC_DOCUMENT_ID); if ($isGerente) $tocMailbox=(new InvoiceTocMailbox($vault,$tocService))->status(); }
     catch (Throwable) { $error='toc_settings_error'; }
 }
 $tocStats=[];

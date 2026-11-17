@@ -47,6 +47,9 @@ authCheck(!InvoiceTocAuthentication::verify("Authentication-Results: fake; dkim=
 authCheck(InvoiceTocPipe::parse($raw)['outcome']==='toc_existing','observed duplicate template classified');
 $success=$headers;$success[2]='Subject: Ficheiros arquivados com sucesso - Active Lines, Lda';
 authCheck(InvoiceTocPipe::parse($sign($success,'booking_'.$token.".pdf\r\n"))['outcome']==='toc_accepted','success subject with exact body identity');
+$rejected="Foram recusados os seguintes ficheiros:\r\nbooking_".$token.".pdf\r\n";
+authCheck(InvoiceTocPipe::parse($sign($headers,$rejected))['outcome']==='toc_rejected','explicit signed file rejection');
+authCheck(InvoiceTocPipe::parse($sign($success,$rejected))['outcome']==='toc_review','conflicting subject and rejection require review');
 authCheck(InvoiceTocPipe::parse($sign($success,$body))['outcome']==='toc_review','contradictory success and duplicate stays manual');
 authCheck(InvoiceTocPipe::parse($sign($headers,$body.' booking_'.str_repeat('b',64).'.pdf'))['outcome']==='toc_review','multiple documents stay manual');
 $relay="DKIM-Signature: v=1; a=rsa-sha256; d=relay.example.invalid; s=relay; h=from; bh=invalid; b=invalid\r\n";

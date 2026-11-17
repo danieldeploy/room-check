@@ -83,6 +83,27 @@ final class InvoiceReceiptReport
         $progress=self::progress($s,$sendEnabled);
         return !$progress['automatic'];
     }
+    /** Only predefined categories and numeric transport data can leave private storage. */
+    public static function failureFacts(array $d): array
+    {
+        $f=$d['failure_facts']??[];
+        if (!in_array($f['phase']??'',['receipt_gemini_analysis','receipt_gemini_classification','receipt_drive_request'],true)
+            || !in_array($f['reason']??'',['gemini_http','gemini_network','gemini_timeout','gemini_response_size','gemini_schema','gemini_json','gemini_finish','drive_transfer_error','drive_http_error'],true)) return [];
+        $safe=['phase'=>$f['phase'],'reason'=>$f['reason']];
+        foreach (['http_status','curl_errno','duration_ms'] as $key) $safe[$key]=max(0,(int)($f[$key]??0));
+        if (in_array($f['finish']??'',['MAX_TOKENS','SAFETY','RECITATION','BLOCKLIST','PROHIBITED_CONTENT','SPII','OTHER','UNKNOWN'],true)) $safe['finish']=$f['finish'];
+        return $safe;
+    }
+    public static function canStartNewRun(array $s,bool $sendEnabled=true): bool
+    {
+        if (!empty($s['requested'])) return false; // Discovery owns a single persisted cursor.
+        $progress=self::progress($s,$sendEnabled);
+        if (!$progress['busy'] || $progress['next_at']>time()) return true;
+        foreach ($s['documents']??[] as $d) {
+            if (($d['toc_deadline']??0)>time() && in_array($d['toconline_state']??'',['toc_sending','toc_submitted','toc_uncertain'],true)) return true;
+        }
+        return false;
+    }
     public static function processState(array $s,string $id,bool $sendEnabled=true): string
     {
         $p=self::progress(self::selected($s,$id),$sendEnabled);

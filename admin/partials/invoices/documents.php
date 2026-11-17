@@ -1,6 +1,12 @@
 <?php if (!defined('INVOICE_VIEW')) { http_response_code(404); exit; } $hasMore=count($documents)>50; $documents=array_slice($documents,0,50); ?>
 <section class="card"><h2><?= it('toc_monthly_report') ?> · <?= ie($period) ?></h2><p><?= it('toc_report_note') ?></p>
-<dl class="invoice-facts"><?php foreach ($tocStats as $state=>$count): ?><div><dt><a href="<?= ie(invoiceUrl('documents',['state'=>$state==='toc_pending'?'toconline_pending':$state])) ?>"><?= it($state) ?></a></dt><dd><?= (int)$count ?></dd></div><?php endforeach; ?></dl></section>
+<dl class="invoice-facts"><?php foreach ($tocStats as $state=>$count): ?><div><dt><a href="<?= ie(invoiceUrl('documents',['state'=>$state==='toc_pending'?'toconline_pending':$state])) ?>"><?= it($state) ?></a></dt><dd><?= (int)$count ?></dd></div><?php endforeach; ?></dl>
+<?php if (in_array($d['toconline_state']??'', ['toc_retry','toc_uncertain','toc_no_confirmation'],true) || (($d['toconline_state']??'')==='toc_rejected' && ($tocProblems[$d['id']]['reason']??'')==='toc_provider_format')):
+    $problem=$tocProblems[$d['id']]??[]; ?>
+<p><?= it($problem['reason']??($d['toconline_state']==='toc_no_confirmation'?'toc_confirmation_expired':'toc_detail_unknown')) ?>
+<?= !empty($problem['http_status'])?'HTTP '.(int)$problem['http_status']:'' ?> <?= !empty($problem['curl_errno'])?'cURL '.(int)$problem['curl_errno']:'' ?></p>
+<?php endif; ?>
+</section>
 
 <section class="card"><h2><?= it('tab_documents') ?></h2><?php require $viewRoot.'/filters.php'; ?></section>
 <?php if ($isGerente && $vault): ?>

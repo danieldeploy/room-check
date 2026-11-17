@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/InvoiceVault.php';
 final class InvoiceGeminiRetry extends RuntimeException
 {
-    public function __construct(string $code,public readonly int $retryAt) { parent::__construct($code); }
+    public function __construct(string $code,public readonly int $retryAt,public readonly array $facts=[]) { parent::__construct($code); }
 }
 /** Read-only document interpretation. All callers hold the existing invoice lock. */
 final class InvoiceGemini
@@ -99,10 +99,15 @@ PROMPT;
         $b['requests']++;$b['next_at']=$now+10;$this->vault->save(self::BUDGET,$b); // Count before external work, even on crashes.
         try {
             $r=$this->request($payload);
-            $status=$r['status']??0;
-            if (in_array($status,[401,403],true)) throw new RuntimeException('gemini_auth');
-            if ($status===404) throw new RuntimeException('gemini_model_unavailable');
-            if ($status===429 || $status===0 || $status>=500) {
+            $status=(int)($r['status']??0);
+            $errno=(int)($r['errno']??0);
+            $facts=['phase'=>$classification?'receipt_gemini_classification':'receipt_gemini_analysis',
+                'http_status'=>(int)($r['http_status']??$status),'curl_errno'=>$errno,'duration_ms'=>(int)($r['duration_ms']??0),
+                'reason'=>'gemini_http'];
+            if (!empty($r['overflow'])) throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_response_size']+$facts);
+            if (in_array($status,[401,403],true)) throw new InvoiceGeminiRetry('gemini_auth',0,$facts);
+            if ($status===404) throw new InvoiceGeminiRetry('gemini_model_unavailable',0,$facts);
+            if (in_array($status,[0,408,429],true) || $status>=500) {
                 $daily=false;$delay=360;
                 $retry=$r['headers']['retry-after']??'';
                 if (ctype_digit((string)$retry)) $delay=max($delay,min(86400,(int)$retry));
@@ -110,22 +115,28 @@ PROMPT;
                     if (preg_match('/\A(\d+(?:\.\d+)?)s\z/',$detail['retryDelay']??'',$m)) $delay=max($delay,min(86400,(int)ceil((float)$m[1])));
                     foreach ($detail['violations']??[] as $violation) if (stripos((string)($violation['quotaId']??''),'PerDay')!==false) $daily=true;
                 }
-                if ($daily) $this->dailyQuota($b,$now,$probe);
-                $b['failures']=($b['failures']??0)+1;$b['next_at']=$now+$delay;
+                if ($daily) $this->dailyQuota($b,$now,$probe,$facts);
+                $b['failures']=($b['failures']??0)+1;$retryAt=$this->now()+$delay;
+                if ($status===429 || isset($r['headers']['retry-after']) || $delay>360) $b['next_at']=$retryAt;
+                if ($status===0) $facts['reason']=$errno===28?'gemini_timeout':'gemini_network';
                 $this->vault->save(self::BUDGET,$b);
-                throw new InvoiceGeminiRetry($status===429?'gemini_quota':'gemini_retry',$b['next_at']);
+                throw new InvoiceGeminiRetry($status===429?'gemini_quota':'gemini_retry',$retryAt,$facts);
             }
-            if ($status!==200) throw new RuntimeException('gemini_response');
+            if ($status!==200) throw new InvoiceGeminiRetry('gemini_response',0,$facts);
             $body=$r['body'];$candidate=$body['candidates'][0]??[];
-            if (($candidate['finishReason']??'')!=='STOP') throw new RuntimeException('gemini_response');
+            if (($candidate['finishReason']??'')!=='STOP') {
+                $finish=$candidate['finishReason']??'';
+                $facts['finish']=in_array($finish,['MAX_TOKENS','SAFETY','RECITATION','BLOCKLIST','PROHIBITED_CONTENT','SPII','OTHER'],true)?$finish:'UNKNOWN';
+                throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_finish']+$facts);
+            }
             $text='';foreach ($candidate['content']['parts']??[] as $part) if (empty($part['thought'])) $text.=$part['text']??'';
-            if (strlen($text)>150000) throw new RuntimeException('gemini_response');
+            if (strlen($text)>150000) throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_response_size']+$facts);
             $result=json_decode($text,true,32,JSON_THROW_ON_ERROR);
-            if (!is_array($result)) throw new RuntimeException('gemini_response');
+            if (!is_array($result)) throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_schema']+$facts);
             if ($classification) {
-                if (!in_array($result['category']??null,['a4','taloes','uncertain'],true)) throw new RuntimeException('gemini_response');
+                if (!in_array($result['category']??null,['a4','taloes','uncertain'],true)) throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_schema']+$facts);
                 $result=['category'=>$result['category']];
-            } elseif (!is_array($result['groups']??null)) throw new RuntimeException('gemini_response');
+            } elseif (!is_array($result['groups']??null)) throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_schema']+$facts);
             $b['tokens']+=max(0,min(1000000,(int)($body['usageMetadata']['totalTokenCount']??0)));
             $b['failures']=0;$b['next_at']=max($b['next_at'],$now);
             if ($probe) $b['daily_quota']=array_merge($b['daily_quota'],['state'=>'recovered','checked_at'=>$now,'reason'=>'']);
@@ -137,18 +148,18 @@ PROMPT;
                 $b['daily_quota']=array_merge($b['daily_quota'],['state'=>'failed','checked_at'=>$now,
                     'reason'=>preg_match('/\Agemini_[a-z_]+\z/',$e->getMessage())?$e->getMessage():'gemini_response']);
                 $b['next_at']=0;$this->vault->save(self::BUDGET,$b);
-                throw new RuntimeException('gemini_quota_probe_failed');
+                throw new InvoiceGeminiRetry('gemini_quota_probe_failed',0,$e instanceof InvoiceGeminiRetry?$e->facts:($facts??[]));
             }
-            if ($e instanceof JsonException) throw new RuntimeException('gemini_response');
+            if ($e instanceof JsonException) throw new InvoiceGeminiRetry('gemini_response',0,['reason'=>'gemini_json']+($facts??[]));
             throw $e;
         }
     }
-    private function dailyQuota(array $budget,int $now,bool $probe): never
+    private function dailyQuota(array $budget,int $now,bool $probe,array $facts=[]): never
     {
         if ($probe) throw new RuntimeException('gemini_daily_quota');
         $budget['daily_quota']=['state'=>'waiting','started_at'=>$now,'retry_at'=>$now+86400];
         $budget['next_at']=$now+86400;$this->vault->save(self::BUDGET,$budget);
-        throw new InvoiceGeminiRetry('gemini_daily_quota',$now+86400);
+        throw new InvoiceGeminiRetry('gemini_daily_quota',$now+86400,$facts);
     }
     /** Explicit human retry only; never erase usage accounting or automatic probe evidence on a read. */
     public static function resetDailyQuota(InvoiceVault $vault): void
@@ -164,14 +175,14 @@ PROMPT;
         $url='https://generativelanguage.googleapis.com/v1beta/models/'.self::MODEL.':generateContent';
         if (is_callable($this->transport)) return ($this->transport)($url,$payload);
         if (!function_exists('curl_init')) throw new RuntimeException('gemini_transport');
-        $key=$this->vault->read(self::SETTINGS)['key'];$raw='';$headers=[];$h=curl_init($url);
+        $key=$this->vault->read(self::SETTINGS)['key'];$raw='';$headers=[];$overflow=false;$h=curl_init($url);
         curl_setopt_array($h,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($payload,JSON_THROW_ON_ERROR),
             CURLOPT_HTTPHEADER=>['Content-Type: application/json','x-goog-api-key: '.$key],CURLOPT_FOLLOWLOCATION=>false,
             CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>60,
             CURLOPT_HEADERFUNCTION=>static function($h,string $line) use (&$headers): int {
                 if (str_contains($line,':')) { [$k,$v]=explode(':',$line,2);if (strtolower(trim($k))==='retry-after') $headers['retry-after']=trim($v); }return strlen($line);
-            },CURLOPT_WRITEFUNCTION=>static function($h,string $part) use (&$raw): int { if(strlen($raw)+strlen($part)>1024*1024)return 0;$raw.=$part;return strlen($part); }]);
-        $ok=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE);curl_close($h);unset($key);
-        return ['status'=>$ok===false?0:$status,'headers'=>$headers,'body'=>json_decode($raw,true,64)?:[]];
+            },CURLOPT_WRITEFUNCTION=>static function($h,string $part) use (&$raw,&$overflow): int { if(strlen($raw)+strlen($part)>1024*1024){$overflow=true;return 0;}$raw.=$part;return strlen($part); }]);
+        $ok=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_HTTP_CODE);$errno=curl_errno($h);$ms=(int)round(1000*curl_getinfo($h,CURLINFO_TOTAL_TIME));curl_close($h);unset($key);
+        return ['status'=>$ok===false?0:$status,'http_status'=>$status,'errno'=>$errno,'duration_ms'=>$ms,'overflow'=>$overflow,'headers'=>$headers,'body'=>json_decode($raw,true,64)?:[]];
     }
 }

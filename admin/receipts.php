@@ -94,7 +94,7 @@ if (!$visibleProcesses) $progress['state']='receipt_no_runs';
 $requestError=(($_SERVER['REQUEST_METHOD']??'GET')==='POST')?$error:'';
 $globalError=($requestError===''?$error:'')?:($state['error']??'')?:($fullState['error']??'');
 $globalError=$globalError!==''?InvoiceText::get(isset(InvoiceText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
-$canStart=InvoiceReceiptReport::canStart($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
+$canStart=InvoiceReceiptReport::canStartNewRun($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
 $globalProgress=InvoiceReceiptReport::progress($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
 $processing=(bool)$selectedRunning;
 if (!$canStart && $globalProgress['poll_at']>0) $progress['poll_at']=$progress['poll_at']?min($progress['poll_at'],$globalProgress['poll_at']):$globalProgress['poll_at'];

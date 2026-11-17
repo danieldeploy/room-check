@@ -205,6 +205,26 @@ try {
     $drive->pdf=$wrong;$toc->run(14);
     tocCheck(count($sent)===$before+1 && $state(14)==='toc_retry','Current recipient NIF rechecked before sending');
     tocCheck(!glob($dir.'/hostelworld-toc-*.pdf'),'Temporary verification PDF removed');
+    tocCheck($toc->deliveryProblems()[14]['reason']==='toc_portal_mismatch','rejected portal verification retains its specific reason');
+    foreach ([15,16] as $id) {
+        $data=$pdf.' '.$id;
+        $pdo->prepare('INSERT INTO invoice_documents(id,account_id,invoice_number,format,sha256,size_bytes) VALUES(?,?,?,?,?,?)')
+            ->execute([$id,1,'MULTI-'.$id,'pdf',hash('sha256',$data),strlen($data)]);
+        $pdo->prepare("INSERT INTO invoice_document_delivery VALUES(?,'verified','validated','drive-id','parent','pending')")->execute([$id]);
+    }
+    $multiDrive=new class($pdf) {
+        public function __construct(private string $base) {}
+        public function connect():void {}
+        public function verifiedPdf(array $row):string {return $this->base.' '.$row['id'];}
+    };
+    $batchSender=new InvoiceToconline($pdo,$vault,$multiDrive,$transport);
+    $vault->save('toconline-settings.enc',array_replace($toc->settings(),['enabled'=>true,'pilot_verified'=>true]));
+    $history=$vault->read('toconline-ledger.enc');
+    foreach ($history as &$previous) $previous['attempted_at']=gmdate('c',time()-7200);
+    unset($previous);$vault->save('toconline-ledger.enc',$history);
+    $before=count($sent);$batchSender->run();
+    tocCheck(count($sent)===$before+1 && $state(15)==='toc_submitted' && $state(16)==='toc_submitted'
+        && substr_count(end($sent)[1]['body'],'Content-Disposition: attachment;')===2,'normal portal worker batches independently verified PDFs');
     unlink($vault->path('toconline-ledger.enc'));
     tocReject(fn()=>$toc->run(7),'missing ledger fails closed');
     echo "TOConline email safeguards passed\n";

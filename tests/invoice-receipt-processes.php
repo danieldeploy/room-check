@@ -21,12 +21,16 @@ try{
  $flow->request(1,2026,[4]);$s=$flow->status();pq(count($s['processes'])===2,'same month can start when older run only needs review');
  pq($s['documents']===$pending['documents'],'new request never resets old invoice states');
  $before=$s;$flow->request(2,2026,[4]);pq($flow->status()===$before,'repeat queued request stays idempotent');
- foreach ([['stage'=>'queued'],['stage'=>'reading','next_attempt'=>time()+45],['stage'=>'source_moving'],['stage'=>'archived','toconline_state'=>'pending']] as $active) {
+ foreach ([['stage'=>'queued'],['stage'=>'source_moving'],['stage'=>'archived','toconline_state'=>'pending']] as $active) {
   $busy=$pending;$busy['documents']['b']=array_merge($busy['documents']['b'],$active);$v->save(InvoiceReceipts::FILE,$busy);
   $v->save('toconline-settings.enc',['enabled'=>true,'pilot_verified'=>true]);
   try{$flow->request(1,2026,[6]);pq(false,'active run must block another month');}catch(RuntimeException $e){pq($e->getMessage()==='receipt_process_running','clear active run explanation');}
   pq($flow->status()===$busy,'blocked request preserves history');
  }
+ $waiting=$pending;$waiting['documents']['b']['stage']='reading';$waiting['documents']['b']['next_attempt']=time()+60;
+ $v->save(InvoiceReceipts::FILE,$waiting);
+ try{$flow->request(1,2026,[4]);pq(false,'overlapping active month admitted');}catch(RuntimeException $e){pq($e->getMessage()==='receipt_month_active','same month remains protected');}
+ $flow->request(1,2026,[6]);pq($flow->status()['documents']===$waiting['documents'],'another month can start without resetting work');
  $v->save(InvoiceReceipts::FILE,$pending);$flow->request(1,2026,[6]);$s=$flow->status();pq(count($s['processes'])===2,'different month can start after pending run');
  pq(count(InvoiceReceiptReport::documents($s,'legacy','all'))===3,'old documents retain process membership');
  $s['documents']['b']['toconline_state']='toc_duplicate_local';$s['documents']['b']['stage']='duplicate_trashed';
