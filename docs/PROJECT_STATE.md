@@ -1,5 +1,7 @@
 ## Paper invoices — independent months and live history
 
+The fiscal QR reader accepts a single CRLF printed after the last field. These receipts pass through normal buyer, completeness and duplicate checks.
+
 The document filter remains selectable during processing. Discovery keeps its single cursor;
 once files have been discovered, another month may be queued while the first has work.
 A worker or Drive connection failure has one shared retry record. A manager or authorised

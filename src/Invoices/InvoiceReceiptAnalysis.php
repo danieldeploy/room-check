@@ -78,7 +78,10 @@ final class InvoiceReceiptAnalysis
     }
     public static function qr(string $raw): ?array
     {
-        if (strlen($raw)>4096 || preg_match('/[\x00-\x1f]/',$raw)) return null;
+        if (strlen($raw)>4096) return null;
+        // Some receipt printers encode one CRLF after the final fiscal field.
+        if (str_ends_with($raw,"\r\n")) $raw=substr($raw,0,-2);
+        if (preg_match('/[\x00-\x1f]/',$raw)) return null;
         $f=[];
         foreach (explode('*',$raw) as $part) {
             if (!preg_match('/\A([A-Z][0-9]?):(.+)\z/u',$part,$m) || isset($f[$m[1]])) return null;
