@@ -46,8 +46,14 @@ if(realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
         require $app.'/lib.php';require_once $app.'/src/Invoices/InvoiceReceipts.php';
         $config=require $app.'/config.php';$pdo=database();
         if((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',60)")->fetchColumn()!==1)throw new RuntimeException('worker_busy');
-        try{$result=pauseReceiptWaitOnce(new InvoiceVault($config['invoices']['private_dir']),time());}
+        try{
+            $vault=new InvoiceVault($config['invoices']['private_dir']);
+            $result=pauseReceiptWaitOnce($vault,time());
+            $state=$vault->has(InvoiceReceipts::FILE)?$vault->read(InvoiceReceipts::FILE):[];
+            $progress=InvoiceReceiptReport::progress($state);
+            $report=['outcome'=>$result,'can_start'=>InvoiceReceiptReport::canStart($state),'automatic'=>$progress['automatic']];
+        }
         finally{$pdo->query("SELECT RELEASE_LOCK('room_check_invoices')");}
-        echo json_encode(['receipt_wait_pause'=>$result]),PHP_EOL;
+        echo json_encode(['receipt_wait_pause'=>$report]),PHP_EOL;
     }catch(Throwable){fwrite(STDERR,"Receipt wait pause unverified; inspect before retry\n");exit(1);}
 }

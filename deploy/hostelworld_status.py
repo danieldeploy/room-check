@@ -2,6 +2,20 @@
 """Read only the exact release log and print non-secret Hostelworld readiness."""
 import json,os,re,sys,urllib.parse,urllib.request
 from cpanel_api import Config,CpanelAPI,WHM_ORIGIN,require
+def receipt_pause_status(text):
+    results=[]
+    for line in text.splitlines():
+        marker=line.find('{"receipt_wait_pause":')
+        if marker<0:continue
+        try: payload,_=json.JSONDecoder().raw_decode(line[marker:])
+        except ValueError:continue
+        value=payload.get('receipt_wait_pause')
+        if not isinstance(value,dict):continue
+        if value.get('outcome') not in ('paused','no_history','target_no_longer_active','already_settled','wait_no_longer_eligible','delivery_already_attempted'):continue
+        if type(value.get('can_start')) is not bool or type(value.get('automatic')) is not bool:continue
+        results.append({key:value[key] for key in ('outcome','can_start','automatic')})
+    return results
+
 def main():
     cfg=Config(token=os.environ.get("WHM_API_TOKEN",""),transport="whm",origin=WHM_ORIGIN)
     api=CpanelAPI(cfg)
@@ -22,6 +36,7 @@ def main():
     value=result["data"]
     if isinstance(value,list): value=value[0]
     text=value.get("content","")
+    for state in receipt_pause_status(text):print(json.dumps({'receipt_wait_pause':state}))
     known=["hostelworld_account_binding_missing_or_ambiguous","private_root_permissions",
            "hostelworld_account_binding_changed","configuration_error","private_write_failed"]
     print(json.dumps({"hostelworld_release_status":{"deploy_id":str(task["deploy_id"]),

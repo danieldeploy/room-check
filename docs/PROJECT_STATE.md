@@ -1242,3 +1242,20 @@ translation file with no pause result, and verify the installed InvoiceText hash
 Unknown causes, changed files, newer/active deployments and missing history block
 recovery. Normal backup, exact-head, fast-forward and post-release gates remain.
 Production cause confirmation, recovery and functional acceptance are still pending.
+
+
+### Receipt pause verification without a browser session — 2026-11-17 (prepared)
+
+The private CLI now reports its allowlisted outcome and the current global
+`can_start` / `automatic` booleans under the same worker lock. The existing
+protected release-log reader forwards only these fields; no invoice contents,
+identities, raw errors or credentials are exposed. This permits fresh operational
+verification after the browser session expires, without granting new access or
+repeating a pause whose durable marker already exists.
+
+The release-log guard did not confirm the fatal and correctly performed no retry.
+Local reproduction with display_errors=0 also suppresses the CLI fatal output.
+Recovery may additionally read only the staging root error_log; it requires the
+exact TranslationProtection bootstrap fatal dated within 120 seconds before
+deployment431 failed. Stale, future, unrelated or unparseable errors cannot
+authorize recovery. Only fixed classifications reach protected action output.

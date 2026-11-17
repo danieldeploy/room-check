@@ -2,7 +2,21 @@ import pathlib,sys,unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"deploy"))
 import recover_hostelworld_release as r
+from hostelworld_status import receipt_pause_status
 class Tests(unittest.TestCase):
+    def test_receipt_status_is_allowlisted_and_never_prints_private_fields(self):
+        raw='prefix {"receipt_wait_pause":{"outcome":"paused","can_start":true,"automatic":false,"private":"never print"}} suffix'
+        self.assertEqual(receipt_pause_status(raw),[{'outcome':'paused','can_start':True,'automatic':False}])
+        self.assertEqual(receipt_pause_status(raw.replace('"paused"','"private outcome"')),[])
+        self.assertEqual(receipt_pause_status(raw.replace('true','"true"')),[])
+    def test_private_php_fatal_must_match_exact_task_time_and_bootstrap(self):
+        task=self.task();task['timestamps']['failed']=r.datetime(2026,11,17,15,28,58,tzinfo=r.ZoneInfo('UTC')).timestamp()
+        line='[17-Nov-2026 15:28:55 UTC] PHP Fatal error: Cannot declare class TranslationProtection in /home/welcome/public_html/check/src/I18n/TranslationProtection.php'
+        self.assertTrue(r.fresh_pause_fatal(line,task))
+        self.assertFalse(r.fresh_pause_fatal(line.replace('15:28:55','14:28:55'),task))
+        self.assertFalse(r.fresh_pause_fatal(line.replace('15:28:55','15:29:55'),task))
+        self.assertFalse(r.fresh_pause_fatal(line.replace('TranslationProtection','UnrelatedClass'),task))
+        self.assertFalse(r.fresh_pause_fatal(line.replace('UTC','invalid/zone'),task))
     def runner(self):
         runner=Mock()
         runner.task_id.side_effect=lambda t:str(t["deploy_id"])
@@ -33,6 +47,9 @@ class Tests(unittest.TestCase):
         fatal='Cannot redeclare class TranslationProtection previously in /home/welcome/repositories/room-check/src/I18n/TranslationProtection.php in /home/welcome/public_html/check/src/I18n/TranslationProtection.php'
         source=(pathlib.Path(r.__file__).resolve().parents[1]/'src/I18n/InvoiceText.php').read_text()
         with patch.object(r,'request_api',side_effect=[{'content':fatal},{'content':source}]):r.verify_failure_log(task)
+        task['timestamps']['failed']=r.datetime(2026,11,17,15,28,58,tzinfo=r.ZoneInfo('UTC')).timestamp()
+        private='[17-Nov-2026 15:28:55 UTC] PHP Fatal error: '+fatal
+        with patch.object(r,'request_api',side_effect=[{'content':'release stopped'},{'content':private},{'content':source}]):r.verify_failure_log(task)
         for text in ('unknown failure',fatal+' {"receipt_wait_pause":"paused"}'):
             with patch.object(r,'request_api',return_value={'content':text}):
                 with self.assertRaises(r.DeploymentError):r.verify_failure_log(task)
