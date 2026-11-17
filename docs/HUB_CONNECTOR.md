@@ -52,6 +52,7 @@ acceptance still needs a supported signed-in browser. The initial tools are:
 | `hub_get_profile` | `hub:read` | Verify account, connection and granted scopes |
 | `hub_list_invoice_accounts` | `invoices:read` | Read bounded account/property metadata |
 | `hub_list_invoice_documents` | `invoices:read` | Read issue-month documents and real delivery states, 100 per page |
+| `hub_get_receipt_run` | `invoices:read` | Read one exact paper receipt run, stored retry/error metadata and actual recorded delivery attempts, 100 records per page |
 | `hub_import_cloudbeds_pdf` | `cloudbeds:import` | Validate supplied PDF and queue existing collection/delivery |
 
 Only use import when the owner has authorized that document's submission. Pass
@@ -59,6 +60,26 @@ original bytes as base64 without printing them. Follow with document queries;
 `toc_submitted`, `toc_uncertain`, `toc_duplicate`, missing states or a queued batch
 are not proof of TOConline acceptance. Airbnb is still excluded and the TOConline
 test button remains. No business documents are included in source or CI.
+
+### Paper receipt diagnosis
+
+Use the process ID from the receipt page URL (or `legacy`) and follow
+`next_offset` until null. This manager-only read uses the existing invoice read
+grant. It never invokes the worker, Gemini, Drive or email, and never saves the
+workflow or resets retry counts. Only the existing structural connector audit
+records the call. No new role, OAuth scope or credential is introduced.
+
+The selected run's progress is separate from global progress/intake blocking.
+Delivery-ledger absence is unknown, not proof that nothing was sent. A submitted
+message remains distinct from TOConline acceptance. Projection excludes keys,
+original Drive IDs/URLs, OCR/PDF bytes, sender/NIF and raw provider errors.
+Shared budget metadata is returned as stored, with its date, and reads across
+encrypted files are not a transactional snapshot of the live worker.
+
+Historical `gemini_retry` records do not retain the HTTP status, cURL failure or
+duration. The diagnostic reports that limitation rather than inventing a provider
+cause. Deployment adds the server operation; verify discovery and a real call in
+the connected client separately if its cached tool list has not refreshed.
 
 ## Lifetime and recovery
 

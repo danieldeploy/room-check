@@ -23,6 +23,9 @@ final class HubMcp
                 'invoices:read',$object(['account_id'=>['type'=>'integer','minimum'=>1],
                     'period'=>['type'=>'string','pattern'=>'^20[0-9]{2}-(0[1-9]|1[0-2])$'],
                     'after_id'=>['type'=>'integer','minimum'=>0]],['account_id','period']),$read),
+            $tool('hub_get_receipt_run','Read one exact paper receipt processing run: stages, stored error codes, retries, global intake blocking, shared Gemini budget and recorded email delivery attempts. No reprocessing or sending. Paginate using next_offset. A generic Gemini error does not identify an HTTP or network cause.',
+                'invoices:read',$object(['process_id'=>['type'=>'string','pattern'=>'^(legacy|[a-f0-9]{24})$'],
+                    'offset'=>['type'=>'integer','minimum'=>0,'maximum'=>10000]],['process_id']),$read),
             $tool('hub_import_cloudbeds_pdf','Import an owner-provided Cloudbeds PDF for Welcome or City. This validates company, property and issue date, deduplicates, and queues the existing Drive/TOConline pipeline. Use only when the owner authorizes submission. Pass the original PDF as base64, at most 2 MiB. Then check documents for real completion.',
                 'cloudbeds:import',$object(['source'=>['type'=>'string','enum'=>['welcome','city']],
                     'pdf_base64'=>['type'=>'string','maxLength'=>2796204]],['source','pdf_base64']),
@@ -42,6 +45,7 @@ final class HubMcp
         if (!in_array($scope,$identity['scopes'],true) || ($identity['user']['role']??'')!=='gerente') throw new RuntimeException('insufficient_scope',403);
         $allowed=match($name) {
             'hub_list_invoice_documents'=>['account_id','period','after_id'],
+            'hub_get_receipt_run'=>['process_id','offset'],
             'hub_import_cloudbeds_pdf'=>['source','pdf_base64'], default=>[]
         };
         if (array_diff(array_keys($arguments),$allowed)) throw new RuntimeException('invalid_request');
@@ -59,6 +63,13 @@ final class HubMcp
                 'period_basis'=>$a['period_basis'],'schedule_enabled'=>(bool)$a['enabled'],
                 'active'=>$accounts->active((int)$a['id']),'properties'=>(object)$accounts->properties((int)$a['id'])];
             return ['accounts'=>$result];
+        }
+        if ($name==='hub_get_receipt_run') {
+            $process=$arguments['process_id']??null;$offset=$arguments['offset']??0;
+            if (!is_string($process) || !preg_match('/\A(?:legacy|[a-f0-9]{24})\z/',$process)
+                || !is_int($offset) || $offset<0 || $offset>10000) throw new RuntimeException('invalid_request');
+            require_once dirname(__DIR__).'/Invoices/InvoiceReceiptDiagnostics.php';
+            return InvoiceReceiptDiagnostics::read(new InvoiceVault($this->config['invoices']['private_dir']),$process,$offset);
         }
         if ($name==='hub_list_invoice_documents') {
             $id=$arguments['account_id']??null; $period=$arguments['period']??null; $after=$arguments['after_id']??0;

@@ -137,7 +137,16 @@ def run():
                 status, _, _ = request('/mcp.php', profile, bearer|{'Origin':'https://evil.test'}, remember=False)
                 assert status == 403
                 status, _, data = request('/mcp.php', json.dumps({'jsonrpc':'2.0','id':3,'method':'tools/list'}), bearer, remember=False)
-                assert status == 200 and len(json.loads(data)['result']['tools']) == 4
+                assert status == 200
+                tools = {tool['name']: tool for tool in json.loads(data)['result']['tools']}
+                receipt = tools['hub_get_receipt_run']
+                assert receipt['annotations']['readOnlyHint'] is True
+                assert receipt['securitySchemes'][0]['scopes'] == ['invoices:read']
+                invalid_read = json.dumps({'jsonrpc':'2.0','id':4,'method':'tools/call','params':
+                    {'name':'hub_get_receipt_run','arguments':{'process_id':'../master.key'}}})
+                status, _, data = request('/mcp.php', invalid_read, bearer, remember=False)
+                assert status == 200 and json.loads(data)['result']['isError'] is True
+                assert json.loads(data)['result']['content'][0]['text'] == 'invalid_request'
                 refresh = {'grant_type':'refresh_token','client_id':auth['client_id'],'resource':RESOURCE,'refresh_token':tokens['refresh_token']}
                 status, _, data = request('/oauth.php?action=token', urlencode(refresh), form_headers, remember=False)
                 assert status == 200

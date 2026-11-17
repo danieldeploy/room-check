@@ -6,6 +6,13 @@ Platform failures are isolated. Portal maps must be validated per account before
 scheduled collection is enabled; adding an account does not make its connector ready.
 Expedia and HostelsClub remain disabled. Existing room management is unchanged.
 
+Manager investigations can use the connector's `hub_get_receipt_run` to read an
+exact paper receipt run, safe persisted retry/error metadata and matched delivery
+attempts. The call does not advance processing, contact providers or save invoice
+state. Selected and global progress are reported separately; absent ledger data
+is unknown. Generic historical Gemini errors do not retain HTTP/cURL diagnostics.
+See `HUB_CONNECTOR.md` for pagination, read boundaries and acceptance.
+
 ## Installation
 
 1. Back up application and database. Apply additive migrations 027 and 028 after 026.

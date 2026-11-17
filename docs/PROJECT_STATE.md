@@ -26,6 +26,19 @@ accuracy and authenticated production correction remain separate acceptance chec
 
 # Management Hub — current project state
 
+## Read-only paper receipt connector diagnosis — 2026-11-17 (prepared)
+
+The existing manager `invoices:read` grant gains `hub_get_receipt_run` for an exact
+process ID and bounded pagination. It reads persisted stages, safe error codes,
+attempt/timing fields, selected/global progress, shared Gemini budget and matched
+delivery-ledger evidence. It does not call providers or write invoice state.
+No roles, grants, retry policy, intake gating or sending behavior change.
+Missing ledger means unknown delivery history; generic historical Gemini failures
+still cannot distinguish HTTP/server failures from transport timeouts. Server
+deployment and client tool discovery/actual run consultation remain separate
+acceptance checks. Tests exercise exact-run isolation, redaction, unchanged vault
+files, scope/role refusal, malformed inputs, pagination and missing history.
+
 ## Standing owner permission to consult the Hub — 2026-11-17
 
 The owner authorized read-only consultation of all historical and future
