@@ -70,6 +70,11 @@ final class InvoiceReceiptDiagnostics
             'snapshot_is_transactional'=>false,'timezone'=>'Europe/Lisbon',
             'process'=>['id'=>$process,'year'=>(int)($p['year']??0),'months'=>array_values(array_map('intval',$p['months']??[])),
                 'requested_at'=>self::date($p['requested_at']??null),'error_code'=>self::code($p['error']??'')],
+            'shared_failure'=>empty($selected['worker_retry'])?null:[
+                'phase'=>self::code($selected['worker_retry']['phase']),'reason'=>self::code($selected['worker_retry']['error']),
+                'attempts'=>(int)$selected['worker_retry']['attempts'],'next_attempt'=>(int)$selected['worker_retry']['next_attempt'],
+                'blocked'=>(bool)$selected['worker_retry']['blocked'],'failure_facts'=>InvoiceReceiptReport::failureFacts($selected['worker_retry'])],
+            'shared_archive_incidents'=>$vault->has(InvoiceReceipts::PHASE_ERRORS)?$vault->read(InvoiceReceipts::PHASE_ERRORS):[],
             'worker_seen_at'=>max(0,(int)($state['worker_seen_at']??0)),
             'progress'=>InvoiceReceiptReport::progress($selected,$sendEnabled,$now),'global_progress'=>$global,
             'can_start_new_run'=>InvoiceReceiptReport::canStartNewRun($state,$sendEnabled),'summary'=>$summary,'gemini'=>$gemini,

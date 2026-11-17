@@ -11,6 +11,7 @@ require_once __DIR__.'/InvoiceReceiptSelection.php';
 /** Manual intake, continued by the existing invoice worker. Every writer holds room_check_invoices. */
 final class InvoiceReceipts
 {
+    public const PHASE_ERRORS='invoice-archive-phase-errors.enc';
     public const FILE='receipts-workflow.enc';
     public static function archiveCategory(array $d): string
     { return ($d['format']??'')==='jpg' || ($d['source_category']??'')==='taloes' ? 'taloes' : 'pdf'; }
@@ -112,6 +113,7 @@ final class InvoiceReceipts
         foreach ($s['processes'] as $existingId=>$run) {
             if ((int)($run['year']??0)!==$year || !array_intersect($months,$run['months']??[])) continue;
             $existing=InvoiceReceiptReport::selected($s,(string)$existingId);
+            unset($existing['worker_retry']); // A shared outage cannot release ownership of this month.
             if (InvoiceReceiptReport::progress($existing,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']))['automatic']) throw new RuntimeException('receipt_month_active');
         }
         $pid=bin2hex(random_bytes(12));$s['active_process']=$pid;
@@ -530,34 +532,49 @@ final class InvoiceReceipts
         self::redirectChildren($s,$id,$children);
         $s['documents'][$id]=$d;$this->save($s); // Manifest and stable child identities commit together before any upload/send.
     }
-    public function recordFailure(Throwable $e): void
+    /** A worker or connection failure belongs to the shared operation, never to unattempted scans. */
+    public function recordFailure(Throwable $e,string $phase='receipt_worker_step',?int $now=null): void
     {
-        $s=$this->status();$now=time();$s['error']=self::error($e);
-        if ($s['requested']) {
-            $s['discovery_retry']=InvoiceReceiptRetry::failure($s['discovery_retry']??[],$e,$now);
-            $s['requested']=!$s['discovery_retry']['blocked'];
-            $s['processes'][$s['active_process']]['error']=$s['error'];
+        $s=$this->status();
+        $previous=$s['worker_retry']??[];
+        $retry=InvoiceReceiptRetry::failure(($previous['phase']??'')===$phase?$previous:[],$e,$now??time());
+        $retry['phase']=$phase;
+        $retry['error']=isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed';
+        if ($e instanceof InvoiceDriveFailure) $retry['failure_facts']=InvoiceReceiptReport::failureFacts(['failure_facts'=>$e->facts]);
+        $s['worker_retry']=$retry;
+        $this->save($s);
+    }
+
+    public function retryWorker(): void
+    {
+        $s=$this->status();
+        if (empty($s['worker_retry']['blocked'])) throw new RuntimeException('invalid_request');
+        unset($s['worker_retry']);
+        $this->save($s);
+    }
+
+    /** Use the current cron for due work and release its shared lock between retry slots. */
+    public function runBatch(bool $allowSend=true): void
+    {
+        $deadline=microtime(true)+45;
+        for ($turn=0;$turn<8 && microtime(true)<$deadline;$turn++) {
+            $before=$this->status();$this->run(null,$allowSend);$after=$this->status();
+            if ($before['documents']===$after['documents'] && $before['requested']===$after['requested']) break;
         }
-        foreach ($s['documents'] as &$doc) if (self::runnable($doc,$s['documents'],true,!empty($s['source_cleanup_paused']))) $doc=self::failedAttempt($doc,$e,$now);
-        unset($doc);$this->save($s);
     }
-    /** Bounded work on the existing cron, including short persisted retry windows. */
-    public function runBatch(): void
-    {
-        $deadline=microtime(true)+45;$turns=0;
-        do {
-            $before=$this->status();$this->run();$after=$this->status();$turns++;
-            if (($before['documents']??[])===($after['documents']??[]) && ($before['requested']??false)===($after['requested']??false)) {
-                $next=0;foreach ($after['documents']??[] as $d) if (in_array($d['stage'],['correcting','repairing','queued','reading','ready','moving','preserving'],true) && ($d['next_attempt']??0)>time()) $next=$next?min($next,$d['next_attempt']):$d['next_attempt'];
-                if (!$next || $next>$deadline-1) break;
-                while (time()<$next && microtime(true)<$deadline) usleep(250000);
-            }
-        } while ($turns<8 && microtime(true)<$deadline);
-    }
-    public function run(?int $now=null): void
+    public function run(?int $now=null,bool $allowSend=true): void
     {
         $now??=time();
-        if (!$this->vault->has(self::FILE)) return; // Deployment never initiates intake.
+        if (!$this->vault->has(self::FILE)) return;
+        $s=$this->status();
+        $shared=$s['worker_retry']??[];
+        if (!empty($shared['blocked']) || ($shared['next_attempt']??0)>$now) return;
+        if (InvoiceReceiptRetry::expired($shared,$now)) {
+            $s['worker_retry']['blocked']=true;
+            $s['worker_retry']['next_attempt']=0;
+            $this->save($s);
+            return;
+        }
         if ($this->analysis) {
             if ($this->analysis->configured()) $this->recoverLegacy();
         }
@@ -580,7 +597,7 @@ final class InvoiceReceipts
             }
         }
         unset($d); if ($before!==$s['documents']) $this->save($s);
-        $sendEnabled=!empty($this->toc->settings()['enabled']) && !empty($this->toc->settings()['pilot_verified']);
+        $sendEnabled=$allowSend && !empty($this->toc->settings()['enabled']) && !empty($this->toc->settings()['pilot_verified']);
         // A delayed cron must not execute retries beyond their persisted deadline.
         $expired=false;
         if ($s['requested'] && InvoiceReceiptRetry::expired($s['discovery_retry']??[],$now)) {
@@ -596,21 +613,25 @@ final class InvoiceReceipts
         try {
             if (!$this->drive->receiptsAuthorized()) throw new RuntimeException('receipt_connect');
             $this->drive->connect();
-            if (($s['discovery_retry']['next_attempt']??0)<=$now) $this->discover();
-            $connectedState=$this->status();$connectedState['error']='';$this->save($connectedState);
         } catch (Throwable $e) {
-            $s=$this->status();$s['error']=self::error($e);
-            if ($s['requested'] && ($s['discovery_retry']['next_attempt']??0)<=$now) {
+            $this->recordFailure($e,'receipt_drive_request',$now);
+            return;
+        }
+        if ($shared) {
+            $s=$this->status();unset($s['worker_retry']);$this->save($s);
+        }
+        if ($s['requested'] && ($s['discovery_retry']['next_attempt']??0)<=$now) {
+            try {
+                $this->discover();
+            } catch (Throwable $e) {
+                $s=$this->status();
+                $s['error']=self::error($e);
                 $s['discovery_retry']=InvoiceReceiptRetry::failure($s['discovery_retry']??[],$e,$now);
                 $s['requested']=!$s['discovery_retry']['blocked'];
-                if (isset($s['active_process'])) $s['processes'][$s['active_process']]['error']=$s['error'];
-                $this->save($s);return;
+                $s['processes'][$s['active_process']]['error']=$s['error'];
+                $this->save($s);
+                // Previous discoveries own independent documents and can still make progress.
             }
-            foreach ($s['documents'] as &$doc) {
-                if (($doc['next_attempt']??0)>$now || !self::runnable($doc,$s['documents'],$sendEnabled,!empty($s['source_cleanup_paused']))) continue;
-                $doc=self::failedAttempt($doc,$e,$now);
-            }
-            unset($doc);$this->save($s);return;
         }
         // One invoice or source cleanup per invocation bounds work and preserves the portal queue.
         $documents=$this->status()['documents'];
@@ -621,11 +642,11 @@ final class InvoiceReceipts
             if (!in_array($d['stage'],['correcting','repairing','queued','reading','ready','moving','preserving','archived','trashing','discarding','split','source_trashing','source_moving'],true) || ($d['next_attempt']??0)>$now) continue;
             if ($d['stage']==='split' && !$this->childrenArchived($d,$documents)) continue;
             if ($d['stage']==='archived' && in_array($d['toconline_state'],['pending','toc_retry'],true)
-                && (empty($this->toc->settings()['enabled']) || empty($this->toc->settings()['pilot_verified']))) continue;
+                && !$sendEnabled) continue;
             if ($d['stage']==='archived' && !empty($d['duplicate_keeper']) && in_array($d['toconline_state'],['pending','toc_retry'],true)) continue;
             if ($d['stage']==='archived' && !in_array($d['toconline_state'],['pending','toc_retry','toc_existing','toc_duplicate_local'],true)) continue;
             try {
-                $this->process($id,$d);
+                $this->process($id,$d,$allowSend);
                 $after=$this->status()['documents'][$id];
                 if ($after['stage']!==$d['stage'] || empty($after['error'])) {
                     $after['recovered_failures']=(int)($after['recovered_failures']??0)+(int)($d['attempts']??0);
@@ -750,7 +771,7 @@ final class InvoiceReceipts
         }
         $path=$this->pagePath($d); if (is_file($path)) unlink($path);
     }
-    private function process(string $id,array $d): void
+    private function process(string $id,array $d,bool $allowSend): void
     {
         if ($d['stage']==='discarding') {
             if (!$this->toc->receiptUnsent($id) || empty($d['discard_requested_by']) || !empty($d['children'])) throw new RuntimeException('receipt_review_required');
@@ -896,7 +917,7 @@ final class InvoiceReceipts
         }
         if ($d['stage']==='archived') {
             if (in_array($d['toconline_state'],['pending','toc_retry'],true)) {
-                if (!empty($d['duplicate_keeper'])) return;
+                if (!$allowSend || !empty($d['duplicate_keeper'])) return;
                 $this->toc->submitReceipt($d,$this->status()['documents']);
             }
             $d=$this->status()['documents'][$id];

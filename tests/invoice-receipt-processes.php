@@ -24,8 +24,9 @@ try{
  foreach ([['stage'=>'queued'],['stage'=>'source_moving'],['stage'=>'archived','toconline_state'=>'pending']] as $active) {
   $busy=$pending;$busy['documents']['b']=array_merge($busy['documents']['b'],$active);$v->save(InvoiceReceipts::FILE,$busy);
   $v->save('toconline-settings.enc',['enabled'=>true,'pilot_verified'=>true]);
-  try{$flow->request(1,2026,[6]);pq(false,'active run must block another month');}catch(RuntimeException $e){pq($e->getMessage()==='receipt_process_running','clear active run explanation');}
-  pq($flow->status()===$busy,'blocked request preserves history');
+  $flow->request(1,2026,[6]);
+  pq($flow->status()['documents']===$busy['documents'],'accept another month without resetting current work');
+  try{$flow->request(1,2026,[7]);pq(false,'second discovery must wait');}catch(RuntimeException $e){pq($e->getMessage()==='receipt_process_running','protect the discovery cursor');}
  }
  $waiting=$pending;$waiting['documents']['b']['stage']='reading';$waiting['documents']['b']['next_attempt']=time()+60;
  $v->save(InvoiceReceipts::FILE,$waiting);

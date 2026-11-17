@@ -482,7 +482,7 @@ cleanup requires a later explicit resume, not a deploy, rerun or permission chan
 
 ## Shared outbound capacity
 
-All portal and scan deliveries share a rolling ten-attempt hourly budget,
+All portal and scan deliveries share a rolling fifteen-message hourly budget,
 including uncertain attempts and explicit diagnostic sends. Duplicate ledger
 aliases do not consume extra capacity. Capacity is checked before committing
 send intent; unsent scans wait with the existing countdown and retry through
@@ -998,6 +998,17 @@ skipped rather than reverting progress.
 
 Eligible archived invoices keep their separate originals and correlation filenames. The normal portal and paper workers each group ready attachments for the configured company and sender. A single-document pilot stays single. Each message carries at most 20 files and 20,000,000 raw bytes ([TOConline manual](https://web.toconline.pt/wp-content/uploads/2023/09/TOConline_V.3.0.pdf)). The Hub also budgets folded base64 and MIME headers within a conservative 25,000,000-byte application ceiling. Set `HUB_TOC_MAX_MESSAGE_BYTES` lower if the relay requires it. Existing individual file validation also applies.
 
-The shared rolling local limit is 10 attempted emails per hour, including diagnostics. Each batch uses one slot. The observed hosting package allowance was 20/domain/hour, shared with other mail. Remaining attachments stay eligible for a later tick. A single encrypted write reserves every member before handoff. An uncertain handoff or partial answer cannot cause an automatic resend. Signed replies can resolve individual named files. A signed purchase summary can also resolve distinct, complete fiscal identities without attachment names. Provider refusals for unsupported format, excess attachment count or excess size retain their reported reason; unmatched messages remain visible in the mail-reply settings. Missing, conflicting and unrecognised verdicts retain their own pending/review states.
+The shared rolling local limit is 15 attempted emails per hour, including diagnostics. Each batch uses one slot. The observed hosting package allowance was 20/domain/hour, shared with other mail. Remaining attachments stay eligible for a later tick. A single encrypted write reserves every member before handoff. An uncertain handoff or partial answer cannot cause an automatic resend. Signed replies can resolve individual named files. A signed purchase summary can also resolve distinct, complete fiscal identities without attachment names. Provider refusals for unsupported format, excess attachment count or excess size retain their reported reason; unmatched messages remain visible in the mail-reply settings. Missing, conflicting and unrecognised verdicts retain their own pending/review states.
 
 The paper intake can start another month once discovery has finished and the existing run is waiting. An overlapping active month is rejected. The manager report gives the actual stage, retry deadline in Lisbon time, and available HTTP, cURL, elapsed time or model finish reason. A mail handoff, an uncertain delivery, and a missing TOConline reply have separate explanations. Historical generic errors have no retroactive technical detail.
+
+
+### Paper invoice worker and history filters
+
+Discovery uses one cursor under the existing invoice lock. After discovery a distinct month
+can enter while other files are active. Each file retains its original process. A shared
+Drive connection failure consumes a single worker retry and preserves all document attempts.
+A terminal shared failure exposes a resume action under the intake permission. Discovery
+errors stay with their run; an already discovered month can continue. Cron releases the lock
+between scheduled retries. The authenticated reply pipe and reconciliation must succeed before
+new mail handoffs. The live document filter applies to the chosen run and does not mutate it.

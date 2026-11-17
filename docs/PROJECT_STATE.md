@@ -1,3 +1,11 @@
+## Paper invoices — independent months and live history
+
+The document filter remains selectable during processing. Discovery keeps its single cursor;
+once files have been discovered, another month may be queued while the first has work.
+A worker or Drive connection failure has one shared retry record. A manager or authorised
+operator can resume a stopped worker. The shared TOConline sender allows 15 actual email
+attempts in a rolling hour. See [the invoice flow](invoices-multiplatform.md).
+
 ## Invoice delivery and processing diagnostics — 2026-11-17
 
 Paper and eligible portal invoices can share a TOConline message with independent attachment verdicts. Automated tests cover mixed replies, count/byte limits, and the shared hourly email quota. The receipt report can identify the failing service on new attempts; historical generic errors remain inconclusive at transport level. Real provider acceptance of a newly generated batch requires a normal eligible submission and its reply. See [the invoice flow](invoices-multiplatform.md).

@@ -78,6 +78,7 @@ final class InvoiceAlerts
                 $recovered+=(int)($d['recovered_failures']??0);
                 if (in_array($d['toconline_state']??'',['toc_submitted','toc_uncertain','toc_sending'],true)) $codes[]='toc_no_confirmation';
             }
+            if (!empty($selected['worker_retry']['blocked'])) $codes[]=$selected['worker_retry']['error'];
             if (!empty($selected['error'])) $codes[]=$selected['error'];
             if (!empty($selected['missing_periods'])) $codes[]='receipt_missing_month';
             if ($progress['state']==='receipt_worker_delayed') $codes[]='receipt_worker_delayed';

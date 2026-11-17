@@ -174,13 +174,13 @@ try {
     reportCheck($saved['stage']==='ready' && $saved['issued_on']==='2026-04-02' && $saved['company_nif']==='600000000' && $saved['company_confirmation']['nif']==='500000000','Controller queues once, preserves raw buyer NIF and stores configured confirmation separately');
     $queued=$render('gerente',[]);
     $dom=new DOMDocument();@$dom->loadHTML($queued['html']);$path=new DOMXPath($dom);
-    reportCheck($path->query('//*[@data-receipt-intake and @disabled]')->length===1,'Year, months and start are locked during automatic work');
+    reportCheck($path->query('//*[@data-receipt-intake and @disabled]')->length===0,'Distinct months can queue after discovery');
     reportCheck($path->query('//*[@id="receipt-processing-message" and not(@hidden)]')->length===1,'Background notice is visible only while automatic work exists');
     reportCheck($path->query('//form[@data-receipt-review]')->length===0 && $path->query('//input[@value="discard"]')->length===0,'Successful review removes the correction and delete controls');
     $poll=json_decode($render('gerente',[],'',false,true)['html'],true,512,JSON_THROW_ON_ERROR);
-    reportCheck(!$poll['can_start'] && $poll['processing'] && str_contains(implode(' ',$poll['process_labels']),InvoiceText::get('receipt_run_running')),'Polling agrees with Running and the global intake lock');
+    reportCheck($poll['can_start'] && $poll['processing'] && str_contains(implode(' ',$poll['process_labels']),InvoiceText::get('receipt_run_running')),'Polling agrees with Running and the global intake lock');
     $runningFiltered=json_decode($render('gerente',[],'',false,true,['filter'=>'success'])['html'],true,512,JSON_THROW_ON_ERROR);
-    reportCheck($runningFiltered['selected_running'] && str_contains($runningFiltered['history'],'SECRET-ERROR.jpg'),'Running ignores a stale success filter');
+    reportCheck($runningFiltered['selected_running'] && !str_contains($runningFiltered['history'],'SECRET-ERROR.jpg') && $runningFiltered['filter']==='success','Running preserves an explicit success filter');
     reportCheck(str_contains($runningFiltered['processing_message'],'2026') && str_contains($runningFiltered['processing_message'],'Junho'),'Banner contains actual selected months/year');
     $state=$vault->read(InvoiceReceipts::FILE);
     $state['processes']['stopped']=['id'=>'stopped','requested_at'=>gmdate('c'),'year'=>2026,'months'=>[1]];
@@ -191,7 +191,7 @@ try {
     reportCheck(!$transition['selected_running'] && $transition['filter']==='problems','Running-to-pending selects the actionable filter');
     $vault->save(InvoiceReceipts::FILE,$state);
     $stopped=json_decode($render('gerente',[],'',false,true,['process'=>'stopped'])['html'],true,512,JSON_THROW_ON_ERROR);
-    reportCheck(!$stopped['selected_running'] && !$stopped['processing'] && !$stopped['can_start'],'Stopped selection has no banner despite other active work');
+    reportCheck(!$stopped['selected_running'] && !$stopped['processing'] && $stopped['can_start'],'Stopped selection has no banner despite other active work');
     $again=$render('gerente',[],'review' ,false,false,[],$goodPost);
     reportCheck($again['status']!==303 && $vault->read(InvoiceReceipts::FILE)['documents']['private-error-id']===$saved,'A repeated confirmation cannot restart or overwrite the queued document');
     echo "Receipt report: totals, duplicate company/number/date, safe errors, actual endpoint role isolation and denied forged POSTs passed.\n";

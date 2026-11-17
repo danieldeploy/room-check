@@ -2,8 +2,8 @@
 <?php if ($canHistory): ?>
 <?php $historyCounts=InvoiceReceiptReport::summary($all); ?>
 <section class="card"><div class="receipt-history-heading"><h2 data-receipt-history-counts><?= $t('receipt_total') ?>: <?= $historyCounts['documents'] ?> | <?= $t('receipt_history_processed') ?>: <?= $historyCounts['processed'] ?> | <?= $t('receipt_pending') ?>: <?= $historyCounts['pending'] ?></h2>
-<div class="receipt-document-filter" data-receipt-document-filter <?= $selectedRunning?'hidden':'' ?>>
-<select name="filter" form="receipt-process-form" data-receipt-filter aria-label="<?= $t('receipt_filter') ?>" <?= $selectedRunning?'disabled':'' ?>>
+<div class="receipt-document-filter" data-receipt-document-filter>
+<select name="filter" form="receipt-process-form" data-receipt-filter aria-label="<?= $t('receipt_filter') ?>">
 <?php if ($filter==='all'): ?><option value="all" selected hidden><?= $t('receipt_filter_all') ?></option><?php endif; ?>
 <?php foreach (['success'=>'receipt_filter_success','problems'=>'receipt_filter_problems'] as $value=>$label): ?><option value="<?= $value ?>" <?= $value===$filter?'selected':'' ?>><?= $t($label) ?></option><?php endforeach; ?>
 </select></div></div>
