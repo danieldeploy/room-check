@@ -42,7 +42,11 @@ is atomic. After analysis, those references expand to the new invoice leaves;
 siblings remain untouched. Superseded pending derivatives are retained until final
 copies resolve and verify, then use existing retry-safe cleanup. Original uploaded
 sources remain retained. Manual regroup cannot orphan an in-flight replacement.
-No deployment-triggered processing or new Drive permissions are introduced.
+Only the new source can regroup replacement pages; each regroup redirects all
+contributing masters before allocating new leaves. Old sources hide that control
+and reject forged regroup requests. Regression coverage includes this second
+analysis, which previously could orphan source references. No deployment-triggered
+processing or new Drive permissions are introduced.
 
 Accepted archived invoices whose issue year/month differs from the scan folder
 show the requested red paper-filing reminder, with only “paper invoice” bold.

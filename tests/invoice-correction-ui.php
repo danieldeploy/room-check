@@ -27,6 +27,11 @@ foreach(['pt','en'] as $locale){
  cu($xp->query('.//input[@name="issued_on" or @name="issuer_name" or @name="buyer_confirmed"]',$replacement)->length===0,'Replacement independent from old mandatory fiscal fields');
  cu(str_contains($html,InvoiceText::get('receipt_replace_file')),'Replace file label translated');
  cu(!str_contains($render(['child'=>$ambiguous],false),'value="replace_source"') && !str_contains($render(['child'=>$ambiguous],true,true),'value="replace_source"'),'Replacement retains role and busy gates');
+ $master=array_replace($missing,['id'=>'master','children'=>['new-child'],'stage'=>'split']);unset($master['source_id']);
+ $child=array_replace($missing,['id'=>'new-child','source_id'=>'new-source']);$newSource=array_replace($master,['id'=>'new-source','replaces'=>'old-child']);
+ $shared=['master'=>$master,'new-source'=>$newSource,'new-child'=>$child];$html=$render($shared);$dom=new DOMDocument();@$dom->loadHTML($html);$xp=new DOMXPath($dom);
+ cu($xp->query('//form[input[@name="action" and @value="regroup"]][input[@name="id" and @value="master"]]')->length===0,'Old contributing source cannot offer regroup of replacement pages');
+ cu($xp->query('//form[input[@name="action" and @value="regroup"]][input[@name="id" and @value="new-source"]]')->length===1,'Replacement source retains manual regroup');
  $processed=array_replace($missing,['stage'=>'archived','toconline_state'=>'toc_accepted','issued_on'=>'2026-05-12','expected_period'=>'2026-06','complete'=>true,'review_reason'=>'']);
  $html=$render(['child'=>$processed]);$warning=strtr(InvoiceText::get('receipt_paper_month_instruction'),['{paper_invoice}'=>'<strong>'.InvoiceText::get('receipt_paper_invoice').'</strong>']);
  cu(str_contains($html,'<p class="receipt-duplicate-instruction">'.$warning.'</p>'),'Processed invoice has exact red-class paper reminder, only noun bold');
