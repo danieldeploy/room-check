@@ -225,10 +225,14 @@ final class InvoiceReceipts
         if (($d['stage']??'')!=='review' || !(self::categoryReview($d) || InvoiceReceiptAnalysis::missingPages($d))) throw new RuntimeException('receipt_review_required');
         $this->requireIdle($s);$this->drive->connect();$out=[];
         foreach ($this->drive->scanFiles($d['source_month']) as $f) {
-            if (!InvoiceReceiptSelection::eligible($f) || (isset($s['documents'][$f['id']]) && !(self::categoryReview($d) && $f['id']===$id))) continue;
-            if (self::categoryReview($d) && InvoiceDriveClient::receiptFormat($f)!=='pdf') continue;
-            $out[]=['token'=>InvoiceReceiptSelection::token($f),'name'=>$f['name'],
-                'path'=>'temp_scan/'.InvoiceDriveLayout::MONTHS[(int)substr($d['expected_period'],5,2)].($f['source_path']??'/')];
+            $reason='';
+            if (isset($s['documents'][$f['id']]) && !(self::categoryReview($d) && $f['id']===$id)) {
+                $reason=$f['id']===$id?'receipt_correction_current'
+                    :($f['id']===($d['source_id']??'')?'receipt_correction_original':'receipt_correction_recorded');
+            } elseif (!InvoiceReceiptSelection::eligible($f)) $reason='receipt_format_required';
+            elseif (self::categoryReview($d) && InvoiceDriveClient::receiptFormat($f)!=='pdf') $reason='receipt_correction_pdf';
+            $out[]=['token'=>$reason===''?InvoiceReceiptSelection::token($f):'','name'=>$f['name'],'reason'=>$reason,
+                'path'=>rtrim('temp_scan/'.InvoiceDriveLayout::MONTHS[(int)substr($d['expected_period'],5,2)].($f['source_path']??'/'),'/')];
         }
         return $out;
     }

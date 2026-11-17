@@ -896,6 +896,13 @@ Older queued repairs without selections return for explicit selection. There is
 no fallback scanning/claiming of unselected files. Stale/missing selections stay
 pending. Moving or replacing bytes after selection requires selecting again.
 
+The correction UI displays the original-month search scope and a direct Drive
+folder link. Recorded pending copies, source PDFs and other claimed files remain
+visible with localized exclusion reasons, separately from selectable new files.
+Excluded entries carry no selection token. The empty message means no **new
+selectable** file in the displayed scope, not that Drive contains no files.
+POST and worker validation are unchanged; a pending page cannot repair itself.
+
 Tests cover real first-page extraction, separate cache and shared quotas, folder
 routing/JPEG preservation, document isolation, exact selected sources, moved and
 replacement IDs, stale selection, idle/review/CSRF boundaries, UI escaping and

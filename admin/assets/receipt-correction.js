@@ -18,6 +18,9 @@
     if(!form || form.dataset.loadingFiles || form.dataset.submitted)return;
     preserve(form);form.dataset.loadingFiles='true';button.disabled=true;
     const select=form.querySelector('[data-correction-files]'),status=form.querySelector('[data-correction-status]');
+    let excluded=form.querySelector('[data-correction-excluded]');
+    if(!excluded){excluded=document.createElement('ul');excluded.dataset.correctionExcluded='';status.after(excluded);}
+    excluded.replaceChildren();excluded.hidden=true;
     select.replaceChildren();select.disabled=true;form.querySelector('input[type=checkbox]').checked=false;status.textContent=form.dataset.loading;update(form);
     const controller=new AbortController(),timeout=window.setTimeout(()=>controller.abort(),15000);
     try {
@@ -26,11 +29,17 @@
       if(typeof result.error==='string'){status.textContent=result.error;return;}
       if(!response.ok || !Array.isArray(result.files) || result.files.length>500)throw new Error('files');
       for(const file of result.files){
-        if(typeof file.token!=='string' || !file.token || typeof file.name!=='string' || typeof file.path!=='string')throw new Error('files');
+        if(typeof file.token!=='string' || typeof file.name!=='string' || typeof file.path!=='string'
+          || (file.reason!==undefined && typeof file.reason!=='string') || (!file.token && !file.reason) || (file.token && file.reason))throw new Error('files');
       }
-      for(const file of result.files){const option=document.createElement('option');option.value=file.token;option.textContent=file.path+' / '+file.name;select.append(option);}
-      select.selectedIndex=-1;select.disabled=!result.files.length;status.textContent=result.files.length?'':form.dataset.empty;
-    }catch{select.replaceChildren();select.disabled=true;status.textContent=form.dataset.error;}
+      for(const file of result.files){
+        const label=file.path+' / '+file.name;
+        if(file.reason){const item=document.createElement('li');item.textContent=label+' — '+file.reason;excluded.append(item);}
+        else{const option=document.createElement('option');option.value=file.token;option.textContent=label;select.append(option);}
+      }
+      excluded.hidden=!excluded.children.length;
+      select.selectedIndex=-1;select.disabled=!select.options.length;status.textContent=select.options.length?'':form.dataset.empty;
+    }catch{select.replaceChildren();select.disabled=true;excluded.replaceChildren();excluded.hidden=true;status.textContent=form.dataset.error;}
     finally{window.clearTimeout(timeout);delete form.dataset.loadingFiles;button.disabled=false;update(form);}
   });
 })();

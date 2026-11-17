@@ -60,6 +60,10 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <form method="post" class="receipt-review-form" data-receipt-correction data-url="receipts.php?correction_files=<?= $escape(rawurlencode($id)) ?>" data-loading="<?= $t('receipt_correction_loading') ?>" data-error="<?= $t('receipt_correction_failed') ?>" data-empty="<?= $t('receipt_correction_empty') ?>">
 <input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="<?= $categoryReview?'replace_source':'repair' ?>">
 <p><?= $t($categoryReview?'receipt_replacement_help':'receipt_missing_selection_help') ?></p>
+<p><?= $t('receipt_correction_scope') ?>: <span data-i18n-skip>temp_scan/<?= $escape(InvoiceDriveLayout::MONTHS[(int)substr((string)($d['expected_period']??''),5,2)]??'') ?></span>
+<?php if (preg_match('/\A[a-zA-Z0-9_-]{10,128}\z/',(string)($d['source_month']??''))): ?>
+ — <a href="https://drive.google.com/drive/folders/<?= $escape($d['source_month']) ?>" target="_blank" rel="noopener noreferrer"><?= $t('receipt_correction_open_folder') ?></a>
+<?php endif; ?></p>
 <div class="form-actions"><button class="primary-button" type="button" data-correction-load><?= $t('receipt_correction_load') ?></button></div>
 <label class="field"><span><?= $t($categoryReview?'receipt_replacement_file':'receipt_missing_files') ?></span><select name="selected_files[]" <?= $categoryReview?'':'multiple size="5"' ?> data-correction-files required disabled></select></label>
 <p role="status" data-correction-status></p>

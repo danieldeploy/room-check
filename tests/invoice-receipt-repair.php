@@ -41,6 +41,19 @@ try {
  $drive->newFiles=[$f];
  $seed=['analysis_version'=>2,'requested'=>false,'documents'=>['source-one'=>$master,'pending-one'=>$d,'other-pending'=>array_merge($d,['id'=>'other-pending','invoice_number'=>'FT TEST/2'])]];
  $v->save(InvoiceReceipts::FILE,$seed);$flow=new InvoiceReceipts($pdo,$v,$drive,$toc,null,$an);
+ // Existing pending copies must be explained, never mistaken for new missing pages.
+ $known=array_merge($f,['id'=>'pending-one','name'=>'source_f001.pdf','source_path'=>'/A4']);
+ $original=array_merge($f,['id'=>'source-one','name'=>'source.pdf','source_path'=>'/']);
+ $drive->newFiles=[$known,$original,$f];
+ $choices=$flow->correctionCandidates('pending-one');
+ rq(count($choices)===3,'Recorded files remain visible with exclusion reasons');
+ rq($choices[0]['token']==='' && $choices[0]['reason']==='receipt_correction_current','Pending document cannot serve as its own missing page');
+ rq($choices[1]['token']==='' && $choices[1]['reason']==='receipt_correction_original','Original source is explained and remains protected');
+ rq($choices[2]['token']===InvoiceReceiptSelection::token($f) && $choices[2]['reason']==='','New pages remain selectable');
+ rq($choices[0]['path']==='temp_scan/Abril/A4' && $choices[1]['path']==='temp_scan/Abril','Display exact paths without doubled separators');
+ try {$flow->requestRepair('pending-one',true,1,[InvoiceReceiptSelection::token($known)]);throw new LogicException('Self repair accepted');}
+ catch(RuntimeException $e){rq($e->getMessage()==='receipt_selection_changed','Forged selection of the existing page is rejected');}
+ $drive->newFiles=[$f];
  $flow->review('pending-one','2026-04-02','FT TEST/1',true,1,'Synthetic Supplier');
  rq($flow->status()['documents']['pending-one']['stage']==='review','Saving details cannot approve a known missing page');
  $v->save(InvoiceReceipts::FILE,$seed);

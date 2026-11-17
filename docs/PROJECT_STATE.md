@@ -26,6 +26,18 @@ accuracy and authenticated production correction remain separate acceptance chec
 
 # Management Hub — current project state
 
+## Correction file visibility — 2026-11-17 (prepared)
+
+The authenticated missing-page picker silently hid recorded sources and pending
+documents, making a populated source folder appear empty. It now shows those
+files separately with their exclusion reason and displays the searched month
+with a direct Drive-folder link. Only new eligible files receive selection tokens;
+the existing POST/worker checks continue to reject self-repair and claimed files.
+The read scope remains the original month and its descendants. No invoice is
+reprocessed or moved by this presentation change. PHP/UI regression tests cover
+the observed case, mixed lists, translated scope and server-side rejection.
+Installed version and authenticated acceptance are separate release checks.
+
 ## Module readiness labels — 2026-11-15
 
 Owner-approved presentation: Paper Invoices shows green Available; Space
