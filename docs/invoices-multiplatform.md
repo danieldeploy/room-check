@@ -1014,3 +1014,5 @@ between scheduled retries. The authenticated reply pipe and reconciliation must 
 new mail handoffs. The live document filter applies to the chosen run and does not mutate it.
 
 When due technical retries and fresh work coexist, the worker alternates them across cron ticks. The earliest eligible retry goes first. Future slots, manual reviews and uncertain mail do not enter the retry lane.
+
+A matched TOConline reply can require review per invoice. The reason distinguishes signature verification, the recipient, ambiguous references or scans, timestamp problems, and an inconclusive attachment outcome. Later authenticated confirmation removes the active review reason. Looking up a reason never resubmits a document.
