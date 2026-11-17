@@ -94,3 +94,14 @@ test('existing preview renderer loads candidates and releases bytes when navigat
  assert.ok(x.doc.querySelector('iframe'));x.cancel();assert.equal(signal.aborted,true);assert.equal(revoked,2);
  }finally{x.dom.window.close();}
 });
+
+test('replacement submits independently of invalid old details elsewhere on the same invoice',async()=>{
+ const x=setup({files:[file('new-scan')],folders},1);try{
+ x.doc.getElementById('receipt-history').insertAdjacentHTML('beforeend','<form data-receipt-review><input name="issued_on" required><input name="issuer_name" required><input name="buyer_confirmed" type="checkbox" required></form>');
+ assert.equal(x.doc.querySelector('[data-receipt-review]').checkValidity(),false);
+ await x.open();x.pick(0);x.apply();x.doc.querySelector('[data-correction-confirm]').click();
+ assert.equal(x.doc.querySelector('[data-correction-submit]').disabled,false);
+ const event=new x.dom.window.Event('submit',{bubbles:true,cancelable:true});x.doc.querySelector('[data-receipt-correction]').dispatchEvent(event);
+ assert.equal(event.defaultPrevented,false);
+ }finally{x.dom.window.close();}
+});

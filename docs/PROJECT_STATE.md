@@ -26,6 +26,32 @@ accuracy and authenticated production correction remain separate acceptance chec
 
 # Management Hub — current project state
 
+## Pending-file replacement and paper month reminder — 2026-11-17 (prepared)
+
+Reviewers can replace an individual pending PDF/JPEG with one newly uploaded file
+through the existing picker, including missing/ambiguous fiscal data or grouping.
+The replacement form is independent of old fields and buyer confirmation. New
+content always enters normal classification/analysis with fresh child identities;
+old QR data, fiscal guesses, approvals and manual groups never transfer. Newly
+ambiguous content remains pending; ledger and duplicate safeguards still apply.
+Missing-page addition remains available separately. Existing category corrections
+still support a moved original PDF with the same ID.
+
+Claiming the new source and redirecting every contributing master's child reference
+is atomic. After analysis, those references expand to the new invoice leaves;
+siblings remain untouched. Superseded pending derivatives are retained until final
+copies resolve and verify, then use existing retry-safe cleanup. Original uploaded
+sources remain retained. Manual regroup cannot orphan an in-flight replacement.
+No deployment-triggered processing or new Drive permissions are introduced.
+
+Accepted archived invoices whose issue year/month differs from the scan folder
+show the requested red paper-filing reminder, with only “paper invoice” bold.
+Same-month, unknown-date, pending and removed-duplicate documents do not show it.
+Tests cover independent form submission, fresh analysis, PDF/JPEG, changed/claimed
+selection, sibling preservation, cleanup retry, sent-history rejection, PT/EN and
+month/year boundaries. Installed version and live functional acceptance remain
+separate release checks.
+
 ## Internal correction file picker — 2026-11-17 (prepared)
 
 Supersedes the previous flat file list and external Drive-folder link. Opening
