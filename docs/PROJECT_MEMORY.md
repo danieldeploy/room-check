@@ -4,6 +4,14 @@ This repository is the durable technical memory for Management Hub / Room Check.
 Chat history can provide context, but it is not the source of truth for current
 behavior, architecture, deployment state, or persistent product decisions.
 
+## Standing Management Hub read authorization
+
+On 2026-11-17 the owner authorized consultation of all past and future Management
+Hub data and activity until explicit revocation. This permission carries across
+chats; routine reads must reuse available authorized access without another
+consent request. The precise scope and technical-access distinction are recorded
+in [ADR-006](decisions/ADR-006-standing-hub-read-authorization.md) and `AGENTS.md`.
+
 ## Read order before changing a module
 
 1. `AGENTS.md` — repository-wide development and deployment rules.

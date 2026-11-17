@@ -167,6 +167,20 @@ This repository powers `check.welcomehostel.pt`. The production branch is
 
 ## Management Hub session recovery
 
+- Standing owner authorization, 2026-11-17: consult all Management Hub modules,
+  historical records/activity and data/activity created from this date onward,
+  until the owner explicitly revokes this permission. This includes read-only
+  investigation of processing runs, errors, retries and delivery/confirmation
+  states. Reuse available authorized access without requesting renewed consent
+  for routine consultations or a new chat. See
+  `docs/decisions/ADR-006-standing-hub-read-authorization.md`.
+- Owner consent and technical access are separate: verify the connected identity,
+  actual tools, scopes and session validity. Missing functionality is not missing
+  owner permission; never claim an unavailable record was checked. This standing
+  read permission does not itself authorize writes, retries, sends, deletions or
+  access-scope expansion. Existing action-specific authorizations and secret
+  protections remain in force.
+
 - Owner instruction, 2026-10-20: use the direct Hub OAuth/MCP connection for its
   supported operations once the owner has activated it in ChatGPT; do not require
   installing ChatGPT on the Windows PC. See `docs/HUB_CONNECTOR.md`. Verify the

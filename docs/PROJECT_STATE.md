@@ -26,6 +26,16 @@ accuracy and authenticated production correction remain separate acceptance chec
 
 # Management Hub — current project state
 
+## Standing owner permission to consult the Hub — 2026-11-17
+
+The owner authorized read-only consultation of all historical and future
+Management Hub data/activity until explicit revocation. This is an accepted
+permission decision, not a new connector capability or proof of a live browser
+session. Existing tools/scopes and secure access must still be verified. No
+processing, retry, delivery or application-permission behavior changes in this
+documentation update. See
+[ADR-006](decisions/ADR-006-standing-hub-read-authorization.md).
+
 ## Pending-file replacement and paper month reminder — 2026-11-17 (prepared)
 
 Reviewers can replace an individual pending PDF/JPEG with one newly uploaded file
