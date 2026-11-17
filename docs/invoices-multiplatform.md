@@ -925,3 +925,33 @@ replacement IDs, stale selection, idle/review/CSRF boundaries, UI escaping and
 selection/checkbox requirements, modal navigation/cancellation/freshness, preview
 authorization and stale/out-of-scope preview rejection. Live Gemini accuracy is a separate acceptance
 check; tests never imply error-free visual recognition.
+
+### Replace an unidentified/ambiguous pending file (2026-11-17)
+
+`Replace file` opens a separate single-file correction form on individual review
+items, including uncertain fiscal data, unreadable scans and grouping pendencies.
+Missing-page repair remains a separate multi-file operation with identity checks.
+Replacement instead treats the selected complete PDF/JPEG as fresh input: no old
+fiscal match, field completion, buyer approval or manual grouping is required.
+The normal new-content classification, fiscal analysis, QR authority, duplicate
+consolidation and TOConline confirmation gates remain mandatory. A new unclear
+scan is reprocessed and may produce a new review item; it is not auto-approved.
+
+The request and worker both reject stale/claimed selections and previously sent
+history. Only the existing category correction can reuse its current PDF ID.
+Other replacements claim a new ID, retain process/original-month context and link
+the superseded entry for audit. Do not copy old extracted fields, QR, approvals or
+manual groups. All original/contributing masters point to the replacement source
+until its manifest atomically expands their references to the new invoice leaves.
+This preserves other invoices and prevents premature source cleanup. Intermediate
+regroup is blocked while a replacement source owns that slot. Retire superseded
+pending derivatives only after final replacement copies resolve and verify;
+cleanup failure follows existing retries without allocating or analysing again.
+
+For archived, accepted individual invoices, compare `issued_on` year/month against
+`expected_period`. On a difference show `(Put the **paper invoice** in the right
+month)` in red inside the card (PT equivalent localized). This reminder is solely
+for physical filing; existing issue-date Drive routing is unchanged. Do not show it
+for unresolved items, removed duplicates, unknown/invalid dates or the same period.
+Acceptance includes replacement with missing old fields, fresh unresolved results,
+PDF/JPEG, sibling preservation, stale/sent guards, cleanup retry and year boundaries.

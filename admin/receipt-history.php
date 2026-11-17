@@ -22,6 +22,7 @@ $buyerIssue=InvoiceReceiptAnalysis::buyerIssue($d,(string)($tocSettings['nif']??
 <p class="receipt-meta"><?php if (!empty($d['page_number'])): ?><?= $t('receipt_page') ?> <?= $escape(implode(', ',$d['pages']??[(int)$d['page_number']])) ?> / <?= (int)$d['page_count'] ?> | <?php endif; ?><?= $t('receipt_expected') ?>: <span data-i18n-skip><?= $escape(InvoiceReceiptReport::displayDate($d['expected_period']??'',true)) ?></span></p>
 <?php if (!$categoryReview): ?><p class="receipt-meta"><?= $t('receipt_company') ?> : <span data-i18n-skip><?= $escape($d['issuer_name']??'') ?: $t('receipt_unknown_issuer') ?></span> | <?= $t('receipt_number_date') ?>: <span data-i18n-skip><?= $escape($d['invoice_number']??'') ?> <?= !empty($d['issued_on'])?'('.$escape(str_replace([' (',')'],[' ',''],InvoiceReceiptReport::displayDate($d['issued_on']))).')':'' ?></span></p><?php endif; ?>
 <p class="receipt-meta"><?php if (($d['stage']??'')==='archived' && ($d['toconline_state']??'')==='toc_accepted'): ?><?= $t('receipt_archive_confirmed') ?><?php else: ?><?= $t('receipt_stage_'.$d['stage']) ?> — <?= $t($d['toconline_state']) ?><?php endif; ?></p>
+<?php if (InvoiceReceiptReport::paperMonthMismatch($d)): ?><p class="receipt-duplicate-instruction"><?= strtr($t('receipt_paper_month_instruction'),['{paper_invoice}'=>'<strong>'.$t('receipt_paper_invoice').'</strong>']) ?></p><?php endif; ?>
 <?php if ($reviewable): ?><p class="alert receipt-review-issues"><?= implode(' | ',array_map($t,InvoiceReceiptAnalysis::reviewIssues($d,(string)($tocSettings['nif']??'')))) ?></p>
 <?php elseif (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
 <?php $previewId=InvoiceReceiptReport::previewId($fullState['documents'],$id); if ($previewId!==null): ?>
@@ -55,17 +56,20 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <p><?= $t('receipt_category_expected') ?>: <?= $t(($d['source_category']??'')==='a4'?'receipt_a4':'receipt_small') ?> | <?= $t('receipt_category_observed') ?>: <?= $t(match($d['category_check']['category']??'uncertain') {'a4'=>'receipt_a4','taloes'=>'receipt_small',default=>'receipt_category_unknown'}) ?></p>
 <?php endif; ?>
 <?php $missingCorrection=$d['stage']==='review' && ($d['format']??'')==='pdf' && !empty($d['source_id']) && InvoiceReceiptAnalysis::missingPages($d); ?>
-<?php if ($canReview && ($categoryReview || $missingCorrection)): ?>
+<?php $replacementReview=InvoiceReceipts::replacementReview($d); ?>
+<?php if ($canReview && ($replacementReview || $missingCorrection)): ?>
 <?php if ($correctionIdle): ?>
-<form method="post" class="receipt-review-form" data-receipt-correction data-url="receipts.php?correction_files=<?= $escape(rawurlencode($id)) ?>" data-preview-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?>" data-max="<?= $categoryReview?1:19 ?>" data-loading="<?= $t('receipt_correction_loading') ?>" data-error="<?= $t('receipt_correction_failed') ?>" data-empty="<?= $t('receipt_correction_empty') ?>">
-<input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="<?= $categoryReview?'replace_source':'repair' ?>">
-<p><?= $t($categoryReview?'receipt_replacement_help':'receipt_missing_selection_help') ?></p>
+<?php foreach (array_keys(array_filter(['repair'=>$missingCorrection,'replace_source'=>$replacementReview])) as $correctionAction): $replacing=$correctionAction==='replace_source'; ?>
+<?php if ($replacing && !$categoryReview): ?><details class="document-disclosure"><summary><?= $t('receipt_replace_file') ?></summary><?php endif; ?>
+<form method="post" class="receipt-review-form" data-receipt-correction data-url="receipts.php?correction_files=<?= $escape(rawurlencode($id)) ?>" data-preview-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?>" data-max="<?= $replacing?1:19 ?>" data-loading="<?= $t('receipt_correction_loading') ?>" data-error="<?= $t('receipt_correction_failed') ?>" data-empty="<?= $t('receipt_correction_empty') ?>">
+<input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="<?= $correctionAction ?>">
+<p><?= $t($replacing?($categoryReview?'receipt_replacement_help':'receipt_replace_file_help'):'receipt_missing_selection_help') ?></p>
 <div class="form-actions"><button class="primary-button" type="button" data-correction-load><?= $t('receipt_correction_load') ?></button></div>
-<p><?= $t($categoryReview?'receipt_replacement_file':'receipt_missing_files') ?></p>
+<p><?= $t($replacing?'receipt_replacement_file':'receipt_missing_files') ?></p>
 <select name="selected_files[]" multiple data-correction-files hidden disabled aria-hidden="true" tabindex="-1"></select>
 <ul data-correction-selected data-i18n-skip hidden></ul>
 <p role="status" data-correction-status></p>
-<label><input type="checkbox" data-correction-confirm name="<?= $categoryReview?'replacement_added':'missing_added' ?>" value="1" required> <?= $t($categoryReview?'receipt_replacement_added':'receipt_missing_added') ?></label>
+<label><input type="checkbox" data-correction-confirm name="<?= $replacing?'replacement_added':'missing_added' ?>" value="1" required> <?= $t($replacing?'receipt_replacement_added':'receipt_missing_added') ?></label>
 <div class="form-actions"><button class="primary-button" type="submit" data-correction-submit disabled><?= $t('receipt_process_again') ?></button></div>
 <template data-correction-picker>
 <dialog class="receipt-picker" data-i18n-skip aria-label="<?= $t('receipt_correction_load') ?>" data-folder-empty="<?= $t('receipt_picker_folder_empty') ?>" data-count="<?= $t('receipt_picker_count') ?>">
@@ -82,6 +86,8 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 </details>
 </template>
 </form>
+<?php if ($replacing && !$categoryReview): ?></details><?php endif; ?>
+<?php endforeach; ?>
 <?php else: ?><p><?= $t('receipt_correction_wait') ?></p><?php endif; ?>
 <?php endif; ?>
 <?php if ($reviewable && empty($d['grouping_pending']) && ($d['review_reason']??'')!=='receipt_grouping_required'): ?>

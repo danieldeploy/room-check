@@ -20,6 +20,18 @@ foreach(['pt','en'] as $locale){
  cu(str_contains($html,'scan &lt;test&gt;.pdf') && str_contains($html,'data-receipt-preview'),'Filename escaped and preview retained');
  cu(!str_contains($render(['source'=>$category],false),'name="selected_files[]"'),'History-only role receives no correction');
  cu(!str_contains($render(['source'=>$category],true,true),'name="selected_files[]"'),'Busy global process hides correction');
+ $ambiguous=array_replace($missing,['complete'=>true,'review_reason'=>'receipt_review_required','uncertain'=>true,'issued_on'=>'','issuer_name'=>'','invoice_number'=>'','issuer_nif'=>'']);
+ $html=$render(['child'=>$ambiguous]);$dom=new DOMDocument();@$dom->loadHTML($html);$xp=new DOMXPath($dom);
+ $replacement=$xp->query('//form[@data-receipt-correction][input[@name="action" and @value="replace_source"]]')->item(0);
+ cu($replacement!==null && $replacement->getAttribute('data-max')==='1','Ambiguous file has single replacement form');
+ cu($xp->query('.//input[@name="issued_on" or @name="issuer_name" or @name="buyer_confirmed"]',$replacement)->length===0,'Replacement independent from old mandatory fiscal fields');
+ cu(str_contains($html,InvoiceText::get('receipt_replace_file')),'Replace file label translated');
+ cu(!str_contains($render(['child'=>$ambiguous],false),'value="replace_source"') && !str_contains($render(['child'=>$ambiguous],true,true),'value="replace_source"'),'Replacement retains role and busy gates');
+ $processed=array_replace($missing,['stage'=>'archived','toconline_state'=>'toc_accepted','issued_on'=>'2026-05-12','expected_period'=>'2026-06','complete'=>true,'review_reason'=>'']);
+ $html=$render(['child'=>$processed]);$warning=strtr(InvoiceText::get('receipt_paper_month_instruction'),['{paper_invoice}'=>'<strong>'.InvoiceText::get('receipt_paper_invoice').'</strong>']);
+ cu(str_contains($html,'<p class="receipt-duplicate-instruction">'.$warning.'</p>'),'Processed invoice has exact red-class paper reminder, only noun bold');
+ foreach([['expected_period'=>'2026-05'],['expected_period'=>''],['issued_on'=>'2026-02-30'],['issued_on'=>''],['stage'=>'review'],['toconline_state'=>'toc_submitted'],['stage'=>'duplicate_trashed','toconline_state'=>'toc_existing'],['error'=>'drive_verify']] as $change)cu(!InvoiceReceiptReport::paperMonthMismatch(array_replace($processed,$change)),'No misleading paper warning for same/unknown/pending/duplicate');
+ cu(InvoiceReceiptReport::paperMonthMismatch(array_replace($processed,['issued_on'=>'2025-06-12'])),'Year mismatch also needs correct paper month');
  $html=$render(['child'=>$missing]);cu(str_contains($html,'value="repair"') && str_contains($html,'name="missing_added"') && str_contains($html,'data-max="19"'),'Missing-page repair requires multiple explicit selected files');
  cu(str_contains($html,'data-correction-picker') && str_contains($html,'data-correction-preview') && str_contains($html,'<dialog'),'Correction uses an internal accessible folder picker and existing document viewer');
  cu(!str_contains($html,'drive.google.com') && !str_contains($html,'data-picker-refresh'),'No external Drive link or refresh control');

@@ -28,6 +28,14 @@ final class InvoiceReceiptReport
         return in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)
             && ($d['stage']??'')==='duplicate_trashed';
     }
+    public static function paperMonthMismatch(array $d): bool
+    {
+        $period=(string)($d['expected_period']??'');$issued=(string)($d['issued_on']??'');
+        $date=DateTimeImmutable::createFromFormat('!Y-m-d',$issued,new DateTimeZone('Europe/Lisbon'));
+        return ($d['stage']??'')==='archived' && ($d['toconline_state']??'')==='toc_accepted'
+            && self::resolved($d) && empty($d['children']) && $date && $date->format('Y-m-d')===$issued
+            && preg_match('/\A[0-9]{4}-(?:0[1-9]|1[0-2])\z/',$period)===1 && substr($issued,0,7)!==$period;
+    }
     /** Preview only the recorded final copy; removed duplicates need an explicit equivalent keeper. */
     public static function previewId(array $documents,string $id): ?string
     {
