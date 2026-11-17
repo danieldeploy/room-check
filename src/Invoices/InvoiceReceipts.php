@@ -634,8 +634,14 @@ final class InvoiceReceipts
             }
         }
         // One invoice or source cleanup per invocation bounds work and preserves the portal queue.
-        $documents=$this->status()['documents'];
-        $priority=static fn(array $doc): array=>[(int)(($doc['error']??'')==='gemini_retry'),(int)($doc['stage']==='archived')];
+        $s=$this->status();$documents=$s['documents'];
+        $dueRetry=static fn(array $d): bool=>($d['retry_kind']??'')==='transient'
+            && ($d['next_attempt']??0)>0 && $d['next_attempt']<=$now;
+        $preferRetry=empty($s['last_worker_was_retry']);
+        $priority=static function(array $d) use ($dueRetry,$preferRetry): array {
+            $retry=$dueRetry($d);
+            return [(int)($retry!==$preferRetry),$retry?(int)$d['next_attempt']:0,(int)($d['stage']==='archived')];
+        };
         uasort($documents,static fn($a,$b)=>$priority($a)<=>$priority($b));
         foreach ($documents as $id=>$d) {
             if (!empty($s['source_cleanup_paused']) && in_array($d['stage'],['split','source_trashing','source_moving'],true)) continue;
@@ -645,6 +651,12 @@ final class InvoiceReceipts
                 && !$sendEnabled) continue;
             if ($d['stage']==='archived' && !empty($d['duplicate_keeper']) && in_array($d['toconline_state'],['pending','toc_retry'],true)) continue;
             if ($d['stage']==='archived' && !in_array($d['toconline_state'],['pending','toc_retry','toc_existing','toc_duplicate_local'],true)) continue;
+            // Persist the turn under the invoice lock so fairness also survives the next cron.
+            $retry=$dueRetry($d);
+            if ($retry !== (bool)($s['last_worker_was_retry']??false)) {
+                $s['last_worker_was_retry']=$retry;
+                $this->save($s);
+            }
             try {
                 $this->process($id,$d,$allowSend);
                 $after=$this->status()['documents'][$id];

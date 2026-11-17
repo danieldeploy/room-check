@@ -68,6 +68,17 @@ try {
     rt(isset($discovery['processes']['new-month']['error']) && $drive->reads===$reads+1,'discovery failure cannot starve an already discovered scan');
     rt($discovery['documents']['scan']['attempts']===1 && $discovery['documents']['scan']['error']==='drive_network','only the scan read contributes to its attempts');
     $s['requested']=false;
+    $fresh=$s['documents']['scan'];
+    $expiredSlot=array_replace($fresh,['id'=>'september','process_id'=>'september','retry_kind'=>'transient',
+        'next_attempt'=>$start,'error'=>'gemini_retry','retry_started_at'=>$start-360,'retry_deadline'=>$start+1440,'attempts'=>1]);
+    $queueState=$s;
+    $queueState['documents']=['october'=>array_replace($fresh,['id'=>'october','process_id'=>'october']),
+        'september'=>$expiredSlot,'other-retry'=>array_replace($expiredSlot,['id'=>'other-retry','next_attempt'=>$start+1])];
+    $v->save(InvoiceReceipts::FILE,$queueState);
+    $flow->run($start+2);$turn=$flow->status();
+    rt($turn['documents']['september']['attempts']===2 && empty($turn['documents']['october']['attempts']),'oldest due retry gets a turn beside fresh work');
+    $resumed=new InvoiceReceipts($p,$v,$drive,new InvoiceToconline($p,$v,$drive));$resumed->run($start+3);
+    rt($resumed->status()['documents']['october']['attempts']===1 && $resumed->status()['documents']['other-retry']['attempts']===1,'next worker admits a fresh document before the next due retry');
     require_once dirname(__DIR__).'/src/Invoices/InvoiceRunner.php';
     $s['documents']['scan']['stage']='review';
     $v->save(InvoiceReceipts::FILE,$s);
