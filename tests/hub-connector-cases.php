@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/../src/Auth/HubOAuth.php';
 require_once __DIR__.'/../src/Auth/HubMcp.php';
 require_once __DIR__.'/../src/Auth/HubConnectorHttp.php';
+require_once __DIR__.'/hub-receipt-read-cases.php';
 function hubCheck(bool $ok,string $label): void { if (!$ok) throw new RuntimeException($label); }
 function hubReject(callable $action,string $code): void {
     try { $action(); } catch (RuntimeException $e) { hubCheck($e->getMessage()===$code,'Unexpected safe rejection: '.$code); return; }
@@ -89,6 +90,7 @@ function runHubCases(PDO $pdo): void {
     $code=$oauth->approve($request,880001,HubOAuth::SCOPES); $tokens=$oauth->token(hubExchange($code,$verifier)); $identity=$oauth->authenticate($tokens['access_token']);
     $profile=(new HubMcp($pdo,[]))->call('hub_get_profile',[],$identity);
     hubCheck($profile['role']==='gerente' && $profile['connection_id']===$identity['grant_id'],'MCP profile');
+    hubReceiptReadCases($pdo,$identity);
     hubReject(fn()=>(new HubMcp($pdo,[]))->call('hub_get_profile',['user_id'=>880002],$identity),'invalid_request');
     hubReject(fn()=>(new HubMcp($pdo,[]))->call('hub_import_cloudbeds_pdf',['source'=>'welcome','pdf_base64'=>'invalid'],$identity),'invalid_document');
     hubReject(fn()=>HubMcp::scope('execute_sql'),'unknown_tool');

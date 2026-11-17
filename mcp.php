@@ -39,7 +39,7 @@ try {
             $data=(new HubMcp(database(),$config))->call($name,$arguments,$identity);
             $result=['content'=>[['type'=>'text','text'=>json_encode($data,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]],'structuredContent'=>$data];
         } catch (Throwable $e) {
-            $safe=in_array($e->getMessage(),['invalid_token','insufficient_scope','unknown_tool','invalid_request','invalid_document','account_mismatch','document_limit','worker_busy','private_storage_unavailable','account_inactive'],true)?$e->getMessage():'operation_failed';
+            $safe=in_array($e->getMessage(),['invalid_token','insufficient_scope','unknown_tool','invalid_request','invalid_document','account_mismatch','document_limit','worker_busy','private_storage_unavailable','account_inactive','receipt_history_missing','receipt_run_not_found'],true)?$e->getMessage():'operation_failed';
             $result=['isError'=>true,'content'=>[['type'=>'text','text'=>$safe]]];
             if (in_array($e->getCode(),[401,403],true)) $result['_meta']=['mcp/www_authenticate'=>[HubConnectorHttp::challengeValue($requiredScope??'hub:read')]];
         }
