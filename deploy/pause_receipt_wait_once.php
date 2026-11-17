@@ -1,6 +1,5 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__).'/src/Invoices/InvoiceReceipts.php';
 
 /** Owner-requested operational pause. Caller holds room_check_invoices. No external operations. */
 function pauseReceiptWaitOnce(InvoiceVault $vault,int $now,string $runHash='738300cc0912566a7fe4c8c44fda96446d571ff7f8ad31ecb8b3410e03f6c2f2'): string
@@ -43,7 +42,9 @@ if(realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__) {
     try {
         $app=rtrim($argv[1]??'','/');
         if($app!=='/home/welcome/public_html/check' || realpath($app)!==$app)throw new RuntimeException('invalid_app');
-        require $app.'/lib.php';$config=require $app.'/config.php';$pdo=database();
+        // Use one application root: loading clone classes first redeclares shared translations.
+        require $app.'/lib.php';require_once $app.'/src/Invoices/InvoiceReceipts.php';
+        $config=require $app.'/config.php';$pdo=database();
         if((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',60)")->fetchColumn()!==1)throw new RuntimeException('worker_busy');
         try{$result=pauseReceiptWaitOnce(new InvoiceVault($config['invoices']['private_dir']),time());}
         finally{$pdo->query("SELECT RELEASE_LOCK('room_check_invoices')");}

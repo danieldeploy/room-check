@@ -1225,3 +1225,20 @@ Local synthetic acceptance covers cron exclusion, another month's intake, existi
 manual resume, repeat deployment and stale/sent/ambiguous guards. Required CI and
 installed release/live unlocked controls remain to be verified after integration.
 This does not implement the broader proposal for concurrent waits or shorter Gemini retries.
+
+
+### Receipt pause release recovery — 2026-11-17 (prepared)
+
+PR383 integrated as dc4eb6e; deployment431 failed. Read-only deployment inspection
+found the staging clone at dc4eb6e and last successful release430/09ae539. A local
+two-root reproduction confirms the new pause helper loaded clone translations
+before installed lib.php, causing a duplicate TranslationProtection class before
+any pause state write. The helper now loads runtime classes only from the installed
+application; the synthetic pause/resume suite and two-root bootstrap pass.
+
+The existing guarded recovery is narrowed to deployment431 and that exact SHA.
+Before mutation it must read the failed task log, confirm that fatal in the installed
+translation file with no pause result, and verify the installed InvoiceText hash.
+Unknown causes, changed files, newer/active deployments and missing history block
+recovery. Normal backup, exact-head, fast-forward and post-release gates remain.
+Production cause confirmation, recovery and functional acceptance are still pending.

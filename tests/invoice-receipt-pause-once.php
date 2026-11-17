@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/deploy/pause_receipt_wait_once.php';
+if(class_exists('InvoiceReceipts',false) || class_exists('Translator',false))throw new RuntimeException('CLI helper must not load clone runtime before the installed application');
+require_once dirname(__DIR__).'/src/Invoices/InvoiceReceipts.php';
 function pw(bool $ok,string $why):void {if(!$ok)throw new RuntimeException($why);}
 $dir=sys_get_temp_dir().'/receipt-pause-'.bin2hex(random_bytes(6));mkdir($dir,0700);
 file_put_contents($dir.'/master.key',random_bytes(32));chmod($dir.'/master.key',0600);
