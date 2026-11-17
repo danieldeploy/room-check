@@ -26,6 +26,24 @@ accuracy and authenticated production correction remain separate acceptance chec
 
 # Management Hub — current project state
 
+## Internal correction file picker — 2026-11-17 (prepared)
+
+Supersedes the previous flat file list and external Drive-folder link. Opening
+Select files from Drive reads fresh contents of the original month and its
+subfolders into an internal modal. Supports folder navigation (including empty
+folders), existing PDF/JPEG preview, multi-file missing pages or one replacement,
+exact selected names/paths, cancel/Escape and the existing confirmation gate.
+Owner explicitly declined Refresh and external Drive access controls; scans are
+added through their Drive application before opening. Existing delegated review
+permissions and the server's encrypted Drive connection are reused.
+
+Candidate preview is read-only and restricted to a fresh eligible month snapshot;
+recorded originals can be viewed but remain excluded from self-repair. Processing,
+fiscal validation, CSRF/lock/idle gates and post/worker selection revalidation stay
+unchanged. Local regression coverage includes modal lifecycle, roles, stale and
+foreign selection, previews and UI translations. Installed commit and authenticated
+production acceptance remain separate release checks.
+
 ## Correction file visibility — 2026-11-17 (prepared)
 
 The authenticated missing-page picker silently hid recorded sources and pending

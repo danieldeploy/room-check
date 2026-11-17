@@ -57,18 +57,30 @@ foreach ($previewOptions as $previewKind=>$previewLabel): ?>
 <?php $missingCorrection=$d['stage']==='review' && ($d['format']??'')==='pdf' && !empty($d['source_id']) && InvoiceReceiptAnalysis::missingPages($d); ?>
 <?php if ($canReview && ($categoryReview || $missingCorrection)): ?>
 <?php if ($correctionIdle): ?>
-<form method="post" class="receipt-review-form" data-receipt-correction data-url="receipts.php?correction_files=<?= $escape(rawurlencode($id)) ?>" data-loading="<?= $t('receipt_correction_loading') ?>" data-error="<?= $t('receipt_correction_failed') ?>" data-empty="<?= $t('receipt_correction_empty') ?>">
+<form method="post" class="receipt-review-form" data-receipt-correction data-url="receipts.php?correction_files=<?= $escape(rawurlencode($id)) ?>" data-preview-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?>" data-max="<?= $categoryReview?1:19 ?>" data-loading="<?= $t('receipt_correction_loading') ?>" data-error="<?= $t('receipt_correction_failed') ?>" data-empty="<?= $t('receipt_correction_empty') ?>">
 <input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="<?= $categoryReview?'replace_source':'repair' ?>">
 <p><?= $t($categoryReview?'receipt_replacement_help':'receipt_missing_selection_help') ?></p>
-<p><?= $t('receipt_correction_scope') ?>: <span data-i18n-skip>temp_scan/<?= $escape(InvoiceDriveLayout::MONTHS[(int)substr((string)($d['expected_period']??''),5,2)]??'') ?></span>
-<?php if (preg_match('/\A[a-zA-Z0-9_-]{10,128}\z/',(string)($d['source_month']??''))): ?>
- — <a href="https://drive.google.com/drive/folders/<?= $escape($d['source_month']) ?>" target="_blank" rel="noopener noreferrer"><?= $t('receipt_correction_open_folder') ?></a>
-<?php endif; ?></p>
 <div class="form-actions"><button class="primary-button" type="button" data-correction-load><?= $t('receipt_correction_load') ?></button></div>
-<label class="field"><span><?= $t($categoryReview?'receipt_replacement_file':'receipt_missing_files') ?></span><select name="selected_files[]" <?= $categoryReview?'':'multiple size="5"' ?> data-correction-files required disabled></select></label>
+<p><?= $t($categoryReview?'receipt_replacement_file':'receipt_missing_files') ?></p>
+<select name="selected_files[]" multiple data-correction-files hidden disabled aria-hidden="true" tabindex="-1"></select>
+<ul data-correction-selected data-i18n-skip hidden></ul>
 <p role="status" data-correction-status></p>
-<label><input type="checkbox" name="<?= $categoryReview?'replacement_added':'missing_added' ?>" value="1" required> <?= $t($categoryReview?'receipt_replacement_added':'receipt_missing_added') ?></label>
+<label><input type="checkbox" data-correction-confirm name="<?= $categoryReview?'replacement_added':'missing_added' ?>" value="1" required> <?= $t($categoryReview?'receipt_replacement_added':'receipt_missing_added') ?></label>
 <div class="form-actions"><button class="primary-button" type="submit" data-correction-submit disabled><?= $t('receipt_process_again') ?></button></div>
+<template data-correction-picker>
+<dialog class="receipt-picker" data-i18n-skip aria-label="<?= $t('receipt_correction_load') ?>" data-folder-empty="<?= $t('receipt_picker_folder_empty') ?>" data-count="<?= $t('receipt_picker_count') ?>">
+<div class="receipt-picker-heading"><h2><?= $t('receipt_correction_load') ?></h2><button type="button" class="secondary-button" data-picker-cancel autofocus><?= $t('receipt_picker_cancel') ?></button></div>
+<nav class="receipt-picker-path" data-picker-path aria-label="<?= $t('receipt_picker_path') ?>" data-i18n-skip></nav>
+<p role="status" data-picker-status></p>
+<div data-picker-list class="receipt-picker-list"></div>
+<div class="receipt-picker-actions"><span data-picker-count aria-live="polite"></span><button type="button" class="primary-button" data-picker-apply disabled><?= $t('receipt_picker_apply') ?></button></div>
+</dialog>
+</template>
+<template data-correction-preview>
+<details class="document-disclosure" data-receipt-preview data-show="<?= $t('receipt_show_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>" data-pdf-previous="<?= $t('receipt_pdf_previous') ?>" data-pdf-next="<?= $t('receipt_pdf_next') ?>" data-pdf-page="<?= $t('receipt_pdf_page') ?>" data-pdf-zoom-in="<?= $t('receipt_pdf_zoom_in') ?>" data-pdf-zoom-out="<?= $t('receipt_pdf_zoom_out') ?>">
+<summary><?= $t('receipt_show_document') ?></summary><div data-preview-panel><p role="status"></p><div data-document-content></div></div>
+</details>
+</template>
 </form>
 <?php else: ?><p><?= $t('receipt_correction_wait') ?></p><?php endif; ?>
 <?php endif; ?>

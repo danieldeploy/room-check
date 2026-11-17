@@ -896,15 +896,32 @@ Older queued repairs without selections return for explicit selection. There is
 no fallback scanning/claiming of unselected files. Stale/missing selections stay
 pending. Moving or replacing bytes after selection requires selecting again.
 
-The correction UI displays the original-month search scope and a direct Drive
-folder link. Recorded pending copies, source PDFs and other claimed files remain
-visible with localized exclusion reasons, separately from selectable new files.
-Excluded entries carry no selection token. The empty message means no **new
-selectable** file in the displayed scope, not that Drive contains no files.
+The correction UI opens an internal modal and retrieves a fresh bounded snapshot
+on every opening, including empty folders. It starts at the original month and
+allows navigation only through its real descendants (no shortcuts or other Drive
+folders). There is no Refresh button or external Drive link: operators add scans
+through their Drive application before opening the picker. Checkboxes allow up
+to 19 missing-page files across folders; source replacement uses one radio choice.
+Use selection returns exact names/paths to the form, followed by the existing
+confirmation and Process again. Cancel/Escape discard draft choices; reopening
+revalidates committed selections and clears obsolete content/location choices.
+
+Recorded pending copies, source PDFs and other claimed files remain visible with
+localized exclusion reasons. They receive no selection token, but bounded valid
+PDF/JPEG files may be previewed through the existing same-origin document endpoint
+and mobile/desktop renderer. Correction previews require receipts.review, an idle
+eligible document and a fresh original-month snapshot; ID/content/parent/category
+must match before the existing checksum-verified download. No arbitrary Drive ID
+or path, external login, credential exposure, OCR call or state mutation is added.
+Closing/navigating releases preview requests and blob URLs. Loading errors keep
+submission disabled and permit closing/reopening. The native dialog traps focus
+and restores the opener. PT/EN labels remain within the server translation boundary.
+The empty message means no **new selectable** file, not that Drive is empty.
 POST and worker validation are unchanged; a pending page cannot repair itself.
 
 Tests cover real first-page extraction, separate cache and shared quotas, folder
 routing/JPEG preservation, document isolation, exact selected sources, moved and
 replacement IDs, stale selection, idle/review/CSRF boundaries, UI escaping and
-selection/checkbox requirements. Live Gemini accuracy is a separate acceptance
+selection/checkbox requirements, modal navigation/cancellation/freshness, preview
+authorization and stale/out-of-scope preview rejection. Live Gemini accuracy is a separate acceptance
 check; tests never imply error-free visual recognition.

@@ -130,6 +130,23 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .receipt-invoice .document-disclosure > summary { padding: 10px 14px; }
 .receipt-review-form { display: grid; gap: 10px; margin-top: 12px; }
 .receipt-review-form > p, .receipt-review-form .form-actions { margin: 0; }
+.receipt-picker { box-sizing: border-box; width: min(1000px, calc(100% - 24px)); max-height: 90dvh; padding: 20px; border: 1px solid #d8e2ed; border-radius: 16px; color: #123047; background: #fff; }
+.receipt-picker::backdrop { background: rgb(15 23 42 / .5); }
+.receipt-picker-heading, .receipt-picker-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.receipt-picker-heading h2 { margin: 0; font-size: 1.3rem; }
+.receipt-picker-heading > button { padding: 10px 14px; border: 1px solid #bcccdc; border-radius: 10px; background: #fff; color: #123047; cursor: pointer; }
+.receipt-picker-path { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0; }
+.receipt-picker-path button, .receipt-picker-folder { border: 1px solid #d8e2ed; border-radius: 8px; padding: 10px 12px; background: #f2f8f8; color: #0c7771; cursor: pointer; font: inherit; text-align: left; overflow-wrap: anywhere; }
+.receipt-picker-list { display: grid; gap: 10px; }
+.receipt-picker-file { border: 1px solid #d8e2ed; border-radius: 10px; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
+.receipt-picker-file label { display: flex; align-items: start; gap: 10px; font-weight: 700; }
+.receipt-picker-file input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 3px; accent-color: #0f766e; }
+.receipt-picker-file p { margin: 6px 0; }
+.receipt-picker-file .document-disclosure { margin: 8px 0 0; }
+.receipt-picker-actions { position: sticky; bottom: -20px; padding: 14px 0; margin-top: 12px; background: #fff; }
+[data-correction-selected] { margin: 0; padding-left: 22px; overflow-wrap: anywhere; }
+.receipt-picker button:focus-visible { outline: 3px solid #0c7771; outline-offset: 2px; }
+@media (max-width: 620px) { .receipt-picker { padding: 12px; } .receipt-picker-actions { bottom: -12px; } .receipt-picker-file { padding: 8px; } }
 .receipt-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
 .receipt-status-line .primary-button { min-height: 36px; padding: 7px 14px; }
 .receipt-status-line [data-status-warning] { flex-basis: 100%; margin: 0; }

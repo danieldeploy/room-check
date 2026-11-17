@@ -15,13 +15,15 @@ try {
     $pdo=database(); $user=Auth::requireLogin($pdo,$config);
     if (!Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_VIEW)) throw new RuntimeException('forbidden',403);
     if (($_SERVER['REQUEST_METHOD']??'GET')!=='GET') throw new RuntimeException('forbidden',405);
+    $correction=isset($_GET['selection']);
+    if ($correction && !Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_REVIEW)) throw new RuntimeException('forbidden',403);
     $id=(string)($_GET['id']??'');
     InvoiceDriveClient::assertId($id);
     session_write_close();
     $vault=new InvoiceVault($config['invoices']['private_dir']);
     $drive=new InvoiceDriveClient($vault);
     $receipts=new InvoiceReceipts($pdo,$vault,$drive,new InvoiceToconline($pdo,$vault,$drive),[new InvoiceReceiptPdf($vault,$config['invoices']),'split']);
-    $document=$receipts->preview($id,($_GET['original']??'')==='1');
+    $document=$correction?$receipts->correctionPreview($id,(string)$_GET['selection']):$receipts->preview($id,($_GET['original']??'')==='1');
     header('Content-Type: '.$document['type']);
     header('Content-Disposition: inline; filename="document.'.($document['type']==='application/pdf'?'pdf':'jpg').'"');
     header('Content-Length: '.strlen($document['bytes']));

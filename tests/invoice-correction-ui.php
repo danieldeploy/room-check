@@ -20,8 +20,12 @@ foreach(['pt','en'] as $locale){
  cu(str_contains($html,'scan &lt;test&gt;.pdf') && str_contains($html,'data-receipt-preview'),'Filename escaped and preview retained');
  cu(!str_contains($render(['source'=>$category],false),'name="selected_files[]"'),'History-only role receives no correction');
  cu(!str_contains($render(['source'=>$category],true,true),'name="selected_files[]"'),'Busy global process hides correction');
- $html=$render(['child'=>$missing]);cu(str_contains($html,'value="repair"') && str_contains($html,'name="missing_added"') && str_contains($html,'multiple size="5"'),'Missing-page repair requires multiple explicit selected files');
- cu(str_contains($html,'temp_scan/Abril') && str_contains($html,'https://drive.google.com/drive/folders/month-folder-test'),'Correction shows the exact searched month and an actionable Drive link');
+ $html=$render(['child'=>$missing]);cu(str_contains($html,'value="repair"') && str_contains($html,'name="missing_added"') && str_contains($html,'data-max="19"'),'Missing-page repair requires multiple explicit selected files');
+ cu(str_contains($html,'data-correction-picker') && str_contains($html,'data-correction-preview') && str_contains($html,'<dialog'),'Correction uses an internal accessible folder picker and existing document viewer');
+ cu(!str_contains($html,'drive.google.com') && !str_contains($html,'data-picker-refresh'),'No external Drive link or refresh control');
+ cu(str_contains($render(['source'=>$category]),'data-max="1"'),'Replacement permits exactly one file');
  cu(str_contains($render(['child'=>$missing],true,true),InvoiceText::get('receipt_correction_wait')),'Busy repair gives translated wait instruction');
 }
+$endpoint=file_get_contents(dirname(__DIR__).'/admin/receipt-document.php');
+cu(str_contains($endpoint,'PERMISSION_RECEIPTS_REVIEW') && str_contains($endpoint,'correctionPreview'),'Candidate bytes require review permission in addition to history');
 echo "Receipt correction render, permissions, busy gates and PT/EN passed\n";
