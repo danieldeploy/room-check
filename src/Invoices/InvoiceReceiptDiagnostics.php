@@ -10,6 +10,11 @@ final class InvoiceReceiptDiagnostics
     {
         return $value==='' || $value===null ? '' : (is_string($value) && isset(InvoiceText::TEXT[$value])?$value:'receipt_failed');
     }
+    private static function deliveryReason(array $delivery): string
+    {
+        $reason=InvoiceToconline::deliveryReason($delivery);
+        return isset(InvoiceTocReplyText::REASONS[$reason])?$reason:self::code($reason);
+    }
     private static function stage(mixed $value): string
     {
         return in_array($value,['queued','reading','ready','review','failed','split','split_completed','archived',
@@ -49,7 +54,7 @@ final class InvoiceReceiptDiagnostics
                 'classification_current'=>!empty($d['sha256']) && ($d['category_check']['sha256']??'')===$d['sha256'],
                 'toconline_state'=>self::code($d['toconline_state']??''),'archived_at'=>self::date($d['archived_at']??null),
                 'delivery_attempt_recorded'=>$hasLedger?$delivery!==null:null,
-                'delivery'=>$delivery===null?null:['state'=>self::code($delivery['state']??''),'reason'=>self::code($delivery['delivery_reason']??''),'attempted_at'=>self::date($delivery['attempted_at']??null)]];
+                'delivery'=>$delivery===null?null:['state'=>self::code($delivery['state']??''),'reason'=>self::deliveryReason($delivery),'attempted_at'=>self::date($delivery['attempted_at']??null)]];
             foreach (['attempts','next_attempt','retry_started_at','retry_deadline','toc_next_check','toc_deadline','toc_checks','page_count','size'] as $key)
                 $row[$key]=max(0,(int)($d[$key]??0));
             $row['failure_facts']=InvoiceReceiptReport::failureFacts($d);

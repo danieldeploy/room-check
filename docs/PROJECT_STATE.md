@@ -1305,3 +1305,5 @@ Recovery may additionally read only the staging root error_log; it requires the
 exact TranslationProtection bootstrap fatal dated within 120 seconds before
 deployment431 failed. Stale, future, unrelated or unparseable errors cannot
 authorize recovery. Only fixed classifications reach protected action output.
+
+Paper invoice reports now use the saved TOConline reply evidence to explain why a specific attachment requires review. Historical entries show the detail that was actually retained.

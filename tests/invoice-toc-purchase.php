@@ -39,6 +39,9 @@ try {
  $bad=$proof;$bad['purchase_identity']['invoice_number']='FR TEST/10';$receive($bad);purchaseCheck($state()==='toc_submitted','partial invoice numbers never match');
  $v->save('toconline-ledger.enc',[$key=>$entry,str_repeat('b',64)=>array_replace($entry,['document_id'=>'receipt:copy'])]);$v->save(InvoiceReceipts::FILE,['documents'=>['synthetic'=>$doc,'copy'=>array_replace($doc,['id'=>'copy'])]]);
  $receive($proof);purchaseCheck($state()==='toc_review','signed reply for identical scans must request review rather than remain silently submitted');
+ purchaseCheck($v->read(InvoiceReceipts::FILE)['documents']['synthetic']['delivery_reason']==='toc_reply_multiple_scans','specific ambiguity reaches the paper invoice');
+ purchaseCheck(InvoiceToconline::deliveryReason(['state'=>'toc_review','receipt_ambiguity'=>'multiple_scans'])==='toc_reply_multiple_scans','previously recorded scan ambiguity is recoverable');
+ purchaseCheck(InvoiceToconline::deliveryReason(['state'=>'toc_review'])==='toc_reply_detail_unavailable','unrecorded facts are not reconstructed');
  $v->save('toconline-ledger.enc',[$key=>$entry]);$v->save(InvoiceReceipts::FILE,['documents'=>['synthetic'=>$doc]]);
  purchaseCheck($receive($proof)['outcome']==='toc_accepted'&&$state()==='toc_accepted','signed exact unique identity confirms the real submitted scan');
  $before=$v->read('toconline-ledger.enc');$receive($proof);purchaseCheck($v->read('toconline-ledger.enc')===$before,'replay preserves final evidence');

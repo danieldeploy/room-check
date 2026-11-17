@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceReceiptAnalysis.php';
 require_once __DIR__.'/InvoiceVault.php';
-require_once dirname(__DIR__).'/I18n/InvoiceText.php';
+require_once dirname(__DIR__).'/I18n/InvoiceTocReplyText.php';
 
 final class InvoiceTocWait extends RuntimeException
 {
@@ -168,11 +168,22 @@ final class InvoiceToconline
         foreach ($ledger as $entry) if ($entry['nif']===$nif) $this->state($entry['document_id'],$entry['state'],self::receiptTiming($entry));
     }
 
+    public static function deliveryReason(array $entry): string
+    {
+        if (($entry['state']??'')!=='toc_review') return (string)($entry['delivery_reason']??'');
+        if (!empty($entry['receipt_review_reason'])) return $entry['receipt_review_reason'];
+        if (($entry['receipt_ambiguity']??'')==='multiple_scans') return 'toc_reply_multiple_scans';
+        // Older multi-file outcomes recorded a receipt hash and time without a single-file suggestion.
+        if (!empty($entry['receipt_hash']) && !empty($entry['receipt_received_at']) && !empty($entry['email_id'])
+            && !isset($entry['receipt_suggestion'])) return 'toc_reply_attachment_unclear';
+        return 'toc_reply_detail_unavailable';
+    }
+
     private static function receiptTiming(array $entry): array
     {
         $sent=strtotime((string)($entry['attempted_at']??''));
         $waiting=$sent && in_array($entry['state']??'',['toc_sending','toc_submitted','toc_uncertain'],true);
-        return ['delivery_reason'=>$entry['delivery_reason']??'', 'toc_next_check'=>$waiting?(int)($entry['receipt_next_check']??$sent+300):0,
+        return ['delivery_reason'=>self::deliveryReason($entry), 'toc_next_check'=>$waiting?(int)($entry['receipt_next_check']??$sent+300):0,
             'toc_deadline'=>$waiting?$sent+1800:0,'toc_checks'=>(int)($entry['receipt_checks']??0)];
     }
 
@@ -234,6 +245,7 @@ final class InvoiceToconline
                     if ($item['document_id']!==$candidate['document_id'] || ($item['email_id']??'')!==$candidate['email_id']
                         || !in_array($item['state'],['toc_sending','toc_submitted','toc_uncertain','toc_review','toc_no_confirmation'],true)) continue;
                     $item['state']=$outcome;
+                    if ($outcome==='toc_review') $item['receipt_review_reason']='toc_reply_attachment_unclear';
                     if ($outcome==='toc_rejected' && in_array($key,$proof['unsupported_files']??[],true)) $item['delivery_reason']='toc_provider_format';
                     $item['receipt_hash']=$receiptHash;$item['receipt_received_at']=gmdate('c');
                     if ($outcome!=='toc_review') { $item['confirmation_source']='dkim_toconline';$item['confirmed_at']=gmdate('c'); }
@@ -257,10 +269,11 @@ final class InvoiceToconline
                 && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
                 $entry['state']='toc_review';$entry['receipt_hash']=$receiptHash;
                 $entry['receipt_suggestion']='toc_accepted';$entry['receipt_received_at']=gmdate('c');
-                $entry['receipt_ambiguity']='multiple_scans';$review[(string)$entry['document_id']]=true;
+                $entry['receipt_ambiguity']='multiple_scans';$entry['receipt_review_reason']='toc_reply_multiple_scans';
+                $review[(string)$entry['document_id']]=self::receiptTiming($entry);
             }
             unset($entry);$this->vault->save('toconline-ledger.enc',$ledger);
-            foreach (array_keys($review) as $id) $this->state($id,'toc_review');
+            foreach ($review as $id=>$timing) $this->state($id,'toc_review',$timing);
             return ['result'=>'matched','suggestion'=>'toc_review','outcome'=>'toc_review'];
         }
         if (count($matches)!==1) return ['result'=>'unmatched'];
@@ -268,19 +281,29 @@ final class InvoiceToconline
         $automatic='toc_review'; $applied=false;
         $uniqueTokens=array_unique(array_map('strtolower',$tokens[1]));
         $signedAt=strtotime((string)($auth['signed_at']??''));
-        if (($auth['verified']??false)===true && ($auth['code']??'')==='verified'
-            && ($auth['recipient']??'')===strtolower($settings['sender'])
-            && (count($uniqueTokens)===1 || $fiscalCandidate!==null) && in_array($proof['outcome']??'',['toc_accepted','toc_existing','toc_rejected'],true)) {
-            $candidate=$fiscalCandidate??($ledger[reset($uniqueTokens)]??[]);
-            $sentAt=strtotime((string)($candidate['attempted_at']??''));
-            if ($signedAt && $sentAt && $signedAt >= $sentAt-300) $automatic=$proof['outcome'];
-        }
+        $candidate=$fiscalCandidate??($ledger[reset($uniqueTokens)]??[]);
+        $sentAt=strtotime((string)($candidate['attempted_at']??''));
+        $authReason='toc_auth_'.($auth['code']??'');
+        $providerReason=$proof['provider_reason']??'';
+        $reviewReason=match (true) {
+            ($auth['verified']??false)!==true || ($auth['code']??'')!=='verified'=>
+                isset(InvoiceText::TEXT[$authReason]) && !in_array($authReason,['toc_auth_verified','toc_auth_label','toc_auth_outcome','toc_auth_not_checked'],true)?$authReason:'toc_reply_authentication',
+            ($auth['recipient']??'')!==strtolower($settings['sender'])=>'toc_reply_recipient',
+            count($uniqueTokens)!==1 && $fiscalCandidate===null=>'toc_reply_correlation',
+            !$signedAt || !$sentAt=>'toc_reply_timestamp_missing',
+            $signedAt<$sentAt-300=>'toc_reply_predates_send',
+            !in_array($proof['outcome']??'',['toc_accepted','toc_existing','toc_rejected'],true)=>
+                in_array($providerReason,['toc_provider_size','toc_provider_count'],true)?$providerReason:'toc_reply_attachment_unclear',
+            default=>'',
+        };
+        if ($reviewReason==='') $automatic=$proof['outcome'];
         // Only the observed duplicate phrase is recognised. Unknown/new templates remain review.
         if (str_contains(mb_strtolower($text),'por já constarem no seu arquivo')) $suggestion='toc_existing';
         foreach ($ledger as &$entry) if ((string)$entry['document_id']===(string)$id
             && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
             && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
             $entry['state']=$automatic;
+            if ($automatic==='toc_review') $entry['receipt_review_reason']=$reviewReason;
             if ($automatic==='toc_rejected' && ($proof['provider_reason']??'')==='toc_provider_format') $entry['delivery_reason']='toc_provider_format';
             $entry['receipt_hash']=$receiptHash;
             if ($automatic!=='toc_review') {
@@ -380,7 +403,8 @@ final class InvoiceToconline
         foreach ($this->ledger() as $entry) {
             $id=$entry['document_id'];
             if (!is_numeric($id)) continue;
-            if (!empty($entry['delivery_reason'])) $problems[$id]=['reason'=>$entry['delivery_reason']];
+            $reason=self::deliveryReason($entry);
+            if ($reason!=='') $problems[$id]=['reason'=>$reason];
         }
         return $problems;
     }
