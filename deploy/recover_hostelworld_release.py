@@ -1,14 +1,35 @@
 #!/usr/bin/env python3
-"""Recover only inspected receipt deployment 401; every other failure keeps the normal gate."""
+"""Recover only receipt pause deployment 431 after read-only cause verification."""
 import argparse
 import json
 import os
 import sys
+import re
+import hashlib
+from pathlib import Path
+from cpanel_disk_cleanup import request_api
 from automated_release import (Config,CpanelAPI,Deployment,WHM_ORIGIN,BRANCH,GitHub,commit,require,
     DeploymentError,release,inspect_release_state,health_check,require_backup_gate)
 
-FAILED_ID="401"
-FAILED_SHA="d9376957613fc072af0dbe45ad764b041b5a9acf"
+FAILED_ID="431"
+FAILED_SHA="dc4eb6eda39d50761f3d8c765698c0152609d090"
+
+def verify_failure_log(task):
+    path=task.get('log_path','')
+    require(re.fullmatch(r'/home/welcome/\.cpanel/logs/vc_[A-Za-z0-9_.-]+_git_deploy\.log',path), 'release_log_path_not_allowed')
+    def read(directory,name):
+        value=request_api('Fileman','get_file_content',{'dir':directory,'file':name})
+        if isinstance(value,list):
+            require(len(value)==1,'release_read_ambiguous');value=value[0]
+        require(isinstance(value,dict) and isinstance(value.get('content'),str),'release_read_invalid')
+        return value['content']
+    text=read('/home/welcome/.cpanel/logs',path.rsplit('/',1)[1])
+    require(re.search(r'Cannot (?:redeclare|declare) class TranslationProtection',text)
+            and 'public_html/check/src/I18n/TranslationProtection.php' in text
+            and '"receipt_wait_pause":' not in text,'receipt_pause_failure_not_confirmed')
+    installed=read('/home/welcome/public_html/check/src/I18n','InvoiceText.php')
+    expected=(Path(__file__).resolve().parents[1]/'src/I18n/InvoiceText.php').read_bytes()
+    require(hashlib.sha256(installed.encode()).digest()==hashlib.sha256(expected).digest(),'installed_receipt_source_changed')
 
 def latest_task(runner):
     tasks=runner.tasks()
@@ -33,16 +54,19 @@ def inspect(runner):
     t=latest_task(runner)
     if runner.task_state(t)=="succeeded": return inspect_release_state(runner)
     known_failure(runner,t)
+    verify_failure_log(t)
     row=runner.repository(); current=runner.inspect(row)
     return {"mode":"inspected-receipt-runtime-recovery","writes":False,"current_commit":current,
             "failed_deploy_id":FAILED_ID,"failed_commit":FAILED_SHA,
-            "cause":"receipt_wasm_virtual_memory"}
+            "last_successful_commit":row.get('last_deployment',{}).get('repository_state',{}).get('identifier'),
+            "installed_invoice_text":"verified","cause":"duplicate_translation_class_before_pause"}
 
 def recover(runner,github,expected):
     expected=commit(expected)
     t=latest_task(runner)
     if runner.task_state(t)=="succeeded": return release(runner,github,expected)
     known_failure(runner,t)
+    verify_failure_log(t)
     require_backup_gate()
     github.require_head(expected)
     require(expected!=FAILED_SHA,"corrected_commit_required")

@@ -308,3 +308,11 @@ a once-only marker; subsequent releases do not repeat the suspension. Its only
 output is an allowlisted outcome, never invoice data. A failed guard aborts the
 release and requires state inspection before retry. Accepted/progressed records
 are never rolled back. Manual recovery uses the existing receipt Try again action.
+
+
+The deployment431 recovery reuses the existing protected recovery entrypoint.
+It admits only dc4eb6e/431 after a read-only log check confirms the duplicate
+TranslationProtection fatal before a pause result, and the installed InvoiceText
+hash matches the reviewed source. The corrected helper loads installed classes
+only, preventing mixed clone/application class declarations. All other failures
+remain blocked. Successful later deployments use the ordinary release path.

@@ -977,3 +977,9 @@ A changed run or progressed delivery is a no-op; missing history, ambiguous
 pending records or other automatic work abort before mutation. No public endpoint,
 new permission, outbound message, document deletion or permanent retry-policy
 change is introduced. See the guarded release procedure for execution.
+
+
+The operational pause helper loads runtime classes from the installed application
+only. A failed bootstrap cannot write the pause marker. Recovery must verify the
+failed release log before retrying; a naturally completed or changed wait is then
+skipped rather than reverting progress.
