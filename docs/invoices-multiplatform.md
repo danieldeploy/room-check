@@ -1012,3 +1012,5 @@ A terminal shared failure exposes a resume action under the intake permission. D
 errors stay with their run; an already discovered month can continue. Cron releases the lock
 between scheduled retries. The authenticated reply pipe and reconciliation must succeed before
 new mail handoffs. The live document filter applies to the chosen run and does not mutate it.
+
+When due technical retries and fresh work coexist, the worker alternates them across cron ticks. The earliest eligible retry goes first. Future slots, manual reviews and uncertain mail do not enter the retry lane.
