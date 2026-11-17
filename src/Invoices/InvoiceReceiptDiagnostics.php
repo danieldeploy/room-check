@@ -33,8 +33,8 @@ final class InvoiceReceiptDiagnostics
         $sendEnabled=!empty($settings['enabled']) && !empty($settings['pilot_verified']);
         $hasLedger=$vault->has('toconline-ledger.enc');$deliveries=[];
         if ($hasLedger) foreach ($vault->read('toconline-ledger.enc') as $entry) {
-            if (!is_array($entry) || !is_string($entry['document_id']??null)) throw new RuntimeException('receipt_history_missing');
-            $id=$entry['document_id'];
+            if (!is_array($entry) || (!is_string($entry['document_id']??null) && !is_int($entry['document_id']??null))) throw new RuntimeException('receipt_history_missing');
+            $id=(string)$entry['document_id'];
             if (!str_starts_with($id,'receipt:') || !isset($selected['documents'][substr($id,8)])) continue;
             if (!isset($deliveries[$id]) || strcmp((string)($entry['attempted_at']??''),(string)($deliveries[$id]['attempted_at']??''))>0) $deliveries[$id]=$entry;
         }

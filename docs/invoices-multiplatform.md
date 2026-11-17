@@ -11,6 +11,9 @@ exact paper receipt run, safe persisted retry/error metadata and matched deliver
 attempts. The call does not advance processing, contact providers or save invoice
 state. Selected and global progress are reported separately; absent ledger data
 is unknown. Generic historical Gemini errors do not retain HTTP/cURL diagnostics.
+The shared delivery ledger contains numeric portal document IDs and `receipt:`
+string IDs. Diagnosis accepts both persisted forms and selects only the requested
+paper run; unrelated portal deliveries neither fail the read nor enter its result.
 See `HUB_CONNECTOR.md` for pagination, read boundaries and acceptance.
 
 ## Installation
