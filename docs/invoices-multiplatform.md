@@ -400,6 +400,10 @@ and form-actions classes; no separate button design or permission change.
 
 ## QR-first receipts and grouped invoices (supersedes automatic per-page OCR)
 
+The QR reader accepts a single trailing printer CRLF before validating fiscal
+fields. The raw size limit applies before trimming. Embedded controls and
+repeated terminators require review.
+
 `InvoiceReceiptAnalysis` combines local QR decoding, optional Gemini evidence and a
 strict complete page manifest. Fiscal QR fields A/B/F/G/O take precedence over model
 fields. A model cannot merge different fiscal identities, lose/duplicate a source
