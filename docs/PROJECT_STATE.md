@@ -1207,3 +1207,21 @@ The reproduced browser regression passes with the boundary. This is display only
   remain release gates. No real invoice is submitted/deleted for this acceptance.
 - Existing WhatsApp template approval blocker is unchanged; no new dependency,
   credentials, source-cleanup policy or mobile PDF change.
+
+
+## 2026-11-17 — owner-requested one-time delivery pause (prepared)
+
+Authenticated inspection found Gemini analysis complete; the only active wait was
+an unsent archived invoice under the application's shared TOConline send budget.
+The owner requested stopping the current wait to permit manual intake of other months.
+A CLI-only release operation targets the exact inspected run by digest, under the
+existing invoice worker lock. It requires a single still-future pacing wait and
+no ledger attempt, then uses the existing stopped/retry state with a truthful
+PT/EN pause reason. One atomic encrypted write retains the previous record and a
+once-only marker. Accepted invoices, source masters, shared budgets and all other
+work remain unchanged. The existing Try again resumes delivery manually.
+
+Local synthetic acceptance covers cron exclusion, another month's intake, existing
+manual resume, repeat deployment and stale/sent/ambiguous guards. Required CI and
+installed release/live unlocked controls remain to be verified after integration.
+This does not implement the broader proposal for concurrent waits or shorter Gemini retries.

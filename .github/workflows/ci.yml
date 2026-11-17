@@ -145,6 +145,7 @@ jobs:
           php tests/zkaccess-backup.php
           php tests/invoice-receipt-alerts.php
           php tests/invoice-receipt-retries.php
+          php tests/invoice-receipt-pause-once.php
           php tests/invoice-receipt-confirmation.php
           php tests/invoice-receipt-summary-probe.php
           php tests/invoice-gemini.php

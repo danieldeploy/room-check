@@ -960,3 +960,20 @@ for physical filing; existing issue-date Drive routing is unchanged. Do not show
 for unresolved items, removed duplicates, unknown/invalid dates or the same period.
 Acceptance includes replacement with missing old fields, fresh unresolved results,
 PDF/JPEG, sibling preservation, stale/sent guards, cleanup retry and year boundaries.
+
+
+### One-time operational suspension — 2026-11-17
+
+An owner-authorized private CLI operation pauses only the inspected active run's
+single unsent archived invoice while its TOConline pacing deadline is still future.
+It checks the encrypted delivery ledger under `room_check_invoices`, preserves
+all fiscal/archive data and accepted siblings, and transitions to the existing
+`failed` / `resume_stage=archived` manual retry state with `receipt_paused`.
+That stops automatic attempts and releases intake without declaring completion.
+`Try again` resumes the existing delivery path and still respects the send budget.
+The encrypted workflow contains the prior record and the once-only marker in the
+same atomic write; later deployments cannot pause a manually resumed item again.
+A changed run or progressed delivery is a no-op; missing history, ambiguous
+pending records or other automatic work abort before mutation. No public endpoint,
+new permission, outbound message, document deletion or permanent retry-policy
+change is introduced. See the guarded release procedure for execution.
