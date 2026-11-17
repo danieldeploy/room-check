@@ -219,12 +219,20 @@ final class InvoiceReceipts
         $d['stage']='discarding';$d['error']='';
         self::beginCycle($s,$d['process_id']??'legacy');$s['documents'][$id]=InvoiceReceiptRetry::reset($d);$this->save($s);
     }
-    public function correctionCandidates(string $id): array
+    private function correctionSnapshot(string $id): array
     {
         $s=$this->status();$d=$s['documents'][$id]??[];
         if (($d['stage']??'')!=='review' || !(self::categoryReview($d) || InvoiceReceiptAnalysis::missingPages($d))) throw new RuntimeException('receipt_review_required');
-        $this->requireIdle($s);$this->drive->connect();$out=[];
-        foreach ($this->drive->scanFiles($d['source_month']) as $f) {
+        $this->requireIdle($s);$this->drive->connect();$folders=[];
+        $files=$this->drive->scanFiles($d['source_month'],$folders);
+        return [$s,$d,$files,$folders];
+    }
+    public function correctionCandidates(string $id, ?array &$folders=null): array
+    {
+        [$s,$d,$files,$folders]=$this->correctionSnapshot($id);$out=[];
+        $root='temp_scan/'.InvoiceDriveLayout::MONTHS[(int)substr($d['expected_period'],5,2)];
+        array_unshift($folders,['id'=>$d['source_month'],'parent'=>'','name'=>$root,'path'=>'/']);
+        foreach ($files as $f) {
             $reason='';
             if (isset($s['documents'][$f['id']]) && !(self::categoryReview($d) && $f['id']===$id)) {
                 $reason=$f['id']===$id?'receipt_correction_current'
@@ -232,9 +240,24 @@ final class InvoiceReceipts
             } elseif (!InvoiceReceiptSelection::eligible($f)) $reason='receipt_format_required';
             elseif (self::categoryReview($d) && InvoiceDriveClient::receiptFormat($f)!=='pdf') $reason='receipt_correction_pdf';
             $out[]=['token'=>$reason===''?InvoiceReceiptSelection::token($f):'','name'=>$f['name'],'reason'=>$reason,
-                'path'=>rtrim('temp_scan/'.InvoiceDriveLayout::MONTHS[(int)substr($d['expected_period'],5,2)].($f['source_path']??'/'),'/')];
+                'folder'=>$f['parents'][0]??$d['source_month'],
+                'preview'=>InvoiceReceiptSelection::eligible($f)?InvoiceReceiptSelection::token($f):'',
+                'path'=>rtrim($root.($f['source_path']??'/'),'/')];
         }
         return $out;
+    }
+    /** Preview only a fresh, bounded correction candidate; no caller-supplied Drive path. */
+    public function correctionPreview(string $id,string $selection): array
+    {
+        if ($selection==='' || strlen($selection)>1024) throw new RuntimeException('receipt_selection_changed');
+        [,,$files]=$this->correctionSnapshot($id);
+        foreach ($files as $f) {
+            if (!InvoiceReceiptSelection::eligible($f) || !hash_equals(InvoiceReceiptSelection::token($f),$selection)) continue;
+            $f['source_parent']=$f['parents'][0];$f['format']=InvoiceDriveClient::receiptFormat($f);
+            $bytes=$this->drive->scanDocument($f);
+            return ['bytes'=>$bytes,'type'=>$f['format']==='pdf'?'application/pdf':'image/jpeg'];
+        }
+        throw new RuntimeException('receipt_selection_changed');
     }
     private function requireIdle(array $s): void
     {

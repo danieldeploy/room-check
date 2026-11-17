@@ -124,6 +124,10 @@ try {
     reportCheck(str_contains($manager['html'],'123456789') && !str_contains($manager['html'],'NIF: 500000000'),'Display supplier NIF, never recipient fallback');
     reportCheck(str_contains($manager['html'],'SECRET-NORMAL-NUMBER') && str_contains($manager['html'],'receipt-document.php?id=') && str_contains($manager['html'],'name="confirmed"'),'Manager detailed history/review regressed: '.json_encode([str_contains($manager['html'],'SECRET-NORMAL-NUMBER'),str_contains($manager['html'],'receipt-document.php?id='),str_contains($manager['html'],'name="confirmed"')]));
     reportCheck($render('governanta',['receipts.run'],'',true)['status']===403,'Actual document endpoint denies run-only operator');
+    $candidateQuery=['id'=>'private-error-id','selection'=>'synthetic-selection'];
+    reportCheck($render('governanta',['receipts.history'],'',true,false,$candidateQuery)['status']===403,'History permission cannot retrieve unrecorded correction bytes');
+    reportCheck($render('governanta',['receipts.review'],'',true,false,$candidateQuery)['status']===422,'Delegated reviewer reaches the document eligibility gate');
+    reportCheck($render('governanta',['receipts.history'],'',false,false,['correction_files'=>'private-error-id'])['status']===403,'History permission cannot browse correction folders');
     reportCheck($render('gerente',[],'',true)['status']===422,'Actual document endpoint rejects missing document ID');
     $history=$render('governanta',['receipts.history']);
     reportCheck(str_contains($history['html'],'SECRET-NORMAL-NUMBER') && !str_contains($history['html'],'name="confirmed"'),'Future history permission must not imply corrections');

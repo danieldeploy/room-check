@@ -21,10 +21,12 @@ try {
         header('Content-Type: application/json; charset=utf-8');
         try {
             if (!$canReview) throw new RuntimeException('forbidden',403);
-            $files=$receipts->correctionCandidates((string)$_GET['correction_files']);
+            if (($_SERVER['REQUEST_METHOD']??'GET')!=='GET') throw new RuntimeException('forbidden',403);
+            session_write_close();
+            $folders=[];$files=$receipts->correctionCandidates((string)$_GET['correction_files'],$folders);
             foreach ($files as &$file) if ($file['reason']!=='') $file['reason']=InvoiceText::get($file['reason']);
             unset($file);
-            echo json_encode(['files'=>$files],JSON_THROW_ON_ERROR);
+            echo json_encode(['files'=>$files,'folders'=>$folders],JSON_THROW_ON_ERROR);
         } catch (Throwable $e) {
             http_response_code($e->getCode()===403?403:409);
             echo json_encode(['error'=>InvoiceText::get(isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed')],JSON_THROW_ON_ERROR);

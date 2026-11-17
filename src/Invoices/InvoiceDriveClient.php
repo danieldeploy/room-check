@@ -278,9 +278,9 @@ final class InvoiceDriveClient
         return $parent!=='' && $next!==$parent ? 'invalid' : $next;
     }
     /** Bounded snapshot, including only real descendants; never follow shortcuts. */
-    public function scanFiles(string $root): array
+    public function scanFiles(string $root, ?array &$folderList = null): array
     {
-        self::assertId($root); $folders=[[$root,'','']]; $seen=[]; $files=[];
+        self::assertId($root); $folders=[[$root,'','']]; $seen=[]; $files=[]; $folderList=[];
         while ($folders) {
             [$parent,$category,$path]=array_shift($folders);
             if (isset($seen[$parent]) || count($seen)>=40) throw new RuntimeException('receipt_limit');
@@ -292,6 +292,7 @@ final class InvoiceDriveClient
                     if (($f['mimeType']??'')==='application/vnd.google-apps.folder') {
                         $next=self::scanCategory($f['name']??'',$category);
                         $folders[]=[$f['id'],$next,$path.'/'.$f['name']];
+                        $folderList[]=['id'=>$f['id'],'parent'=>$parent,'name'=>$f['name'],'path'=>$path.'/'.$f['name']];
                     } elseif (empty($f['appProperties']['hubReceiptOcr'])) {
                         $f['source_category']=$category ?: 'a4';
                         $f['source_path']=$path ?: '/';

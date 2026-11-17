@@ -10,7 +10,7 @@ try {
   public array $files=[],$newFiles=[];public int $sends=0;
   function receiptsAuthorized():bool{return true;}function connect():void{}
   function newId():string{return 'new-'.bin2hex(random_bytes(8));}
-  function scanFiles($id):array{rq($id==='month-folder','Search only original month');return $this->newFiles;}
+  function scanFiles($id,?array &$folders=null):array{rq($id==='month-folder','Search only original month');$folders=[['id'=>'empty-folder','parent'=>$id,'name'=>'Talões','path'=>'/Talões']];return $this->newFiles;}
   function scanDocument($d):string{return $this->files[$d['id']]['bytes'];}
   function verifiedReceipt($d):string{$b=$this->files[$d['id']]['bytes'];rq(hash('sha256',$b)===$d['sha256'],'Content pinned');return $b;}
   function namedItems($p,$n,$f=true):array{return [];}
@@ -51,6 +51,18 @@ try {
  rq($choices[1]['token']==='' && $choices[1]['reason']==='receipt_correction_original','Original source is explained and remains protected');
  rq($choices[2]['token']===InvoiceReceiptSelection::token($f) && $choices[2]['reason']==='','New pages remain selectable');
  rq($choices[0]['path']==='temp_scan/Abril/A4' && $choices[1]['path']==='temp_scan/Abril','Display exact paths without doubled separators');
+ $folders=[];$choices=$flow->correctionCandidates('pending-one',$folders);
+ rq($folders[0]['id']==='month-folder' && $folders[1]['id']==='empty-folder','Picker includes root and empty subfolders');
+ rq($choices[0]['preview']!=='' && $choices[0]['folder']==='month-folder','Excluded files can be previewed inside the bounded folder');
+ $before=$flow->status();$preview=$flow->correctionPreview('pending-one',InvoiceReceiptSelection::token($f));
+ rq($preview['bytes']===$extra && $preview['type']==='application/pdf','New selected file preview uses verified bytes');
+ rq($flow->status()===$before,'Browsing and previewing do not change processing state');
+ foreach([base64_encode('["outside"]'),InvoiceReceiptSelection::token(array_merge($f,['md5Checksum'=>str_repeat('a',32)])),str_repeat('x',1025)] as $stale){
+  try{$flow->correctionPreview('pending-one',$stale);throw new LogicException('Unsafe preview accepted');}catch(RuntimeException $e){rq($e->getMessage()==='receipt_selection_changed','Unknown or stale preview rejected');}
+ }
+ $busy=$seed;$busy['requested']=true;$v->save(InvoiceReceipts::FILE,$busy);
+ try{$flow->correctionPreview('pending-one',InvoiceReceiptSelection::token($f));throw new LogicException('Busy preview accepted');}catch(RuntimeException $e){rq($e->getMessage()==='worker_busy','Preview retains idle gate');}
+ $v->save(InvoiceReceipts::FILE,$seed);
  try {$flow->requestRepair('pending-one',true,1,[InvoiceReceiptSelection::token($known)]);throw new LogicException('Self repair accepted');}
  catch(RuntimeException $e){rq($e->getMessage()==='receipt_selection_changed','Forged selection of the existing page is rejected');}
  $drive->newFiles=[$f];
