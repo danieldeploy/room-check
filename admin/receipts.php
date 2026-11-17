@@ -22,6 +22,8 @@ try {
         try {
             if (!$canReview) throw new RuntimeException('forbidden',403);
             $files=$receipts->correctionCandidates((string)$_GET['correction_files']);
+            foreach ($files as &$file) if ($file['reason']!=='') $file['reason']=InvoiceText::get($file['reason']);
+            unset($file);
             echo json_encode(['files'=>$files],JSON_THROW_ON_ERROR);
         } catch (Throwable $e) {
             http_response_code($e->getCode()===403?403:409);
