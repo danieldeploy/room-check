@@ -153,6 +153,7 @@ final class InvoiceText
         'receipt_select_periods' => ['Escolha um ano válido e pelo menos um mês.', 'Choose a valid year and at least one month.'],
         'receipt_missing_month' => ['Não existe pasta temporária para estes meses; os restantes meses selecionados foram verificados', 'No temporary folder exists for these months; the other selected months were checked'],
         'receipt_retry' => ['Tentar novamente', 'Try again'],
+        'receipt_paused' => ['Envio suspenso a pedido. A fatura está guardada; escolha Tentar novamente para retomar.', 'Sending paused on request. The invoice is saved; choose Try again to resume.'],
         'receipt_title' => ['Faturas em papel — A4 e formatos pequenos','Paper Invoices — A4 and Small Formats'],
         'receipt_description' => ['Digitalize para a pasta do mês em temp_scan. Escolha o ano e os meses para arquivar e enviar para o TOConline.','Scan into the month folder in temp_scan. Choose the year and months to archive and send to TOConline.'],
         'receipt_start' => ['Iniciar arquivo e envio','Start archiving and sending'],

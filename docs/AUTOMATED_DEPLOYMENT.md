@@ -296,3 +296,15 @@ and completion state reach release logs; result.json remains private. Shared
 keys, invoice history, invoices, backups and current providers are preserved.
 The old deployment-400 diagnostic workflow is removed; current release probes
 and protected deployment gates stay active. No Azure cloud resource is deleted.
+
+
+### Reviewed one-time receipt wait pause — 2026-11-17
+
+After the ordinary backup and source copies, `pause_receipt_wait_once.php` uses
+the existing invoice lock and encrypted vault. It is bound to the digest of the
+owner's inspected run; it can only stop one archived, unsent, future pacing wait,
+with no matching ledger attempt. It atomically retains the previous record and
+a once-only marker; subsequent releases do not repeat the suspension. Its only
+output is an allowlisted outcome, never invoice data. A failed guard aborts the
+release and requires state inspection before retry. Accepted/progressed records
+are never rolled back. Manual recovery uses the existing receipt Try again action.
