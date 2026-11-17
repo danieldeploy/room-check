@@ -1252,3 +1252,10 @@ protected release-log reader forwards only these fields; no invoice contents,
 identities, raw errors or credentials are exposed. This permits fresh operational
 verification after the browser session expires, without granting new access or
 repeating a pause whose durable marker already exists.
+
+The release-log guard did not confirm the fatal and correctly performed no retry.
+Local reproduction with display_errors=0 also suppresses the CLI fatal output.
+Recovery may additionally read only the staging root error_log; it requires the
+exact TranslationProtection bootstrap fatal dated within 120 seconds before
+deployment431 failed. Stale, future, unrelated or unparseable errors cannot
+authorize recovery. Only fixed classifications reach protected action output.

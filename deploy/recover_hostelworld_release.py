@@ -7,12 +7,28 @@ import sys
 import re
 import hashlib
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from cpanel_disk_cleanup import request_api
 from automated_release import (Config,CpanelAPI,Deployment,WHM_ORIGIN,BRANCH,GitHub,commit,require,
     DeploymentError,release,inspect_release_state,health_check,require_backup_gate)
 
 FAILED_ID="431"
 FAILED_SHA="dc4eb6eda39d50761f3d8c765698c0152609d090"
+
+def pause_bootstrap_fatal(text):
+    return bool(re.search(r'Cannot (?:redeclare|declare) class TranslationProtection',text)
+        and 'public_html/check/src/I18n/TranslationProtection.php' in text)
+
+def fresh_pause_fatal(text,task):
+    failed=float(task.get('timestamps',{}).get('failed',0))
+    for line in text.splitlines()[-100:]:
+        match=re.search(r'\[(\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}:\d{2}) ([^\]]+)\]',line)
+        if not match or not pause_bootstrap_fatal(line):continue
+        try: at=datetime.strptime(match[1],'%d-%b-%Y %H:%M:%S').replace(tzinfo=ZoneInfo(match[2])).timestamp()
+        except (ValueError,KeyError):continue
+        if 0<=failed-at<=120:return True
+    return False
 
 def verify_failure_log(task):
     path=task.get('log_path','')
@@ -24,9 +40,11 @@ def verify_failure_log(task):
         require(isinstance(value,dict) and isinstance(value.get('content'),str),'release_read_invalid')
         return value['content']
     text=read('/home/welcome/.cpanel/logs',path.rsplit('/',1)[1])
-    require(re.search(r'Cannot (?:redeclare|declare) class TranslationProtection',text)
-            and 'public_html/check/src/I18n/TranslationProtection.php' in text
-            and '"receipt_wait_pause":' not in text,'receipt_pause_failure_not_confirmed')
+    require('"receipt_wait_pause":' not in text,'receipt_pause_already_ran')
+    if not pause_bootstrap_fatal(text):
+        # display_errors=0 can leave the fatal only in PHP's private working-directory log.
+        root=os.path.normpath(Config(token='unused',transport='whm',origin=WHM_ORIGIN).repository)
+        require(fresh_pause_fatal(read(root,'error_log'),task),'receipt_pause_failure_not_confirmed')
     installed=read('/home/welcome/public_html/check/src/I18n','InvoiceText.php')
     expected=(Path(__file__).resolve().parents[1]/'src/I18n/InvoiceText.php').read_bytes()
     require(hashlib.sha256(installed.encode()).digest()==hashlib.sha256(expected).digest(),'installed_receipt_source_changed')

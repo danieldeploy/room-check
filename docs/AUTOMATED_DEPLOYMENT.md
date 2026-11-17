@@ -322,3 +322,10 @@ The receipt pause CLI emits only its fixed outcome plus current intake/automatic
 booleans, read while holding the invoice lock. The existing protected release-log
 reader allowlists those values for acceptance evidence; arbitrary fields or raw
 messages are never forwarded. This check is separate from public-login health.
+
+The release-log guard did not confirm the fatal and correctly performed no retry.
+Local reproduction with display_errors=0 also suppresses the CLI fatal output.
+Recovery may additionally read only the staging root error_log; it requires the
+exact TranslationProtection bootstrap fatal dated within 120 seconds before
+deployment431 failed. Stale, future, unrelated or unparseable errors cannot
+authorize recovery. Only fixed classifications reach protected action output.
