@@ -180,6 +180,16 @@ final class InvoiceToconline
     {
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
         if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
+        $purchases=$proof['purchase_identities']??[];
+        if ($purchases && count($purchases)<=self::MAX_ATTACHMENTS && $text==='' && $references==='') {
+            $matched=false;
+            foreach ($purchases as $identity) {
+                $result=$this->receive($from,'','',$receiptHash,['authentication'=>$proof['authentication']??[],
+                    'outcome'=>'toc_accepted','purchase_identity'=>$identity]);
+                if ($result['result']==='matched') $matched=true;
+            }
+            return ['result'=>$matched?'matched':'unmatched','outcome'=>'toc_review'];
+        }
         $ledger=$this->ledger(); $settings=$this->settings(); $matches=[];
         preg_match_all('/(?:(?:booking|hostelworld|cloudbeds|receipt)[-_]|toc-)([a-f0-9]{64})(?:\.(?:pdf|jpe?g)|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
         foreach (array_unique($tokens[1]) as $key) {
@@ -222,7 +232,9 @@ final class InvoiceToconline
                 foreach ($ledger as &$item) {
                     if ($item['document_id']!==$candidate['document_id'] || ($item['email_id']??'')!==$candidate['email_id']
                         || !in_array($item['state'],['toc_sending','toc_submitted','toc_uncertain','toc_review','toc_no_confirmation'],true)) continue;
-                    $item['state']=$outcome;$item['receipt_hash']=$receiptHash;$item['receipt_received_at']=gmdate('c');
+                    $item['state']=$outcome;
+                    if ($outcome==='toc_rejected' && in_array($key,$proof['unsupported_files']??[],true)) $item['delivery_reason']='toc_provider_format';
+                    $item['receipt_hash']=$receiptHash;$item['receipt_received_at']=gmdate('c');
                     if ($outcome!=='toc_review') { $item['confirmation_source']='dkim_toconline';$item['confirmed_at']=gmdate('c'); }
                 }
                 unset($item);
@@ -267,7 +279,9 @@ final class InvoiceToconline
         foreach ($ledger as &$entry) if ((string)$entry['document_id']===(string)$id
             && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
             && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
-            $entry['state']=$automatic; $entry['receipt_hash']=$receiptHash;
+            $entry['state']=$automatic;
+            if ($automatic==='toc_rejected' && ($proof['provider_reason']??'')==='toc_provider_format') $entry['delivery_reason']='toc_provider_format';
+            $entry['receipt_hash']=$receiptHash;
             if ($automatic!=='toc_review') {
                 $entry['confirmed_at']=gmdate('c'); $entry['confirmation_source']='dkim_toconline';
                 $entry['confirmed_by']=0; $applied=true;

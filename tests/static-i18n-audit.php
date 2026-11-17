@@ -55,8 +55,13 @@ $technicalExceptions = [
     'src/Invoices/InvoiceTocPipe.php' => [
         'Ficheiros arquivados e associados automaticamente a faturas de compra:',
         'Ficheiros arquivados com sucesso:',
+        'Ficheiros arquivados e associados automaticamente a fornecedores:',
+        '/\AFornecedor NIF:\s*[0-9]{9}\s+Fornecedor:[^\r\n]*?\s+Ficheiro:\s*(',
         'Ficheiros arquivados com sucesso - Active Lines, Lda',
         'Foram recusados os seguintes ficheiros:',
+        'Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:',
+        'Arquivo digital não foi efetuado porque o total dos ficheiros enviados é superior a 20 MB.',
+        'Arquivo digital não foi efetuado porque enviou mais de 20 ficheiros.',
         'Foram recusados os seguintes ficheiros por já constarem no seu arquivo:',
     ],
     // PDF source-label patterns are parser instructions, never rendered UI.

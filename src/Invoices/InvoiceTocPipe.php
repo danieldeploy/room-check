@@ -130,13 +130,37 @@ final class InvoiceTocPipe
             } elseif ($duplicate && !$success) $outcome='toc_existing';
             elseif ($success && !$duplicate) $outcome='toc_accepted';
         }
-        $purchase=[];
+        $reason='';
+        $unsupported='Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:';
+        $normalized=preg_replace('/[\s\x{00A0}]+/u',' ',trim($text))??'';
+        if (str_contains($normalized,$unsupported)) $reason='toc_provider_format';
+        elseif (str_contains($normalized,'Arquivo digital não foi efetuado porque o total dos ficheiros enviados é superior a 20 MB.')) $reason='toc_provider_size';
+        elseif (str_contains($normalized,'Arquivo digital não foi efetuado porque enviou mais de 20 ficheiros.')) $reason='toc_provider_count';
+        if ($reason==='toc_provider_format' && $allNamesKnown && count($bodyTokens)===1 && count($tokens)===1)
+            $outcome=(!$success && !$duplicate)?'toc_rejected':'toc_review';
+        $purchase=[];$purchases=[];
         if ($success && !$duplicate && !$tokens && !$pdfNames[0]) {
             $purchase=self::purchaseIdentity($text);
             if ($purchase) $outcome='toc_accepted';
+            elseif ($reason==='' && !str_contains(mb_strtolower($normalized),'recusad')) {
+                $heading='Ficheiros arquivados e associados automaticamente a faturas de compra:';
+                if (substr_count($normalized,$heading)===1) {
+                    $rows=explode('Fornecedor NIF:',explode($heading,$normalized,2)[1]);
+                    array_shift($rows);
+                    if (count($rows)>1 && count($rows)<=20) foreach ($rows as $row) {
+                        $identity=self::purchaseIdentity($heading.' Fornecedor NIF:'.$row);
+                        if (!$identity) { $purchases=[]; break; }
+                        $purchases[]=$identity;
+                    }
+                }
+            }
         }
+        $perFile=$allNamesKnown && count($tokens)<=20 && (count($bodyTokens)>1 || (count($bodyTokens)===1 && $outcome==='toc_rejected'))
+            ? self::attachmentOutcomes($text,$subject) : [];
+        $unsupportedFiles=array_keys($perFile,'toc_provider_format',true);
+        foreach ($unsupportedFiles as $key) $perFile[$key]='toc_rejected';
         return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase,
-            'attachments'=>$allNamesKnown && count($tokens)<=20 && (count($bodyTokens)>1 || (count($bodyTokens)===1 && $outcome==='toc_rejected')) ? self::attachmentOutcomes($text,$subject) : []];
+            'purchase_identities'=>$purchases,'provider_reason'=>$reason,'attachments'=>$perFile,'unsupported_files'=>$unsupportedFiles];
     }
 
     /** Attach an outcome only to filenames explicitly listed under an understood heading.
@@ -150,6 +174,8 @@ final class InvoiceTocPipe
             'Ficheiros arquivados com sucesso:'=>'toc_accepted',
             'Foram recusados os seguintes ficheiros por já constarem no seu arquivo:'=>'toc_existing',
             'Foram recusados os seguintes ficheiros:'=>'toc_rejected',
+            'Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:'=>'toc_provider_format',
+            'Ficheiros arquivados e associados automaticamente a fornecedores:'=>'supplier_archive',
         ];
         $result=[];$section='toc_review';
         if (trim($subject)==='Ficheiros arquivados com sucesso - Active Lines, Lda'
@@ -162,6 +188,12 @@ final class InvoiceTocPipe
                 $section=$outcome;$line=trim(substr($line,strlen($heading)));break;
             }
             if ($line==='') continue;
+            if ($section==='supplier_archive' && preg_match('/\AFornecedor NIF:\s*[0-9]{9}\s+Fornecedor:[^\r\n]*?\s+Ficheiro:\s*('.$name.')\s*\]?\z/iu',$line,$supplier)) {
+                $key=strtolower($supplier[2]);
+                $result[$key]=isset($result[$key]) && $result[$key]!=='toc_accepted'?'toc_review':'toc_accepted';
+                continue;
+            }
+            if ($section==='supplier_archive') $section='toc_review';
             if (!preg_match('/\A(?:'.$name.'(?:[\s,;]+|$))+\z/i',$line)) $section='toc_review';
             preg_match_all('/'.$name.'/i',$line,$matches);
             foreach ($matches[1] as $key) {
@@ -205,7 +237,7 @@ final class InvoiceTocPipe
         return ['pending'=>count(glob($this->vault->root.'/toc-pipe-*.enc')?:[]),
             'matched'=>(int)($status['matched']??0),'unmatched'=>(int)($status['unmatched']??0),
             'checked_at'=>$status['checked_at']??null,'received_at'=>$status['received_at']??null,
-            'authentication'=>$status['authentication']??'not_checked','outcome'=>$status['outcome']??'toc_review','authentication_facts'=>$status['authentication_facts']??[]];
+            'provider_reason'=>$status['provider_reason']??'', 'authentication'=>$status['authentication']??'not_checked','outcome'=>$status['outcome']??'toc_review','authentication_facts'=>$status['authentication_facts']??[]];
     }
 
     /** Called under room_check_invoices; atomic queue files survive worker/database outages. */
@@ -219,10 +251,11 @@ final class InvoiceTocPipe
             // A previously unmatched filename-only parse may now carry signed fiscal evidence.
             $event=$receipt['hash'].(!empty($receipt['purchase_identity'])?':purchase-v'.self::CORRELATION_VERSION:'');
             if (!in_array($event,$status['recent'],true)) {
-                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[],'attachments'=>$receipt['attachments']??[]]);
+                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[],'attachments'=>$receipt['attachments']??[],'purchase_identities'=>$receipt['purchase_identities']??[],'provider_reason'=>$receipt['provider_reason']??'','unsupported_files'=>$receipt['unsupported_files']??[]]);
                 $status[$result['result']==='matched'?'matched':'unmatched']++;
                 $status['recent']=array_slice([...$status['recent'],$event],-250);
                 $status['authentication']=$receipt['authentication']['code']??'not_checked';
+                $status['provider_reason']=!empty($receipt['authentication']['verified'])?($receipt['provider_reason']??''):'';
                 $status['authentication_facts']=$receipt['authentication']['facts']??[];
                 $status['outcome']=$result['outcome']??'toc_review';
                 $status['received_at']=$receipt['received_at']; $status['checked_at']=gmdate('c');

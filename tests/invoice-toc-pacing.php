@@ -51,12 +51,16 @@ try {
     $raw="From: no_reply@toconline.pt\r\nSubject: Arquivo digital\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n"
         ."Ficheiros arquivados com sucesso:\r\n".$names[1][0]."\r\nForam recusados os seguintes ficheiros por já constarem no seu arquivo:\r\n"
         .$names[1][1]."\r\nForam recusados os seguintes ficheiros:\r\n".$names[1][2]."\r\nEstado desconhecido\r\n".$names[1][3];
+    $raw.="\r\nForam recusados os seguintes ficheiros, por se encontrarem em formato não suportado:\r\n".$names[1][5]
+        ."\r\nFicheiros arquivados e associados automaticamente a fornecedores:\r\nFornecedor NIF: 500000000 Fornecedor: Example Ficheiro: ".$names[1][6]."]";
     $parsed=InvoiceTocPipe::parse($raw);
     $proof=$parsed+['authentication'=>['verified'=>true,'code'=>'verified','recipient'=>'test@welcomehostel.pt','signed_at'=>gmdate('c')]];
     $batched->receive($parsed['from'],'',$parsed['text'],$parsed['hash'],$proof);
     $states=$worker->status()['documents'];
     foreach (['toc_accepted','toc_existing','toc_rejected','toc_review','toc_submitted'] as $i=>$state)
         paceCheck($states['batch-'.$i]['toconline_state']===$state,'mixed reply preserves independent verdict for position '.$i);
+    paceCheck(($states['batch-2']['delivery_reason']??'')==='' && $states['batch-5']['delivery_reason']==='toc_provider_format','format refusal applies only to the named attachment');
+    paceCheck($states['batch-6']['toconline_state']==='toc_accepted','published supplier archive format confirms its named file');
     $batched->submitReceipt(reset($docs),$docs);
     paceCheck(count($messages)===2,'replayed request never retransmits a partial batch');
 

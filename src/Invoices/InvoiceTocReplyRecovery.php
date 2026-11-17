@@ -54,7 +54,7 @@ final class InvoiceTocReplyRecovery
                     if (($d['issuer_nif']??'')===$purchase['issuer_nif']
                         && trim(preg_replace('/\s+/u',' ',(string)($d['invoice_number']??'')))===$purchase['invoice_number']) $fiscal=true;
                 }
-                if ((count($tokens)===1 && isset($keys[$tokens[0]])) || array_intersect_key($parsed['attachments']??[],$batchKeys) || $fiscal) {
+                if ((count($tokens)===1 && isset($keys[$tokens[0]])) || array_intersect_key($parsed['attachments']??[],$batchKeys) || $fiscal || (!empty($parsed['purchase_identities']) && $keys)) {
                     $pipe->enqueue($raw);$queued++;
                 }
             }
