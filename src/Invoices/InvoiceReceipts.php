@@ -389,16 +389,23 @@ final class InvoiceReceipts
         $s['processes'][$s['active_process']]['error']='';
         $s['requested']=false;unset($s['discovery_retry']); $s['source']=$source; $s['root']=$root; $s['scanned_at']=gmdate('c'); $s['error']=''; $this->save($s);
     }
+    /** Shared replacement pages must be regrouped from their new source, never old bytes. */
+    public static function hasReplacementChildren(string $id,array $d,array $documents): bool
+    {
+        foreach ($d['children']??[] as $child) {
+            $entry=$documents[$child]??[];$source=(string)($entry['source_id']??'');
+            if (($source==='' && !empty($entry['replaces']))
+                || ($source!==$id && !empty($documents[$source]['replaces']))) return true;
+        }
+        return false;
+    }
     /** Manager supplies complete page groups; fiscal QR fields remain authoritative. */
     public function regroup(string $id,string $text,bool $confirmed,int $actor): void
     {
         $s=$this->status();$d=$s['documents'][$id]??null;
         if (!$confirmed || !is_array($d) || !empty($d['source_id']) || ($d['format']??'')!=='pdf'
             || in_array($d['stage'],['split_completed','source_trashing','source_moving','source_processed'],true) || strlen($text)>400) throw new RuntimeException('receipt_grouping_required');
-        foreach ($d['children']??[] as $child) {
-            $pending=$s['documents'][$child]??[];
-            if (!empty($pending['replaces']) && empty($pending['source_id'])) throw new RuntimeException('worker_busy');
-        }
+        if (self::hasReplacementChildren($id,$d,$s['documents'])) throw new RuntimeException('receipt_grouping_required');
         $groups=[];$seen=[];
         foreach (preg_split('/[;\r\n]+/',trim($text)) as $line) {
             if (!preg_match('/\A\s*\d+(?:\s*,\s*\d+)*\s*\z/',$line)) throw new RuntimeException('receipt_grouping_required');
@@ -409,7 +416,10 @@ final class InvoiceReceipts
         // Actual page count is checked again by the local parser on the original bytes.
         foreach ($d['children']??[$id] as $child) if (in_array($s['documents'][$child]['stage']??'',['discarding','discarded'],true) || !$this->toc->receiptUnsent($child)) throw new RuntimeException('receipt_legacy_submitted');
         $d['legacy_children']=array_values(array_unique(array_merge($d['legacy_children']??[],$d['children']??[])));
-        foreach ($d['children']??[] as $child) { $s['documents'][$child]['stage']='superseded';$s['documents'][$child]['error']=''; }
+        foreach ($d['children']??[] as $child) {
+            $s['documents'][$child]['stage']='superseded';$s['documents'][$child]['error']='';
+            self::redirectChildren($s,$child,[$id]);
+        }
         unset($d['children'],$d['analysis_version'],$d['manifest'],$d['grouping_pending']);
         $d['manual_groups']=$groups;$d['grouped_by']=$actor;$d['stage']='queued';$d['error']='';$d['attempts']=0;$d['next_attempt']=0;
         $s['documents'][$id]=InvoiceReceiptRetry::reset($d);self::beginCycle($s,$d['process_id']??'legacy');$this->save($s);

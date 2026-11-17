@@ -113,7 +113,7 @@ $fiscalBlocked=isset($d['fiscal_status']) && $d['fiscal_status']!=='N';
 <?php if ($missing): ?><input type="hidden" name="confirmed" value="1"><?php else: ?><label><input type="checkbox" name="confirmed" value="1" required> <?= $t('receipt_confirm') ?></label><?php endif; ?>
 <div class="form-actions"><button class="primary-button" type="submit" data-review-submit disabled><?= $t($missing?'receipt_save_details':'receipt_approve') ?></button></div>
 </form><?php else: ?><p><?= $t('receipt_wait') ?></p><?php endif; ?>
-<?php endif; ?><?php if ($canReview && empty($d['source_id']) && ($d['format']??'')==='pdf' && !in_array($d['stage'],['split_completed','source_trashing','source_moving','source_processed'],true) && (!empty($d['children']) || !empty($d['grouping_pending']))): ?>
+<?php endif; ?><?php if ($canReview && empty($d['source_id']) && ($d['format']??'')==='pdf' && !in_array($d['stage'],['split_completed','source_trashing','source_moving','source_processed'],true) && (!empty($d['children']) || !empty($d['grouping_pending'])) && !InvoiceReceipts::hasReplacementChildren($id,$d,$fullState['documents'])): ?>
 <details><summary><?= $t('receipt_groups') ?></summary><p><?= $t('receipt_groups_help') ?></p>
 <form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="regroup"><input type="hidden" name="id" value="<?= $escape($id) ?>">
 <label class="field"><span><?= $t('receipt_groups') ?></span><textarea name="page_groups" required maxlength="400" rows="4"></textarea></label>

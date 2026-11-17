@@ -944,7 +944,12 @@ the superseded entry for audit. Do not copy old extracted fields, QR, approvals 
 manual groups. All original/contributing masters point to the replacement source
 until its manifest atomically expands their references to the new invoice leaves.
 This preserves other invoices and prevents premature source cleanup. Intermediate
-regroup is blocked while a replacement source owns that slot. Retire superseded
+regroup is blocked while a replacement source owns that slot. Once its leaves
+exist, old contributing sources still cannot regroup those new pages from old
+bytes; their grouping control is hidden and POST rejects it. The new source can
+regroup its own pages: redirect all references to the source before superseding
+old leaves, then atomically expand them to the regrouped manifest. Repeated manual
+grouping therefore cannot leave a contributing master pointing to retired leaves. Retire superseded
 pending derivatives only after final replacement copies resolve and verify;
 cleanup failure follows existing retries without allocating or analysing again.
 

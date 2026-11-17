@@ -71,7 +71,7 @@ cc($new['stage']==='queued' && $s['documents']['old-leaf']['stage']==='supersede
 foreach(['issued_on','issuer_nif','company_nif','qr_fields','fiscal_status','manual_groups','company_confirmation','reviewed_at','review_reason','source_id','preserved_at','drive_parent'] as $key)cc(!isset($new[$key]),'Old data cannot transfer: '.$key);
 cc($s['documents']['original-master']['children']===['good','sibling'] && $s['documents']['sibling']===$sibling,'Replacement retains original master and untouched sibling');
 cc($new['legacy_children']===['old-leaf'] && !$drive->trashed && !$drive->moved,'Original derivative retained until correction accepted');
-try{$flow->regroup('original-master','1;2',true,1);throw new LogicException('Regroup orphaned replacement');}catch(RuntimeException $e){cc($e->getMessage()==='worker_busy','Cannot regroup during replacement');}
+try{$flow->regroup('original-master','1;2',true,1);throw new LogicException('Regroup orphaned replacement');}catch(RuntimeException $e){cc($e->getMessage()==='receipt_grouping_required','Cannot regroup during replacement');}
 try{$flow->requestReplacement('old-leaf',[InvoiceReceiptSelection::token($drive->files['good'])],true,1);throw new LogicException('Repeated submit');}catch(RuntimeException $e){cc($e->getMessage()==='receipt_review_required','Repeated submission cannot allocate second replacement');}
 $before=count($an->analysed);$flow->run();$s=$flow->status();$leaves=$s['documents']['good']['children'];$leaf=$leaves[0];
 cc(count($an->analysed)===$before+1 && end($an->analysed)===['%PDF-A4','pdf',null],'Fresh full fiscal analysis, no old grouping');
@@ -99,6 +99,12 @@ $v->save(InvoiceReceipts::FILE,$multi);$flow->requestReplacement('old-leaf',[Inv
 $group=['complete'=>true,'uncertain'=>true,'review_reason'=>'receipt_review_required'];$an->result=['page_count'=>2,'groups'=>[$group+['pages'=>[1]],$group+['pages'=>[2]]]];
 $flow->run();$s=$flow->status();$leaves=$s['documents']['good']['children'];
 cc(count($leaves)===2 && $s['documents']['original-master']['children']===array_merge($leaves,['sibling']) && $s['documents']['other-master']['children']===$leaves,'One replacement can reanalyse multiple leaves without orphaning any contributing master');$an->result=null;
+// Manual regroup must follow the new bytes, preserving every source link across reanalysis.
+try{$flow->regroup('original-master','1;2',true,1);throw new LogicException('Original regroup overwrote new bytes');}catch(RuntimeException $e){cc($e->getMessage()==='receipt_grouping_required','Contributing old source cannot regroup replacement pages');}
+$flow->regroup('good','1,2',true,1);$s=$flow->status();
+cc($s['documents']['original-master']['children']===['good','sibling'] && $s['documents']['other-master']['children']===['good'],'Regroup redirects every owner to the replacement pending source');
+$flow->run();$s=$flow->status();$regrouped=$s['documents']['good']['children'];
+cc($s['documents']['original-master']['children']===array_merge($regrouped,['sibling']) && $s['documents']['other-master']['children']===$regrouped,'Regroup reanalysis commits fresh shared child references');
 // A stale generic replacement must not become a PDF-only category correction.
 $generic=array_replace($source,['category_check_required'=>true,'category_check'=>['category'=>'a4'],'source_category'=>'a4','error'=>'receipt_selection_changed','replacement_allow_same_id'=>false]);
 cc(!InvoiceReceipts::categoryReview($generic) && InvoiceReceipts::replacementReview($generic),'Stale ambiguous source keeps generic replacement eligibility');
