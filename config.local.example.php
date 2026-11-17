@@ -20,6 +20,9 @@ return [
         // ficam fora de public_html e nunca devem ser adicionados ao Git.
         'private_config_file' => '/home/CPANEL_USER/room-check-private/zkaccess/config.json',
         'runner_status_file' => '/home/CPANEL_USER/room-check-private/zkaccess/status.json',
+        // Disabled until Cloudbeds API access is approved. The referenced JSON
+        // contains the webhook token, API key and property-ID mapping; never commit it.
+        'cloudbeds_access_config_file' => '/home/CPANEL_USER/room-check-private/cloudbeds-zkaccess.json',
     ],
     'my2n' => [
         // This file contains only the path. Credentials stay outside public_html.

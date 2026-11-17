@@ -15,6 +15,14 @@ the guest the correct access information.
 Cloudbeds is authoritative for reservation state. ZKAccess is authoritative for
 whether the physical access programming succeeded.
 
+## Current implementation boundary
+
+The current draft foundation prepares authenticated webhook intake, an idempotent
+event queue, the Cloudbeds reservation/note client and the verified City Center
+ZKAccess mapping. It remains disabled by private configuration and does **not**
+yet write production guest PINs, enable the Cloudbeds webhook/API key, or send
+the final guest access message.
+
 ## Normal flow
 
 ```mermaid
