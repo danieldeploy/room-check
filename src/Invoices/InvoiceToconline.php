@@ -257,7 +257,7 @@ final class InvoiceToconline
         $signedAt=strtotime((string)($auth['signed_at']??''));
         if (($auth['verified']??false)===true && ($auth['code']??'')==='verified'
             && ($auth['recipient']??'')===strtolower($settings['sender'])
-            && (count($uniqueTokens)===1 || $fiscalCandidate!==null) && in_array($proof['outcome']??'',['toc_accepted','toc_existing'],true)) {
+            && (count($uniqueTokens)===1 || $fiscalCandidate!==null) && in_array($proof['outcome']??'',['toc_accepted','toc_existing','toc_rejected'],true)) {
             $candidate=$fiscalCandidate??($ledger[reset($uniqueTokens)]??[]);
             $sentAt=strtotime((string)($candidate['attempted_at']??''));
             if ($signedAt && $sentAt && $signedAt >= $sentAt-300) $automatic=$proof['outcome'];

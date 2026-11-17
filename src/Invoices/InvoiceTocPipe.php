@@ -124,7 +124,10 @@ final class InvoiceTocPipe
         preg_match_all('/[a-zA-Z0-9._-]+\.(?:pdf|jpe?g)/i',$text,$pdfNames);
         $allNamesKnown=count(array_filter($pdfNames[0],static fn($name)=>!preg_match('/\A(?:booking|hostelworld|cloudbeds|receipt)[-_][a-f0-9]{64}\.(?:pdf|jpe?g)\z/i',$name)))===0;
         if ($allNamesKnown && count(array_unique(array_map('strtolower',$pdfNames[0])))===1 && count($bodyTokens)===1 && count($tokens)===1) {
-            if ($duplicate && !$success) $outcome='toc_existing';
+            if (str_contains($text,'Foram recusados os seguintes ficheiros:')) {
+                $classified=self::attachmentOutcomes($text,$subject);
+                if (!$success && !$duplicate && ($classified[$bodyTokens[0]]??'')==='toc_rejected') $outcome='toc_rejected';
+            } elseif ($duplicate && !$success) $outcome='toc_existing';
             elseif ($success && !$duplicate) $outcome='toc_accepted';
         }
         $purchase=[];
@@ -133,14 +136,14 @@ final class InvoiceTocPipe
             if ($purchase) $outcome='toc_accepted';
         }
         return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase,
-            'attachments'=>$allNamesKnown && count($tokens)<=20 && (count($bodyTokens)>1 || (count($bodyTokens)===1 && str_contains($text,'Foram recusados os seguintes ficheiros:'))) ? self::attachmentOutcomes($text,$bodyTokens,$subject) : []];
+            'attachments'=>$allNamesKnown && count($tokens)<=20 && (count($bodyTokens)>1 || (count($bodyTokens)===1 && $outcome==='toc_rejected')) ? self::attachmentOutcomes($text,$subject) : []];
     }
 
     /** Attach an outcome only to filenames explicitly listed under an understood heading.
      * A bare list is understood only for the observed success subject. Contradictions
      * or unrecognised prose leave the corresponding filenames for manager review.
      */
-    private static function attachmentOutcomes(string $text,array $tokens,string $subject): array
+    private static function attachmentOutcomes(string $text,string $subject): array
     {
         $name='(?:booking|hostelworld|cloudbeds|receipt)[-_]([a-f0-9]{64})\.(?:pdf|jpe?g)';
         $headings=[

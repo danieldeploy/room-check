@@ -54,6 +54,10 @@ $technicalExceptions = [
     // Exact provider protocol text matched on the server, never website copy.
     'src/Invoices/InvoiceTocPipe.php' => [
         'Ficheiros arquivados e associados automaticamente a faturas de compra:',
+        'Ficheiros arquivados com sucesso:',
+        'Ficheiros arquivados com sucesso - Active Lines, Lda',
+        'Foram recusados os seguintes ficheiros:',
+        'Foram recusados os seguintes ficheiros por já constarem no seu arquivo:',
     ],
     // PDF source-label patterns are parser instructions, never rendered UI.
     'src/Invoices/InvoiceReceipts.php' => [
