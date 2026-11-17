@@ -64,10 +64,10 @@ final class InvoiceTocMailbox
     }
 
     /** Caller owns room_check_invoices. Progress persists after each receipt; repeat processing is safe. */
-    public function poll(): void
+    public function poll(): ?string
     {
-        if (!$this->vault->has('toconline-mailbox.enc')) return;
-        $settings=$this->vault->read('toconline-mailbox.enc'); if (empty($settings['enabled'])) return;
+        if (!$this->vault->has('toconline-mailbox.enc')) return null;
+        $settings=$this->vault->read('toconline-mailbox.enc'); if (empty($settings['enabled'])) return null;
         $r=$this->vault->has('toconline-receipts.enc')?$this->vault->read('toconline-receipts.enc'):['cursors'=>[],'unmatched'=>0];
         $r['checked_at']=gmdate('c'); $r['error']=null;
         try {
@@ -108,5 +108,6 @@ final class InvoiceTocMailbox
             $r['error']=in_array($e->getMessage(),['toc_mail_connect','toc_mail_unavailable','toc_mail_settings'],true)?$e->getMessage():'toc_mail_connect';
         }
         $this->vault->save('toconline-receipts.enc',$r);
+        return $r['error'];
     }
 }

@@ -28,8 +28,8 @@ final class InvoiceRunner
                 $this->config['whatsapp']??[]))->dispatch();
         } catch (Throwable) {}
         if ($remote->mode() !== 'local') {
-            $remote->maintenance();
             try { $this->archive(); } catch (Throwable) {}
+            $remote->maintenance();
             try { (new InvoiceAlerts($this->pdo, $this->config['whatsapp'] ?? []))->dispatch(); } catch (Throwable) {}
             return;
         }
@@ -119,15 +119,40 @@ final class InvoiceRunner
         $vault = new InvoiceVault((string) ($this->config['private_dir'] ?? ''));
         $drive=new InvoiceDriveClient($vault);
         $toc=new InvoiceToconline($this->pdo,$vault,$drive);
-        (new InvoiceTocPipe($vault))->process($toc);
-        (new InvoiceTocMailbox($vault,$toc))->poll();
-        $toc->reconcile(); // Process authenticated arrivals before expiring receipt confirmation windows.
-        (new InvoiceDrive($this->pdo,$vault,$drive))->run();
-        $toc->run();
+        $pipeReady=$this->archivePhase($vault,'toc_pipe_queue',fn()=>(new InvoiceTocPipe($vault))->process($toc));
+        $this->archivePhase($vault,'toc_mail_connect',function() use ($vault,$toc) {
+            $reason=(new InvoiceTocMailbox($vault,$toc))->poll();
+            if ($reason!==null) throw new RuntimeException($reason);
+        });
+        // Apply authenticated arrivals before ageing any confirmation or reserving another send.
+        $deliveryReady=$pipeReady && $this->archivePhase($vault,'receipt_delivery_reconcile',fn()=>$toc->reconcile());
+        $this->archivePhase($vault,'receipt_portal_archive',fn()=>(new InvoiceDrive($this->pdo,$vault,$drive))->run());
+        if ($deliveryReady) $this->archivePhase($vault,'receipt_portal_send',fn()=>$toc->run(null,false));
         $pdf=new InvoiceReceiptPdf($vault,$this->config);
         $receipts=new InvoiceReceipts($this->pdo,$vault,$drive,$toc,[$pdf,'split'],new InvoiceReceiptAnalysis($pdf,new InvoiceGemini($vault)));
-        try { $receipts->runBatch(); } catch (Throwable $e) { $receipts->recordFailure($e); }
+        try { $receipts->runBatch($deliveryReady); } catch (Throwable $e) { $receipts->recordFailure($e); }
         (new InvoiceAlerts($this->pdo,$this->config['whatsapp']??[]))->receipts($vault);
+    }
+
+    /** Persist one safe incident per phase; success clears only that phase. */
+    private function archivePhase(InvoiceVault $vault,string $phase,callable $work): bool
+    {
+        $file=InvoiceReceipts::PHASE_ERRORS;
+        $incidents=$vault->has($file)?$vault->read($file):[];
+        try {
+            $work();
+        } catch (Throwable $e) {
+            $reason=isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed';
+            if (($incidents[$phase]['reason']??'')!==$reason) {
+                $incidents[$phase]=['reason'=>$reason,'since'=>gmdate('c')];
+                $vault->save($file,$incidents);
+            }
+            return false;
+        }
+        if (isset($incidents[$phase])) {
+            unset($incidents[$phase]);$vault->save($file,$incidents);
+        }
+        return true;
     }
 
     private function finishFailure(array $job, string $code, InvoiceAlerts $alerts): void

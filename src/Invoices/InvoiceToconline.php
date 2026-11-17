@@ -15,6 +15,7 @@ final class InvoiceToconline
     // Keep until end-to-end validation AND explicit owner withdrawal (2026-10-04).
     public const DIAGNOSTIC_DOCUMENT_ID = 9;
     public const DIAGNOSTIC_COOLDOWN = 600;
+    private const EMAILS_PER_HOUR = 15;
 
     public function __construct(private readonly PDO $pdo, private readonly InvoiceVault $vault, private readonly object $drive, private readonly mixed $transport = null) {}
 
@@ -296,9 +297,9 @@ final class InvoiceToconline
         return ['result'=>'matched','document_id'=>$id,'suggestion'=>$suggestion,'outcome'=>$applied?$automatic:'toc_review'];
     }
 
-    public function run(?int $pilotId=null): void
+    public function run(?int $pilotId=null,bool $reconcile=true): void
     {
-        $this->reconcile();
+        if ($reconcile) $this->reconcile();
         $settings=$this->settings();
         if ($pilotId && empty($settings['nif'])) throw new RuntimeException('toc_invalid_settings');
         if (empty($settings['nif']) || (!$pilotId && (empty($settings['enabled']) || empty($settings['pilot_verified'])))) return;
@@ -423,9 +424,9 @@ final class InvoiceToconline
             $at=strtotime((string)($entry['attempted_at']??''));
             if ($at && $at>$now-3600) $attempts['diagnostic:'.$key]=$at;
         }
-        if (count($attempts)>=10) {
+        if (count($attempts)>=self::EMAILS_PER_HOUR) {
             sort($attempts,SORT_NUMERIC);
-            throw new InvoiceTocWait($attempts[count($attempts)-10]+3600);
+            throw new InvoiceTocWait($attempts[count($attempts)-self::EMAILS_PER_HOUR]+3600);
         }
     }
 

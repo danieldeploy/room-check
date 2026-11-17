@@ -36,11 +36,12 @@ try {
     if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
         Csrf::validate($_POST['csrf_token']??null);
         $action=(string)($_POST['action']??'');
-        if (!((in_array($action,['start','retry_process'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','replace_source','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
+        if (!((in_array($action,['start','retry_process','retry_worker'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','replace_source','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
         if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
         try {
             $action=(string)($_POST['action']??''); $id=(string)($_POST['id']??'');
             if ($action==='start' && $canRun) $receipts->request((int)$user['id'],(int)($_POST['year']??0),is_array($_POST['months']??null)?$_POST['months']:[]);
+            elseif ($action==='retry_worker' && $canRun) $receipts->retryWorker();
             elseif ($action==='retry_process' && $canRun) $receipts->retryDiscovery((string)($_POST['process']??''));
             elseif ($action==='retry' && $canRun && $canHistory) $receipts->retry($id);
             elseif ($action==='discard' && $canReview) $receipts->requestDiscard($id,($_POST['discard_confirmed']??'')==='1',(int)$user['id']);
@@ -54,6 +55,7 @@ try {
         $returnQuery=$action==='start'?['process'=>$receipts->status()['active_process']]:array_intersect_key($_GET,array_flip(['process','filter','process_year','process_month','page']));
         header('Location: receipts.php'.($returnQuery?'?'.http_build_query($returnQuery):''),true,303); exit;
     }
+    $phaseErrors=$vault->has(InvoiceReceipts::PHASE_ERRORS)?$vault->read(InvoiceReceipts::PHASE_ERRORS):[];
     $state=$receipts->status(); $connected=$drive->receiptsAuthorized(); $tocSettings=$toc->settings();
 } catch (Throwable $e) { if (isset($receipts)) { try { $state=$receipts->status();$connected=$drive->receiptsAuthorized();$tocSettings=$toc->settings(); } catch (Throwable) {} } $error=isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed'; if ($e->getCode()===403) http_response_code(403); }
 $escape=static fn($v)=>htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
@@ -85,15 +87,29 @@ $progress=InvoiceReceiptReport::progress($state,$sendEnabled);
 $selectedRunning=$visibleProcesses && InvoiceReceiptReport::processState($fullState,$processId,$sendEnabled)==='receipt_run_running';
 $report=InvoiceReceiptReport::summary($state['documents']);
 $defaultFilter=($report['pending'] || $report['errors'])?'problems':'success';
-$filter=$selectedRunning?'all':(in_array($_GET['filter']??'',['all','success','problems'],true)?$_GET['filter']:$defaultFilter);
+$explicitFilter=in_array($_GET['filter']??'',['all','success','problems'],true);
+$filter=$explicitFilter?$_GET['filter']:$defaultFilter;
 $processingMessage=strtr(InvoiceText::get('receipt_processing_months'),['{months}'=>implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$state['months']??[])),'{year}'=>(string)$year]);
-$selectionQuery=['process'=>$processId,'filter'=>$selectedRunning?'auto':$filter,'process_year'=>$processYear,'process_month'=>$processMonth];$query=http_build_query($selectionQuery);
+$selectionQuery=['process'=>$processId,'filter'=>$explicitFilter?$filter:'auto','process_year'=>$processYear,'process_month'=>$processMonth];$query=http_build_query($selectionQuery);
 $page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse(InvoiceReceiptReport::documents($fullState,$processId,$filter),true):[]; $documents=array_slice($all,($page-1)*50,50,true);
 $historyHtml='';
 if (!$visibleProcesses) $progress['state']='receipt_no_runs';
 $requestError=(($_SERVER['REQUEST_METHOD']??'GET')==='POST')?$error:'';
-$globalError=($requestError===''?$error:'')?:($state['error']??'')?:($fullState['error']??'');
+$globalError=($requestError===''?$error:'')?:($state['error']??'');
 $globalError=$globalError!==''?InvoiceText::get(isset(InvoiceText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
+$shared=$state['worker_retry']??[];
+if ($shared) {
+    $reason=InvoiceText::get(isset(InvoiceText::TEXT[$shared['error']])?$shared['error']:'receipt_failed');
+    $phase=InvoiceText::get(($shared['phase']??'')==='receipt_drive_request'?'receipt_drive_request':'receipt_worker_step');
+    $globalError=trim($globalError.' '.$phase.' — '.$reason);
+    $facts=InvoiceReceiptReport::failureFacts($shared);
+    if (!empty($facts['http_status'])) $globalError.=' (HTTP '.$facts['http_status'].')';
+}
+foreach ($phaseErrors??[] as $phase=>$incident) {
+    if (!isset(InvoiceText::TEXT[$phase])) continue;
+    $reason=$incident['reason']??'receipt_failed';
+    $globalError=trim($globalError.' '.InvoiceText::get($phase).' — '.InvoiceText::get(isset(InvoiceText::TEXT[$reason])?$reason:'receipt_failed'));
+}
 $canStart=InvoiceReceiptReport::canStartNewRun($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
 $globalProgress=InvoiceReceiptReport::progress($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
 $processing=(bool)$selectedRunning;
@@ -111,7 +127,7 @@ if ($requestError!=='' && ($_POST['action']??'')==='start') {
 if ($canHistory) { $receiptHistoryRendering=true; ob_start(); require __DIR__.'/receipt-history.php'; $historyHtml=(string)ob_get_clean(); }
 if (($_GET['status']??'')==='1') {
     jsonResponse(['progress'=>$progress,'label'=>InvoiceText::get($progress['state']),'report'=>InvoiceReceiptReport::render($report,!$canHistory,$progress),
-        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'can_start'=>$canRun && $canStart,'processing'=>$processing,'processing_message'=>$processingMessage,'selected_running'=>(bool)$selectedRunning,'filter'=>$filter,'process_labels'=>$processLabels,'revision'=>hash('sha256',json_encode([$state['documents'],$filter,$selectedRunning]))]);
+        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'worker_blocked'=>$canRun && !empty($shared['blocked']),'can_start'=>$canRun && $canStart,'processing'=>$processing,'processing_message'=>$processingMessage,'selected_running'=>(bool)$selectedRunning,'filter'=>$filter,'process_labels'=>$processLabels,'revision'=>hash('sha256',json_encode([$state['documents'],$filter,$selectedRunning]))]);
 }
 ?>
 <!doctype html><html lang="<?= $escape(Translator::locale()) ?>"><head>
@@ -141,6 +157,7 @@ if (($_GET['status']??'')==='1') {
 <fieldset class="receipt-months"><legend class="field-label"><?= $t('receipt_months') ?></legend><div class="receipt-month-row">
 <?php foreach (InvoiceDriveLayout::MONTHS as $month=>$name): ?><label class="receipt-month"><input type="checkbox" name="months[]" value="<?= $month ?>" <?= in_array($month,$formMonths,true)?'checked':'' ?>> <span><?= $escape(SiteTranslations::text($name,$monthEnglish[$month])) ?></span></label> <?php endforeach; ?>
 </div></fieldset><div class="form-actions"><button class="primary-button" type="submit" data-receipt-start <?= !$canStart?'disabled':'' ?>><?= $t('receipt_start') ?></button></div></fieldset></form><?php endif; ?>
+<?php if ($canRun): ?><form method="post" data-receipt-worker-retry <?= empty($shared['blocked'])?'hidden':'' ?>><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="retry_worker"><button class="primary-button" type="submit"><?= $t('receipt_retry_worker') ?></button></form><?php endif; ?>
 <?php if ($canRun && (!empty($state['missing_periods']) || !empty($state['error']))): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="action" value="retry_process"><input type="hidden" name="process" value="<?= $escape($processId) ?>"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></form><?php endif; ?>
 <?php if (!empty($state['missing_periods'])): ?><p class="alert"><?= $t('receipt_missing_month') ?>: <?= $escape(implode(', ',$state['missing_periods'])) ?></p><?php endif; ?>
 <?php if (empty($tocSettings['enabled']) || empty($tocSettings['pilot_verified'])): ?><p class="alert"><?= $t('receipt_toc_disabled') ?></p><?php endif; ?>

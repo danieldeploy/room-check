@@ -73,8 +73,15 @@ final class InvoiceReceiptReport
     public static function selected(array $s,string $id): array
     {
         $p=$s['processes'][$id]??[];
-        return array_merge($s,$p,['documents'=>self::documents($s,$id),
+        $selected=array_merge($s,$p,['documents'=>self::documents($s,$id),
             'requested'=>!empty($s['requested']) && ($s['active_process']??'')===$id]);
+        if (isset($selected['worker_retry'])) {
+            $shared=$selected['worker_retry'];
+            unset($selected['worker_retry']);
+            $work=self::progress($selected);
+            if ($work['busy'] || $work['next_at'] || $selected['requested']) $selected['worker_retry']=$shared;
+        }
+        return $selected;
     }
 
     /** Automatic retries and live TOConline confirmation waits also reserve the intake. */
@@ -96,13 +103,8 @@ final class InvoiceReceiptReport
     }
     public static function canStartNewRun(array $s,bool $sendEnabled=true): bool
     {
-        if (!empty($s['requested'])) return false; // Discovery owns a single persisted cursor.
-        $progress=self::progress($s,$sendEnabled);
-        if (!$progress['busy'] || $progress['next_at']>time()) return true;
-        foreach ($s['documents']??[] as $d) {
-            if (($d['toc_deadline']??0)>time() && in_array($d['toconline_state']??'',['toc_sending','toc_submitted','toc_uncertain'],true)) return true;
-        }
-        return false;
+        // Discovery owns a single cursor. After discovery, request() checks month ownership.
+        return empty($s['requested']);
     }
     public static function processState(array $s,string $id,bool $sendEnabled=true): string
     {
@@ -191,6 +193,15 @@ final class InvoiceReceiptReport
             }
             if (empty($d['children']) && !self::resolved($d)) $pending=true;
             if (!empty($d['children']) && !in_array($stage,['source_processed','split_completed'],true)) $pending=true;
+        }
+        $shared=$state['worker_retry']??[];
+        if ($shared && ($busy || $next || !empty($state['requested']))) {
+            if (!empty($shared['blocked'])) {
+                $failed=true;$busy=false;$next=0;$shortRetry=false;
+            } elseif (($shared['next_attempt']??0)>$now) {
+                $next=$busy?(int)$shared['next_attempt']:max($next,(int)$shared['next_attempt']);
+                $busy=false;$shortRetry=true;
+            }
         }
         if (!empty($state['missing_periods'])) $pending=true;
         $key=$busy?'receipt_processing':($shortRetry?'receipt_retry_wait':($replyPoll?'receipt_toc_wait':($next?'receipt_quota_wait':($failed?'receipt_interrupted':($pending?'receipt_finished_pending':'receipt_finished')))));

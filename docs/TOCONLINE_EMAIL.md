@@ -17,7 +17,7 @@ Optional read-only mailbox retrieval and conservative outcome reconciliation are
 
 ## Shared outbound capacity
 
-All portal and scan deliveries share a rolling ten-attempt hourly budget,
+All portal and scan deliveries share a rolling budget of 15 attempted messages per hour,
 including uncertain attempts and explicit diagnostic sends. Duplicate ledger
 aliases do not consume extra capacity. Capacity is checked before committing
 send intent; unsent scans wait with the existing countdown and retry through
@@ -26,3 +26,5 @@ not clear submission history, reset confirmed outcomes or resend queued mail.
 The budget leaves headroom for other domain mail but cannot guarantee hosting
 capacity when unrelated mail also consumes the domain quota. Mail-server
 acceptance still requires a separate authenticated TOConline acknowledgement.
+
+Each eligible batch uses one slot for up to 20 individually identifiable attachments, subject to the raw and encoded message-size checks. A partial reply settles only its named invoices.

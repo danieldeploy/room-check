@@ -44,6 +44,8 @@
       offset=result.progress.server_time*1000-Date.now();const label=statusLabel();if(label)label.textContent=result.label;
       const globalError=document.getElementById('receipt-global-error');
       if(globalError){globalError.textContent=result.error||'';globalError.hidden=!result.error;}
+      const retryWorker=document.querySelector('[data-receipt-worker-retry]');
+      if(retryWorker)retryWorker.hidden=!result.worker_blocked;
       if(typeof result.can_start==='boolean'){
         document.querySelectorAll('[data-receipt-intake]').forEach(fieldset=>{fieldset.disabled=!result.can_start;});
         document.querySelectorAll('[data-receipt-start]').forEach(button=>{button.disabled=!result.can_start;});
@@ -62,13 +64,6 @@
       const history=document.getElementById('receipt-history');
       if(result.history!==null && result.revision!==revision && !previewBusy() && !history.contains(document.activeElement) && !history.dataset.editing){
         history.innerHTML=result.history;revision=result.revision;window.dispatchEvent(new Event('receipt-history-updated'));
-      }
-      if(typeof result.selected_running==='boolean'){
-        document.querySelectorAll('[data-receipt-document-filter]').forEach(box=>{
-          box.hidden=result.selected_running;const select=box.querySelector('select');if(!select)return;
-          select.disabled=result.selected_running;
-          if(typeof result.filter==='string')select.value=result.filter;
-        });
       }
       success=true;warning.hidden=true;delete status.dataset.statusFailed;refreshButtons.forEach(b=>{b.hidden=true;});
     }catch{status.dataset.statusFailed='true';warning.textContent=status.dataset.unavailable;warning.hidden=false;refreshButtons.forEach(b=>{b.hidden=false;});}
