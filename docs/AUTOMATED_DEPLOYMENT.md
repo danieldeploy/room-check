@@ -316,3 +316,9 @@ TranslationProtection fatal before a pause result, and the installed InvoiceText
 hash matches the reviewed source. The corrected helper loads installed classes
 only, preventing mixed clone/application class declarations. All other failures
 remain blocked. Successful later deployments use the ordinary release path.
+
+
+The receipt pause CLI emits only its fixed outcome plus current intake/automatic
+booleans, read while holding the invoice lock. The existing protected release-log
+reader allowlists those values for acceptance evidence; arbitrary fields or raw
+messages are never forwarded. This check is separate from public-login health.

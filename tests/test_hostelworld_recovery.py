@@ -2,7 +2,13 @@ import pathlib,sys,unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"deploy"))
 import recover_hostelworld_release as r
+from hostelworld_status import receipt_pause_status
 class Tests(unittest.TestCase):
+    def test_receipt_status_is_allowlisted_and_never_prints_private_fields(self):
+        raw='prefix {"receipt_wait_pause":{"outcome":"paused","can_start":true,"automatic":false,"private":"never print"}} suffix'
+        self.assertEqual(receipt_pause_status(raw),[{'outcome':'paused','can_start':True,'automatic':False}])
+        self.assertEqual(receipt_pause_status(raw.replace('"paused"','"private outcome"')),[])
+        self.assertEqual(receipt_pause_status(raw.replace('true','"true"')),[])
     def runner(self):
         runner=Mock()
         runner.task_id.side_effect=lambda t:str(t["deploy_id"])
