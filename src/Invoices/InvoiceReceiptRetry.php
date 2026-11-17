@@ -13,7 +13,16 @@ final class InvoiceReceiptRetry
         if ($failure instanceof InvoiceGeminiRetry && in_array($code,['gemini_wait','gemini_daily_quota'],true)) {
             $r['retry_kind']=$code==='gemini_daily_quota'?'quota':'pacing';
             $r['next_attempt']=$failure->retryAt;
-            if ($code==='gemini_wait') $r['error']='';
+            if ($code==='gemini_wait') {
+                $r['error']='';
+                if (($previous['retry_kind']??'')==='transient') {
+                    $r['retry_kind']='transient';$r['error']=$previous['error']??'';
+                    $r['retry_deadline']=(int)($previous['retry_deadline']??0);
+                    if ($r['retry_deadline'] && $r['next_attempt']>$r['retry_deadline']) {
+                        $r['blocked']=true;$r['next_attempt']=0;
+                    }
+                }
+            }
             return $r;
         }
         $r['attempts']++;
@@ -35,7 +44,7 @@ final class InvoiceReceiptRetry
 
     public static function reset(array $record): array
     {
-        unset($record['retry_started_at'],$record['retry_kind'],$record['retry_deadline'],$record['blocked']);
+        unset($record['failure_facts'],$record['wait_reason'],$record['retry_started_at'],$record['retry_kind'],$record['retry_deadline'],$record['blocked']);
         $record['attempts']=0;$record['next_attempt']=0;return $record;
     }
 }

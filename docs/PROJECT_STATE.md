@@ -1,3 +1,7 @@
+## Invoice delivery and processing diagnostics — 2026-11-17
+
+Paper and eligible portal invoices can share a TOConline message with independent attachment verdicts. Automated tests cover mixed replies, count/byte limits, and the shared hourly email quota. The receipt report can identify the failing service on new attempts; historical generic errors remain inconclusive at transport level. Real provider acceptance of a newly generated batch requires a normal eligible submission and its reply. See [the invoice flow](invoices-multiplatform.md).
+
 ## PDF source categories and explicit corrections — 2026-11-15 (prepared)
 
 New PDF intake records A4/Talões folder ancestry and checks only the first page

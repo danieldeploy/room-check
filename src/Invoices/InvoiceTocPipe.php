@@ -92,6 +92,7 @@ final class InvoiceTocPipe
         if (preg_match('/;\s*charset\s*=\s*"?([a-zA-Z0-9_-]+)/i',$type,$m)) {
             try { $body=mb_convert_encoding($body,'UTF-8',$m[1]); } catch (ValueError) { throw new RuntimeException('toc_pipe_invalid'); }
         }
+        if (preg_match('/\A\s*text\/html/i',$type)) $body=preg_replace('~<(?:br\s*/?|/(?:p|li|td|tr|div))\s*>~i',"\n",$body)??$body;
         return html_entity_decode(strip_tags($body),ENT_QUOTES|ENT_HTML5,'UTF-8');
     }
 
@@ -131,7 +132,41 @@ final class InvoiceTocPipe
             $purchase=self::purchaseIdentity($text);
             if ($purchase) $outcome='toc_accepted';
         }
-        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase];
+        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase,
+            'attachments'=>$allNamesKnown && count($tokens)<=20 && (count($bodyTokens)>1 || (count($bodyTokens)===1 && str_contains($text,'Foram recusados os seguintes ficheiros:'))) ? self::attachmentOutcomes($text,$bodyTokens,$subject) : []];
+    }
+
+    /** Attach an outcome only to filenames explicitly listed under an understood heading.
+     * A bare list is understood only for the observed success subject. Contradictions
+     * or unrecognised prose leave the corresponding filenames for manager review.
+     */
+    private static function attachmentOutcomes(string $text,array $tokens,string $subject): array
+    {
+        $name='(?:booking|hostelworld|cloudbeds|receipt)[-_]([a-f0-9]{64})\.(?:pdf|jpe?g)';
+        $headings=[
+            'Ficheiros arquivados com sucesso:'=>'toc_accepted',
+            'Foram recusados os seguintes ficheiros por já constarem no seu arquivo:'=>'toc_existing',
+            'Foram recusados os seguintes ficheiros:'=>'toc_rejected',
+        ];
+        $result=[];$section='toc_review';
+        if (trim($subject)==='Ficheiros arquivados com sucesso - Active Lines, Lda'
+            && preg_match('/\A(?:\s*'.$name.'\s*)+\z/i',trim($text))) $section='toc_accepted';
+        foreach (preg_split('/\R/u',$text)?:[] as $line) {
+            $line=trim($line);
+            if ($line==='') continue;
+            foreach ($headings as $heading=>$outcome) {
+                if (!str_starts_with($line,$heading)) continue;
+                $section=$outcome;$line=trim(substr($line,strlen($heading)));break;
+            }
+            if ($line==='') continue;
+            if (!preg_match('/\A(?:'.$name.'(?:[\s,;]+|$))+\z/i',$line)) $section='toc_review';
+            preg_match_all('/'.$name.'/i',$line,$matches);
+            foreach ($matches[1] as $key) {
+                $key=strtolower($key);
+                $result[$key]=isset($result[$key]) && $result[$key]!==$section?'toc_review':$section;
+            }
+        }
+        return $result;
     }
 
     /** Observed QR-created purchase acknowledgement omits the uploaded filename. */
@@ -181,7 +216,7 @@ final class InvoiceTocPipe
             // A previously unmatched filename-only parse may now carry signed fiscal evidence.
             $event=$receipt['hash'].(!empty($receipt['purchase_identity'])?':purchase-v'.self::CORRELATION_VERSION:'');
             if (!in_array($event,$status['recent'],true)) {
-                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[]]);
+                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[],'attachments'=>$receipt['attachments']??[]]);
                 $status[$result['result']==='matched'?'matched':'unmatched']++;
                 $status['recent']=array_slice([...$status['recent'],$event],-250);
                 $status['authentication']=$receipt['authentication']['code']??'not_checked';

@@ -993,3 +993,11 @@ The operational pause helper loads runtime classes from the installed applicatio
 only. A failed bootstrap cannot write the pause marker. Recovery must verify the
 failed release log before retrying; a naturally completed or changed wait is then
 skipped rather than reverting progress.
+
+## TOConline email batching and failure evidence
+
+Eligible archived invoices keep their separate originals and correlation filenames. The normal portal and paper workers each group ready attachments for the configured company and sender. A single-document pilot stays single. Each message carries at most 20 files and 20,000,000 raw bytes ([TOConline manual](https://web.toconline.pt/wp-content/uploads/2023/09/TOConline_V.3.0.pdf)). The Hub also budgets folded base64 and MIME headers within a conservative 25,000,000-byte application ceiling. Set `HUB_TOC_MAX_MESSAGE_BYTES` lower if the relay requires it. Existing individual file validation also applies.
+
+The shared rolling local limit is 10 attempted emails per hour, including diagnostics. Each batch uses one slot. The observed hosting package allowance was 20/domain/hour, shared with other mail. Remaining attachments stay eligible for a later tick. A single encrypted write reserves every member before handoff. An uncertain handoff or partial answer cannot cause an automatic resend. Signed replies can resolve individual named files. Missing, conflicting and unrecognised verdicts retain their own pending/review states.
+
+The paper intake can start another month once discovery has finished and the existing run is waiting. An overlapping active month is rejected. The manager report gives the actual stage, retry deadline in Lisbon time, and available HTTP, cURL, elapsed time or model finish reason. A mail handoff, an uncertain delivery, and a missing TOConline reply have separate explanations. Historical generic errors have no retroactive technical detail.

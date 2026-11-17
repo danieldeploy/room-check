@@ -27,5 +27,43 @@ try {
     $ledger=$v->read('toconline-ledger.enc');foreach($ledger as &$e)$e['attempted_at']=gmdate('c',time()-3601);unset($e);$v->save('toconline-ledger.enc',$ledger);
     $toc->submitReceipt($docs['scan-9']);$toc->submitReceipt($docs['scan-9']);
     paceCheck($sent===10,'expired budget permits exactly one previously unsent delivery');
+    // Twenty-one ready invoices use two actual messages, even across worker restarts.
+    require_once dirname(__DIR__).'/src/Invoices/InvoiceTocPipe.php';
+    $v->save('toconline-ledger.enc',[]);
+    $docs=[];
+    for ($i=0;$i<21;$i++) {
+        $id='batch-'.$i;
+        $docs[$id]=array_replace($d,['id'=>$id,'stage'=>'archived','next_attempt'=>0,'error'=>'','toconline_state'=>'pending']);
+    }
+    $v->save(InvoiceReceipts::FILE,['documents'=>$docs,'requested'=>false]);
+    $messages=[];
+    $batched=new InvoiceToconline($pdo,$v,$drive,static function($to,$message) use (&$messages) {
+        $messages[]=$message;return true;
+    });
+    $worker=new InvoiceReceipts($pdo,$v,$drive,$batched);
+    $worker->run();
+    paceCheck(count($messages)===1 && substr_count($messages[0]['body'],'Content-Disposition: attachment;')===20,'normal receipt worker sends twenty invoices in one email');
+    paceCheck($batched->receiptUnsent('batch-20'),'overflow invoice has no send intent');
+    $worker->run();
+    paceCheck(count($messages)===2 && substr_count($messages[1]['body'],'Content-Disposition: attachment;')===1,'second email contains only overflow');
+    preg_match_all('/filename="(receipt-[a-f0-9]{64}\.pdf)"/',$messages[0]['body'],$names);
+    paceCheck(count(array_unique($names[1]))===20,'every invoice has an independent submission ID');
+    $raw="From: no_reply@toconline.pt\r\nSubject: Arquivo digital\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n"
+        ."Ficheiros arquivados com sucesso:\r\n".$names[1][0]."\r\nForam recusados os seguintes ficheiros por já constarem no seu arquivo:\r\n"
+        .$names[1][1]."\r\nForam recusados os seguintes ficheiros:\r\n".$names[1][2]."\r\nEstado desconhecido\r\n".$names[1][3];
+    $parsed=InvoiceTocPipe::parse($raw);
+    $proof=$parsed+['authentication'=>['verified'=>true,'code'=>'verified','recipient'=>'test@welcomehostel.pt','signed_at'=>gmdate('c')]];
+    $batched->receive($parsed['from'],'',$parsed['text'],$parsed['hash'],$proof);
+    $states=$worker->status()['documents'];
+    foreach (['toc_accepted','toc_existing','toc_rejected','toc_review','toc_submitted'] as $i=>$state)
+        paceCheck($states['batch-'.$i]['toconline_state']===$state,'mixed reply preserves independent verdict for position '.$i);
+    $batched->submitReceipt(reset($docs),$docs);
+    paceCheck(count($messages)===2,'replayed request never retransmits a partial batch');
+
+    // Upper bound includes folded base64 transport bytes in addition to raw attachment bytes.
+    $fits=new ReflectionMethod(InvoiceToconline::class,'fits');
+    paceCheck($fits->invoke(null,[['pdf'=>str_repeat('a',9000000)]],9000000),'18 MB raw fits the configured transport');
+    paceCheck(!$fits->invoke(null,[['pdf'=>str_repeat('a',10000000)]],9000000),'encoded size independently splits a batch');
+    paceCheck(!$fits->invoke(null,[],20000001),'raw cap applies to an oversized attachment');
     echo "TOConline pacing OK\n";
 }finally{foreach(glob($dir.'/*')?:[]as$f)unlink($f);rmdir($dir);}

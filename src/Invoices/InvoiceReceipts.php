@@ -85,6 +85,10 @@ final class InvoiceReceipts
         $s=$vault->read(self::FILE);
         if (!isset($s['documents'][$id])) throw new RuntimeException('receipt_history_missing');
         $s['documents'][$id]['toconline_state']=$state;
+        if (isset($timing['delivery_reason'])) $s['documents'][$id]['delivery_reason']=$timing['delivery_reason'];
+        if (!in_array($state,['pending','toc_retry'],true) && ($s['documents'][$id]['wait_reason']??'')==='toc_send_wait') {
+            unset($s['documents'][$id]['wait_reason']);$s['documents'][$id]['next_attempt']=0;
+        }
         foreach (['toc_next_check','toc_deadline','toc_checks'] as $key) if (isset($timing[$key])) $s['documents'][$id][$key]=(int)$timing[$key];
         if (!in_array($state,['toc_sending','toc_submitted','toc_uncertain'],true)) {
             $s['documents'][$id]['toc_next_check']=0;$s['documents'][$id]['toc_deadline']=0;
@@ -104,7 +108,12 @@ final class InvoiceReceipts
             return;
         }
         $tocSettings=$this->toc->settings();
-        if (!InvoiceReceiptReport::canStart($s,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']))) throw new RuntimeException('receipt_process_running');
+        if (!InvoiceReceiptReport::canStartNewRun($s,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']))) throw new RuntimeException('receipt_process_running');
+        foreach ($s['processes'] as $existingId=>$run) {
+            if ((int)($run['year']??0)!==$year || !array_intersect($months,$run['months']??[])) continue;
+            $existing=InvoiceReceiptReport::selected($s,(string)$existingId);
+            if (InvoiceReceiptReport::progress($existing,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']))['automatic']) throw new RuntimeException('receipt_month_active');
+        }
         $pid=bin2hex(random_bytes(12));$s['active_process']=$pid;
         $s['processes'][$pid]=['id'=>$pid,'year'=>$year,'months'=>$months,'requested_at'=>gmdate('c'),'error'=>'','missing_periods'=>[],'notification_cycle'=>1];
         $s['worker_seen_at']=time();$s['requested']=true; $s['requested_by']=$actor; $s['requested_at']=gmdate('c');
@@ -431,6 +440,8 @@ final class InvoiceReceipts
     }
     private static function failedAttempt(array $d,Throwable $e,int $now): array
     {
+        if (($e instanceof InvoiceGeminiRetry || $e instanceof InvoiceDriveFailure) && $e->facts) $d['failure_facts']=$e->facts;
+        elseif ($e->getMessage()!=='gemini_wait') unset($d['failure_facts']);
         $d=array_replace($d,InvoiceReceiptRetry::failure($d,$e,$now));
         if ($e->getMessage()==='gemini_daily_quota') { $d['quota_outcome']='waiting';$d['quota_retry_at']=$d['next_attempt']; }
         if ($e->getMessage()==='gemini_quota_probe_failed') $d['quota_outcome']='failed';
@@ -583,7 +594,6 @@ final class InvoiceReceipts
             static fn($d)=>($d['next_attempt']??0)<=$now && self::runnable($d,$s['documents'],$sendEnabled,!empty($s['source_cleanup_paused'])));
         if (!$work) return;
         try {
-            if ($this->analysis && !$this->analysis->configured()) throw new RuntimeException('gemini_not_configured');
             if (!$this->drive->receiptsAuthorized()) throw new RuntimeException('receipt_connect');
             $this->drive->connect();
             if (($s['discovery_retry']['next_attempt']??0)<=$now) $this->discover();
@@ -594,6 +604,7 @@ final class InvoiceReceipts
                 $s['discovery_retry']=InvoiceReceiptRetry::failure($s['discovery_retry']??[],$e,$now);
                 $s['requested']=!$s['discovery_retry']['blocked'];
                 if (isset($s['active_process'])) $s['processes'][$s['active_process']]['error']=$s['error'];
+                $this->save($s);return;
             }
             foreach ($s['documents'] as &$doc) {
                 if (($doc['next_attempt']??0)>$now || !self::runnable($doc,$s['documents'],$sendEnabled,!empty($s['source_cleanup_paused']))) continue;
@@ -603,7 +614,8 @@ final class InvoiceReceipts
         }
         // One invoice or source cleanup per invocation bounds work and preserves the portal queue.
         $documents=$this->status()['documents'];
-        uasort($documents,static fn($a,$b)=>(int)($a['stage']==='archived')<=>(int)($b['stage']==='archived'));
+        $priority=static fn(array $doc): array=>[(int)(($doc['error']??'')==='gemini_retry'),(int)($doc['stage']==='archived')];
+        uasort($documents,static fn($a,$b)=>$priority($a)<=>$priority($b));
         foreach ($documents as $id=>$d) {
             if (!empty($s['source_cleanup_paused']) && in_array($d['stage'],['split','source_trashing','source_moving'],true)) continue;
             if (!in_array($d['stage'],['correcting','repairing','queued','reading','ready','moving','preserving','archived','trashing','discarding','split','source_trashing','source_moving'],true) || ($d['next_attempt']??0)>$now) continue;
@@ -627,10 +639,10 @@ final class InvoiceReceipts
             catch (Throwable $e) {
                 $d=$this->status()['documents'][$id];
                 if ($e instanceof InvoiceTocWait) {
-                    $d['error']='';$d['next_attempt']=$e->retryAt;$d['retry_kind']='pacing';$this->put($id,$d);break;
+                    $d['error']='';$d['next_attempt']=$e->retryAt;$d['retry_kind']='pacing';$d['wait_reason']='toc_send_wait';$this->put($id,$d);break;
                 }
                 if (in_array($e->getMessage(),['receipt_grouping_required','receipt_company_changed','receipt_buyer_missing','receipt_buyer_consumer','receipt_missing_pages','receipt_repair_not_found','receipt_repair_ambiguous','receipt_repair_limit','receipt_selection_changed','receipt_select_files','gemini_response'],true)) {
-                    $d['stage']='review'; $d['error']=$e->getMessage(); $d['grouping_pending']=!empty($d['grouping_pending']) || (!self::categoryReview($d) && empty($d['source_id']) && !in_array($e->getMessage(),['receipt_company_changed','receipt_buyer_missing','receipt_buyer_consumer'],true)); $this->put($id,$d); break;
+                    $d['stage']='review'; $d['error']=$e->getMessage(); if ($e instanceof InvoiceGeminiRetry) $d['failure_facts']=$e->facts; $d['grouping_pending']=!empty($d['grouping_pending']) || (!self::categoryReview($d) && empty($d['source_id']) && !in_array($e->getMessage(),['receipt_company_changed','receipt_buyer_missing','receipt_buyer_consumer'],true)); $this->put($id,$d); break;
                 }
                 $d=self::failedAttempt($d,$e,$now);
                 if (($d['quota_outcome']??'')==='failed' && $this->vault->has(InvoiceGemini::BUDGET)) $d['quota_reason']=$this->vault->read(InvoiceGemini::BUDGET)['daily_quota']['reason']??'gemini_quota_probe_failed';
@@ -877,11 +889,15 @@ final class InvoiceReceipts
                 $this->drive->moveReceipt($d);
             }
             $d['stage']='archived'; $d['archived_at']=gmdate('c'); $d['error']=''; $this->put($id,$d); $this->clearPageCache($d);
+            // Give ready siblings a chance to archive before composing a single email.
+            foreach ($this->status()['documents'] as $other) {
+                if (in_array($other['stage']??'',['ready','moving'],true) && ($other['next_attempt']??0)<=time()) return;
+            }
         }
         if ($d['stage']==='archived') {
             if (in_array($d['toconline_state'],['pending','toc_retry'],true)) {
                 if (!empty($d['duplicate_keeper'])) return;
-                $this->toc->submitReceipt($d);
+                $this->toc->submitReceipt($d,$this->status()['documents']);
             }
             $d=$this->status()['documents'][$id];
             if (!$this->toc->receiptDuplicateConfirmed($id) && !$this->localDuplicateSafe($d,$this->status()['documents'])) return;

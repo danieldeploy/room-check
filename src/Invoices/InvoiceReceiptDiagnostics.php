@@ -49,15 +49,16 @@ final class InvoiceReceiptDiagnostics
                 'classification_current'=>!empty($d['sha256']) && ($d['category_check']['sha256']??'')===$d['sha256'],
                 'toconline_state'=>self::code($d['toconline_state']??''),'archived_at'=>self::date($d['archived_at']??null),
                 'delivery_attempt_recorded'=>$hasLedger?$delivery!==null:null,
-                'delivery'=>$delivery===null?null:['state'=>self::code($delivery['state']??''),'attempted_at'=>self::date($delivery['attempted_at']??null)]];
+                'delivery'=>$delivery===null?null:['state'=>self::code($delivery['state']??''),'reason'=>self::code($delivery['delivery_reason']??''),'attempted_at'=>self::date($delivery['attempted_at']??null)]];
             foreach (['attempts','next_attempt','retry_started_at','retry_deadline','toc_next_check','toc_deadline','toc_checks','page_count','size'] as $key)
                 $row[$key]=max(0,(int)($d[$key]??0));
+            $row['failure_facts']=InvoiceReceiptReport::failureFacts($d);
             $rows[]=$row;
         }
         $budget=$vault->has(InvoiceGemini::BUDGET)?$vault->read(InvoiceGemini::BUDGET):[];
         $gemini=['configured'=>$vault->has(InvoiceGemini::SETTINGS),'model'=>InvoiceGemini::MODEL,
             'budget_day'=>preg_match('/\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z/',(string)($budget['day']??''))?$budget['day']:null,
-            'http_diagnostics_available'=>false];
+            'http_diagnostics_available'=>(bool)array_filter(array_column($rows,'failure_facts'),static fn($f)=>str_starts_with($f['phase']??'','receipt_gemini_'))];
         foreach (['requests','failures','next_at'] as $key)$gemini[$key]=max(0,(int)($budget[$key]??0));
         $quota=$budget['daily_quota']??[];
         $gemini['daily_quota']=['state'=>in_array($quota['state']??'',['waiting','probing','failed'],true)?$quota['state']:null,
@@ -71,7 +72,7 @@ final class InvoiceReceiptDiagnostics
                 'requested_at'=>self::date($p['requested_at']??null),'error_code'=>self::code($p['error']??'')],
             'worker_seen_at'=>max(0,(int)($state['worker_seen_at']??0)),
             'progress'=>InvoiceReceiptReport::progress($selected,$sendEnabled,$now),'global_progress'=>$global,
-            'can_start_new_run'=>!$global['automatic'],'summary'=>$summary,'gemini'=>$gemini,
+            'can_start_new_run'=>InvoiceReceiptReport::canStartNewRun($state,$sendEnabled),'summary'=>$summary,'gemini'=>$gemini,
             'mail_sending_enabled'=>$sendEnabled,'delivery_ledger_available'=>$hasLedger,
             'documents'=>$rows,'next_offset'=>$offset+count($rows)<count($selected['documents'])?$offset+count($rows):null];
     }

@@ -25,6 +25,16 @@ $buyerIssue=InvoiceReceiptAnalysis::buyerIssue($d,(string)($tocSettings['nif']??
 <?php if (InvoiceReceiptReport::paperMonthMismatch($d)): ?><p class="receipt-duplicate-instruction"><?= strtr($t('receipt_paper_month_instruction'),['{paper_invoice}'=>'<strong>'.$t('receipt_paper_invoice').'</strong>']) ?></p><?php endif; ?>
 <?php if ($reviewable): ?><p class="alert receipt-review-issues"><?= implode(' | ',array_map($t,InvoiceReceiptAnalysis::reviewIssues($d,(string)($tocSettings['nif']??'')))) ?></p>
 <?php elseif (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
+<?php if (in_array($d['toconline_state']??'',['toc_no_confirmation','toc_uncertain'],true)): ?>
+<?php if (in_array($d['delivery_reason']??'',['toc_mail_refused','toc_mail_exception','toc_interrupted_handoff'],true)): ?><p><?= $t($d['delivery_reason']) ?></p><?php endif; ?>
+<?php if ($d['toconline_state']==='toc_no_confirmation'): ?><p><?= $t('toc_confirmation_expired') ?></p><?php endif; ?>
+<?php endif; ?>
+<?php $facts=InvoiceReceiptReport::failureFacts($d); if ($facts): ?>
+<p class="alert"><?= $t($facts['phase']) ?> · <?= $t($facts['reason']) ?>
+<span data-i18n-skip><?= $facts['http_status']?'HTTP '.$facts['http_status']:'' ?> <?= $facts['curl_errno']?'cURL '.$facts['curl_errno']:'' ?> <?= $facts['duration_ms'] ?> ms <?= $escape($facts['finish']??'') ?></span></p>
+<?php elseif (($d['error']??'')==='gemini_retry'): ?><p><?= $t('gemini_detail_unavailable') ?></p><?php endif; ?>
+<?php if (($d['stage']??'')==='failed'): ?><p><?= $t('receipt_retry_stopped') ?></p>
+<?php elseif (($d['next_attempt']??0)>0): ?><p><?= ($d['wait_reason']??'')==='toc_send_wait'?$t('toc_send_wait').' ':'' ?><?= $t('receipt_next_attempt') ?> · <?= $escape((new DateTimeImmutable('@'.(int)$d['next_attempt']))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d-m-Y H:i:s')) ?></p><?php endif; ?>
 <?php $previewId=InvoiceReceiptReport::previewId($fullState['documents'],$id); if ($previewId!==null): ?>
 <?php
 $previewOptions=['document'=>'receipt_show_document'];

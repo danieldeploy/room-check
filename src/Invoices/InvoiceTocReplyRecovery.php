@@ -12,10 +12,13 @@ final class InvoiceTocReplyRecovery
         if (($state['correlation_version']??1)<InvoiceTocPipe::CORRELATION_VERSION) $state=['seen'=>[],'correlation_version'=>InvoiceTocPipe::CORRELATION_VERSION];
         if (!empty($state['complete'])) return ['complete'=>true,'queued'=>0];
         $ledger=$vault->has('toconline-ledger.enc')?$vault->read('toconline-ledger.enc'):[];
-        $keys=[];
+        $keys=[];$batchKeys=[];
         foreach ($ledger as $key=>$entry) if (preg_match('/\A[a-f0-9]{64}\z/',(string)$key)
             && str_starts_with((string)($entry['document_id']??''),'receipt:')
-            && in_array($entry['state']??'',['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) $keys[$key]=true;
+            && in_array($entry['state']??'',['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
+            $keys[$key]=true;
+            if (!empty($entry['email_id']) && $entry['email_id']!==$key) $batchKeys[$key]=true;
+        }
         $documents=$vault->has('receipts-workflow.enc')?($vault->read('receipts-workflow.enc')['documents']??[]):[];
         $folders=[$mailRoot];$files=[];$now=time();$scanned=0;
         foreach (new DirectoryIterator($mailRoot) as $file) {
@@ -51,7 +54,7 @@ final class InvoiceTocReplyRecovery
                     if (($d['issuer_nif']??'')===$purchase['issuer_nif']
                         && trim(preg_replace('/\s+/u',' ',(string)($d['invoice_number']??'')))===$purchase['invoice_number']) $fiscal=true;
                 }
-                if ((count($tokens)===1 && isset($keys[$tokens[0]])) || $fiscal) {
+                if ((count($tokens)===1 && isset($keys[$tokens[0]])) || array_intersect_key($parsed['attachments']??[],$batchKeys) || $fiscal) {
                     $pipe->enqueue($raw);$queued++;
                 }
             }

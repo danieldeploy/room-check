@@ -39,7 +39,7 @@ function hubReceiptReadCases(PDO $pdo,array $identity): void
         $result=$mcp->call('hub_get_receipt_run',['process_id'=>$run],$identity);
         hubCheck($result['process']['id']===$run && $result['process']['months']===[9],'Exact selected run');
         hubCheck($result['summary']['documents']===2 && count($result['documents'])===2,'No other run records');
-        hubCheck($result['progress']['automatic']===false && $result['can_start_new_run']===false,'Selected interruption differs from global wait');
+        hubCheck($result['progress']['automatic']===false && $result['can_start_new_run']===true,'An interrupted run and an independently waiting month allow new intake');
         $failed=$result['documents'][0];$sent=$result['documents'][1];
         hubCheck($failed['error_code']==='gemini_retry' && $failed['attempts']===6 && $failed['next_attempt']===0,'Persisted retry facts');
         hubCheck($failed['delivery_attempt_recorded']===false && $sent['delivery_attempt_recorded']===true,'Ledger distinguishes no send from actual attempt');
