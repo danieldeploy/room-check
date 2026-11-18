@@ -36,5 +36,11 @@ try{
  $s['documents']['manual']=['process_id'=>'run','stage'=>'archived','toconline_state'=>'toc_accepted'];$v->save('receipts-workflow.enc',$s);$a->receipts($v,$send);
  $s['documents']['manual']=['process_id'=>'run','stage'=>'review','error'=>'receipt_missing_pages','toconline_state'=>'pending'];$v->save('receipts-workflow.enc',$s);$a->receipts($v,$send);
  ac(count($calls)===6,'previously delivered fingerprint is not resent after an oscillation');
+ // Two affected members of one unresolved batch generate a single actionable process summary.
+ $calls=[];$s['documents']['manual']=$s['documents']['running']=['process_id'=>'run','stage'=>'archived','toconline_state'=>'toc_review',
+     'delivery_reason'=>'toc_reply_batch_incomplete','name'=>'PRIVATE-INVOICE.pdf'];
+ $s['processes']['run']['notification_cycle']++;$v->save('receipts-workflow.enc',$s);$a->receipts($v,$send);$a->receipts($v,$send);
+ ac(count($calls)===1 && str_contains($calls[0][3],InvoiceTocReplyText::REASONS['toc_reply_batch_incomplete'][0])
+     && str_contains($calls[0][4],'compare os PDFs') && !str_contains(json_encode($calls),'PRIVATE-INVOICE'),'actionable, redacted group summary');
  echo "Receipt consolidated summaries, recovery, deduplication and uncertainty passed\n";
 }finally{foreach(glob($d.'/*')?:[]as$f)unlink($f);rmdir($d);}

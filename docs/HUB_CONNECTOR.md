@@ -109,3 +109,7 @@ References:
 - https://developers.openai.com/plugins/build/auth
 - https://developers.openai.com/api/docs/guides/custom-mcp-server
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
+
+For paper receipt runs, a matched delivery also exposes its recorded attempt
+count, the confirmation basis when known (individual, batch or manual), and
+stored supplier counts when available. Older records can have no recorded basis.

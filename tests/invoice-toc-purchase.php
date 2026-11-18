@@ -12,7 +12,7 @@ purchaseCheck($p['outcome']==='toc_accepted'&&$p['text']==='','new template is c
 purchaseCheck(!str_contains(json_encode($p),'Synthetic Supplier'),'only necessary fields retained');
 purchaseCheck(empty(InvoiceTocPipe::parse($mail.' '.$body)['purchase_identity']),'multiple invoice rows are ambiguous');
 purchaseCheck(empty(InvoiceTocPipe::parse(str_replace('Ficheiros arquivados e associados automaticamente a faturas de compra:','Unknown result',$mail))['purchase_identity']),'unknown template is not guessed');
-$several=InvoiceTocPipe::parse($mail.' '.substr(str_replace('TEST/101','TEST/102',$body),strpos($body,'Fornecedor NIF:')));
+$several=InvoiceTocPipe::parse($mail.' '.substr(str_replace(['TEST/101','TEST/7'],['TEST/102','TEST/8'],$body),strpos($body,'Fornecedor NIF:')));
 purchaseCheck(array_column($several['purchase_identities'],'invoice_number')===['FR TEST/101','FR TEST/102'],'distinct rows keep their own supplier and fiscal numbers');
 purchaseCheck(empty(InvoiceTocPipe::parse($mail.' Fornecedor NIF: missing')['purchase_identities']),'an incomplete fiscal row prevents implicit acceptance');
 $html=str_replace('Content-Type: text/plain; charset=UTF-8','Content-Type: text/html; charset=UTF-8',$mail);

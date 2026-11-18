@@ -86,12 +86,17 @@ final class InvoiceReceipts
         $s=$vault->read(self::FILE);
         if (!isset($s['documents'][$id])) throw new RuntimeException('receipt_history_missing');
         $s['documents'][$id]['toconline_state']=$state;
+        if (isset($timing['evidence'])) {
+            foreach (InvoiceToconline::RECEIPT_EVIDENCE_FIELDS as $key) unset($s['documents'][$id][$key]);
+            $s['documents'][$id]+=$timing['evidence'];
+        }
         if (isset($timing['delivery_reason'])) $s['documents'][$id]['delivery_reason']=$timing['delivery_reason'];
         if (!in_array($state,['pending','toc_retry'],true) && ($s['documents'][$id]['wait_reason']??'')==='toc_send_wait') {
             unset($s['documents'][$id]['wait_reason']);$s['documents'][$id]['next_attempt']=0;
         }
         foreach (['toc_next_check','toc_deadline','toc_checks'] as $key) if (isset($timing[$key])) $s['documents'][$id][$key]=(int)$timing[$key];
-        if (!in_array($state,['toc_sending','toc_submitted','toc_uncertain'],true)) {
+        if (!in_array($state,['toc_sending','toc_submitted','toc_uncertain'],true)
+            && !($state==='toc_review' && ($timing['delivery_reason']??'')==='toc_provider_preparing')) {
             $s['documents'][$id]['toc_next_check']=0;$s['documents'][$id]['toc_deadline']=0;
         }
         $vault->save(self::FILE,$s);
@@ -454,6 +459,7 @@ final class InvoiceReceipts
     {
         if (in_array($d['stage']??'',['correcting','repairing','queued','reading','ready','moving','preserving','trashing','discarding'],true)) return true;
         if (in_array($d['stage']??'',['source_trashing','source_moving'],true)) return !$cleanupPaused;
+        if (($d['stage']??'')==='archived' && ($d['toc_confirmation_basis']??'')==='manual' && ($d['toconline_state']??'')==='toc_existing') return false;
         if (($d['stage']??'')==='archived') return in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)
             || ($sendEnabled && empty($d['duplicate_keeper']) && in_array($d['toconline_state']??'',['pending','toc_retry'],true));
         if (($d['stage']??'')!=='split' || $cleanupPaused || empty($d['children'])) return false;
@@ -650,6 +656,7 @@ final class InvoiceReceipts
             if ($d['stage']==='archived' && in_array($d['toconline_state'],['pending','toc_retry'],true)
                 && !$sendEnabled) continue;
             if ($d['stage']==='archived' && !empty($d['duplicate_keeper']) && in_array($d['toconline_state'],['pending','toc_retry'],true)) continue;
+            if ($d['stage']==='archived' && $d['toconline_state']==='toc_existing' && ($d['toc_confirmation_basis']??'')==='manual') continue;
             if ($d['stage']==='archived' && !in_array($d['toconline_state'],['pending','toc_retry','toc_existing','toc_duplicate_local'],true)) continue;
             // Persist the turn under the invoice lock so fairness also survives the next cron.
             $retry=$dueRetry($d);

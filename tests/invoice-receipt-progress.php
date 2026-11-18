@@ -37,3 +37,11 @@ $s['documents']['reply']['toc_deadline']=$now-1;
 pg(InvoiceReceiptReport::canStart($s) && InvoiceReceiptReport::processState($s,'run')==='receipt_pending','Expired confirmation is manual pending and permits intake');
 $s['documents']['reply']['toconline_state']='toc_accepted';
 pg(InvoiceReceiptReport::processState($s,'run')==='receipt_finished','All confirmed means Completed');
+
+
+$now=time();$inPreparation=['stage'=>'archived','toconline_state'=>'toc_review','delivery_reason'=>'toc_provider_preparing','toc_deadline'=>$now+300];
+pg(InvoiceReceiptReport::progress(['documents'=>[$inPreparation]],true,$now)['state']==='receipt_toc_wait','An authenticated in-preparation result continues its original reply window');
+pg(InvoiceReceiptReport::summary([$inPreparation])['errors']===[],'Normal provider preparation is not counted as an error');
+$inPreparation['toc_deadline']=$now-1;
+pg(InvoiceReceiptReport::progress(['documents'=>[$inPreparation]],true,$now)['state']==='receipt_finished_pending','Preparation deadline ends automatic work');
+pg(InvoiceReceiptReport::summary([$inPreparation])['errors']===['toc_preparation_expired'],'Overdue preparation retains its actual reason');

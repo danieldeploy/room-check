@@ -44,6 +44,7 @@ function hubReceiptReadCases(PDO $pdo,array $identity): void
         hubCheck($failed['error_code']==='gemini_retry' && $failed['attempts']===6 && $failed['next_attempt']===0,'Persisted retry facts');
         hubCheck($failed['delivery_attempt_recorded']===false && $sent['delivery_attempt_recorded']===true,'Ledger distinguishes no send from actual attempt');
         hubCheck($sent['delivery']['state']==='toc_submitted','Submission is not acceptance');
+        hubCheck($sent['delivery']['recorded_attempts']===1 && $sent['delivery']['confirmation_basis']===null,'Legacy attempt visible without inventing confirmation evidence');
         hubCheck($result['gemini']['requests']===19 && $result['gemini']['next_at']===$now+600,'Shared Gemini pacing visible');
         $encoded=json_encode($result);
         foreach(['PRIVATE_OCR_TEXT','SECRET_API_KEY','SECRET_BUDGET','SECRET_NIF','PRIVATE_EMAIL_BODY','PRIVATE_PORTAL_BODY','private@example.invalid','drive-source-private','other-run-secret.pdf'] as $secret)

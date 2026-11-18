@@ -5,14 +5,15 @@ require $root.'/lib.php';
 require_once $root.'/src/UI/SessionBar.php';
 require_once $root.'/src/Invoices/InvoiceReceipts.php';
 require_once $root.'/src/Invoices/InvoiceReceiptReport.php';
-require_once $root.'/src/I18n/InvoiceText.php';
+require_once $root.'/src/I18n/InvoiceTocReplyText.php';
 $config=require $root.'/config.php';
 try { $pdo=database(); $user=Auth::requireLogin($pdo,$config);
     if (!Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_VIEW) && !Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_RUN)) throw new RuntimeException('forbidden',403); }
-catch (Throwable $e) { if ($e->getCode()===401) { header('Location: ../login.php'); exit; } http_response_code(403); exit(InvoiceText::get('forbidden')); }
+catch (Throwable $e) { if ($e->getCode()===401) { header('Location: ../login.php'); exit; } http_response_code(403); exit(InvoiceTocReplyText::label('forbidden')); }
 header('Cache-Control: no-store'); header('Referrer-Policy: no-referrer');
 $manager=$user['role']==='gerente'; $canRun=Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_RUN);
 $canHistory=Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_VIEW); $canReview=Auth::hasPermission($pdo,$user,Auth::PERMISSION_RECEIPTS_REVIEW);
+$canResolveBatch=$manager && $canHistory && $canReview;
 $state=['documents'=>[],'requested'=>false]; $error=''; $connected=false; $tocSettings=[];
 try {
     $vault=new InvoiceVault($config['invoices']['private_dir']); $drive=new InvoiceDriveClient($vault);
@@ -24,19 +25,19 @@ try {
             if (($_SERVER['REQUEST_METHOD']??'GET')!=='GET') throw new RuntimeException('forbidden',403);
             session_write_close();
             $folders=[];$files=$receipts->correctionCandidates((string)$_GET['correction_files'],$folders);
-            foreach ($files as &$file) if ($file['reason']!=='') $file['reason']=InvoiceText::get($file['reason']);
+            foreach ($files as &$file) if ($file['reason']!=='') $file['reason']=InvoiceTocReplyText::label($file['reason']);
             unset($file);
             echo json_encode(['files'=>$files,'folders'=>$folders],JSON_THROW_ON_ERROR);
         } catch (Throwable $e) {
             http_response_code($e->getCode()===403?403:409);
-            echo json_encode(['error'=>InvoiceText::get(isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed')],JSON_THROW_ON_ERROR);
+            echo json_encode(['error'=>InvoiceTocReplyText::label(isset(InvoiceTocReplyText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed')],JSON_THROW_ON_ERROR);
         }
         exit;
     }
     if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
         Csrf::validate($_POST['csrf_token']??null);
         $action=(string)($_POST['action']??'');
-        if (!((in_array($action,['start','retry_process','retry_worker'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','replace_source','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
+        if (!(($action==='review_batch' && $canResolveBatch) || (in_array($action,['start','retry_process','retry_worker'],true) && $canRun) || ($action==='retry' && $canRun && $canHistory) || (in_array($action,['review','regroup','repair','replace_source','confirm_buyer','discard'],true) && $canReview))) throw new RuntimeException('forbidden',403);
         if ((int)$pdo->query("SELECT GET_LOCK('room_check_invoices',0)")->fetchColumn()!==1) throw new RuntimeException('worker_busy');
         try {
             $action=(string)($_POST['action']??''); $id=(string)($_POST['id']??'');
@@ -44,6 +45,15 @@ try {
             elseif ($action==='retry_worker' && $canRun) $receipts->retryWorker();
             elseif ($action==='retry_process' && $canRun) $receipts->retryDiscovery((string)($_POST['process']??''));
             elseif ($action==='retry' && $canRun && $canHistory) $receipts->retry($id);
+            elseif ($action==='review_batch' && $canResolveBatch) {
+                foreach (['process','batch','version','choice'] as $field) {
+                    if (!is_string($_POST[$field]??null)) throw new RuntimeException('toc_batch_check_required');
+                }
+                $selected=$_POST['selected']??[];
+                if (!is_array($selected)) throw new RuntimeException('toc_batch_check_required');
+                $toc->reviewReceiptBatch($user,$_POST['process'],$_POST['batch'],$_POST['version'],$_POST['choice'],$selected,
+                    ($_POST['checked_toc']??'')==='1',($_POST['others_present']??'')==='1');
+            }
             elseif ($action==='discard' && $canReview) $receipts->requestDiscard($id,($_POST['discard_confirmed']??'')==='1',(int)$user['id']);
             elseif ($action==='repair' && $canReview) $receipts->requestRepair($id,($_POST['missing_added']??'')==='1',(int)$user['id'],is_array($_POST['selected_files']??null)?$_POST['selected_files']:[]);
             elseif ($action==='replace_source' && $canReview) $receipts->requestReplacement($id,is_array($_POST['selected_files']??null)?$_POST['selected_files']:[],($_POST['replacement_added']??'')==='1',(int)$user['id']);
@@ -57,9 +67,9 @@ try {
     }
     $phaseErrors=$vault->has(InvoiceReceipts::PHASE_ERRORS)?$vault->read(InvoiceReceipts::PHASE_ERRORS):[];
     $state=$receipts->status(); $connected=$drive->receiptsAuthorized(); $tocSettings=$toc->settings();
-} catch (Throwable $e) { if (isset($receipts)) { try { $state=$receipts->status();$connected=$drive->receiptsAuthorized();$tocSettings=$toc->settings(); } catch (Throwable) {} } $error=isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed'; if ($e->getCode()===403) http_response_code(403); }
+} catch (Throwable $e) { if (isset($receipts)) { try { $state=$receipts->status();$connected=$drive->receiptsAuthorized();$tocSettings=$toc->settings(); } catch (Throwable) {} } $error=isset(InvoiceTocReplyText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed'; if ($e->getCode()===403) http_response_code(403); }
 $escape=static fn($v)=>htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
-$t=static fn($key)=>htmlspecialchars(InvoiceText::get($key),ENT_QUOTES,'UTF-8');
+$t=static fn($key)=>htmlspecialchars(InvoiceTocReplyText::label($key),ENT_QUOTES,'UTF-8');
 unset($_SESSION['receipt_flash']);
 $year=(int)($state['year']??(new DateTimeImmutable('now',new DateTimeZone('Europe/Lisbon')))->format('Y'));
 $monthEnglish=[1=>'January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -89,26 +99,35 @@ $report=InvoiceReceiptReport::summary($state['documents']);
 $defaultFilter=($report['pending'] || $report['errors'])?'problems':'success';
 $explicitFilter=in_array($_GET['filter']??'',['all','success','problems'],true);
 $filter=$explicitFilter?$_GET['filter']:$defaultFilter;
-$processingMessage=strtr(InvoiceText::get('receipt_processing_months'),['{months}'=>implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$state['months']??[])),'{year}'=>(string)$year]);
+$processingMessage=strtr(InvoiceTocReplyText::label('receipt_processing_months'),['{months}'=>implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$state['months']??[])),'{year}'=>(string)$year]);
 $selectionQuery=['process'=>$processId,'filter'=>$explicitFilter?$filter:'auto','process_year'=>$processYear,'process_month'=>$processMonth];$query=http_build_query($selectionQuery);
-$page=max(1,(int)($_GET['page']??1)); $all=$canHistory?array_reverse(InvoiceReceiptReport::documents($fullState,$processId,$filter),true):[]; $documents=array_slice($all,($page-1)*50,50,true);
+$all=$canHistory?array_reverse(InvoiceReceiptReport::documents($fullState,$processId,$filter),true):[];
+$batches=[];
+$possibleBatch=array_intersect(['toc_review','toc_no_confirmation','toc_rejected','toc_sending','toc_submitted','toc_uncertain'],array_column($all,'toconline_state'));
+if ($possibleBatch && $filter!=='success' && isset($toc)) {
+    try { $batches=$toc->receiptReviewBatches($user,$processId); }
+    catch (Throwable $e) { if ($error==='') $error=isset(InvoiceTocReplyText::TEXT[$e->getMessage()])?$e->getMessage():'toc_batch_read_failed'; }
+}
+$historyItems=InvoiceReceiptReport::historyItems($all,$batches);
+$page=min(max(1,(int)($_GET['page']??1)),max(1,(int)ceil(count($historyItems)/50)));
+$documents=array_slice($historyItems,($page-1)*50,50,true);
 $historyHtml='';
 if (!$visibleProcesses) $progress['state']='receipt_no_runs';
 $requestError=(($_SERVER['REQUEST_METHOD']??'GET')==='POST')?$error:'';
 $globalError=($requestError===''?$error:'')?:($state['error']??'');
-$globalError=$globalError!==''?InvoiceText::get(isset(InvoiceText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
+$globalError=$globalError!==''?InvoiceTocReplyText::label(isset(InvoiceTocReplyText::TEXT[$globalError])?$globalError:'receipt_failed'):'';
 $shared=$state['worker_retry']??[];
 if ($shared) {
-    $reason=InvoiceText::get(isset(InvoiceText::TEXT[$shared['error']])?$shared['error']:'receipt_failed');
-    $phase=InvoiceText::get(($shared['phase']??'')==='receipt_drive_request'?'receipt_drive_request':'receipt_worker_step');
+    $reason=InvoiceTocReplyText::label(isset(InvoiceTocReplyText::TEXT[$shared['error']])?$shared['error']:'receipt_failed');
+    $phase=InvoiceTocReplyText::label(($shared['phase']??'')==='receipt_drive_request'?'receipt_drive_request':'receipt_worker_step');
     $globalError=trim($globalError.' '.$phase.' — '.$reason);
     $facts=InvoiceReceiptReport::failureFacts($shared);
     if (!empty($facts['http_status'])) $globalError.=' (HTTP '.$facts['http_status'].')';
 }
 foreach ($phaseErrors??[] as $phase=>$incident) {
-    if (!isset(InvoiceText::TEXT[$phase])) continue;
+    if (!isset(InvoiceTocReplyText::TEXT[$phase])) continue;
     $reason=$incident['reason']??'receipt_failed';
-    $globalError=trim($globalError.' '.InvoiceText::get($phase).' — '.InvoiceText::get(isset(InvoiceText::TEXT[$reason])?$reason:'receipt_failed'));
+    $globalError=trim($globalError.' '.InvoiceTocReplyText::label($phase).' — '.InvoiceTocReplyText::label(isset(InvoiceTocReplyText::TEXT[$reason])?$reason:'receipt_failed'));
 }
 $canStart=InvoiceReceiptReport::canStartNewRun($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
 $globalProgress=InvoiceReceiptReport::progress($fullState,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified']));
@@ -117,7 +136,8 @@ if (!$canStart && $globalProgress['poll_at']>0) $progress['poll_at']=$progress['
 $processLabels=[];
 foreach (array_reverse($visibleProcesses,true) as $pid=>$process) {
     $at='—';try {if(!empty($process['requested_at'])) $at=(new DateTimeImmutable($process['requested_at']))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d-m-Y H:i:s');}catch(Exception){}
-    $processLabels[$pid]=$at.' · '.$process['year'].' · '.implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$process['months'])).' · '.InvoiceText::get(InvoiceReceiptReport::processState($fullState,(string)$pid,!empty($tocSettings['enabled']) && !empty($tocSettings['pilot_verified'])));
+    $runState=InvoiceReceiptReport::processState($fullState,(string)$pid,$sendEnabled,true);
+    $processLabels[$pid]=$at.' · '.$process['year'].' · '.implode(', ',array_map(static fn($m)=>SiteTranslations::text(InvoiceDriveLayout::MONTHS[$m],$monthEnglish[$m]),$process['months'])).' · '.InvoiceTocReplyText::label($runState);
 }
 $formYear=$year;$formMonths=$state['months']??[];
 if ($requestError!=='' && ($_POST['action']??'')==='start') {
@@ -126,8 +146,8 @@ if ($requestError!=='' && ($_POST['action']??'')==='start') {
 }
 if ($canHistory) { $receiptHistoryRendering=true; ob_start(); require __DIR__.'/receipt-history.php'; $historyHtml=(string)ob_get_clean(); }
 if (($_GET['status']??'')==='1') {
-    jsonResponse(['progress'=>$progress,'label'=>InvoiceText::get($progress['state']),'report'=>InvoiceReceiptReport::render($report,!$canHistory,$progress),
-        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'worker_blocked'=>$canRun && !empty($shared['blocked']),'can_start'=>$canRun && $canStart,'processing'=>$processing,'processing_message'=>$processingMessage,'selected_running'=>(bool)$selectedRunning,'filter'=>$filter,'process_labels'=>$processLabels,'revision'=>hash('sha256',json_encode([$state['documents'],$filter,$selectedRunning]))]);
+    jsonResponse(['progress'=>$progress,'label'=>InvoiceTocReplyText::label($progress['state']),'report'=>InvoiceReceiptReport::render($report,!$canHistory,$progress),
+        'history'=>$canHistory?$historyHtml:null,'error'=>$globalError,'worker_blocked'=>$canRun && !empty($shared['blocked']),'can_start'=>$canRun && $canStart,'processing'=>$processing,'processing_message'=>$processingMessage,'selected_running'=>(bool)$selectedRunning,'filter'=>$filter,'process_labels'=>$processLabels,'revision'=>hash('sha256',json_encode([$state['documents'],$batches,$filter,$selectedRunning]))]);
 }
 ?>
 <!doctype html><html lang="<?= $escape(Translator::locale()) ?>"><head>

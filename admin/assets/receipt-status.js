@@ -6,6 +6,32 @@
     if(select.hasAttribute('data-receipt-period')){const process=select.form.elements.namedItem('process');if(process)process.disabled=true;}
     select.form.requestSubmit();
   });
+  function updateBatchActions(form){
+    const selected=form.querySelector('[data-batch-row]:checked:not(:disabled)');
+    const verified=form.elements.checked_toc.checked;
+    const others=form.querySelector('[data-batch-others]');
+    if(others){
+      others.hidden=selected?.dataset.resend!=='1';
+      if(others.hidden)form.elements.others_present.checked=false;
+    }
+    for(const button of form.querySelectorAll('button[name="choice"]')){
+      const eligible=button.value==='all_present' ? !selected
+        : selected?.dataset[button.value==='resend_missing'?'resend':'assign']==='1';
+      button.disabled=!verified || !eligible;
+    }
+  }
+  const initializeBatches=()=>document.querySelectorAll('[data-batch-review]').forEach(updateBatchActions);
+  document.addEventListener('change',event=>{
+    const form=event.target.closest('[data-batch-review]');
+    if(!form)return;
+    if(event.target.matches('[data-batch-row]') && form.elements.others_present)form.elements.others_present.checked=false;
+    if(event.target.matches('[data-batch-row]:checked')){
+      for(const row of form.querySelectorAll('[data-batch-row]:checked'))row.checked=row===event.target;
+    }
+    updateBatchActions(form);
+  });
+  initializeBatches();
+  window.addEventListener('receipt-history-updated',initializeBatches);
   const sizeRunSelect=()=>{
     const select=document.querySelector('select[name="process"]');if(!select)return;
     const style=window.getComputedStyle(select),measure=document.createElement('span');
@@ -26,6 +52,30 @@
     const label=statusLabel();if(!label)return;
     label.textContent=seconds?status.dataset.retry.replace('{seconds}',String(seconds)):status.dataset.due;
   };
+  function replaceHistory(history,markup){
+    const drafts=new Map();
+    const focus=document.activeElement;
+    for(const form of history.querySelectorAll('[data-batch-review]')){
+      const selected=form.querySelector('[data-batch-row]:checked');
+      drafts.set(form.elements.batch.value,{version:form.elements.version.value,selected:selected?.value,
+        verified:form.elements.checked_toc.checked,others:form.elements.others_present?.checked,focus:form.contains(focus)?[focus.name,focus.value]:null});
+    }
+    history.innerHTML=markup;
+    for(const form of history.querySelectorAll('[data-batch-review]')){
+      const draft=drafts.get(form.elements.batch.value);
+      if(!draft)continue;
+      const row=[...form.querySelectorAll('[data-batch-row]:not(:disabled)')].find(el=>el.value===draft.selected);
+      if(row)row.checked=true;
+      form.elements.checked_toc.checked=draft.verified && draft.version===form.elements.version.value;
+      if(form.elements.others_present)form.elements.others_present.checked=draft.others && draft.version===form.elements.version.value;
+      updateBatchActions(form);
+      if(draft.focus){
+        const control=[...form.elements].find(el=>el.name===draft.focus[0] && el.value===draft.focus[1] && !el.disabled);
+        control?.focus({preventScroll:true});
+      }
+    }
+    window.dispatchEvent(new Event('receipt-history-updated'));
+  }
   const previewBusy=()=>document.querySelector('[data-receipt-preview][open], [data-receipt-preview] button[aria-expanded="true"]');
   const schedule=()=>{
     window.clearTimeout(timer);window.clearInterval(countdownTimer);timer=null;countdownTimer=null;
@@ -62,14 +112,16 @@
       sizeRunSelect();
       document.getElementById('receipt-report').innerHTML=result.report;countdown();
       const history=document.getElementById('receipt-history');
-      if(result.history!==null && result.revision!==revision && !previewBusy() && !history.contains(document.activeElement) && !history.dataset.editing){
-        history.innerHTML=result.history;revision=result.revision;window.dispatchEvent(new Event('receipt-history-updated'));
+      const active=document.activeElement;
+      const preserveFocus=history.contains(active) && !active.matches('[data-batch-review] input, [data-batch-review] button');
+      if(result.history!==null && result.revision!==revision && !previewBusy() && !preserveFocus && !history.dataset.editing){
+        replaceHistory(history,result.history);revision=result.revision;
       }
       success=true;warning.hidden=true;delete status.dataset.statusFailed;refreshButtons.forEach(b=>{b.hidden=true;});
     }catch{status.dataset.statusFailed='true';warning.textContent=status.dataset.unavailable;warning.hidden=false;refreshButtons.forEach(b=>{b.hidden=false;});}
     finally{window.clearTimeout(timeout);inFlight=false;refreshButtons.forEach(b=>{b.disabled=false;});if(success)schedule();}
   }
-  document.getElementById('receipt-history')?.addEventListener('input',event=>{if(event.target.closest('form'))document.getElementById('receipt-history').dataset.editing='true';});
+  document.getElementById('receipt-history')?.addEventListener('input',event=>{if(event.target.closest('form') && !event.target.closest('[data-batch-review]'))document.getElementById('receipt-history').dataset.editing='true';});
   refreshButtons.forEach(button=>button.addEventListener('click',poll));
   refreshButtons.forEach(button=>{button.hidden=true;});countdown();schedule();
 })();

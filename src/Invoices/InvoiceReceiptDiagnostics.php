@@ -8,12 +8,12 @@ final class InvoiceReceiptDiagnostics
 {
     private static function code(mixed $value): string
     {
-        return $value==='' || $value===null ? '' : (is_string($value) && isset(InvoiceText::TEXT[$value])?$value:'receipt_failed');
+        return $value==='' || $value===null ? '' : (is_string($value) && isset(InvoiceTocReplyText::TEXT[$value])?$value:'receipt_failed');
     }
     private static function deliveryReason(array $delivery): string
     {
         $reason=InvoiceToconline::deliveryReason($delivery);
-        return isset(InvoiceTocReplyText::REASONS[$reason])?$reason:self::code($reason);
+        return self::code($reason);
     }
     private static function stage(mixed $value): string
     {
@@ -55,6 +55,14 @@ final class InvoiceReceiptDiagnostics
                 'toconline_state'=>self::code($d['toconline_state']??''),'archived_at'=>self::date($d['archived_at']??null),
                 'delivery_attempt_recorded'=>$hasLedger?$delivery!==null:null,
                 'delivery'=>$delivery===null?null:['state'=>self::code($delivery['state']??''),'reason'=>self::deliveryReason($delivery),'attempted_at'=>self::date($delivery['attempted_at']??null)]];
+            if ($delivery!==null) {
+                $basis=$delivery['toc_confirmation_basis']??'';
+                $row['delivery']['confirmation_basis']=in_array($basis,['individual','batch','manual'],true)?$basis:null;
+                $row['delivery']['recorded_attempts']=1+count($delivery['previous_attempts']??[]);
+                foreach (['toc_supplier_total','toc_supplier_confirmed'] as $count) {
+                    if (isset($delivery[$count])) $row['delivery'][$count]=max(0,(int)$delivery[$count]);
+                }
+            }
             foreach (['attempts','next_attempt','retry_started_at','retry_deadline','toc_next_check','toc_deadline','toc_checks','page_count','size'] as $key)
                 $row[$key]=max(0,(int)($d[$key]??0));
             $row['failure_facts']=InvoiceReceiptReport::failureFacts($d);

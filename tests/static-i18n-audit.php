@@ -53,16 +53,26 @@ $technicalExceptions = [
     ],
     // Exact provider protocol text matched on the server, never website copy.
     'src/Invoices/InvoiceTocPipe.php' => [
-        'Ficheiros arquivados e associados automaticamente a faturas de compra:',
-        'Ficheiros arquivados com sucesso:',
-        'Ficheiros arquivados e associados automaticamente a fornecedores:',
-        '/\AFornecedor NIF:\s*[0-9]{9}\s+Fornecedor:[^\r\n]*?\s+Ficheiro:\s*(',
-        'Ficheiros arquivados com sucesso - Active Lines, Lda',
-        'Foram recusados os seguintes ficheiros:',
         'Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:',
         'Arquivo digital não foi efetuado porque o total dos ficheiros enviados é superior a 20 MB.',
         'Arquivo digital não foi efetuado porque enviou mais de 20 ficheiros.',
+    ],
+    'src/Invoices/InvoiceTocReplyParser.php' => [
+        'Ficheiros arquivados com sucesso - Active Lines, Lda',
+        'Ficheiros arquivados e associados automaticamente a faturas de compra:',
+        'Ficheiros aceites para arquivo:',
+        'Ficheiros arquivados e associados automaticamente a fornecedores:',
+        'Ficheiros arquivados com sucesso:',
         'Foram recusados os seguintes ficheiros por já constarem no seu arquivo:',
+        'Foram recusados os seguintes ficheiros por não pertencerem à sua empresa:',
+        'Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:',
+        'Foram recusados os seguintes ficheiros:',
+        '~\A(?:Ficheiros|Documentos|Estado|Resultado|Foram)\b[^:\r\n]{0,180}:~iu',
+        'Fatura de compra:\s*((?:FC|DSP) +[A-Z0-9._-]+/[A-Z0-9._-]+|Em preparação\.{0,3})\z~u',
+        'Em preparação',
+        'Ficheiro:',
+        ') +Fornecedor: [^:]{1,200} +Ficheiro:\s*(',
+        '/\A(?:→|[•*-]|Ficheiro:)\s*/u',
     ],
     // PDF source-label patterns are parser instructions, never rendered UI.
     'src/Invoices/InvoiceReceipts.php' => [

@@ -6,7 +6,7 @@ require_once __DIR__ . '/InvoiceAlerts.php';
 require_once __DIR__ . '/InvoiceDrive.php';
 require_once __DIR__ . '/InvoiceToconline.php';
 require_once __DIR__ . '/InvoiceTocMailbox.php';
-require_once __DIR__ . '/InvoiceTocPipe.php';
+require_once __DIR__ . '/InvoiceTocReplyRecovery.php';
 require_once __DIR__ . '/InvoiceTaskLifecycle.php';
 require_once __DIR__ . '/InvoiceNotificationTest.php';
 require_once __DIR__.'/CloudbedsInbox.php';
@@ -119,13 +119,7 @@ final class InvoiceRunner
         $vault = new InvoiceVault((string) ($this->config['private_dir'] ?? ''));
         $drive=new InvoiceDriveClient($vault);
         $toc=new InvoiceToconline($this->pdo,$vault,$drive);
-        $pipeReady=$this->archivePhase($vault,'toc_pipe_queue',fn()=>(new InvoiceTocPipe($vault))->process($toc));
-        $this->archivePhase($vault,'toc_mail_connect',function() use ($vault,$toc) {
-            $reason=(new InvoiceTocMailbox($vault,$toc))->poll();
-            if ($reason!==null) throw new RuntimeException($reason);
-        });
-        // Apply authenticated arrivals before ageing any confirmation or reserving another send.
-        $deliveryReady=$pipeReady && $this->archivePhase($vault,'receipt_delivery_reconcile',fn()=>$toc->reconcile());
+        $deliveryReady=$this->prepareDelivery($vault,$toc);
         $this->archivePhase($vault,'receipt_portal_archive',fn()=>(new InvoiceDrive($this->pdo,$vault,$drive))->run());
         if ($deliveryReady) $this->archivePhase($vault,'receipt_portal_send',fn()=>$toc->run(null,false));
         $pdf=new InvoiceReceiptPdf($vault,$this->config);
@@ -134,15 +128,31 @@ final class InvoiceRunner
         (new InvoiceAlerts($this->pdo,$this->config['whatsapp']??[]))->receipts($vault);
     }
 
+    private function prepareDelivery(InvoiceVault $vault,InvoiceToconline $toc): bool
+    {
+        $checked=$this->archivePhase($vault,'receipt_retained_replies',fn()=>InvoiceTocReplyRecovery::queueDue($vault));
+        $pipeReady=$this->archivePhase($vault,'toc_pipe_queue',function() use ($vault,$toc) {
+            $pipe=new InvoiceTocPipe($vault);
+            $pipe->process($toc);
+            return $pipe->status()['pending']===0;
+        });
+        $this->archivePhase($vault,'toc_mail_connect',function() use ($vault,$toc) {
+            $reason=(new InvoiceTocMailbox($vault,$toc))->poll();
+            if ($reason!==null) throw new RuntimeException($reason);
+        });
+        // A failed historical lookup defers ageing. Fresh identities still require a healthy live pipe and ledger.
+        return $pipeReady && $this->archivePhase($vault,'receipt_delivery_reconcile',fn()=>$toc->reconcile(null,$checked));
+    }
+
     /** Persist one safe incident per phase; success clears only that phase. */
     private function archivePhase(InvoiceVault $vault,string $phase,callable $work): bool
     {
         $file=InvoiceReceipts::PHASE_ERRORS;
         $incidents=$vault->has($file)?$vault->read($file):[];
         try {
-            $work();
+            $complete=$work();
         } catch (Throwable $e) {
-            $reason=isset(InvoiceText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed';
+            $reason=isset(InvoiceTocReplyText::TEXT[$e->getMessage()])?$e->getMessage():'receipt_failed';
             if (($incidents[$phase]['reason']??'')!==$reason) {
                 $incidents[$phase]=['reason'=>$reason,'since'=>gmdate('c')];
                 $vault->save($file,$incidents);
@@ -152,7 +162,7 @@ final class InvoiceRunner
         if (isset($incidents[$phase])) {
             unset($incidents[$phase]);$vault->save($file,$incidents);
         }
-        return true;
+        return $complete!==false; // A bounded yield carries no failure incident.
     }
 
     private function finishFailure(array $job, string $code, InvoiceAlerts $alerts): void
