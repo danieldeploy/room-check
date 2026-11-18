@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
+require_once dirname(__DIR__,3).'/src/I18n/InvoiceTocReplyText.php';
 function ie(string $value): string { return htmlspecialchars($value,ENT_QUOTES,'UTF-8'); }
-function it(string $key): string { return ie(InvoiceText::get($key)); }
+function it(string $key): string { return ie(InvoiceTocReplyText::label($key)); }
 function invoiceTime(?string $value): string { return $value ? (new DateTimeImmutable($value,new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d/m/Y H:i') : '—'; }
 function invoiceUrl(string $tab,array $extra=[]): string {
     global $filters;

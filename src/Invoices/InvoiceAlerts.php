@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../Notifications/WhatsAppCloudClient.php';
 require_once __DIR__.'/InvoiceVault.php';
-require_once __DIR__.'/../I18n/InvoiceText.php';
+require_once __DIR__.'/../I18n/InvoiceTocReplyText.php';
 
 final class InvoiceAlerts
 {
@@ -76,13 +76,19 @@ final class InvoiceAlerts
                 if (($d['quota_outcome']??'')==='recovered') $codes[]='gemini_quota_recovered';
                 if (($d['quota_outcome']??'')==='failed' && !empty($d['quota_reason'])) $codes[]=$d['quota_reason'];
                 $recovered+=(int)($d['recovered_failures']??0);
-                if (in_array($d['toconline_state']??'',['toc_submitted','toc_uncertain','toc_sending'],true)) $codes[]='toc_no_confirmation';
+                $deliveryState=$d['toconline_state']??'';
+                $deliveryReason=$d['delivery_reason']??'';
+                if (in_array($deliveryState,['toc_review','toc_rejected'],true)
+                    && isset(InvoiceTocReplyText::TEXT[$deliveryReason])) {
+                    $codes[]=$deliveryReason;
+                }
+                if ($deliveryState==='toc_no_confirmation') $codes[]='toc_confirmation_expired';
             }
             if (!empty($selected['worker_retry']['blocked'])) $codes[]=$selected['worker_retry']['error'];
             if (!empty($selected['error'])) $codes[]=$selected['error'];
             if (!empty($selected['missing_periods'])) $codes[]='receipt_missing_month';
             if ($progress['state']==='receipt_worker_delayed') $codes[]='receipt_worker_delayed';
-            $codes=array_values(array_unique(array_map(static fn($code)=>isset(InvoiceText::TEXT[$code])?$code:'receipt_failed',$codes)));sort($codes);
+            $codes=array_values(array_unique(array_map(static fn($code)=>isset(InvoiceTocReplyText::TEXT[$code])?$code:'receipt_failed',$codes)));sort($codes);
             $summary=['state'=>$progress['state'],'processed'=>$report['processed'],'pending'=>$report['pending'],'total'=>$report['documents'],
                 'reasons'=>$codes,'next_at'=>$progress['state']==='receipt_quota_wait'?$progress['next_at']:0,
                 'cycle'=>(int)($process['notification_cycle']??0),'recovered'=>$recovered];
@@ -127,16 +133,22 @@ final class InvoiceAlerts
         $date=static fn(string $at)=>(new DateTimeImmutable($at))->setTimezone(new DateTimeZone('Europe/Lisbon'))->format('d-m-Y H:i');
         $period=implode(', ',array_map(static fn($m)=>sprintf('%02d-%04d',(int)$m,(int)($process['year']??0)),$process['months']??[]));
         $complete=$entry['state']==='receipt_finished';
-        $label=$complete?'Concluído':($entry['state']==='receipt_quota_wait'?'Pausado — quota diária':'Pendente — intervenção necessária');
+        $label=match ($entry['state']) {
+            'receipt_finished'=>'Concluído', 'receipt_finished_pending'=>'Concluído com pendências',
+            'receipt_quota_wait'=>'Pausado — quota diária', default=>'Pendente — intervenção necessária',
+        };
         // The dedicated summary template describes both success and blocked outcomes neutrally.
         $text=($complete?'Sem problemas. ':'').'Estado: '.$label.'. Tratados: '.$entry['processed'].'/'.$entry['total'].'. Pendentes: '.$entry['pending'].'.';
         if ($entry['recovered']) $text.=' Falhas temporárias recuperadas: '.$entry['recovered'].'.';
         foreach ($entry['reasons'] as $code) {
-            $reason=InvoiceText::TEXT[$code][0];
+            $reason=InvoiceTocReplyText::TEXT[$code][0];
             if (mb_strlen($text.' '.$reason)>620) { $text.=' Mais detalhes no Hub.';break; }
             $text.=' '.$reason;
         }
         $action=$complete?'Nenhuma ação necessária.':($entry['next_at']?'Nova tentativa em '.$date('@'.$entry['next_at']).'. Consulte as outras pendências no Hub.':'Consulte os motivos e resolva as pendências no Management Hub. Não reenvie documentos sem confirmação.');
+        if (array_intersect($entry['reasons'],['toc_reply_batch_incomplete','toc_reply_batch_conflict','toc_reply_batch_ambiguous','toc_confirmation_expired'])) {
+            $action='Abra o lote em Problemas ou pendentes no Hub e compare os PDFs com o TOConline. Só reenvie uma fatura depois de confirmar que está em falta.';
+        }
         $when=!empty($process['requested_at'])?$date($process['requested_at']):$date($entry['created_at']);
         return ['Faturas em papel — A4 e formatos pequenos','Processo '.$when.' / '.substr($pid,0,8),$period,$text,$action];
     }
@@ -165,7 +177,7 @@ final class InvoiceAlerts
             'cloudbeds_mail_review' => 'Consulte os emails preservados na pasta Cloudbeds da conta indicada. Peça uma nova cópia ao fornecedor se faltar alguma fatura do período.',
             'drive_auth' => 'No módulo Faturas e Portais, volte a ligar a conta Google Drive e clique em Tentar novamente.',
             'drive_quota' => 'Liberte espaço no Google Drive e clique em Tentar novamente no módulo.',
-            'drive_not_configured', 'drive_invalid_id', 'drive_account_mismatch', 'drive_permission', 'drive_not_found' => 'Verifique a ligação e a pasta da conta daniel.ciorcas@welcomehostel.pt e clique em Tentar novamente.',
+            'drive_not_configured', 'drive_invalid_id', 'drive_account_mismatch', 'drive_permission', 'drive_not_found' => InvoiceText::TEXT['notice_18'][0],
             'drive_local_missing', 'drive_verify' => 'Peça a verificação dos ficheiros ao suporte antes de repetir. Não elimine a cópia do servidor.',
             'human_verification' => 'No Chrome de login controlado, conclua apenas a verificação humana na aba do Booking. Depois clique em Testar acesso à conta no Management Hub; o agente trata das credenciais e do SMS.',
             'needs_auth', 'auth_invalid', 'auth_timeout' => 'Verifique o acesso e o método 2FA da conta no módulo e teste novamente.',

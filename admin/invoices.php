@@ -220,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') throw new RuntimeException('https_required');
                     $mailbox=new InvoiceTocMailbox($vault,$toc);
                     if ($action==='toc_mailbox') $mailbox->configure($_POST);
-                    $toc->reconcile(); $mailbox->poll();
+                    $mailbox->poll(); $toc->reconcile(null,false);
                     if ($mailbox->status()['error']) throw new RuntimeException($mailbox->status()['error']);
                 }
                 else {

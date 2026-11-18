@@ -169,6 +169,8 @@ jobs:
           php tests/invoice-toconline.php
           php tests/invoice-toc-pacing.php
           php tests/invoice-toc-purchase.php
+          php tests/invoice-toc-batch-reply.php
+          php tests/invoice-toc-batch-review.php
           php tests/invoice-toc-pipe.php
           php tests/invoice-toc-recovery.php
           php tests/invoice-hostelworld-pipe.php

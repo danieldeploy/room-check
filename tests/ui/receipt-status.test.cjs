@@ -59,3 +59,26 @@ test('selected-run filter and banner update even with an open preview',async()=>
  running=false;await x.tick();assert.equal(h.querySelector('[data-receipt-document-filter]').hidden,false);assert.equal(h.querySelector('select').value,'problems');assert.ok(h.querySelector('details').open);
  }finally{x.dom.window.close();}
 });
+
+test('batch review permits one choice, preserves it during polling and withdraws stale confirmation',async()=>{
+ const x=setup();
+ try {
+  const w=x.dom.window,history=w.document.getElementById('receipt-history');
+  const markup=(version,confirmed=false)=>`<form data-batch-review><input name="batch" value="example"><input name="version" value="${version}">
+   <input type="checkbox" data-batch-row data-resend="1" name="selected[]" value="one"><input type="checkbox" data-batch-row data-resend="1" name="selected[]" value="two" ${confirmed?'disabled':''}>
+   <input type="checkbox" name="checked_toc"><button name="choice" value="all_present">Confirm all</button>
+   <button name="choice" value="resend_missing">Resend</button></form>`;
+  history.innerHTML=markup('v1');w.dispatchEvent(new w.Event('receipt-history-updated'));
+  let form=history.querySelector('form');assert.ok(form.querySelector('[value="all_present"]').disabled);
+  form.querySelector('[value="one"]').click();form.querySelector('[value="two"]').click();form.elements.checked_toc.click();
+  assert.equal(form.querySelectorAll('[data-batch-row]:checked').length,1);assert.ok(form.querySelector('[value="two"]').checked);
+  assert.ok(!form.querySelector('[value="resend_missing"]').disabled);assert.ok(form.querySelector('[value="all_present"]').disabled);
+  form.querySelector('[value="two"]').focus();
+  let version='v1';w.fetch=async()=>({ok:true,json:async()=>({...x.response({poll_at:x.now+5}),history:markup(version,version==='v2'),revision:version})});
+  await x.tick();form=history.querySelector('form');assert.ok(form.querySelector('[value="two"]').checked && form.elements.checked_toc.checked);
+  assert.equal(w.document.activeElement.value,'two');
+  version='v2';await x.tick();form=history.querySelector('form');
+  assert.ok(form.querySelector('[value="two"]').disabled);assert.equal(form.querySelectorAll('[data-batch-row]:checked').length,0);
+  assert.ok(!form.elements.checked_toc.checked && form.querySelector('[value="resend_missing"]').disabled);
+ } finally {x.dom.window.close();}
+});

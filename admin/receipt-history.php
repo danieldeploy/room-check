@@ -10,6 +10,11 @@
 <?php if (!$documents): ?><p><?= $t('receipt_empty') ?></p><?php endif; ?>
 <?php foreach ($documents as $id=>$d): ?>
 <?php
+if (isset($d['review_batch'])) {
+    $batch=$batches[$d['review_batch']];
+    require __DIR__.'/partials/receipts/batch.php';
+    continue;
+}
 if (!empty($d['children']) && ($d['format']??'')==='jpg' && empty($d['error']) && ($d['stage']??'')!=='failed') continue;
 $categoryReview=$d['stage']==='review' && InvoiceReceipts::categoryReview($d);
 $correctionIdle=InvoiceReceiptReport::canStart($fullState,$sendEnabled);
@@ -22,14 +27,21 @@ $buyerIssue=InvoiceReceiptAnalysis::buyerIssue($d,(string)($tocSettings['nif']??
 <p class="receipt-meta"><?php if (!empty($d['page_number'])): ?><?= $t('receipt_page') ?> <?= $escape(implode(', ',$d['pages']??[(int)$d['page_number']])) ?> / <?= (int)$d['page_count'] ?> | <?php endif; ?><?= $t('receipt_expected') ?>: <span data-i18n-skip><?= $escape(InvoiceReceiptReport::displayDate($d['expected_period']??'',true)) ?></span></p>
 <?php if (!$categoryReview): ?><p class="receipt-meta"><?= $t('receipt_company') ?> : <span data-i18n-skip><?= $escape($d['issuer_name']??'') ?: $t('receipt_unknown_issuer') ?></span> | <?= $t('receipt_number_date') ?>: <span data-i18n-skip><?= $escape($d['invoice_number']??'') ?> <?= !empty($d['issued_on'])?'('.$escape(str_replace([' (',')'],[' ',''],InvoiceReceiptReport::displayDate($d['issued_on']))).')':'' ?></span></p><?php endif; ?>
 <p class="receipt-meta"><?php if (($d['stage']??'')==='archived' && ($d['toconline_state']??'')==='toc_accepted'): ?><?= $t('receipt_archive_confirmed') ?><?php else: ?><?= $t('receipt_stage_'.$d['stage']) ?> — <?= $t($d['toconline_state']) ?><?php endif; ?></p>
+<?php $basis=InvoiceReceiptReport::confirmationLabel($d); if ($basis!==''): ?>
+<p class="receipt-meta"><?= $escape($basis) ?>
+<?php if ((!empty($d['toc_supplier_counts_known']) || !empty($d['toc_supplier_unambiguous'])) && ($d['toc_confirmation_basis']??'')!=='batch' && isset($d['toc_supplier_total'],$d['toc_supplier_confirmed'])): ?> · <?= strtr($t('toc_batch_fiscal_counts'),['{confirmed}'=>(int)$d['toc_supplier_confirmed'],'{total}'=>(int)$d['toc_supplier_total']]) ?><?php endif; ?></p><?php endif; ?>
 <?php if (InvoiceReceiptReport::paperMonthMismatch($d)): ?><p class="receipt-duplicate-instruction"><?= strtr($t('receipt_paper_month_instruction'),['{paper_invoice}'=>'<strong>'.$t('receipt_paper_invoice').'</strong>']) ?></p><?php endif; ?>
 <?php if ($reviewable): ?><p class="alert receipt-review-issues"><?= implode(' | ',array_map($t,InvoiceReceiptAnalysis::reviewIssues($d,(string)($tocSettings['nif']??'')))) ?></p>
 <?php elseif (!empty($d['error'])): ?><p class="alert"><?= $t($d['error']) ?></p><?php endif; ?>
-<?php if (($d['toconline_state']??'')==='toc_rejected' && ($d['delivery_reason']??'')==='toc_provider_format'): ?><p><?= $t('toc_provider_format') ?></p><?php endif; ?>
-<?php if (($d['toconline_state']??'')==='toc_review'): ?><p><?= $escape(InvoiceTocReplyText::get($d['delivery_reason']??'')) ?></p><?php endif; ?>
+<?php if (($d['toconline_state']??'')==='toc_rejected'): ?><p class="alert receipt-block"><?= $t(in_array($d['delivery_reason']??'',['toc_provider_format','toc_provider_count','toc_provider_size','toc_provider_wrong_recipient'],true)?$d['delivery_reason']:'toc_batch_refusal_unknown') ?> <?= $t('toc_batch_compare') ?></p><?php endif; ?>
+<?php if (($d['toconline_state']??'')==='toc_review'): ?>
+<?php if (InvoiceReceiptReport::preparing($d)): ?><p><?= $t('toc_provider_preparing') ?></p>
+<?php elseif (($d['delivery_reason']??'')==='toc_provider_preparing'): ?><p class="alert receipt-block"><?= $t('toc_preparation_expired') ?></p>
+<?php else: ?><p class="alert receipt-block"><?= $escape(InvoiceTocReplyText::get($d['delivery_reason']??'')) ?> <?= $t('toc_batch_compare') ?></p><?php endif; ?>
+<?php endif; ?>
 <?php if (in_array($d['toconline_state']??'',['toc_no_confirmation','toc_uncertain'],true)): ?>
 <?php if (in_array($d['delivery_reason']??'',['toc_mail_refused','toc_mail_exception','toc_interrupted_handoff'],true)): ?><p><?= $t($d['delivery_reason']) ?></p><?php endif; ?>
-<?php if ($d['toconline_state']==='toc_no_confirmation'): ?><p><?= $t('toc_confirmation_expired') ?></p><?php endif; ?>
+<?php if ($d['toconline_state']==='toc_no_confirmation'): ?><p class="alert receipt-block"><?= $t('toc_confirmation_expired') ?> <?= $t('toc_batch_compare') ?></p><?php endif; ?>
 <?php endif; ?>
 <?php $facts=InvoiceReceiptReport::failureFacts($d); if ($facts): ?>
 <p class="alert"><?= $t($facts['phase']) ?> · <?= $t($facts['reason']) ?>
@@ -43,12 +55,7 @@ $previewOptions=['document'=>'receipt_show_document'];
 $sourceDocument=$state['documents'][$d['source_id']??'']??null;
 if ($previewId===$id && ($d['format']??'')==='pdf' && is_array($sourceDocument) && ($sourceDocument['format']??'')==='pdf' && ($sourceDocument['stage']??'')!=='split_completed') $previewOptions['source']='receipt_show_source';
 foreach ($previewOptions as $previewKind=>$previewLabel): ?>
-<details class="document-disclosure" data-receipt-preview data-url="receipt-document.php?id=<?= $escape(rawurlencode($id)) ?><?= $previewKind==='source'?'&amp;original=1':'' ?>" data-show="<?= $t($previewLabel) ?>" data-close="<?= $t('receipt_close_document') ?>" data-loading="<?= $t('receipt_loading_document') ?>" data-error="<?= $t('receipt_preview_unavailable') ?>" data-pdf-previous="<?= $t('receipt_pdf_previous') ?>" data-pdf-next="<?= $t('receipt_pdf_next') ?>" data-pdf-page="<?= $t('receipt_pdf_page') ?>" data-pdf-zoom-in="<?= $t('receipt_pdf_zoom_in') ?>" data-pdf-zoom-out="<?= $t('receipt_pdf_zoom_out') ?>">
-<summary><?= $t($previewLabel) ?></summary>
-<div id="preview-<?= $escape($id.'-'.$previewKind) ?>" data-preview-panel>
-<?php if ($previewKind==='source'): ?><p><?= $t('receipt_source_warning') ?></p><?php endif; ?>
-<p role="status"></p><div data-document-content></div></div>
-</details>
+<?php $previewTitle=InvoiceText::get($previewLabel);require __DIR__.'/partials/receipts/preview.php'; ?>
 <?php endforeach; ?>
 <?php endif; ?>
 <?php if ($canRun && $d['stage']==='failed'): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= $escape(Csrf::token()) ?>"><input type="hidden" name="id" value="<?= $escape($id) ?>"><input type="hidden" name="action" value="retry"><div class="form-actions"><button class="primary-button" type="submit"><?= $t('receipt_retry') ?></button></div></form><?php endif; ?>
@@ -135,5 +142,5 @@ $fiscalBlocked=isset($d['fiscal_status']) && $d['fiscal_status']!=='N';
 </article>
 <?php if (!empty($d['children'])): ?></details><?php endif; ?>
 <?php endforeach; ?>
-<nav><?php if ($page>1): ?><a href="?<?= $escape(http_build_query($selectionQuery+['page'=>$page-1])) ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($all)): ?><a href="?<?= $escape(http_build_query($selectionQuery+['page'=>$page+1])) ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
+<nav><?php if ($page>1): ?><a href="?<?= $escape(http_build_query($selectionQuery+['page'=>$page-1])) ?>"><?= $escape(SiteTranslations::text('Anterior','Previous')) ?></a><?php endif; ?> <?php if ($page*50<count($historyItems??$all)): ?><a href="?<?= $escape(http_build_query($selectionQuery+['page'=>$page+1])) ?>"><?= $escape(SiteTranslations::text('Seguinte','Next')) ?></a><?php endif; ?></nav>
 </section><?php endif; ?>

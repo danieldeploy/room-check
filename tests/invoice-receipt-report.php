@@ -42,6 +42,7 @@ reportCheck(InvoiceReceipts::issuerName("Fornecedor: ABC\nEmitente: DEF") === ''
 $root=dirname(__DIR__); $tmp=sys_get_temp_dir().'/receipt-report-'.bin2hex(random_bytes(8));
 mkdir($tmp,0700); mkdir($tmp.'/web',0700); mkdir($tmp.'/web/admin',0700); mkdir($tmp.'/vault',0700);
 symlink($root.'/src',$tmp.'/web/src'); symlink($root.'/assets',$tmp.'/web/assets'); symlink($root.'/admin/assets',$tmp.'/web/admin/assets');
+symlink($root.'/admin/partials',$tmp.'/web/admin/partials');
 copy($root.'/admin/receipts.php',$tmp.'/web/admin/receipts.php');
 copy($root.'/admin/receipt-history.php',$tmp.'/web/admin/receipt-history.php');
 copy($root.'/admin/receipt-document.php',$tmp.'/web/admin/receipt-document.php');
@@ -194,10 +195,88 @@ try {
     reportCheck(!$stopped['selected_running'] && !$stopped['processing'] && $stopped['can_start'],'Stopped selection has no banner despite other active work');
     $again=$render('gerente',[],'review' ,false,false,[],$goodPost);
     reportCheck($again['status']!==303 && $vault->read(InvoiceReceipts::FILE)['documents']['private-error-id']===$saved,'A repeated confirmation cannot restart or overwrite the queued document');
+    // Five PDFs on one real e-mail: four individual confirmations must stay visible
+    // in Problems to allow identification of the fifth, without inflating its counters.
+    $nif='500000000';$sender='test@welcomehostel.pt';$mail=hash('sha256','example-batch');
+    $settings=['nif'=>$nif,'sender'=>$sender,'enabled'=>true,'pilot_verified'=>true];
+    $batchDocs=[];$ledger=[];
+    for($i=1;$i<=5;$i++) {
+        $id='example-pdf-'.$i;$sha=hash('sha256',$id);$state=$i<5?'toc_accepted':'toc_no_confirmation';
+        $batchDocs[$id]=['id'=>$id,'name'=>'Example '.$i.'.pdf','sha256'=>$sha,'format'=>'pdf','stage'=>'archived','archived_at'=>gmdate('c'),
+            'toconline_state'=>$state,'invoice_number'=>'FT EX/'.$i,'company_nif'=>$nif,'issuer_name'=>'Example supplier','issuer_nif'=>'500000111',
+            'issued_on'=>'2026-04-01','total'=>'19.25','process_id'=>'test-run'];
+        $entry=['email_id'=>$mail,'document_id'=>'receipt:'.$id,'state'=>$state,'nif'=>$nif,'sender'=>$sender,'attempted_at'=>gmdate('c',time()-3600)];
+        if ($i<5) { $entry['confirmation_source']='dkim_toconline';$batchDocs[$id]['toc_confirmation_basis']='individual'; }
+        $ledger[hash('sha256',$nif."\0receipt\0".$id."\0".$sha)]=$entry;
+    }
+    $run=['documents'=>$batchDocs,'processes'=>['test-run'=>['id'=>'test-run','requested_at'=>gmdate('c'),'year'=>2026,'months'=>[4]]]];
+    $vault->save('toconline-settings.enc',$settings);$vault->save('toconline-ledger.enc',$ledger);$vault->save(InvoiceReceipts::FILE,$run);
+    $batchQuery=['filter'=>'problems','process'=>'test-run'];$batchHtml=$render('gerente',[],'',false,false,$batchQuery)['html'];
+    $batchPath=static function(string $html):DOMXPath { $dom=new DOMDocument();@$dom->loadHTML($html);return new DOMXPath($dom); };
+    $path=$batchPath($batchHtml);$counts($batchHtml,[1,0,1]);
+    reportCheck($path->query('//article[@data-receipt-batch]')->length===1 && $path->query('//article')->length===1,'Five invoices in one email must render as one problem');
+    reportCheck($path->query('//tbody/tr/td/input[@data-batch-row]')->length===5 && $path->query('//input[@data-batch-row and not(@disabled)]')->length===1,'One checkbox per row, only the pending file is selectable');
+    reportCheck($path->query('//form[@data-batch-review]//details[@data-receipt-preview]')->length===5 && $path->query('//form[@data-batch-review]//select')->length===0,'All five PDFs expand inline without a selector');
+    reportCheck($path->query('//form[@data-batch-review]//td[contains(.,"19.25")]')->length===5 && $path->query('//form[@data-batch-review]//td[contains(.,"01-04-2026")]')->length===5,'Every invoice has its amount and issue date');
+    reportCheck($path->query('//button[@value="resend_missing"]')->length===1 && $path->query('//button[@value="assign_rejection"]')->length===0,'Missing reply alone allows single resend and cannot imply a refusal');
+    reportCheck(str_contains($batchHtml,strtr(InvoiceTocReplyText::label('toc_batch_reply_counts'),['{total}'=>'5','{accepted}'=>'4','{rejected}'=>'0','{missing}'=>'1'])),'Four replies for five files display one missing result, without inferring a refusal');
+    $batchPost=['process'=>'test-run','batch'=>$mail,'version'=>$path->query('//input[@name="version"]')->item(0)->getAttribute('value'),'choice'=>'all_present','checked_toc'=>'1'];
+    reportCheck($render('governanta',['receipts.review'],'review_batch',false,false,$batchQuery,$batchPost)['status']===403,'A delegated receipt reviewer cannot confirm a TOConline batch');
+    reportCheck($render('gerente',[],'review_batch',false,false,$batchQuery,['csrf_token'=>'wrong']+$batchPost)['status']===403,'A batch confirmation requires the original CSRF token');
+    reportCheck($render('gerente',[],'review_batch',false,false,$batchQuery,['selected'=>'example-pdf-5']+$batchPost)['status']!==303
+        && $vault->read('toconline-ledger.enc')===$ledger,'Malformed selection never becomes an all-present confirmation');
+    $historyOnly=$render('governanta',['receipts.history'],'',false,false,$batchQuery)['html'];
+    reportCheck($batchPath($historyOnly)->query('//article[@data-receipt-batch]//details[@data-receipt-preview]')->length===5 && !str_contains($historyOnly,'value="review_batch"'),'History viewer can inspect all PDFs but cannot submit actions');
+    $limited=$render('governanta',['receipts.run'],'',false,true,$batchQuery)['html'];
+    reportCheck(!str_contains($limited,'example-pdf-') && !str_contains($limited,'FT EX/'),'Run-only polling never exposes the row projection');
+    $poll=json_decode($render('gerente',[],'',false,true,$batchQuery)['html'],true,512,JSON_THROW_ON_ERROR);
+    reportCheck($batchPath($poll['history'])->query('//article[@data-receipt-batch]')->length===1,'Polling returns the same grouped report');
+    reportCheck($render('gerente',[],'review_batch',false,false,$batchQuery,$batchPost)['status']===303,'Explicit all-present check resolves the remaining attachment');
+    $after=$vault->read(InvoiceReceipts::FILE)['documents'];
+    reportCheck(($after['example-pdf-5']['toc_confirmation_basis']??'')==='manual' && $after['example-pdf-1']===$batchDocs['example-pdf-1'],'Only unconfirmed attachment changes');
+    $closed=$render('gerente',[],'',false,false,$batchQuery)['html'];$counts($closed,[0,0,0]);reportCheck(!str_contains($closed,'data-receipt-batch'),'A resolved batch leaves Problems');
+
+    // A signed refusal count with no filename makes attribution possible; resend is unavailable.
+    foreach ($ledger as &$entry) {
+        $entry['state']='toc_review';unset($entry['confirmation_source']);
+        $entry+=['toc_supplier_group'=>hash('sha256','supplier-set'),'toc_supplier_unambiguous'=>true,
+            'toc_supplier_total'=>5,'toc_supplier_confirmed'=>4,'toc_supplier_refused'=>1,'toc_supplier_refusal_outcome'=>'toc_rejected'];
+    }
+    unset($entry);
+    foreach ($run['documents'] as &$member) { $member['toconline_state']='toc_review';unset($member['toc_confirmation_basis']); }
+    unset($member);$vault->save(InvoiceReceipts::FILE,$run);$vault->save('toconline-ledger.enc',$ledger);
+    $refused=$render('gerente',[],'',false,false,$batchQuery)['html'];$path=$batchPath($refused);
+    reportCheck($path->query('//form[@data-batch-review]//input[@data-batch-row and not(@disabled)]')->length===5 && $path->query('//button[@value="assign_rejection"]')->length===1,'An anonymous refusal exposes five selectable candidates');
+    reportCheck($path->query('//button[@value="resend_missing" or @value="all_present"]')->length===0 && str_contains($refused,InvoiceTocReplyText::label('toc_batch_refusal_unassigned')) && !str_contains($refused,InvoiceTocReplyText::label('toc_provider_wrong_recipient')),'No automatic buyer diagnosis, override, or resend for anonymous refusal');
+    reportCheck(str_contains($refused,strtr(InvoiceTocReplyText::label('toc_batch_reply_counts'),['{total}'=>'5','{accepted}'=>'4','{rejected}'=>'1','{missing}'=>'0'])),'An anonymous refusal is counted as a result');
+    foreach ($ledger as &$entry) {
+        $entry['toc_supplier_counts_known']=true;$entry['toc_supplier_unambiguous']=false;
+        $entry['toc_supplier_refused']=0;$entry['toc_supplier_refusal_outcome']='';
+    }
+    unset($entry);$vault->save('toconline-ledger.enc',$ledger);
+    $partial=$render('gerente',[],'',false,false,$batchQuery)['html'];$path=$batchPath($partial);
+    reportCheck(str_contains($partial,strtr(InvoiceTocReplyText::label('toc_batch_reply_counts'),['{total}'=>'5','{accepted}'=>'4','{rejected}'=>'0','{missing}'=>'1']))
+        && $path->query('//form[@data-batch-review]//input[@data-batch-row and not(@disabled)]')->length===5,'Four unidentified results among five PDFs remain unassigned and selectable');
+    reportCheck($path->query('//input[@name="others_present" and not(@checked)]')->length===1 && $path->query('//button[@value="assign_rejection"]')->length===0,'Manager may explicitly confirm all other documents when resending the one missing PDF');
+    $manualExisting=['stage'=>'archived','toconline_state'=>'toc_existing','toc_confirmation_basis'=>'manual'];
+    reportCheck(InvoiceReceiptReport::resolved($manualExisting) && InvoiceReceiptReport::progress(['documents'=>[$manualExisting]])['state']==='receipt_finished','A manually attributed duplicate remains archived and finished');
+    foreach (['pt','en'] as $locale) {
+        Translator::setLocale($locale,false);
+        foreach (array_diff_key(InvoiceTocReplyText::TEXT,InvoiceText::TEXT) as $key=>$pair) {
+            $translated=InvoiceTocReplyText::label($key);
+            reportCheck($pair[0]!=='' && $pair[1]!=='' && $pair[0]!==$pair[1] && $translated===$pair[$locale==='pt'?0:1],
+                'Batch label or reply reason missing its localized pair: '.$key);
+            preg_match_all('/\{[a-z_]+\}/',$pair[0],$ptTokens);preg_match_all('/\{[a-z_]+\}/',$pair[1],$enTokens);
+            sort($ptTokens[0]);sort($enTokens[0]);reportCheck($ptTokens[0]===$enTokens[0],'Receipt placeholders differ: '.$key);
+        }
+        reportCheck(InvoiceTocReplyText::label('receipt_finished_pending')===($locale==='pt'?'Finalizado com pendências':'Completed with unresolved items'),'Unresolved report state uses the receipt-specific label');
+        $label=InvoiceReceiptReport::confirmationLabel(['toconline_state'=>'toc_accepted','toc_confirmation_basis'=>'batch','toc_supplier_total'=>5,'issuer_name'=>'Example Supplier']);
+        reportCheck(str_contains($label,'5') && str_contains($label,'Example Supplier'),'Processed batch confirmation gives supplier and count in both languages');
+    }
     echo "Receipt report: totals, duplicate company/number/date, safe errors, actual endpoint role isolation and denied forged POSTs passed.\n";
 } finally {
     foreach (glob($tmp.'/sess_*')?:[] as $sessionFile) unlink($sessionFile);
-    foreach ([$tmp.'/web/admin/assets',$tmp.'/web/src',$tmp.'/web/assets'] as $link) unlink($link);
+    foreach ([$tmp.'/web/admin/partials',$tmp.'/web/admin/assets',$tmp.'/web/src',$tmp.'/web/assets'] as $link) unlink($link);
     foreach (glob($tmp.'/vault/*')?:[] as $file) unlink($file);
     unlink($tmp.'/web/admin/receipt-history.php'); unlink($tmp.'/web/admin/receipt-document.php'); unlink($tmp.'/web/admin/receipts.php'); unlink($tmp.'/web/lib.php'); unlink($tmp.'/web/config.php');
     rmdir($tmp.'/web/admin'); rmdir($tmp.'/web'); rmdir($tmp.'/vault'); rmdir($tmp);

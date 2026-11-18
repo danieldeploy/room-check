@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__).'/I18n/InvoiceText.php';
+require_once dirname(__DIR__).'/I18n/InvoiceTocReplyText.php';
 require_once __DIR__.'/InvoiceReceiptAnalysis.php';
 
 /** Explicit projection: the operator report never contains file identities or original links. */
@@ -24,9 +24,15 @@ final class InvoiceReceiptReport
     {
         if (!empty($d['error']) || ($d['stage']??'')==='failed') return false;
         if (($d['stage']??'')==='discarded') return !empty($d['discarded_at']) && !empty($d['discard_requested_by']) && ($d['toconline_state']??'')==='receipt_not_submitted';
+        if (($d['stage']??'')==='archived' && ($d['toconline_state']??'')==='toc_existing' && ($d['toc_confirmation_basis']??'')==='manual') return true;
         if (($d['toconline_state']??'')==='toc_accepted') return ($d['stage']??'')==='archived';
         return in_array($d['toconline_state']??'',['toc_existing','toc_duplicate_local'],true)
             && ($d['stage']??'')==='duplicate_trashed';
+    }
+    public static function preparing(array $d,?int $now=null): bool
+    {
+        return ($d['toconline_state']??'')==='toc_review' && ($d['delivery_reason']??'')==='toc_provider_preparing'
+            && (int)($d['toc_deadline']??0)>($now??time());
     }
     public static function paperMonthMismatch(array $d): bool
     {
@@ -59,6 +65,25 @@ final class InvoiceReceiptReport
             return $filter==='success'?(self::resolved($d) && ($d['stage']??'')!=='discarded'):!self::resolved($d);
         });
     }
+    /** A blocked email occupies one position in history, even across invoice page boundaries. */
+    public static function historyItems(array $documents,array $batches): array
+    {
+        if (!$batches) return $documents;
+        $byDocument=[];
+        foreach ($batches as $batchId=>$batch) {
+            foreach ($batch['documents'] as $row) $byDocument[$row['id']][]=$batchId;
+        }
+        $items=[];
+        foreach ($documents as $id=>$document) {
+            // An independent Drive failure or fiscal correction retains its own action.
+            if (empty($byDocument[$id]) || !empty($document['error']) || in_array($document['stage']??'',['failed','review'],true)) {
+                $items[$id]=$document;
+            }
+            foreach ($byDocument[$id]??[] as $batchId) $items['batch:'.$batchId]=['review_batch'=>$batchId];
+        }
+        return $items;
+    }
+
     public static function processPending(array $s,string $id): bool
     {
         $p=$s['processes'][$id]??[];
@@ -106,11 +131,13 @@ final class InvoiceReceiptReport
         // Discovery owns a single cursor. After discovery, request() checks month ownership.
         return empty($s['requested']);
     }
-    public static function processState(array $s,string $id,bool $sendEnabled=true): string
+    public static function processState(array $s,string $id,bool $sendEnabled=true,bool $describePending=false): string
     {
         $p=self::progress(self::selected($s,$id),$sendEnabled);
         if ($p['automatic'] && $p['state']!=='receipt_worker_delayed') return 'receipt_run_running';
-        return self::processPending($s,$id)?'receipt_pending':'receipt_finished';
+        if (!self::processPending($s,$id)) return 'receipt_finished';
+        if (!$describePending) return 'receipt_pending';
+        return in_array($p['state'],['receipt_interrupted','receipt_worker_delayed'],true)?$p['state']:'receipt_finished_pending';
     }
     /** Filter by execution start in Lisbon, never by scanned folder or invoice date. */
     public static function processesForPeriod(array $s,int $year,int $month): array
@@ -149,11 +176,13 @@ final class InvoiceReceiptReport
                 }
             }
             $error=(string)($document['error']??'');
-            if ($error==='' && in_array($document['toconline_state']??'', ['toc_rejected','toc_review'],true)) $error=$document['toconline_state'];
+            if ($error==='' && !self::preparing($document) && in_array($document['toconline_state']??'', ['toc_rejected','toc_review','toc_no_confirmation'],true)) {
+                $error=($document['delivery_reason']??'')==='toc_provider_preparing'?'toc_preparation_expired':$document['toconline_state'];
+            }
             if ($error==='' && ($document['stage']??'')==='failed') $error='receipt_failed';
             if ($error!=='') {
                 // Same translated diagnostic as the detailed report; never raw provider messages/OCR.
-                $report['errors'][]=isset(InvoiceText::TEXT[$error])?$error:'receipt_failed';
+                $report['errors'][]=isset(InvoiceTocReplyText::TEXT[$error])?$error:'receipt_failed';
             }
         }
         return $report;
@@ -170,7 +199,7 @@ final class InvoiceReceiptReport
             if ($at>$now) $wait($at);else $busy=true;
         }
         foreach ($state['documents']??[] as $d) {
-            $stage=$d['stage']??'';if ($stage==='superseded') continue;
+            $stage=$d['stage']??'';if ($stage==='superseded' || self::resolved($d)) continue;
             if ($stage==='failed') $failed=true;
             $cleanup=in_array($stage,['source_trashing','source_moving'],true) && empty($state['source_cleanup_paused']);
             if ($cleanup || in_array($stage,['correcting','repairing','queued','reading','ready','moving','preserving','trashing','discarding'],true)
@@ -178,8 +207,8 @@ final class InvoiceReceiptReport
                 $at=(int)($d['next_attempt']??0);
                 if ($at>$now) $wait($at,($d['retry_kind']??'')==='quota');else $busy=true;
             }
-            if ($stage==='archived' && in_array($d['toconline_state']??'',['toc_sending','toc_submitted','toc_uncertain'],true)
-                && ($d['toc_deadline']??0)>$now) {
+            if ($stage==='archived' && ($d['toc_deadline']??0)>$now && (self::preparing($d,$now)
+                || in_array($d['toconline_state']??'',['toc_sending','toc_submitted','toc_uncertain'],true))) {
                 $at=min($now+60,(int)$d['toc_deadline']);$replyPoll=$replyPoll?min($replyPoll,$at):$at;
             }
             if ($stage==='split' && empty($state['source_cleanup_paused'])) {
@@ -213,6 +242,21 @@ final class InvoiceReceiptReport
         return ['state'=>$key,'next_at'=>$next,'server_time'=>$now,'busy'=>$busy,'poll_at'=>$poll,'settled'=>$settled,'automatic'=>$busy || $next>0 || $replyPoll>0];
     }
 
+    public static function confirmationLabel(array $d): string
+    {
+        if (!in_array($d['toconline_state']??'',['toc_accepted','toc_existing','toc_rejected'],true)) return '';
+        $basis=$d['toc_confirmation_basis']??'';
+        if ($basis==='batch' && ($d['toc_supplier_total']??0)>0 && !empty($d['issuer_name'])) {
+            return strtr(InvoiceTocReplyText::label('toc_batch_group_named'),['{total}'=>(int)$d['toc_supplier_total'],'{supplier}'=>$d['issuer_name']]);
+        }
+        return match($basis) {
+            'batch'=>InvoiceTocReplyText::label('toc_batch_group'),
+            'manual'=>InvoiceTocReplyText::label('toc_batch_manual'),
+            'individual'=>InvoiceTocReplyText::label('toc_batch_individual'),
+            default=>'',
+        };
+    }
+
     /** Presentation only: never write formatted dates back to the workflow. */
     public static function displayDate(string $value,bool $folder=false): string
     {
@@ -225,13 +269,13 @@ final class InvoiceReceiptReport
     public static function render(array $report,bool $errorDetails=true,?array $progress=null): string
     {
         $e=static fn($v)=>htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
-        $t=static fn($key)=>htmlspecialchars(InvoiceText::get($key),ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+        $t=static fn($key)=>htmlspecialchars(InvoiceTocReplyText::label($key),ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
         ob_start();
         ?>
 <section class="card"><h2><?= $t('receipt_report') ?><?php if ($progress!==null): ?> — <?php
 $running=!empty($progress['automatic']) && $progress['state']!=='receipt_worker_delayed';
 $completed=$progress['state']==='receipt_finished';
-?><span class="receipt-report-label"><?= $t('receipt_status') ?></span> <span class="receipt-report-state <?= $running?'is-running':($completed?'is-completed':'is-pending') ?>"><?= $t($running?'receipt_processing':($completed?'receipt_completed_bang':($progress['state']==='receipt_no_runs'?'receipt_no_runs':'receipt_pending'))) ?><?php if ($running): ?><span class="receipt-dots" aria-hidden="true"><?php for($i=0;$i<5;$i++): ?><span>.</span><?php endfor; ?></span><?php endif; ?></span><?php endif; ?></h2>
+?><span class="receipt-report-label"><?= $t('receipt_status') ?></span> <span class="receipt-report-state <?= $running?'is-running':($completed?'is-completed':'is-pending') ?>"><?= $t($running?'receipt_processing':($completed?'receipt_completed_bang':$progress['state'])) ?><?php if ($running): ?><span class="receipt-dots" aria-hidden="true"><?php for($i=0;$i<5;$i++): ?><span>.</span><?php endfor; ?></span><?php endif; ?></span><?php endif; ?></h2>
 <?php if ($progress!==null && in_array($progress['state'],['receipt_retry_wait','receipt_quota_wait','receipt_toc_wait','receipt_worker_delayed'],true)): ?><p data-status-label><?= $t($progress['state']) ?></p><?php endif; ?>
 <p class="receipt-totals">
 <span><?= $t('receipt_files') ?>: <strong><?= $report['pdf_files'] ?></strong> pdf <?= $t('receipt_and') ?> <strong><?= $report['jpg_files'] ?></strong> jpg</span> <strong aria-hidden="true">|</strong>

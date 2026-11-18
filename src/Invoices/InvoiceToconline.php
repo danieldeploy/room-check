@@ -1,7 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceReceiptAnalysis.php';
+require_once __DIR__.'/InvoiceTocBatchReply.php';
+require_once __DIR__.'/InvoiceTocPipe.php';
 require_once __DIR__.'/InvoiceVault.php';
+require_once __DIR__.'/InvoiceTocBatchReview.php';
 require_once dirname(__DIR__).'/I18n/InvoiceTocReplyText.php';
 
 final class InvoiceTocWait extends RuntimeException
@@ -12,10 +15,14 @@ final class InvoiceTocWait extends RuntimeException
 /** Every caller holds room_check_invoices. The encrypted ledger precedes network side effects. */
 final class InvoiceToconline
 {
+    use InvoiceTocBatchReview;
+
     // Keep until end-to-end validation AND explicit owner withdrawal (2026-10-04).
     public const DIAGNOSTIC_DOCUMENT_ID = 9;
     public const DIAGNOSTIC_COOLDOWN = 600;
     private const EMAILS_PER_HOUR = 15;
+    public const RECEIPT_EVIDENCE_FIELDS=['toc_confirmation_basis','toc_supplier_group','toc_supplier_total',
+        'toc_supplier_confirmed','toc_supplier_refused','toc_supplier_refusal_outcome','toc_supplier_unambiguous','toc_supplier_counts_known'];
 
     public function __construct(private readonly PDO $pdo, private readonly InvoiceVault $vault, private readonly object $drive, private readonly mixed $transport = null) {}
 
@@ -144,20 +151,25 @@ final class InvoiceToconline
     }
 
     /** Reconcile even when sending is disabled. Never change a final confirmed outcome. */
-    public function reconcile(?int $now=null): void
+    public function reconcile(?int $now=null,bool $ageDue=true): void
     {
         $now??=time(); $ledger=$this->ledger();
         foreach ($ledger as &$entry) {
             if ($entry['state']==='toc_sending') { $entry['state']='toc_uncertain';$entry['delivery_reason']='toc_interrupted_handoff'; }
+            if (!$ageDue) continue;
             if (str_starts_with((string)$entry['document_id'],'receipt:')) {
                 $sent=strtotime((string)($entry['attempted_at']??''));
-                if ($sent && in_array($entry['state'],['toc_submitted','toc_uncertain'],true)) {
+                $preparing=$entry['state']==='toc_review' && self::deliveryReason($entry)==='toc_provider_preparing';
+                if ($sent && ($preparing || in_array($entry['state'],['toc_submitted','toc_uncertain'],true))) {
                     $entry['receipt_checks']??=0;$entry['receipt_next_check']??=$sent+300;
-                    if ($now>=(int)$entry['receipt_next_check']) {
+                    if ($entry['receipt_next_check']>0 && $now>=(int)$entry['receipt_next_check']) {
                         $entry['receipt_checks']=min(6,$entry['receipt_checks']+1);
                         // A delayed worker does not invent missed checks or replay them in a burst.
                         $entry['receipt_next_check']=$sent+(intdiv(max(0,$now-$sent),300)+1)*300;
-                        if ($now>=$sent+1800) $entry['state']='toc_no_confirmation';
+                        if ($now>=$sent+1800) {
+                            $entry['receipt_next_check']=0;
+                            if (!$preparing) $entry['state']='toc_no_confirmation';
+                        }
                     }
                 }
             } elseif ($entry['state']==='toc_submitted' && !empty($entry['attempted_at'])
@@ -182,16 +194,113 @@ final class InvoiceToconline
     private static function receiptTiming(array $entry): array
     {
         $sent=strtotime((string)($entry['attempted_at']??''));
-        $waiting=$sent && in_array($entry['state']??'',['toc_sending','toc_submitted','toc_uncertain'],true);
-        return ['delivery_reason'=>self::deliveryReason($entry), 'toc_next_check'=>$waiting?(int)($entry['receipt_next_check']??$sent+300):0,
-            'toc_deadline'=>$waiting?$sent+1800:0,'toc_checks'=>(int)($entry['receipt_checks']??0)];
+        $reason=self::deliveryReason($entry);
+        $waiting=$sent && (in_array($entry['state']??'',['toc_sending','toc_submitted','toc_uncertain'],true)
+            || (($entry['state']??'')==='toc_review' && $reason==='toc_provider_preparing'));
+        $evidence=array_intersect_key($entry,array_flip(self::RECEIPT_EVIDENCE_FIELDS));
+        if (!isset($evidence['toc_confirmation_basis']) && empty($entry['equivalent_keeper'])
+            && in_array($entry['state']??'',['toc_accepted','toc_existing','toc_rejected'],true)) {
+            if (($entry['confirmation_source']??'')==='dkim_toconline') $evidence['toc_confirmation_basis']='individual';
+            elseif (($entry['confirmation_source']??'')==='manager') $evidence['toc_confirmation_basis']='manual';
+        }
+        return ['delivery_reason'=>$reason, 'toc_next_check'=>$waiting?(int)($entry['receipt_next_check']??$sent+300):0,
+            'toc_deadline'=>$waiting?$sent+1800:0,'toc_checks'=>(int)($entry['receipt_checks']??0),
+            'evidence'=>$evidence];
     }
 
-    /** Mail headers/body are untrusted evidence. Exact correlation only; no automatic acceptance. */
+    private static function protectedReview(array $entry): bool
+    {
+        return ($entry['state']??'')==='toc_review' && in_array($entry['receipt_review_reason']??'',
+            ['toc_provider_preparing','toc_reply_unassigned_refusal'],true);
+    }
+
+    private static function recordBatchDecision(array &$entry,array $decision,string $hash,int $signedAt): void
+    {
+        $outcome=$decision['state'];
+        $open=in_array($entry['state'],['toc_sending','toc_submitted','toc_uncertain','toc_no_confirmation','toc_review'],true);
+        if ($outcome==='toc_review' && ($signedAt<($entry['receipt_signed_at']??0)
+            || (self::protectedReview($entry) && !in_array($decision['reason'],['toc_provider_preparing','toc_reply_unassigned_refusal'],true)))) return;
+        if ($open) {
+            $entry['state']=$outcome;
+            if (($entry['receipt_hash']??'')!==$hash || empty($entry['receipt_received_at'])) $entry['receipt_received_at']=gmdate('c');
+            $entry['receipt_hash']=$hash;$entry['receipt_signed_at']=$signedAt;
+            unset($entry['receipt_ambiguity'],$entry['receipt_suggestion'],$entry['receipt_review_reason']);
+            if ($outcome==='toc_review') $entry['receipt_review_reason']=$decision['reason'];
+            else {
+                unset($entry['delivery_reason']);
+                if (!empty($decision['reason'])) $entry['delivery_reason']=$decision['reason'];
+                $entry['confirmed_at']=gmdate('c');$entry['confirmed_by']=0;
+                $entry['toc_confirmation_basis']=$decision['basis'];
+                $entry['confirmation_source']=$decision['source']??($decision['basis']==='batch'?'dkim_toconline_batch':'dkim_toconline');
+                if (!empty($decision['prior_email'])) $entry['receipt_attempt_email_id']=$decision['prior_email'];
+            }
+        } elseif (($entry['confirmation_source']??'')==='dkim_toconline' && empty($entry['toc_confirmation_basis'])
+            && empty($entry['equivalent_keeper']) && $outcome===$entry['state'] && ($decision['basis']??'')==='individual') {
+            $entry['toc_confirmation_basis']='individual';
+        }
+        if (isset($decision['toc_supplier_group']) && (empty($entry['toc_supplier_unambiguous'])
+            || !empty($decision['toc_supplier_unambiguous']) || ($entry['toc_supplier_evidence_hash']??'')===$hash)) {
+            foreach (self::RECEIPT_EVIDENCE_FIELDS as $field) if ($field!=='toc_confirmation_basis') $entry[$field]=$decision[$field];
+            $entry['toc_supplier_evidence_hash']=$hash;
+        }
+    }
+
+    /** Persist one authenticated report atomically in the ledger, then repair its document projections on replay. */
+    private function receiveBatch(array $settings,int $signedAt,array $report,string $hash): array
+    {
+        $ledger=$this->ledger();
+        $documents=$this->vault->has('receipts-workflow.enc')?$this->vault->read('receipts-workflow.enc')['documents']??[]:[];
+        $decisions=InvoiceTocBatchReply::decide($ledger,$documents,$settings,$signedAt,$report);
+        if (!$decisions) return ['result'=>'unmatched'];
+        $changed=false;$updated=[];$pilot=false;
+        foreach ($ledger as &$entry) {
+            $id=$entry['document_id'];$decision=$decisions[$id]??null;
+            if (!$decision || $entry['nif']!==$settings['nif'] || $entry['sender']!==$settings['sender']) continue;
+            $before=$entry;
+            if (!empty($decision['prior_email'])) {
+                // The original attachment was acknowledged after a deliberate resend. Preserve which handoff was proven.
+                $present=false;
+                if (empty($entry['previous_attempts'])) continue;
+                foreach ($entry['previous_attempts'] as &$prior) if (($prior['email_id']??'')===$decision['prior_email']) {
+                    self::recordBatchDecision($prior,$decision,$hash,$signedAt);
+                    $present=in_array($prior['state'],['toc_accepted','toc_existing'],true);
+                }
+                unset($prior);
+                if (!$present) continue;
+                $decision=array_intersect_key($decision,array_flip(['state','basis','reason','prior_email']));
+                $decision['source']='dkim_toconline_prior_send';
+            }
+            self::recordBatchDecision($entry,$decision,$hash,$signedAt);
+            $pilot=$pilot || (($entry['receipt_hash']??'')===$hash && $entry['state']==='toc_accepted'
+                && ($entry['confirmation_source']??'')==='dkim_toconline');
+            $changed=$changed || $entry!==$before;
+            $updated[$id]=$entry;
+        }
+        unset($entry);
+        if ($changed) $this->vault->save('toconline-ledger.enc',$ledger);
+        foreach ($updated as $id=>$entry) $this->state($id,$entry['state'],self::receiptTiming($entry));
+        if ($pilot && empty($settings['pilot_verified'])) {
+            $settings['pilot_verified']=true;$this->vault->save('toconline-settings.enc',$settings);
+        }
+        return ['result'=>'matched','outcome'=>count($updated)===1?reset($updated)['state']:'toc_review'];
+    }
+
+    /** Body-derived verdicts may only change a uniquely supported, authenticated submission. */
     public function receive(string $from, string $references, string $text, string $receiptHash, array $proof=[]): array
     {
         if (!preg_match('/\A[a-f0-9]{64}\z/',$receiptHash)) throw new RuntimeException('toc_ineligible');
-        if (strtolower(trim($from))!=='no_reply@toconline.pt') return ['result'=>'ignored'];
+        if (strtolower(trim($from))!==InvoiceTocPipe::PROVIDER_SENDER) return ['result'=>'ignored'];
+        $settings=$this->settings();
+        $auth=$proof['authentication']??[];$signedAt=strtotime((string)($auth['signed_at']??''));
+        $batch=$proof['batch_reply']??[];
+        // Keep the existing single fiscal path, including its equivalent-copy resolution protocol.
+        $singlePurchase=!empty($proof['purchase_identity']) && count($batch['purchases']??[])===1 && empty($batch['named'])
+            && empty($batch['unassigned']) && !empty($batch['complete']);
+        $trusted=($auth['verified']??false)===true && ($auth['code']??'')==='verified'
+            && ($auth['recipient']??'')===strtolower($settings['sender']) && $signedAt;
+        if ((!empty($batch['named']) || !empty($batch['purchases']) || !empty($batch['refusals'])) && !$singlePurchase && $trusted) {
+            return $this->receiveBatch($settings,$signedAt,$batch,$receiptHash);
+        }
         $purchases=$proof['purchase_identities']??[];
         if ($purchases && count($purchases)<=self::MAX_ATTACHMENTS && $text==='' && $references==='') {
             $matched=false;
@@ -202,10 +311,17 @@ final class InvoiceToconline
             }
             return ['result'=>$matched?'matched':'unmatched','outcome'=>'toc_review'];
         }
-        $ledger=$this->ledger(); $settings=$this->settings(); $matches=[];
+        $ledger=$this->ledger(); $matches=[];$wire=[];
+        foreach ($ledger as $key=>$entry) $wire[$entry['attachment_key']??$key]=$entry;
         preg_match_all('/(?:(?:booking|hostelworld|cloudbeds|receipt)[-_]|toc-)([a-f0-9]{64})(?:\.(?:pdf|jpe?g)|@check\.welcomehostel\.pt)/i',$references."\n".$text,$tokens);
+        $uniqueKeys=array_unique(array_map('strtolower',$tokens[1]));
+        if ($trusted && count($uniqueKeys)===1 && !isset($wire[reset($uniqueKeys)]) && in_array($proof['outcome']??'',['toc_accepted','toc_existing'],true)) {
+            // A pre-upgrade encrypted queue entry may have an old signed verdict without the structured row list.
+            return $this->receiveBatch($settings,$signedAt,['named'=>[reset($uniqueKeys)=>['state'=>$proof['outcome']]],
+                'purchases'=>[],'unassigned'=>0,'complete'=>true],$receiptHash);
+        }
         foreach (array_unique($tokens[1]) as $key) {
-            $entry=$ledger[strtolower($key)]??null;
+            $entry=$wire[strtolower($key)]??null;
             if ($entry && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']) $matches[(string)$entry['document_id']]=true;
         }
         $auth=$proof['authentication']??[];$purchase=$proof['purchase_identity']??[];$fiscalCandidate=null;
@@ -234,8 +350,8 @@ final class InvoiceToconline
             $handled=false;
             foreach ($attachments as $key=>$outcome) {
                 if (!in_array($outcome,['toc_accepted','toc_existing','toc_rejected','toc_review'],true)
-                    || !in_array($key,$tokens[1],true) || !isset($ledger[$key])) continue;
-                $candidate=$ledger[$key];
+                    || !in_array($key,$tokens[1],true) || !isset($wire[$key])) continue;
+                $candidate=$wire[$key];
                 if (!isset($matches[(string)$candidate['document_id']]) || empty($candidate['email_id'])
                     || $candidate['email_id']===$key || $candidate['sender']!==$settings['sender'] || $candidate['nif']!==$settings['nif']) continue;
                 $sent=strtotime((string)($candidate['attempted_at']??''));
@@ -244,18 +360,19 @@ final class InvoiceToconline
                 foreach ($ledger as &$item) {
                     if ($item['document_id']!==$candidate['document_id'] || ($item['email_id']??'')!==$candidate['email_id']
                         || !in_array($item['state'],['toc_sending','toc_submitted','toc_uncertain','toc_review','toc_no_confirmation'],true)) continue;
+                    if ($outcome==='toc_review' && self::protectedReview($item)) continue;
                     $item['state']=$outcome;
                     if ($outcome==='toc_review') $item['receipt_review_reason']='toc_reply_attachment_unclear';
                     if ($outcome==='toc_rejected' && in_array($key,$proof['unsupported_files']??[],true)) $item['delivery_reason']='toc_provider_format';
                     $item['receipt_hash']=$receiptHash;$item['receipt_received_at']=gmdate('c');
-                    if ($outcome!=='toc_review') { $item['confirmation_source']='dkim_toconline';$item['confirmed_at']=gmdate('c'); }
+                    if ($outcome!=='toc_review') { $item['confirmation_source']='dkim_toconline';$item['toc_confirmation_basis']='individual';$item['confirmed_at']=gmdate('c'); }
                 }
                 unset($item);
             }
             if ($handled) {
                 $this->vault->save('toconline-ledger.enc',$ledger);
-                foreach (array_keys($attachments) as $key) if (isset($ledger[$key]) && isset($matches[(string)$ledger[$key]['document_id']])) {
-                    $item=$ledger[$key];$this->state($item['document_id'],$item['state'],self::receiptTiming($item));
+                foreach ($ledger as $key=>$item) if (isset($attachments[$item['attachment_key']??$key]) && isset($matches[(string)$item['document_id']])) {
+                    $this->state($item['document_id'],$item['state'],self::receiptTiming($item));
                 }
                 return ['result'=>'matched','outcome'=>'toc_review']; // Detailed outcomes live on each invoice.
             }
@@ -267,6 +384,7 @@ final class InvoiceToconline
             foreach ($ledger as &$entry) if (isset($matches[(string)$entry['document_id']])
                 && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
                 && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
+                if (self::protectedReview($entry)) continue;
                 $entry['state']='toc_review';$entry['receipt_hash']=$receiptHash;
                 $entry['receipt_suggestion']='toc_accepted';$entry['receipt_received_at']=gmdate('c');
                 $entry['receipt_ambiguity']='multiple_scans';$entry['receipt_review_reason']='toc_reply_multiple_scans';
@@ -281,7 +399,7 @@ final class InvoiceToconline
         $automatic='toc_review'; $applied=false;
         $uniqueTokens=array_unique(array_map('strtolower',$tokens[1]));
         $signedAt=strtotime((string)($auth['signed_at']??''));
-        $candidate=$fiscalCandidate??($ledger[reset($uniqueTokens)]??[]);
+        $candidate=$fiscalCandidate??($wire[reset($uniqueTokens)]??[]);
         $sentAt=strtotime((string)($candidate['attempted_at']??''));
         $authReason='toc_auth_'.($auth['code']??'');
         $providerReason=$proof['provider_reason']??'';
@@ -302,13 +420,14 @@ final class InvoiceToconline
         foreach ($ledger as &$entry) if ((string)$entry['document_id']===(string)$id
             && $entry['nif']===$settings['nif'] && $entry['sender']===$settings['sender']
             && in_array($entry['state'],['toc_submitted','toc_uncertain','toc_sending','toc_no_confirmation','toc_review'],true)) {
+            if ($automatic==='toc_review' && self::protectedReview($entry)) continue;
             $entry['state']=$automatic;
             if ($automatic==='toc_review') $entry['receipt_review_reason']=$reviewReason;
             if ($automatic==='toc_rejected' && ($proof['provider_reason']??'')==='toc_provider_format') $entry['delivery_reason']='toc_provider_format';
             $entry['receipt_hash']=$receiptHash;
             if ($automatic!=='toc_review') {
                 $entry['confirmed_at']=gmdate('c'); $entry['confirmation_source']='dkim_toconline';
-                $entry['confirmed_by']=0; $applied=true;
+                $entry['confirmed_by']=0; $entry['toc_confirmation_basis']='individual';$applied=true;
             }
             $entry['receipt_suggestion']=$suggestion; $entry['receipt_received_at']=gmdate('c');
         }
@@ -322,7 +441,7 @@ final class InvoiceToconline
 
     public function run(?int $pilotId=null,bool $reconcile=true): void
     {
-        if ($reconcile) $this->reconcile();
+        if ($reconcile) $this->reconcile(null,false); // Only the worker ages records after its late-mail check.
         $settings=$this->settings();
         if ($pilotId && empty($settings['nif'])) throw new RuntimeException('toc_invalid_settings');
         if (empty($settings['nif']) || (!$pilotId && (empty($settings['enabled']) || empty($settings['pilot_verified'])))) return;
@@ -409,15 +528,25 @@ final class InvoiceToconline
         return $problems;
     }
 
-    private function transmitBatch(array &$ledger,array $parts,array $settings,string $to): void
+    private function transmitBatch(array &$ledger,array $parts,array $settings,string $to,int $resendActor=0): void
     {
         $this->assertSendBudget($ledger);
-        $mailId=count($parts)===1?$parts[0]['identity']:bin2hex(random_bytes(32));
-        $message=self::batchMessage($parts,$settings['sender'],$mailId);
+        $mailId=count($parts)===1 && !$resendActor?$parts[0]['identity']:bin2hex(random_bytes(32));
+        $wireParts=$parts;
+        if ($resendActor) $wireParts[0]['identity']=$mailId;
+        $message=self::batchMessage($wireParts,$settings['sender'],$mailId);
         $attempted=gmdate('c');
         foreach ($parts as $part) {
             $entry=['document_id'=>$part['id'],'nif'=>$settings['nif'],'sender'=>$settings['sender'],
                 'state'=>'toc_sending','attempted_at'=>$attempted,'email_id'=>$mailId];
+            if ($resendActor) {
+                $previous=$ledger[$part['identity']];
+                $history=$previous['previous_attempts']??[];
+                unset($previous['previous_attempts']);
+                $entry['previous_attempts']=[...$history,$previous];
+                $entry['resent_by']=$resendActor;
+                $entry['attachment_key']=$mailId;
+            }
             $ledger[$part['identity']]=$ledger[$part['content']]=$entry;
         }
         // A single durable write reserves every attachment before the irreversible handoff.
@@ -441,8 +570,10 @@ final class InvoiceToconline
     {
         $now=time();$attempts=[];
         foreach ($ledger as $entry) {
-            $at=strtotime((string)($entry['attempted_at']??''));
-            if ($at && $at>$now-3600) $attempts[$entry['email_id']??((string)$entry['document_id'].'|'.$at)]=$at;
+            foreach ([...($entry['previous_attempts']??[]),$entry] as $attempt) {
+                $at=strtotime((string)($attempt['attempted_at']??''));
+                if ($at && $at>$now-3600) $attempts[$attempt['email_id']??((string)$attempt['document_id'].'|'.$at)]=$at;
+            }
         }
         foreach ($this->diagnosticAttempts() as $key=>$entry) {
             $at=strtotime((string)($entry['attempted_at']??''));
@@ -460,7 +591,7 @@ final class InvoiceToconline
         if (empty($settings['enabled']) || empty($settings['pilot_verified'])) return;
         if (($d['stage']??'')!=='archived' || empty($d['issued_on']) || !InvoiceReceiptAnalysis::buyerAccepted($d,$settings['nif'])) throw new RuntimeException('toc_ineligible');
         $id='receipt:'.$d['id']; $ledger=$this->ledger();
-        $identity=hash('sha256',$settings['nif']."\0receipt\0".$d['id']."\0".$d['sha256']);
+        $identity=self::receiptKey($d,$settings['nif']);
         // Each new scan gets its own external verdict. Repeated clicks on this ID never resend.
         $content=$identity; $existing=$ledger[$identity]??null;
         if ($existing) { $this->state($id,(string)$existing['document_id']===$id?$existing['state']:'toc_duplicate'); return; }
@@ -473,21 +604,18 @@ final class InvoiceToconline
             if (!$first && (($doc['stage']??'')!=='archived' || !in_array($doc['toconline_state']??'',['pending','toc_retry'],true)
                 || !empty($doc['duplicate_keeper']) || ($doc['next_attempt']??0)>time() || empty($doc['issued_on'])
                 || !InvoiceReceiptAnalysis::buyerAccepted($doc,$settings['nif']))) continue;
-            $key=hash('sha256',$settings['nif']."\0receipt\0".$doc['id']."\0".$doc['sha256']);
+            $key=self::receiptKey($doc,$settings['nif']);
             if (isset($ledger[$key])) continue;
             if (!self::fits($parts,(int)$doc['size'])) {
                 if ($first) throw new RuntimeException('toc_attachment_size');
                 break;
             }
             try {
-                $pdf=$this->drive->verifiedReceipt($doc);
-                if (strlen($pdf)!==(int)$doc['size'] || strlen($pdf)>10*1024*1024
-                    || !InvoiceDriveClient::receiptBytesValid($pdf,$doc['format']) || !hash_equals($doc['sha256'],hash('sha256',$pdf))) throw new RuntimeException('drive_verify');
+                $parts[]=$this->verifiedReceiptPart($doc,$key);
             } catch (Throwable $failure) {
                 if ($first) throw $failure;
                 break; // Its own worker turn will record the exact verification failure.
             }
-            $parts[]=['id'=>'receipt:'.$doc['id'],'identity'=>$key,'content'=>$key,'pdf'=>$pdf,'portal'=>'receipt','format'=>$doc['format']];
             if (count($parts)===self::MAX_ATTACHMENTS) break;
         }
         if (!$parts) throw new RuntimeException('toc_ineligible');

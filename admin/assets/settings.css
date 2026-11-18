@@ -168,3 +168,24 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f6; }
 .receipt-pdf-toolbar .primary-button{margin:0;min-height:2.75rem}
 .receipt-pdf-viewport{max-width:100%;overflow:auto;max-height:75vh;background:#edf1f5}
 .receipt-pdf-viewport canvas{display:block;background:#fff}
+
+.receipt-batch { overflow-wrap: anywhere; }
+.receipt-batch > p, .receipt-batch form > label { margin: .65rem 0; }
+.receipt-invoice .receipt-block, .receipt-invoice > .alert { color: #9f231b; }
+.receipt-batch-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .95rem; }
+.receipt-batch-table th, .receipt-batch-table td { padding: 8px; text-align: left; vertical-align: top; }
+.receipt-batch-table thead th { color: #486581; border-bottom: 1px solid #bcccdc; }
+.receipt-batch-table tbody { border-bottom: 1px solid #d9e2ec; }
+.receipt-batch-table small { display: block; margin-top: .25rem; }
+.receipt-batch-table .document-disclosure { margin: 0; }
+.receipt-batch .form-actions { flex-wrap: wrap; }
+.receipt-batch input:focus-visible, .receipt-batch button:focus-visible { outline: 3px solid #0c7771; outline-offset: 2px; }
+@media (max-width: 700px) {
+    .receipt-batch-table, .receipt-batch-table tbody, .receipt-batch-table tr { display: block; }
+    .receipt-batch-table tbody { padding: .75rem 0; }
+    .receipt-batch-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .receipt-batch-table [data-label] { display: block; padding: 4px 0; }
+    .receipt-batch-table [data-label]::before { content: attr(data-label) " "; color: #486581; font-weight: 600; }
+    .receipt-batch-table .receipt-batch-file td { display: block; padding: .5rem 0 0; }
+    .receipt-batch .form-actions { align-items: stretch; flex-direction: column; }
+}

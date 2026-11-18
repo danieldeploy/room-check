@@ -2,12 +2,14 @@
 declare(strict_types=1);
 require_once __DIR__.'/InvoiceVault.php';
 require_once __DIR__.'/InvoiceTocAuthentication.php';
+require_once __DIR__.'/InvoiceTocReplyParser.php';
 
 /** CLI mail delivery -> bounded encrypted queue -> existing conservative receipt reconciliation. */
 final class InvoiceTocPipe
 {
+    public const PROVIDER_SENDER='no_reply@toconline.pt';
     public const MAX_BYTES=262144;
-    public const CORRELATION_VERSION=2;
+    public const CORRELATION_VERSION=3;
     public function __construct(private readonly InvoiceVault $vault) {}
 
     /** Exim's pipe transport may prepend one Unix mailbox From_ envelope line.
@@ -59,7 +61,7 @@ final class InvoiceTocPipe
         return [$headers,$parts[1]];
     }
 
-    private static function text(string $raw,int $depth,int &$parts): string
+    private static function text(string $raw,int $depth,int &$parts,?array &$bodies=null): string
     {
         if ($depth>5 || ++$parts>32) throw new RuntimeException('toc_pipe_invalid');
         [$h,$body]=self::split($raw);
@@ -76,7 +78,7 @@ final class InvoiceTocPipe
             $lines=preg_split('/\r?\n/',$body); $active=false; $closed=false; $part='';
             foreach ($lines as $line) {
                 if (rtrim($line)==='--'.$boundary || rtrim($line)==='--'.$boundary.'--') {
-                    if ($active) $text.=self::text($part,$depth+1,$parts)."\n";
+                    if ($active) $text.=self::text($part,$depth+1,$parts,$bodies)."\n";
                     $part=''; $active=true;
                     if (rtrim($line)==='--'.$boundary.'--') { $closed=true; break; }
                 } elseif ($active) $part.=$line."\r\n";
@@ -92,8 +94,14 @@ final class InvoiceTocPipe
         if (preg_match('/;\s*charset\s*=\s*"?([a-zA-Z0-9_-]+)/i',$type,$m)) {
             try { $body=mb_convert_encoding($body,'UTF-8',$m[1]); } catch (ValueError) { throw new RuntimeException('toc_pipe_invalid'); }
         }
-        if (preg_match('/\A\s*text\/html/i',$type)) $body=preg_replace('~<(?:br\s*/?|/(?:p|li|td|tr|div))\s*>~i',"\n",$body)??$body;
-        return html_entity_decode(strip_tags($body),ENT_QUOTES|ENT_HTML5,'UTF-8');
+        $isHtml=preg_match('/\A\s*text\/html/i',$type)===1;
+        if ($isHtml) {
+            if ($bodies!==null) $body=preg_replace('~<(head|style|script)\b[^>]*>.*?</\1\s*>~is','',$body)??$body;
+            $body=preg_replace('~<(?:br\s*/?|/(?:p|li|td|tr|div|h[1-6]))\s*>~i',"\n",$body)??$body;
+        }
+        $text=html_entity_decode(strip_tags($body),ENT_QUOTES|ENT_HTML5,'UTF-8');
+        if ($bodies!==null) $bodies[]=$isHtml?$text:$body;
+        return $text;
     }
 
     /** Store only correlation tokens and a classification hint, never the original mail or attachments. */
@@ -107,8 +115,8 @@ final class InvoiceTocPipe
         [$headers]=self::split($raw); $from=$headers['from']??[];
         if (count($from)!==1 || !preg_match('/\A\s*(?:[^<>]*<no_reply@toconline\.pt>|no_reply@toconline\.pt)\s*\z/i',$from[0])) return null;
         $hash=hash('sha256',$raw);
-        try { $parts=0; $text=self::text($raw,0,$parts); }
-        catch (RuntimeException) { return ['from'=>'no_reply@toconline.pt','text'=>'','hash'=>$hash]; }
+        try { $parts=0; $bodies=[]; $text=self::text($raw,0,$parts,$bodies); }
+        catch (RuntimeException) { return ['from'=>self::PROVIDER_SENDER,'text'=>'','hash'=>$hash,'correlation_version'=>self::CORRELATION_VERSION]; }
         $references=implode(' ',array_merge($headers['references']??[],$headers['in-reply-to']??[]));
         preg_match_all('/(?:(?:booking|hostelworld|cloudbeds|receipt)[-_]|toc-)([a-f0-9]{64})(?:\.(?:pdf|jpe?g)|@check\.welcomehostel\.pt)/i',$references."\n".$text,$m);
         $tokens=array_unique(array_map('strtolower',$m[1]));
@@ -116,106 +124,51 @@ final class InvoiceTocPipe
         $safe=count($tokens)>20?'':implode("\n",array_map(static fn($key)=>'booking-'.$key.'.pdf',$tokens));
         if (str_contains(mb_strtolower($text),'por já constarem no seu arquivo')) $safe.="\npor já constarem no seu arquivo";
         $subject=count($headers['subject']??[])===1 ? mb_decode_mimeheader($headers['subject'][0]) : '';
-        $outcome='toc_review';
-        $duplicate=str_contains(mb_strtolower($text),'por já constarem no seu arquivo');
-        $success=preg_match('/\AFicheiros arquivados com sucesso - Active Lines, Lda\s*\z/u',trim($subject))===1;
-        preg_match_all('/(?:booking|hostelworld|cloudbeds|receipt)[-_]([a-f0-9]{64})\.(?:pdf|jpe?g)/i',$text,$bodyMatches);
-        $bodyTokens=array_values(array_unique(array_map('strtolower',$bodyMatches[1])));
-        preg_match_all('/[a-zA-Z0-9._-]+\.(?:pdf|jpe?g)/i',$text,$pdfNames);
-        $allNamesKnown=count(array_filter($pdfNames[0],static fn($name)=>!preg_match('/\A(?:booking|hostelworld|cloudbeds|receipt)[-_][a-f0-9]{64}\.(?:pdf|jpe?g)\z/i',$name)))===0;
-        if ($allNamesKnown && count(array_unique(array_map('strtolower',$pdfNames[0])))===1 && count($bodyTokens)===1 && count($tokens)===1) {
-            if (str_contains($text,'Foram recusados os seguintes ficheiros:')) {
-                $classified=self::attachmentOutcomes($text,$subject);
-                if (!$success && !$duplicate && ($classified[$bodyTokens[0]]??'')==='toc_rejected') $outcome='toc_rejected';
-            } elseif ($duplicate && !$success) $outcome='toc_existing';
-            elseif ($success && !$duplicate) $outcome='toc_accepted';
+        $batch=[];
+        // MIME alternatives describe the same event. Never count them twice or combine
+        // contradictory renderings into a seemingly complete provider response.
+        foreach ($bodies as $body) {
+            $parsed=InvoiceTocReplyParser::read($body,trim($subject));
+            if (!$parsed) continue;
+            if ($batch && $batch!=$parsed) {
+                $batch=['named'=>[],'purchases'=>[],'refusals'=>[],'unassigned'=>1,'complete'=>false,'counts'=>[]];
+                break;
+            }
+            $batch=$parsed;
         }
         $reason='';
-        $unsupported='Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:';
         $normalized=preg_replace('/[\s\x{00A0}]+/u',' ',trim($text))??'';
-        if (str_contains($normalized,$unsupported)) $reason='toc_provider_format';
+        if (str_contains($normalized,'Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:')) $reason='toc_provider_format';
         elseif (str_contains($normalized,'Arquivo digital não foi efetuado porque o total dos ficheiros enviados é superior a 20 MB.')) $reason='toc_provider_size';
         elseif (str_contains($normalized,'Arquivo digital não foi efetuado porque enviou mais de 20 ficheiros.')) $reason='toc_provider_count';
-        if ($reason==='toc_provider_format' && $allNamesKnown && count($bodyTokens)===1 && count($tokens)===1)
-            $outcome=(!$success && !$duplicate)?'toc_rejected':'toc_review';
-        $purchase=[];$purchases=[];
-        if ($success && !$duplicate && !$tokens && !$pdfNames[0]) {
-            $purchase=self::purchaseIdentity($text);
-            if ($purchase) $outcome='toc_accepted';
-            elseif ($reason==='' && !str_contains(mb_strtolower($normalized),'recusad')) {
-                $heading='Ficheiros arquivados e associados automaticamente a faturas de compra:';
-                if (substr_count($normalized,$heading)===1) {
-                    $rows=explode('Fornecedor NIF:',explode($heading,$normalized,2)[1]);
-                    array_shift($rows);
-                    if (count($rows)>1 && count($rows)<=20) foreach ($rows as $row) {
-                        $identity=self::purchaseIdentity($heading.' Fornecedor NIF:'.$row);
-                        if (!$identity) { $purchases=[]; break; }
-                        $purchases[]=$identity;
-                    }
+        if ($batch && in_array($reason,['toc_provider_size','toc_provider_count'],true)) {
+            // An explicit whole-message failure contradicts individual success.
+            $batch=['named'=>[],'purchases'=>[],'refusals'=>[],'unassigned'=>1,'complete'=>false,'counts'=>[]];
+        }
+        $files=$batch['named']??[];
+        $rows=$batch['purchases']??[];
+        $outcome='toc_review'; $purchase=[]; $purchases=[]; $attachments=[]; $unsupported=[];
+        foreach ($files as $key=>$file) {
+            $attachments[$key]=$file['state'];
+            if ($file['reason']==='toc_provider_format') $unsupported[]=$key;
+        }
+        // Keep historical receiver/diagnostic projections only for exact, complete cases.
+        if (!empty($batch['complete']) && empty($batch['unassigned'])) {
+            if (count($files)===1 && !$rows && count($tokens)===1) $outcome=reset($files)['state'];
+            if (!$files && !$tokens && $rows) {
+                foreach ($rows as $row) {
+                    if ($row['status']!=='toc_accepted' || $row['invoice_number']==='') { $purchases=[]; break; }
+                    $purchases[]=['issuer_nif'=>$row['issuer_nif'],'invoice_number'=>$row['invoice_number']];
                 }
+                if (count($purchases)===1) { $purchase=array_pop($purchases); $outcome='toc_accepted'; }
             }
         }
-        $perFile=$allNamesKnown && count($tokens)<=20 && (count($bodyTokens)>1 || (count($bodyTokens)===1 && $outcome==='toc_rejected'))
-            ? self::attachmentOutcomes($text,$subject) : [];
-        $unsupportedFiles=array_keys($perFile,'toc_provider_format',true);
-        foreach ($unsupportedFiles as $key) $perFile[$key]='toc_rejected';
-        return ['from'=>'no_reply@toconline.pt','text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase,
-            'purchase_identities'=>$purchases,'provider_reason'=>$reason,'attachments'=>$perFile,'unsupported_files'=>$unsupportedFiles];
+        return ['from'=>self::PROVIDER_SENDER,'text'=>$safe,'hash'=>$hash,'outcome'=>$outcome,'purchase_identity'=>$purchase,
+            'purchase_identities'=>$purchases,'provider_reason'=>$reason,'attachments'=>$attachments,'unsupported_files'=>$unsupported,
+            'batch_reply'=>$batch,'correlation_version'=>self::CORRELATION_VERSION];
     }
 
-    /** Attach an outcome only to filenames explicitly listed under an understood heading.
-     * A bare list is understood only for the observed success subject. Contradictions
-     * or unrecognised prose leave the corresponding filenames for manager review.
-     */
-    private static function attachmentOutcomes(string $text,string $subject): array
-    {
-        $name='(?:booking|hostelworld|cloudbeds|receipt)[-_]([a-f0-9]{64})\.(?:pdf|jpe?g)';
-        $headings=[
-            'Ficheiros arquivados com sucesso:'=>'toc_accepted',
-            'Foram recusados os seguintes ficheiros por já constarem no seu arquivo:'=>'toc_existing',
-            'Foram recusados os seguintes ficheiros:'=>'toc_rejected',
-            'Foram recusados os seguintes ficheiros, por se encontrarem em formato não suportado:'=>'toc_provider_format',
-            'Ficheiros arquivados e associados automaticamente a fornecedores:'=>'supplier_archive',
-        ];
-        $result=[];$section='toc_review';
-        if (trim($subject)==='Ficheiros arquivados com sucesso - Active Lines, Lda'
-            && preg_match('/\A(?:\s*'.$name.'\s*)+\z/i',trim($text))) $section='toc_accepted';
-        foreach (preg_split('/\R/u',$text)?:[] as $line) {
-            $line=trim($line);
-            if ($line==='') continue;
-            foreach ($headings as $heading=>$outcome) {
-                if (!str_starts_with($line,$heading)) continue;
-                $section=$outcome;$line=trim(substr($line,strlen($heading)));break;
-            }
-            if ($line==='') continue;
-            if ($section==='supplier_archive' && preg_match('/\AFornecedor NIF:\s*[0-9]{9}\s+Fornecedor:[^\r\n]*?\s+Ficheiro:\s*('.$name.')\s*\]?\z/iu',$line,$supplier)) {
-                $key=strtolower($supplier[2]);
-                $result[$key]=isset($result[$key]) && $result[$key]!=='toc_accepted'?'toc_review':'toc_accepted';
-                continue;
-            }
-            if ($section==='supplier_archive') $section='toc_review';
-            if (!preg_match('/\A(?:'.$name.'(?:[\s,;]+|$))+\z/i',$line)) $section='toc_review';
-            preg_match_all('/'.$name.'/i',$line,$matches);
-            foreach ($matches[1] as $key) {
-                $key=strtolower($key);
-                $result[$key]=isset($result[$key]) && $result[$key]!==$section?'toc_review':$section;
-            }
-        }
-        return $result;
-    }
-
-    /** Observed QR-created purchase acknowledgement omits the uploaded filename. */
-    private static function purchaseIdentity(string $text): array
-    {
-        $text=preg_replace('/[\s\x{00A0}]+/u',' ',$text)??'';
-        if (!str_contains($text,'Ficheiros arquivados e associados automaticamente a faturas de compra:')) return [];
-        foreach (['Fornecedor NIF:','e-Fatura:','Fatura de compra:'] as $label) if (substr_count($text,$label)!==1) return [];
-        if (!preg_match('/Fornecedor NIF:\s*([125689][0-9]{8})\s*Fornecedor\s*:/u',$text,$nif)
-            || !preg_match('/e-Fatura:\s*([A-Z0-9][A-Z0-9]{0,7}[ \t]+[A-Z0-9][A-Z0-9 ._\/-]{0,99}?)\s*Fatura de compra:\s*FC\s+[A-Z0-9._-]+\/[A-Z0-9._-]+/u',$text,$number)) return [];
-        return ['issuer_nif'=>$nif[1],'invoice_number'=>trim(preg_replace('/\s+/u',' ',$number[1]))];
-    }
-
-    public function enqueue(string $raw): bool
+    public function enqueue(string $raw,bool $retryUnavailableDns=false): bool
     {
         $receipt=self::parse($raw); if ($receipt===null) return false;
         $receipt['authentication']=InvoiceTocAuthentication::verify(self::withoutEnvelope($raw));
@@ -224,7 +177,19 @@ final class InvoiceTocPipe
         try {
             if (!flock($lock,LOCK_EX|LOCK_NB)) throw new RuntimeException('toc_pipe_queue');
             $name='toc-pipe-'.$receipt['hash'].'.enc';
-            if ($this->vault->has($name)) return true;
+            $queued=$this->vault->has($name)?$this->vault->read($name):[];
+            if ($retryUnavailableDns && ($receipt['authentication']['code']??'')==='dns_unavailable' && empty($queued['authentication']['verified']))
+                throw new RuntimeException('toc_auth_dns_unavailable');
+            if ($queued) {
+                $upgraded=($receipt['correlation_version']??0)>($queued['correlation_version']??0);
+                $verified=!empty($receipt['authentication']['verified']);
+                if (!$upgraded && (!$verified || !empty($queued['authentication']['verified']))) return true;
+                // Same raw SHA-256: preserve an earlier valid signature when DNS now fails.
+                if (!empty($queued['authentication']['verified'])) $receipt['authentication']=$queued['authentication'];
+                $receipt['received_at']=$queued['received_at'];
+                $this->vault->save($name,$receipt);
+                return true;
+            }
             if (count(glob($this->vault->root.'/toc-pipe-*.enc')?:[])>=200) throw new RuntimeException('toc_pipe_queue');
             $receipt['received_at']=gmdate('c'); $this->vault->save($name,$receipt);
             return true;
@@ -244,14 +209,20 @@ final class InvoiceTocPipe
     public function process(object $toc): void
     {
         $status=$this->vault->has('toconline-pipe-status.enc')?$this->vault->read('toconline-pipe-status.enc'):['matched'=>0,'unmatched'=>0,'recent'=>[]];
+        $status+=['matched'=>0,'unmatched'=>0,'recent'=>[]];
         foreach (array_slice(glob($this->vault->root.'/toc-pipe-*.enc')?:[],0,50) as $file) {
             $name=basename($file); if (!preg_match('/\Atoc-pipe-([a-f0-9]{64})\.enc\z/',$name,$m)) continue;
             $receipt=$this->vault->read($name);
             if (!hash_equals($m[1],$receipt['hash']??'')) throw new RuntimeException('toc_pipe_queue');
-            // A previously unmatched filename-only parse may now carry signed fiscal evidence.
-            $event=$receipt['hash'].(!empty($receipt['purchase_identity'])?':purchase-v'.self::CORRELATION_VERSION:'');
-            if (!in_array($event,$status['recent'],true)) {
-                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[],'attachments'=>$receipt['attachments']??[],'purchase_identities'=>$receipt['purchase_identities']??[],'provider_reason'=>$receipt['provider_reason']??'','unsupported_files'=>$receipt['unsupported_files']??[]]);
+            $event=$receipt['hash'];
+            $verifiedEvent=null;
+            if (($receipt['correlation_version']??0)>=3) {
+                $version=$event.':reply-v'.$receipt['correlation_version'];
+                $verifiedEvent=$version.':verified';
+                $event=!empty($receipt['authentication']['verified'])?$verifiedEvent:$version.':unverified';
+            } elseif (!empty($receipt['purchase_identity'])) $event.=':purchase-v2';
+            if (!in_array($event,$status['recent'],true) && !in_array($verifiedEvent,$status['recent'],true)) {
+                $result=$toc->receive($receipt['from'],'',$receipt['text'],$receipt['hash'],['authentication'=>$receipt['authentication']??[], 'outcome'=>$receipt['outcome']??'toc_review','purchase_identity'=>$receipt['purchase_identity']??[],'attachments'=>$receipt['attachments']??[],'purchase_identities'=>$receipt['purchase_identities']??[],'provider_reason'=>$receipt['provider_reason']??'','unsupported_files'=>$receipt['unsupported_files']??[],'batch_reply'=>$receipt['batch_reply']??[]]);
                 $status[$result['result']==='matched'?'matched':'unmatched']++;
                 $status['recent']=array_slice([...$status['recent'],$event],-250);
                 $status['authentication']=$receipt['authentication']['code']??'not_checked';
@@ -261,7 +232,14 @@ final class InvoiceTocPipe
                 $status['received_at']=$receipt['received_at']; $status['checked_at']=gmdate('c');
                 $this->vault->save('toconline-pipe-status.enc',$status);
             }
-            if (!unlink($this->vault->path($name))) throw new RuntimeException('toc_pipe_queue');
+            // enqueue() can upgrade this exact item while receive() is running. Only
+            // acknowledge the snapshot that actually reached the receiver.
+            $lock=fopen($this->vault->path('toc-pipe.lock'),'c');
+            if (!$lock) throw new RuntimeException('toc_pipe_queue');
+            try {
+                if (!flock($lock,LOCK_EX)) throw new RuntimeException('toc_pipe_queue');
+                if ($this->vault->read($name)===$receipt && !unlink($this->vault->path($name))) throw new RuntimeException('toc_pipe_queue');
+            } finally { flock($lock,LOCK_UN); fclose($lock); }
         }
     }
 }
